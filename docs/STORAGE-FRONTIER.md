@@ -112,7 +112,10 @@ the replica count. Measure repair bandwidth: when one shard is lost, how many by
 must move to restore `n`?
 
 **Acceptance:** a 1 GB blob survives losing up to `m` holders, is rebuilt from any
-`k`, and reports its true replica count; repair traffic is below `1/k` of the blob.
+`k`, and reports its true replica count; repair traffic is measured as read + write
+and is at least the MDS floor `S(1 + m/k)`. The old `< 1/k` total target is
+impossible for this layout and was amended in issue #4; beating the floor needs a
+different code.
 **Falsifies:** "the network has it" when it has one copy.
 
 ### 3. Neural and parametric compression with an exactness contract (mid)

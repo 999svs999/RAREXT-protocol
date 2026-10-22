@@ -134,21 +134,26 @@ is **not** a trust anchor:
 
 ### Repair
 
-`repair(blobHash, holders)` reads any `k` surviving shards, re-encodes the lost
-ones, and writes each to a holder that (a) does not already hold a shard of this
-blob, (b) is not the failed holder, and (c) answers `HEAD` for a probe shard. The
-probe matters: without it a repairer would happily write a recovered shard to an
-unreachable spare.
+`repair(blobHash, holders)` reads exactly `k` surviving shards, re-encodes the
+lost ones, and stages every write before changing the placement. A target holder
+(a) is not currently assigned a shard of this blob, (b) is not the failed holder,
+and (c) answers `HEAD` for a probe shard. The probe matters: without it a repairer
+would write a recovered shard to an unreachable spare. A holder that already has
+an orphaned copy from an earlier crash is still valid; the store is
+content-addressed, so the write is idempotent.
 
-The cost is asymmetric and the documentation should say so: reading survivors
-costs one shard set (about `1 + m/k` times the payload), writing costs `1/n` of
-the stored bytes per repaired shard. A repair that reads every survivor to rebuild
-one shard therefore reads roughly `1/k` of the payload per failed shard, not
-`1/k` of the whole stored set in a single write.
+For an MDS code the read cost of rebuilding `m` shards is one payload, `S`, because
+`k` shards determine all of it; the write cost is `mS/k`. The floor is therefore
+`S(1 + m/k)` — `1.25x` for one loss and `1.50x` for two at `k = 4`. Reading every
+survivor would cost more without adding safety. The old claim that repair could
+move less than `1/k` in total is arithmetically impossible here; lowering the floor
+needs a different code or layout, not tuning. Measurements are in
+[`bench/repair`](../bench/repair/README.md).
 
-`repair` mutates the placement object in place and returns the same object. A
-caller that wants an immutable historical snapshot should sign a record before
-repairing, or copy the placement first.
+`repair` mutates the placement object in place and returns the same object after
+every staged write succeeds. A caller that wants an immutable historical snapshot
+should sign a record before repairing, or persist the returned placement first; a
+failed write leaves the previous signed record authoritative.
 
 ### The schedule
 
