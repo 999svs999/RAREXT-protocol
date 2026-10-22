@@ -13,6 +13,11 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **RFC 0009: representation kinds.** Defines `exact`, `bounded`, and `generative`
+  artifacts, the signed representation record, the verifier result block, semantics
+  declarations, display rules, and the acceptance criterion before a research codec can
+  become a protocol claim. Documentation only; no envelope change ships yet.
+
 - **Leaderboard UI and capability-based discovery.** `/leaderboard.html` ranks verified
   builds with app and challenge filters, links each row to its signed envelope, and opens
   an unlisted artifact from an artifact id plus capability token. Filters and capability

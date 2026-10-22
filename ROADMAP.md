@@ -89,7 +89,7 @@ does not ship behind a marketing claim. The acceptance criteria and the limits a
 [`docs/STORAGE-FRONTIER.md`](docs/STORAGE-FRONTIER.md).
 
 - [x] Benchmark harness over a fixed public corpus (photos, video, audio, text, code, 3D)
-- [ ] RFC: representation kinds — `exact`, `bounded`, `generative` — with a verifier contract
+- [x] RFC: representation kinds — `exact`, `bounded`, `generative` — with a verifier contract
 - [ ] One learned codec and one implicit representation, measured with the decoder counted
 - [ ] Data availability sampling for media, with a stated soundness bound
 - [ ] Repair-bandwidth measurement for erasure-coded blobs at 1 GB

@@ -46,6 +46,8 @@
 
 **PoD (Proof of Design)** — TapeOut's mining mechanism, which weights rewards by circuit design quality and efficiency rather than raw compute.
 
+**Representation kind** — `exact`, `bounded`, or `generative`: what a verifier compared (byte equality, a named metric bound, or model/seed provenance). Defined by [RFC 0009](../rfcs/0009-representation-kinds.md).
+
 **Publication** — An artifact plus metadata: app, challenge, title, source, attestation, and lineage. The registry object. May carry a signed identity envelope.
 
 **Registry** — The queryable index of builds, attestations, source pins, identity links, and adapter receipts. The product surface; the ledger is only its anchor.

@@ -77,9 +77,9 @@ tolerance:
   check that the output came from the committed model and seed, and must not claim
   more.
 
-That is a protocol change, not a codec change, and it belongs in an RFC before any
-implementation. The claim kind already exists in the semantics layer; the
-representation kind would sit beside it.
+That is a protocol change, not a codec change. [RFC 0009](../rfcs/0009-representation-kinds.md)
+now defines the envelope, the verifier block, and the acceptance criterion; the claim kind
+already exists in the semantics layer, and the representation kind sits beside it.
 
 ## The research programme
 
