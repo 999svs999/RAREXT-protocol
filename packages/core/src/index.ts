@@ -57,6 +57,7 @@ export type {
 } from "./types.ts";
 
 export { canonicalize } from "./canonical.ts";
+export { leafPayload, PUBLICATION_LEAF_VERSION } from "./leaf.ts";
 export { simulate, validateCircuit } from "./simulator.ts";
 export { countGates, score } from "./scoring.ts";
 export { findTask, tasks } from "./tasks.ts";

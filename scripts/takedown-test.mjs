@@ -22,6 +22,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 
+import { canonicalize, leafPayload } from "../packages/core/src/index.ts";
+
 const root = new URL("..", import.meta.url).pathname;
 const work = mkdtempSync(join(tmpdir(), "rarext-takedown-"));
 const mirror = join(work, "mirror");
@@ -47,60 +49,8 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function canonicalize(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
-  const keys = Object.keys(value).filter((key) => value[key] !== undefined).sort();
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`).join(",")}}`;
-}
-
 function leaf(publication, version) {
-  const payload =
-    version < 2
-      ? {
-          id: publication.id,
-          author: publication.author,
-          authorKey: publication.authorKey,
-          taskId: publication.taskId,
-          circuitHash: publication.attestation.circuitHash,
-          traceHash: publication.attestation.traceHash,
-          score: publication.attestation.score,
-          gateCount: publication.attestation.gateCount,
-          createdAt: publication.createdAt,
-        }
-      : {
-          leafVersion: 2,
-          id: publication.id,
-          author: publication.author,
-          authorKey: publication.authorKey,
-          title: publication.title,
-          body: publication.body,
-          app: publication.app,
-          challengeId: publication.challengeId,
-          taskId: publication.taskId,
-          artifact: publication.artifact,
-          circuit: publication.circuit ?? null,
-          parentId: publication.parentId,
-          source: publication.source,
-          createdAt: publication.createdAt,
-          nonce: publication.nonce,
-          signature: publication.signature,
-          attestation: {
-            circuitHash: publication.attestation.circuitHash,
-            traceHash: publication.attestation.traceHash,
-            correct: publication.attestation.correct,
-            score: publication.attestation.score,
-            gateCount: publication.attestation.gateCount,
-            semanticsId: publication.attestation.semanticsId,
-            semanticsVersion: publication.attestation.semanticsVersion,
-            semanticsHash: publication.attestation.semanticsHash,
-            claimKind: publication.attestation.claimKind,
-            scope: publication.attestation.scope,
-            verifierHash: publication.attestation.verifierHash,
-          },
-        };
-
-  return sha256(canonicalize(payload));
+  return sha256(canonicalize(leafPayload(publication, version)));
 }
 
 function merkleRoot(leaves) {

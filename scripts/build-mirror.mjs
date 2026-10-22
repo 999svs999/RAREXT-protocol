@@ -75,99 +75,28 @@ writeFileSync(
     <h1>This mirror is a copy. Here is whether it is a faithful one.</h1>
     <div id="out"></div>
     <button id="check">Re-verify</button>
-    <script src="/bundle.js"></script>
     <script type="module">
+      import { verifyBundle } from "/verify.js";
       const out = document.getElementById("out");
 
-      async function sha256Hex(bytes) {
-        const digest = await crypto.subtle.digest("SHA-256", bytes);
-        return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-      }
+      async function run() {
+        const bundle = await (await fetch("/bundle.json")).json();
+        const result = await verifyBundle(bundle);
 
-      function canonicalize(value) {
-        if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-        if (Array.isArray(value)) return "[" + value.map(canonicalize).join(",") + "]";
-        const keys = Object.keys(value).filter((k) => value[k] !== undefined).sort();
-        return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalize(value[k])).join(",") + "}";
-      }
-
-      function hashPair(left, right) {
-        return sha256Hex(new TextEncoder().encode(left + right));
-      }
-
-      function merkleRoot(leaves) {
-        if (leaves.length === 0) return "";
-        let level = [...leaves];
-        while (level.length > 1) {
-          const next = [];
-          for (let i = 0; i < level.length; i += 2) next.push(hashPair(level[i], level[i + 1] ?? level[i]));
-          level = next;
-        }
-        return level[0];
-      }
-
-      function leaf(publication, version) {
-        if (version < 2) {
-          return sha256Hex(new TextEncoder().encode(canonicalize({
-            id: publication.id, author: publication.author, authorKey: publication.authorKey,
-            taskId: publication.taskId, circuitHash: publication.attestation.circuitHash,
-            traceHash: publication.attestation.traceHash, score: publication.attestation.score,
-            gateCount: publication.attestation.gateCount, createdAt: publication.createdAt })));
-        }
-        return sha256Hex(new TextEncoder().encode(canonicalize({
-          leafVersion: 2, id: publication.id, author: publication.author,
-          authorKey: publication.authorKey, title: publication.title, body: publication.body,
-          app: publication.app, challengeId: publication.challengeId, taskId: publication.taskId,
-          artifact: publication.artifact, circuit: publication.circuit ?? null,
-          parentId: publication.parentId, source: publication.source, createdAt: publication.createdAt,
-          nonce: publication.nonce, signature: publication.signature,
-          attestation: {
-            circuitHash: publication.attestation.circuitHash,
-            traceHash: publication.attestation.traceHash,
-            correct: publication.attestation.correct,
-            score: publication.attestation.score,
-            gateCount: publication.attestation.gateCount,
-            semanticsId: publication.attestation.semanticsId,
-            semanticsVersion: publication.attestation.semanticsVersion,
-            semanticsHash: publication.attestation.semanticsHash,
-            claimKind: publication.attestation.claimKind,
-            scope: publication.attestation.scope,
-            verifierHash: publication.attestation.verifierHash } })));
-      }
-
-      async function verify() {
-        const bundle = window.__RAREXT_BUNDLE__;
-        if (!bundle) {
-          out.innerHTML = '<div class="row bad">no bundle found</div>';
-          return;
-        }
-
-        const leaves = [];
-        for (const publication of bundle.publications) {
-          leaves.push(await leaf(publication, bundle.manifest.leafVersion));
-        }
-
-        const computed = merkleRoot(leaves);
-        const matches = computed === bundle.manifest.root;
-        const listed = bundle.manifest.publications.map((p) => p.leaf);
-        const listMatches = JSON.stringify(listed) === JSON.stringify(leaves);
+        const row = (label, value, cls) =>
+          '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
 
         out.innerHTML = [
-          row("Publications", String(bundle.publications.length)),
-          row("Anchored root", "<code>" + bundle.manifest.root + "</code>"),
-          row("Recomputed root", "<code>" + computed + "</code>"),
-          row("Leaf list matches", listMatches ? "yes" : "no", listMatches ? "ok" : "bad"),
-          row("This copy is faithful", matches && listMatches ? "yes" : "no", matches && listMatches ? "ok" : "bad"),
-          row("Anchored at", bundle.manifest.createdAt),
+          row("Publications", String(result.publications)),
+          row("Anchored root", "<code>" + result.root + "</code>"),
+          row("Recomputed root", "<code>" + result.computedRoot + "</code>"),
+          row("This copy is faithful", result.valid ? "yes" : "no", result.valid ? "ok" : "bad"),
+          result.reason ? row("Why not", result.reason, "bad") : "",
         ].join("");
-
-        function row(label, value, cls) {
-          return '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
-        }
       }
 
-      document.getElementById("check").addEventListener("click", verify);
-      verify();
+      document.getElementById("check").addEventListener("click", run);
+      run();
     </script>
   </body>
 </html>

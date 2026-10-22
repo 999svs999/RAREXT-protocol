@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build:web",
-    "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap",
+    "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap && esbuild apps/web/src/verify.ts --bundle --format=esm --outfile=apps/web/public/verify.js --sourcemap",
     "build:packages": "node scripts/build-packages.mjs",
     "verify:packages": "node scripts/verify-packages.mjs",
     "pack:all": "npm run build:packages && node scripts/pack-all.mjs",
