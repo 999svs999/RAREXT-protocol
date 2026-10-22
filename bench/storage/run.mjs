@@ -63,11 +63,17 @@ function addRow(runner, result) {
     };
   }
 
-  if (runner.kind === "learned" && !(runner.decoderBytes > 0)) {
+  const declaredDecoder = result.decoderBytes ?? runner.decoderBytes ?? null;
+
+  if (runner.kind === "learned" && !(declaredDecoder > 0)) {
     throw new Error(`${runner.label}: a learned codec must declare its decoder size`);
   }
 
-  const decoderBytes = runner.kind === "learned" ? runner.decoderBytes : null;
+  if (runner.kind !== "classical" && !(declaredDecoder > 0)) {
+    throw new Error(`${runner.label}: a ${runner.kind} representation must declare its decoder size`);
+  }
+
+  const decoderBytes = declaredDecoder;
   const totalBytes = result.storedBytes + (decoderBytes ?? 0);
   const classification = classify(runner, result);
   const notes = [...(result.notes ? [result.notes] : [])];
@@ -165,9 +171,9 @@ do not match the reference digest is \`bounded\` or \`generative\`, never \`exac
 ${tableLines}
 
 - **Stored** is the encoded artifact (all shards for erasure coding).
-- **Decoder** is the decoder artifact when it is part of the protocol's cost. This
-  build ships no learned codec, so classical rows rely on the system ffmpeg/zstd
-  decoder and show \`—\`; the column exists so a learned row cannot omit it.
+- **Decoder** is the decoder artifact when it is part of the protocol's cost.
+  Learned and parametric rows must declare it and count it in **total**; classical
+  rows rely on the system ffmpeg/zstd decoder and show \`—\`.
 - **Total** is stored + decoder; **ratio** is input / total, so higher is smaller.
 - A \`no — bounded\` result reports byte error against the committed reference
   digest, plus PSNR where the slice has a raster interpretation.

@@ -13,6 +13,15 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Learned and parametric baselines in the storage benchmark.** `bench/storage/learned.mjs`
+  adds an order-1 context Huffman codec whose 256×256 model is stored and counted as the
+  decoder, and a tensor-product Legendre fit whose coefficients are the entire artifact.
+  Measured on the fixed corpus: adaptive Huffman 2.40x on text and 3.02x on source
+  (exact), the same model trained on `source.js` and held out on `text.txt` 0.64x
+  (negative cross-slice result), and degree-10 Legendre 2212x stored size at 19.79 dB
+  PSNR with 98.84% of bytes differing (negative fidelity result). Decoder bytes are now
+  counted for every non-classical row, not only `kind: "learned"`. Three tests.
+
 - **Repair-bandwidth measurement at 1 GB.** `bench/repair` encodes a deterministic
   1 GiB payload with the shipped 4 + 2 code, loses a shard, rebuilds it from four
   survivors, and checks both digests. Measured: 1.000 GiB read, 0.250 GiB written,

@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { generateCorpus } from "../corpus.mjs";
 import { erasureRunner, zstdRunner } from "../methods.mjs";
+import { learnedHuffmanRunner, polynomialRunner } from "../learned.mjs";
 import { runBenchmark } from "../run.mjs";
 
 function temp() {
@@ -142,6 +143,72 @@ test("a declared-lossless mismatch is labelled bounded, never exact", async () =
     assert.match(report.rows[1].notes, /PSNR 31.50 dB/);
     assert.match(markdown, /no — bounded/);
     assert.equal(report.budget.passed, false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("the learned Huffman codec round-trips a held-out slice and counts its model", async () => {
+  const { root, cleanup } = temp();
+
+  try {
+    const manifest = generateCorpus(join(root, "corpus"), { scale: 0.02 });
+    const { report } = await runBenchmark({
+      root: join(root, "corpus"),
+      manifest,
+      runners: [
+        learnedHuffmanRunner({ trainPath: "text.txt", evalPath: "text.txt" }),
+        learnedHuffmanRunner({ trainPath: "source.js", evalPath: "text.txt" }),
+      ],
+      maxMinutes: 5,
+    });
+
+    for (const row of report.rows) {
+      assert.equal(row.kind, "learned");
+      assert.equal(row.classification, "exact", row.method);
+      assert.equal(row.exact, true);
+      assert.ok(row.decoderBytes > 0);
+      assert.equal(row.totalBytes, row.storedBytes + row.decoderBytes);
+    }
+
+    assert.match(report.rows[0].notes, /adaptive result, not a generalization claim/);
+    assert.match(report.rows[1].notes, /eval slice held out/);
+  } finally {
+    cleanup();
+  }
+});
+
+test("the parametric representation counts its coefficients once as the decoder", async () => {
+  const { root, cleanup } = temp();
+
+  try {
+    const manifest = generateCorpus(join(root, "corpus"), { scale: 0.02 });
+    const { report, markdown } = await runBenchmark({
+      root: join(root, "corpus"),
+      manifest,
+      runners: [polynomialRunner({ degree: 6, sampleStride: 32 })],
+      maxMinutes: 5,
+    });
+    const [row] = report.rows;
+
+    assert.equal(row.kind, "parametric");
+    assert.equal(row.classification, "bounded");
+    assert.equal(row.exact, false);
+    assert.equal(row.storedBytes, 0);
+    assert.ok(row.decoderBytes > 0);
+    assert.equal(row.totalBytes, row.decoderBytes);
+    assert.ok(row.psnr > 0);
+    assert.match(markdown, /no — bounded/);
+    assert.match(markdown, /parametric 2D Legendre/);
+
+    await assert.rejects(
+      runBenchmark({
+        root: join(root, "corpus"),
+        manifest,
+        runners: [{ ...polynomialRunner({ degree: 6, sampleStride: 32 }), decoderBytes: null, run: fakeRunner().run }],
+      }),
+      /must declare its decoder size/,
+    );
   } finally {
     cleanup();
   }

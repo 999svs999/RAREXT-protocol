@@ -190,6 +190,30 @@ No kind makes a bad artifact good. `bounded` says "within this metric"; `generat
 says "this model produced it". Neither is a statement about usefulness, safety, or
 ownership.
 
+## Measured baselines (2026-10-23)
+
+The first two rows that count their decoder are now in
+[`bench/storage/RESULTS.md`](../bench/storage/RESULTS.md):
+
+| Method | Slice | Total cost | Ratio | Result |
+| --- | --- | ---: | ---: | --- |
+| learned order-1 Huffman (adaptive) | `text.txt` | 3.76 MiB | 2.40x | exact |
+| learned order-1 Huffman (adaptive) | `source.js` | 3.31 MiB | 3.02x | exact |
+| learned order-1 Huffman (train `source.js`) | `text.txt`, held out | 14.15 MiB | 0.64x | exact, expands |
+| parametric 2D Legendre degree 10 | photos, raw RGB | 16.7 KiB | 2212x | bounded, 19.79 dB, 98.84% bytes differ |
+
+The adaptive codec stores a 65,793-byte context table as its decoder and is counted
+in full. It is an adaptive result, not evidence that a model trained elsewhere
+generalizes: the held-out cross-slice row expands to 0.64x. The parametric fit stores
+only coefficients (no residual), so its ratio is huge while its fidelity is not useful.
+Both non-exact outcomes are labelled `bounded`; neither is presented as a compression
+claim. This is the negative-result path this RFC requires when a representation cannot
+fill the table honestly.
+
+The harness now counts `decoderBytes` for every non-classical runner, not only
+`kind: "learned"`. A parametric representation where coefficients are both artifact and
+decoder sets `storedBytes = 0` and counts the model once.
+
 ## Acceptance criterion for the research track
 
 The RFC is implemented for a representation only when:

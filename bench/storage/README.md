@@ -10,7 +10,7 @@ npm run bench:storage
 ```
 
 On the reference laptop (Intel i5-8257U, ffmpeg 8.1.1, zstd 1.5.7) a full run takes
-about 66 seconds over a 99.96 MiB corpus, well inside the 15-minute budget. The
+about 85 seconds over a 99.96 MiB corpus, well inside the 15-minute budget. The
 budget is enforced: the command exits non-zero if `--max-minutes` is exceeded.
 
 ## What is measured
@@ -79,18 +79,47 @@ be used only when a corpus change is intended.
 - **erasure 4+2** — the shipped `encodeBytes`/`decodeBytes` path over the framed
   corpus, four data shards and two parity shards. It does not compress; its ratio is
   the durability cost (about 0.67x) paid for surviving two holder losses.
+- **learned order-1 Huffman (adaptive)** — a static context model trained on the file
+  it encodes, with the 256×256 code-length table written as the decoder and counted in
+  full (65,793 bytes). Exact. This is an adaptive result: the model is stored, so it is
+  not a claim that a model trained elsewhere generalizes.
+- **learned order-1 Huffman (train source.js)** — the same model trained on `source.js`
+  and evaluated on `text.txt` without seeing it. Exact, but 0.64x: the held-out
+  cross-slice case expands. That is the negative result for this model.
+- **parametric 2D Legendre degree 10** — each photo is fitted with a tensor-product
+  Legendre polynomial (66 coefficients per channel). The coefficients are the entire
+  stored artifact and the decoder, counted once. The row is bounded at about 19.8 dB
+  PSNR with no residual: a very high ratio, and not useful fidelity. That is the
+  negative result for this parametric direction.
 
 If ffmpeg or one of its encoders is missing, those rows are marked `skipped` rather
 than omitted. A skipped row is not a pass.
 
 ## Decoder accounting
 
-A learned codec's decoder is data the protocol must store and agree on, so its size
-belongs in the storage cost. The harness requires any runner with
-`kind: "learned"` to declare `decoderBytes > 0`, and `Total = Stored + Decoder`.
-This build ships no learned codec; the column is the mechanism the next RFC must
-fill. Classical rows rely on the system ffmpeg/zstd decoder and show `—`; measuring a
-pinned decoder build for those is future work, not a claim that their decoder is free.
+A learned or parametric decoder is data the protocol must store and agree on, so its
+size belongs in the storage cost. The harness requires every non-classical runner to
+declare `decoderBytes > 0`, and `Total = Stored + Decoder`. The parametric runner sets
+`Stored = 0` because its coefficients are both the artifact and the decoder; counting
+them twice would double-charge the same bytes. Classical rows rely on the system
+ffmpeg/zstd decoder and show `—`; measuring a pinned decoder build for those is future
+work, not a claim that their decoder is free.
+
+## Measured outcome and negative results
+
+The 2026-10-23 run (`RESULTS.md`) gives both sides of the ledger:
+
+- Adaptive order-1 Huffman compresses text and source to 2.40x and 3.02x including its
+  model, beating zstd's 1.47x on those slices. It is exact.
+- The same codec trained on `source.js` and evaluated on `text.txt` expands to 0.64x.
+  The model does not generalize across the corpus's two text-ish slices; a deployable
+  static model would need a much larger, representative decoder.
+- The degree-10 Legendre fit stores 16.7 KiB for 36 MiB of photos (2212x) but only
+  reaches 19.79 dB PSNR, with 98.84% of bytes differing. A smooth global polynomial
+  cannot represent the corpus's texture. Per the research rule, that is a bounded row
+  and a negative result, not a compression claim.
+
+Neither negative result is hidden: the table and JSON carry the labels.
 
 ## Adding a method
 
@@ -100,9 +129,9 @@ Add a runner in `bench/storage/methods.mjs`:
 {
   id: "my-codec",
   label: "my codec",
-  kind: "classical",        // or "learned" / "generative"
+  kind: "classical",        // or "learned" / "parametric" / "generative"
   declaresExact: true,      // a claim the harness will test
-  decoderBytes: null,       // required > 0 for kind "learned"
+  decoderBytes: null,       // required > 0 for non-classical; may be set on result
   async run({ root, manifest, work }) {
     return {
       slice: "all files",

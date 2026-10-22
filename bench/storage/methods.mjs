@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { decodeBytes, encodeBytes } from "../../apps/api/src/erasure.ts";
 import { sha256, sliceByModality } from "./corpus.mjs";
+import { learnedRunners, polynomialRunner } from "./learned.mjs";
 
 const ZSTD_LEVEL = 19;
 
@@ -352,5 +353,12 @@ export function av1Runner() {
 }
 
 export function allRunners() {
-  return [...x265Runner(), ...av1Runner(), zstdRunner(), erasureRunner()];
+  return [
+    ...x265Runner(),
+    ...av1Runner(),
+    zstdRunner(),
+    erasureRunner(),
+    ...learnedRunners(),
+    polynomialRunner(),
+  ];
 }
