@@ -114,6 +114,43 @@ over a content hash; the second is fixed by many registries accepting the same
 signed publications and gossiping between them — the publications are already
 portable, they are signed envelopes.
 
+## Erasure coding: replication becomes reconstruction
+
+Replication is the naive durability story: keep m full copies and hope at least one
+survives. Erasure coding is the better one: cut the blob into `k` data blocks, emit
+`n = k + m` shards with a systematic Reed-Solomon code over GF(256), and rebuild the
+blob from **any** `k` of the `n` shards. With `k = 4, m = 2` a node holds 1.5× the
+bytes and survives the loss of any one shard — the same durability as three full
+copies for half the storage.
+
+The primitive lives in `apps/api/src/erasure.ts`. Its contract:
+
+- `encodeBytes(payload, k, m)` returns `k + m` shards; the first `k` are the data
+  blocks, the rest are parity.
+- `decodeBytes(shards)` accepts any `k` distinct shards, rejects duplicates, and
+  verifies the reconstructed payload against the digest the shards commit to.
+- Each shard's digest covers its index, the code parameters, the original length,
+  the payload digest, and its own bytes. A corrupted shard fails its digest; a shard
+  relabelled with another index fails its digest; a shard borrowed from a different
+  set fails the set check. None of those failures are silent.
+
+Two independent replicas encoding the same blob produce byte-identical shards, so
+they can compare digests instead of paying for a third opinion.
+
+What this does *not* do, yet: it does not place shards, schedule retention proofs
+against them, or price them. Those are the rest of the durability contract:
+
+1. **Placement** — a target shard count across independent holders.
+2. **Retention proofs** — the existing time-locked commitment, challenged on a
+   schedule rather than only at upload.
+3. **Durability tier** — `ephemeral`, `pinned`, `durable`, with the actual replica
+   count published, so a reader can see whether "forever" is one laptop or six
+   holders.
+4. **Pricing** — per byte-month, per the metering above.
+
+Until a publication carries a durability tier and a replica count, its permanence is
+a claim the operator makes, not one a reader can check.
+
 ## The chain path
 
 The protocol is chain-agnostic by construction: an anchor is a Merkle root plus
