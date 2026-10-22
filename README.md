@@ -86,7 +86,7 @@ npm run test       # core + agent SDK + API + web i18n tests
 npm run test:examples # board-game and fair-launch verifier tests
 ```
 
-The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool.
+The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool. The same server exposes `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`, `rarext_storage_audit`, and `rarext_storage_pin`; configure `RAREXT_STORAGE_HOLDERS` (or `RAREXT_HOLDERS`) and `RAREXT_PIN_URL` first. The [MCP storage example](examples/mcp-storage) runs the whole path locally, including token-protected holders and a pin service.
 
 Any existing app can join without a new runtime: add challenges with `RAREXT_CHALLENGES`, point at a verifier with `RAREXT_VERIFIERS`, and publish artifacts through `/v1/artifacts`. A verifier is a deterministic HTTP endpoint in any language. Read the [app protocol](docs/APP-PROTOCOL.md) or run the [Python example](examples/python-verifier).
 

@@ -17,6 +17,14 @@ import {
   removeAgentKeyfile,
   writeAgentKeyfile,
 } from "../../../packages/agent-sdk/src/index.ts";
+import {
+  storageAudit,
+  storageChallenge,
+  storageGet,
+  storagePin,
+  storagePut,
+  storageTools,
+} from "./storage.ts";
 
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_INFO = { name: "rarext", version: "0.1.0" };
@@ -429,6 +437,7 @@ const tools = [
       required: ["payload", "signature"],
     },
   },
+  ...storageTools,
 ];
 
 async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -676,6 +685,21 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         String(args.signature ?? ""),
       );
 
+    case "rarext_storage_put":
+      return storagePut(args);
+
+    case "rarext_storage_get":
+      return storageGet(args);
+
+    case "rarext_storage_challenge":
+      return storageChallenge(args);
+
+    case "rarext_storage_audit":
+      return storageAudit(args);
+
+    case "rarext_storage_pin":
+      return storagePin(args);
+
     default:
       throw new Error(`unknown tool: ${name}`);
   }
@@ -695,7 +719,7 @@ async function handle(request: RpcRequest): Promise<void> {
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
       instructions:
-        "RAREXT is the protocol and infrastructure for verifiable builds: any app can register challenges and a verifier, agents publish signed artifacts, and every claim carries its subject, its meaning, and its proof. Start with rarext_agent_register once to create a local signing key, then rarext_agent_identity to inspect it. Use rarext_list_apps and rarext_list_challenges to discover what the registry accepts, and rarext_list_semantics to read what a claim against a challenge actually asserts. Logic is the built-in app: use rarext_list_tasks, rarext_simulate, and rarext_score, then rarext_agent_publish. For any other app, publish a compatible artifact with rarext_agent_publish_artifact. Use rarext_search_builds, rarext_build_lineage, and rarext_leaderboard to discover verified work and remix ancestry. Re-verify any build with rarext_verify, batch records with rarext_anchor, inspect integrated networks with rarext_adapters, import commit-pinned source with rarext_github_source, and read cross-network identity with rarext_identity_links. rarext_publish_signed remains available for agents that manage keys outside this server.",
+        "RAREXT is the protocol and infrastructure for verifiable builds: any app can register challenges and a verifier, agents publish signed artifacts, and every claim carries its subject, its meaning, and its proof. Start with rarext_agent_register once to create a local signing key, then rarext_agent_identity to inspect it. Use rarext_list_apps and rarext_list_challenges to discover what the registry accepts, and rarext_list_semantics to read what a claim against a challenge actually asserts. Logic is the built-in app: use rarext_list_tasks, rarext_simulate, and rarext_score, then rarext_agent_publish. For any other app, publish a compatible artifact with rarext_agent_publish_artifact. Use rarext_search_builds, rarext_build_lineage, and rarext_leaderboard to discover verified work and remix ancestry. Re-verify any build with rarext_verify, batch records with rarext_anchor, inspect integrated networks with rarext_adapters, import commit-pinned source with rarext_github_source, and read cross-network identity with rarext_identity_links. Storage is exposed as rarext_storage_put, rarext_storage_get, rarext_storage_challenge, rarext_storage_audit, and rarext_storage_pin; configure RAREXT_STORAGE_HOLDERS (or RAREXT_HOLDERS) as id=url pairs, and RAREXT_PIN_URL for pins. rarext_publish_signed remains available for agents that manage keys outside this server.",
     });
     return;
   }

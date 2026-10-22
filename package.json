@@ -30,6 +30,7 @@
     "backup:restore": "node scripts/backup.mjs restore",
     "test:takedown": "node scripts/takedown-test.mjs",
     "demo:durability": "node scripts/durability-demo.mjs",
+    "example:mcp-storage": "node --experimental-strip-types examples/mcp-storage/main.ts",
     "bench:storage": "node bench/storage/cli.mjs",
     "bench:repair": "node bench/repair/repair-bandwidth.mjs",
     "holder": "node apps/api/src/holder-server.ts",

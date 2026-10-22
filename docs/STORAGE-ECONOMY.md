@@ -203,9 +203,11 @@ it.
 in [RFC 0005](../rfcs/0005-durable-placements.md): a holder stores shard bytes under
 their own digest, answers nonce-bound leaf challenges with a Merkle path, and never
 learns the blob hash or the placement. `npm run holder` starts one
-(`RAREXT_HOLDER_ID`, `RAREXT_HOLDER_DIR`, `RAREXT_HOLDER_PORT`). `httpHolder()` is
-the client the ledger uses, so the same `place`, `challenge`, `audit`, and `repair`
-calls work across processes. The transport test runs eight holders over HTTP, stops
+(`RAREXT_HOLDER_ID`, `RAREXT_HOLDER_DIR`, `RAREXT_HOLDER_PORT`). Set
+`RAREXT_HOLDER_TOKEN` on the holder and on every client to require a bearer token; the
+CLI refuses a non-loopback bind without one. `httpHolder()` is the client the ledger
+uses, so the same `place`, `challenge`, `audit`, and `repair` calls work across
+processes. The threat model is in [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md). The transport test runs eight holders over HTTP, stops
 one, watches the audit go `under-replicated`, repairs onto a reachable spare, and
 decodes the payload from the new placement.
 

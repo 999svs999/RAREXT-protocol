@@ -46,6 +46,7 @@
   ],
   "sideEffects": false,
   "dependencies": {
-    "@rarext/agent-sdk": "0.1.0-alpha.3"
+    "@rarext/agent-sdk": "0.1.0-alpha.3",
+    "@rarext/core": "0.1.0-alpha.3"
   }
 }

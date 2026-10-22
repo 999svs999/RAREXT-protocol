@@ -67,6 +67,8 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Scheduled challenges, not only on demand
 - [x] Automatic repair and re-challenge after a scheduled challenge
 - [x] Failure-injection tests and documented recovery limits for the storage stack
+- [x] Storage challenge/transport hardening and a documented security model with open findings
+- [x] MCP storage verbs: put, get, challenge, audit, and pin, with a runnable example
 - [x] Durability tier and an auditable replica count on the publication itself
 - [x] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))

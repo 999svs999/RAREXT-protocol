@@ -26,6 +26,17 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **MCP storage tools and a runnable network example.** The MCP server now exposes
+  `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`,
+  `rarext_storage_audit`, and `rarext_storage_pin`. Put encodes and places shards on the
+  configured holders, signs the placement with the local agent key, and registers it;
+  get digest-checks shards before rebuilding; challenge and audit share the process
+  ledger; pin computes the CID and calls the pin service. The holder and pin bearer
+  tokens are supported through `RAREXT_HOLDER_TOKEN` and `RAREXT_PIN_TOKEN`.
+  `examples/mcp-storage` drives the real stdio server end to end against six
+  token-protected holders, an API, and a pin service. One integration test covers the
+  same verbs directly.
+
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
   blobs and its index through unique temp files and renames, rolls back a new blob when
   the index write fails, and no longer swallows index errors. Durability repair reads
