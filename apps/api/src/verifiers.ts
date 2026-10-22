@@ -99,6 +99,8 @@ function logicVerifier(semantics: SemanticsRegistry | null): AppVerifier {
         claimKind: bound?.claimKind ?? "satisfies",
         scope: null,
         proofKind: "recomputable",
+        signatureAlgorithm: "ecdsa-p256",
+        cryptoProfile: "classical",
         verifierHash: logicVerifierHash(),
       });
 
@@ -205,6 +207,8 @@ function externalVerifier(
         claimKind: "satisfies",
         scope: null,
         proofKind: "recomputable",
+        signatureAlgorithm: "ecdsa-p256",
+        cryptoProfile: "classical",
         verifierHash: hashValue(manifest),
         createdAt: new Date().toISOString(),
       };

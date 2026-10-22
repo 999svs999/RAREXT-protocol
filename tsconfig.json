@@ -10,7 +10,12 @@
     "noEmit": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@rarext/core": ["packages/core/src/index.ts"],
+      "@rarext/agent-sdk": ["packages/agent-sdk/src/index.ts"]
+    }
   },
   "include": ["packages/**/*.ts", "apps/**/*.ts"],
   "exclude": ["node_modules"]

@@ -28,7 +28,8 @@
     "test:takedown": "node scripts/takedown-test.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test && npm run build:web",
-    "chain:node": "node apps/chain/src/server.ts"
+    "chain:node": "node apps/chain/src/server.ts",
+    "pretest": "npm run build:packages"
   },
   "engines": {
     "node": ">=22.18"

@@ -1,6 +1,26 @@
 export type Bit = 0 | 1;
 
 /**
+ * The signature suites a participant can sign with.
+ *
+ * `ecdsa-p256` is what a browser has today. It is broken by a cryptographically
+ * relevant quantum computer, so every claim records which suite signed it and
+ * the profile that implies. `ml-dsa-44` and `ml-dsa-65` are post-quantum and
+ * available wherever the platform has OpenSSL 3.5.
+ */
+export type SignatureSuite = "ecdsa-p256" | "ml-dsa-44" | "ml-dsa-65";
+
+export type CryptoProfile = "classical" | "post-quantum";
+
+export interface SignatureSuiteInfo {
+  suite: SignatureSuite;
+  profile: CryptoProfile;
+  quantumSafe: boolean;
+  available: boolean;
+  note: string;
+}
+
+/**
  * The WebCrypto JSON Web Key shape, declared here so the protocol types do not
  * depend on a DOM library.
  */
@@ -188,6 +208,8 @@ export interface Attestation {
   scope: ClaimScope | null;
   verifierHash: string;
   proofKind: ProofKind;
+  signatureAlgorithm: SignatureSuite;
+  cryptoProfile: CryptoProfile;
   createdAt: string;
 }
 
@@ -340,6 +362,7 @@ export interface Publication {
   id: string;
   author: string;
   authorKey: string | null;
+  signatureAlgorithm: SignatureSuite;
   title: string;
   body: string;
   app: string;
@@ -411,6 +434,7 @@ export interface Profile {
 export interface Identity {
   handle: string;
   keyId: string;
+  algorithm: SignatureSuite;
   publicKey: JsonWebKey;
   createdAt: string;
 }
@@ -432,6 +456,7 @@ export interface PublicationPayload {
   version: 1;
   author: string;
   authorKey: string;
+  algorithm?: SignatureSuite;
   title: string;
   body: string;
   app?: string;

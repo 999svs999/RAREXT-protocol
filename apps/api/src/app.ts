@@ -40,7 +40,14 @@ import type {
 
 import { AdapterRegistry, createDefaultRegistry } from "./adapters/registry.ts";
 import { anchorPending, anchorThreshold, publicationLeaf } from "./anchorer.ts";
-import { asPublicKey, keyId, verifyPayload } from "./identity.ts";
+import {
+  asPublicKey,
+  cryptoPolicy,
+  keyId,
+  profileFor,
+  suiteFor,
+  verifyPayload,
+} from "./identity.ts";
 import { merkleProof, verifyProof } from "./merkle.ts";
 import {
   createChallengeRegistry,
@@ -266,6 +273,16 @@ function asAttestation(value: unknown): Attestation | undefined {
     verifierHash:
       typeof record.verifierHash === "string" ? record.verifierHash : "",
     proofKind: record.proofKind === "salted" ? "salted" : "recomputable",
+    signatureAlgorithm:
+      record.signatureAlgorithm === "ml-dsa-44" ||
+      record.signatureAlgorithm === "ml-dsa-65"
+        ? record.signatureAlgorithm
+        : "ecdsa-p256",
+    cryptoProfile:
+      record.signatureAlgorithm === "ml-dsa-44" ||
+      record.signatureAlgorithm === "ml-dsa-65"
+        ? "post-quantum"
+        : "classical",
     createdAt:
       typeof record.createdAt === "string"
         ? record.createdAt
@@ -726,6 +743,14 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       }
     }
 
+    const authorIdentity = input.authorKey
+      ? store.getIdentityByKey(input.authorKey)
+      : null;
+    const suite = authorIdentity?.algorithm ?? "ecdsa-p256";
+
+    attestation.signatureAlgorithm = suite;
+    attestation.cryptoProfile = profileFor(suite);
+
     if (!attestation.correct) {
       return {
         status: 422,
@@ -737,6 +762,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       id: randomUUID(),
       author: input.author,
       authorKey: input.authorKey,
+      signatureAlgorithm: suite,
       title: input.title,
       body: input.body,
       app: input.app,
@@ -1184,6 +1210,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
       if (req.method === "GET" && pathname === "/v1/chains/status") {
         send(res, 200, await chainRegistry.status());
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/crypto") {
+        send(res, 200, cryptoPolicy());
         return;
       }
 
@@ -1652,6 +1683,12 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         const handle = asHandle(body.handle);
         const publicKey = asPublicKey(body.publicKey);
         const id = keyId(publicKey);
+        const algorithm = suiteFor(publicKey);
+
+        if (!algorithm) {
+          send(res, 400, { error: "unsupported signature suite" });
+          return;
+        }
 
         if (store.getIdentity(handle)) {
           send(res, 409, { error: "handle is already registered" });
@@ -1666,6 +1703,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         const identity: Identity = {
           handle,
           keyId: id,
+          algorithm,
           publicKey,
           createdAt: new Date().toISOString(),
         };

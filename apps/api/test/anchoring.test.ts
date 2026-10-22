@@ -30,6 +30,7 @@ function publication(overrides: Partial<Publication> = {}): Publication {
     verified: true,
     signature: "c2lnbmF0dXJl",
     nonce: "nonce-1",
+    signatureAlgorithm: "ecdsa-p256",
     visibility: "public",
     artifactCommitment: null,
     attestation: {
@@ -50,6 +51,8 @@ function publication(overrides: Partial<Publication> = {}): Publication {
       scope: null,
       verifierHash: "verifier-hash",
       proofKind: "recomputable",
+      signatureAlgorithm: "ecdsa-p256",
+      cryptoProfile: "classical",
       createdAt: "2026-01-01T00:00:00.000Z",
     },
     ...overrides,

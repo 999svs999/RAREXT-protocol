@@ -20,6 +20,10 @@ mirrored and taken down, multi-chain anchoring, and private publications.
 
 ### Added
 
+- **Quantum-ready signatures.** The suite is pluggable, the platform ships ML-DSA
+  natively, every publication and attestation records which suite signed it, and
+  the Merkle leaf commits to the crypto profile. The registry publishes its policy
+  at /v1/crypto.
 - **A work economy.** Seven actions with different payouts, a work queue, a portable
   verifier format, signed worker submissions, a credit ledger that never pays twice
   for the same artifact, and a rewards board in the web app.

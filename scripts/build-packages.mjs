@@ -73,8 +73,7 @@ for (const pkg of packages) {
     target: "node22",
     sourcemap: true,
     banner: banner ? { js: banner } : undefined,
-    external: ["@rarext/core", "@rarext/agent-sdk", "node:*"],
-    logLevel: "warning",
+    external: ["@rarext/core", "@rarext/agent-sdk", "node:*"],    logLevel: "warning",
   });
 
   // The declarations are emitted once for the whole workspace, laid out like the

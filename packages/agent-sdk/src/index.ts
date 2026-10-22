@@ -36,6 +36,7 @@ import type {
   PublicationPayload,
   PublicationSource,
   Semantics,
+  SignatureSuite,
   SimulationResult,
   SourceQuery,
   SourceResolution,
@@ -175,25 +176,62 @@ function nodeJwk(key: JsonWebKey): NodeJwk {
 }
 
 function publicJwk(key: JsonWebKey): JsonWebKey {
-  if (key.kty !== "EC" || key.crv !== "P-256") {
-    throw new Error("agent key must be an EC P-256 key");
+  if (key.kty === "EC" && key.crv === "P-256") {
+    if (typeof key.x !== "string" || typeof key.y !== "string") {
+      throw new Error("agent key is missing coordinates");
+    }
+
+    return { kty: key.kty, crv: key.crv, x: key.x, y: key.y };
   }
 
-  if (typeof key.x !== "string" || typeof key.y !== "string") {
-    throw new Error("agent key is missing coordinates");
+  if (key.kty === "AKP" && (key.alg === "ML-DSA-44" || key.alg === "ML-DSA-65")) {
+    const raw = (key as unknown as Record<string, unknown>).pub;
+    if (typeof raw !== "string" || raw.length === 0) {
+      throw new Error("agent key is missing its public value");
+    }
+    return { kty: key.kty, alg: key.alg, pub: raw } as JsonWebKey;
   }
 
-  return { kty: key.kty, crv: key.crv, x: key.x, y: key.y };
+  throw new Error("agent key must be an EC P-256 or an ML-DSA key");
+}
+
+/**
+ * The suite a key belongs to. Derived from the key, never from a request, so a
+ * caller cannot claim a post-quantum key for a classical one.
+ */
+export function suiteOf(key: JsonWebKey): SignatureSuite {
+  if (key.kty === "EC" && key.crv === "P-256") return "ecdsa-p256";
+  if (key.kty === "AKP" && key.alg === "ML-DSA-44") return "ml-dsa-44";
+  if (key.kty === "AKP" && key.alg === "ML-DSA-65") return "ml-dsa-65";
+  throw new Error("unsupported signature suite");
 }
 
 export function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicJwk(publicKey))).digest("hex");
 }
 
-export function generateAgentKeypair(): AgentKeypair {
-  const { publicKey, privateKey } = generateKeyPairSync("ec", {
-    namedCurve: "prime256v1",
-  });
+export function generateAgentKeypair(
+  suite: SignatureSuite = "ecdsa-p256",
+): AgentKeypair {
+  if (suite === "ecdsa-p256") {
+    const { publicKey, privateKey } = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+    });
+
+    return {
+      publicKey: publicJwk(publicKey.export({ format: "jwk" }) as JsonWebKey),
+      privateKey: privateKey.export({ format: "jwk" }) as JsonWebKey,
+    };
+  }
+
+  const algorithm: "ml-dsa-44" | "ml-dsa-65" =
+    suite === "ml-dsa-65" ? "ml-dsa-65" : "ml-dsa-44";
+  const { publicKey, privateKey } = (
+    generateKeyPairSync as unknown as (
+      name: "ml-dsa-44" | "ml-dsa-65",
+      options?: unknown,
+    ) => { publicKey: import("node:crypto").KeyObject; privateKey: import("node:crypto").KeyObject }
+  )(algorithm);
 
   return {
     publicKey: publicJwk(publicKey.export({ format: "jwk" }) as JsonWebKey),
@@ -204,13 +242,19 @@ export function generateAgentKeypair(): AgentKeypair {
 export class AgentSigner {
   readonly publicKey: JsonWebKey;
   readonly keyId: string;
+  readonly suite: SignatureSuite;
   readonly #privateKey: import("node:crypto").KeyObject;
 
   constructor(privateKey: JsonWebKey) {
-    if (privateKey.kty !== "EC" || privateKey.crv !== "P-256" || privateKey.d === undefined) {
-      throw new Error("private key must be an EC P-256 JWK");
+    const suite = suiteOf(privateKey);
+    const raw = privateKey as unknown as Record<string, unknown>;
+    const secret = suite === "ecdsa-p256" ? raw.d : raw.priv;
+
+    if (secret === undefined) {
+      throw new Error("private key must include its private value");
     }
 
+    this.suite = suite;
     this.#privateKey = createPrivateKey({
       key: nodeJwk(privateKey),
       format: "jwk",
@@ -221,11 +265,25 @@ export class AgentSigner {
     this.keyId = publicKeyId(this.publicKey);
   }
 
+  /**
+   * Sign the canonical payload.
+   *
+   * ECDSA signs a SHA-256 digest in the P1363 encoding; ML-DSA signs the message
+   * itself. Either way the signature covers the canonical bytes, and the suite
+   * travels inside the signed payload so a signature can never be reinterpreted
+   * under a different suite.
+   */
   sign(payload: unknown): string {
-    return signBytes("sha256", Buffer.from(canonicalize(payload)), {
-      key: this.#privateKey,
-      dsaEncoding: "ieee-p1363",
-    }).toString("base64");
+    const message = Buffer.from(canonicalize(payload));
+
+    if (this.suite === "ecdsa-p256") {
+      return signBytes("sha256", message, {
+        key: this.#privateKey,
+        dsaEncoding: "ieee-p1363",
+      }).toString("base64");
+    }
+
+    return signBytes(null, message, { key: this.#privateKey }).toString("base64");
   }
 
   publicationPayload(input: AgentPublishInput): PublicationPayload {
@@ -234,6 +292,7 @@ export class AgentSigner {
       version: 1,
       author: input.author,
       authorKey: this.keyId,
+      algorithm: this.suite,
       title: input.title,
       body: input.body ?? "",
       taskId: input.taskId,
@@ -251,6 +310,7 @@ export class AgentSigner {
       version: 1,
       author: input.author,
       authorKey: this.keyId,
+      algorithm: this.suite,
       title: input.title,
       body: input.body ?? "",
       app: input.artifact.app,

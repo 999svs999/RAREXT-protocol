@@ -9,7 +9,7 @@ import { createDefaultRegistry } from "./adapters/registry.ts";
 import type { AdapterRegistry } from "./adapters/registry.ts";
 import type { RarextStore } from "./store.ts";
 
-export const PUBLICATION_LEAF_VERSION = 2;
+export const PUBLICATION_LEAF_VERSION = 3;
 
 /**
  * The leaf a publication contributes to a Merkle root.
@@ -48,37 +48,49 @@ export function publicationLeaf(
     );
   }
 
+  const base = {
+    id: publication.id,
+    author: publication.author,
+    authorKey: publication.authorKey,
+    title: publication.title,
+    body: publication.body,
+    app: publication.app,
+    challengeId: publication.challengeId,
+    taskId: publication.taskId,
+    artifact: publication.artifact,
+    circuit: publication.circuit ?? null,
+    parentId: publication.parentId,
+    source: publication.source,
+    createdAt: publication.createdAt,
+    nonce: publication.nonce,
+    signature: publication.signature,
+    attestation: {
+      circuitHash: publication.attestation.circuitHash,
+      traceHash: publication.attestation.traceHash,
+      correct: publication.attestation.correct,
+      score: publication.attestation.score,
+      gateCount: publication.attestation.gateCount,
+      semanticsId: publication.attestation.semanticsId,
+      semanticsVersion: publication.attestation.semanticsVersion,
+      semanticsHash: publication.attestation.semanticsHash,
+      claimKind: publication.attestation.claimKind,
+      scope: publication.attestation.scope,
+      verifierHash: publication.attestation.verifierHash,
+    },
+  };
+
+  if (version < 3) {
+    return sha256(canonicalize({ leafVersion: 2, ...base }));
+  }
+
+  // Version 3 also commits to the cryptographic profile of the claim, so the
+  // anchor records whether the signature behind it was post-quantum.
   return sha256(
     canonicalize({
-      leafVersion: PUBLICATION_LEAF_VERSION,
-      id: publication.id,
-      author: publication.author,
-      authorKey: publication.authorKey,
-      title: publication.title,
-      body: publication.body,
-      app: publication.app,
-      challengeId: publication.challengeId,
-      taskId: publication.taskId,
-      artifact: publication.artifact,
-      circuit: publication.circuit ?? null,
-      parentId: publication.parentId,
-      source: publication.source,
-      createdAt: publication.createdAt,
-      nonce: publication.nonce,
-      signature: publication.signature,
-      attestation: {
-        circuitHash: publication.attestation.circuitHash,
-        traceHash: publication.attestation.traceHash,
-        correct: publication.attestation.correct,
-        score: publication.attestation.score,
-        gateCount: publication.attestation.gateCount,
-        semanticsId: publication.attestation.semanticsId,
-        semanticsVersion: publication.attestation.semanticsVersion,
-        semanticsHash: publication.attestation.semanticsHash,
-        claimKind: publication.attestation.claimKind,
-        scope: publication.attestation.scope,
-        verifierHash: publication.attestation.verifierHash,
-      },
+      leafVersion: 3,
+      ...base,
+      signatureAlgorithm: publication.signatureAlgorithm,
+      cryptoProfile: publication.attestation.cryptoProfile,
     }),
   );
 }

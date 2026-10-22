@@ -6,7 +6,9 @@ import type {
   Circuit,
   ClaimKind,
   ClaimScope,
+  CryptoProfile,
   ProofKind,
+  SignatureSuite,
   Task,
 } from "../../../packages/core/src/index.ts";
 
@@ -20,6 +22,8 @@ export interface AttestationBinding {
   scope: ClaimScope | null;
   verifierHash: string;
   proofKind: ProofKind;
+  signatureAlgorithm: SignatureSuite;
+  cryptoProfile: CryptoProfile;
 }
 
 export function sha256(value: string): string {
@@ -58,6 +62,8 @@ export function attest(
     scope: binding.scope,
     verifierHash: binding.verifierHash,
     proofKind: binding.proofKind,
+    signatureAlgorithm: binding.signatureAlgorithm,
+    cryptoProfile: binding.cryptoProfile,
     createdAt: new Date().toISOString(),
   };
 }
