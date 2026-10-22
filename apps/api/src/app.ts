@@ -144,6 +144,7 @@ export interface AppOptions {
   scheduler?: ChallengeScheduler;
   challengeIntervalMs?: number;
   fetch?: typeof fetch;
+  holderUrls?: Map<string, string>;
 }
 
 function send(res: ServerResponse, status: number, body?: unknown): void {
@@ -1577,6 +1578,27 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
       if (req.method === "POST" && pathname === "/v1/durability/challenge") {
         send(res, 200, await scheduler.runNow());
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/durability/gc") {
+        if (!options.holderUrls || options.holderUrls.size === 0) {
+          send(res, 400, { error: "no holders configured for GC" });
+          return;
+        }
+
+        const body = asRecord(await readJson(req));
+        const gracePeriodMs = typeof body.gracePeriodMs === "number" && body.gracePeriodMs >= 0
+          ? body.gracePeriodMs
+          : undefined;
+        const dryRun = body.dryRun !== false;
+
+        send(res, 200, await durability.gcWithUrls(options.holderUrls, {
+          gracePeriodMs,
+          dryRun,
+          token: process.env.RAREXT_HOLDER_TOKEN || undefined,
+          fetch: options.fetch,
+        }));
         return;
       }
 

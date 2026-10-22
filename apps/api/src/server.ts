@@ -13,6 +13,16 @@ const store = DATA === "none" ? new RarextStore() : new RarextStore(DATA ?? ".da
 const holders = holdersFromEnv(undefined, {
   token: process.env.RAREXT_HOLDER_TOKEN || undefined,
 });
+
+const rawHolderUrls = process.env.RAREXT_STORAGE_HOLDERS ?? process.env.RAREXT_HOLDERS ?? "";
+const holderUrls = new Map<string, string>(
+  rawHolderUrls.split(",").filter(Boolean).map((s) => {
+    const parts = s.split("=");
+    if (parts.length !== 2) throw new Error(`invalid holder spec: ${s}`);
+    return [parts[0], parts[1]];
+  }),
+);
+
 const durability = new DurabilityLedger();
 const intervalMs = Number(process.env.RAREXT_CHALLENGE_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
 const scheduler = new ChallengeScheduler({
@@ -28,6 +38,7 @@ const server = createApp({
   durability,
   holders,
   scheduler,
+  holderUrls,
 });
 
 server.listen(PORT, HOST, () => {

@@ -778,4 +778,80 @@ export class DurabilityLedger {
 
     return { filled: staged.length, readBytes, writtenBytes, placement };
   }
+
+  /**
+   * Collects all shard hashes referenced by placements in this ledger.
+   * Returns a map from holder id to array of storedAs hashes.
+   */
+  referencedShardsByHolder(): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+
+    for (const placement of this.placements.values()) {
+      for (const shard of placement.shards) {
+        const arr = map.get(shard.holder) ?? [];
+        arr.push(shard.storedAs);
+        map.set(shard.holder, arr);
+      }
+    }
+
+    return map;
+  }
+
+  /**
+   * Runs garbage collection on all configured holders.
+   *
+   * @param holderUrls - Map from holder id to base URL (e.g., "http://host:port")
+   * @param options - GC options
+   */
+  async gcWithUrls(
+    holderUrls: Map<string, string>,
+    options: { gracePeriodMs?: number; dryRun?: boolean; fetch?: typeof fetch; token?: string } = {},
+  ): Promise<GcResult[]> {
+    const referenced = this.referencedShardsByHolder();
+    const results: GcResult[] = [];
+    const callFetch = options.fetch ?? fetch;
+    const token = options.token;
+    const gracePeriodMs = options.gracePeriodMs ?? 24 * 60 * 60 * 1000;
+    const dryRun = options.dryRun ?? true;
+
+    for (const [holderId, baseUrl] of holderUrls) {
+      const hashes = referenced.get(holderId) ?? [];
+
+      try {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (token) headers.authorization = `Bearer ${token}`;
+
+        const resp = await callFetch(`${baseUrl.replace(/\/+$/, "")}/v1/holder/gc/scan`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ referenced: hashes, gracePeriodMs, dryRun }),
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        const data = await resp.json() as GcScanResponse;
+        results.push(data);
+      } catch (error) {
+        results.push({
+          holder: holderId,
+          error: error instanceof Error ? error.message : "GC failed",
+        } as GcResult);
+      }
+    }
+
+    return results;
+  }
 }
+
+export interface GcScanResponse {
+  holder: string;
+  scanned: number;
+  referenced: number;
+  candidates: number;
+  deleted: number;
+  wouldDelete: string[];
+  dryRun: boolean;
+  gracePeriodMs: number;
+  error?: string;
+}
+
+export interface GcResult extends GcScanResponse {}

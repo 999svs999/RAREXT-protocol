@@ -1,6 +1,8 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   chunkLeaves,
@@ -22,6 +24,36 @@ export interface HolderServerOptions {
 
 const MAX_CACHED_LEAVES = 262_144;
 const MAX_CACHE_ENTRIES = 64;
+
+const GC_CANDIDATES_FILE = "_gc-candidates.json";
+const DEFAULT_GC_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000; // 24h
+
+interface GcCandidate {
+  storedAs: string;
+  firstSeen: number; // epoch ms
+}
+
+function loadGcCandidates(directory: string): Map<string, GcCandidate> {
+  const path = join(directory, GC_CANDIDATES_FILE);
+  if (!existsSync(path)) return new Map();
+  try {
+    const data = JSON.parse(readFileSync(path, "utf8")) as GcCandidate[];
+    return new Map(data.map((c) => [c.storedAs, c]));
+  } catch {
+    return new Map();
+  }
+}
+
+function saveGcCandidates(directory: string, candidates: Map<string, GcCandidate>): void {
+  const path = join(directory, GC_CANDIDATES_FILE);
+  const temporary = `${path}.${randomBytes(6).toString("hex")}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify([...candidates.values()], null, 2));
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
 
 function authorized(req: IncomingMessage, token: string | undefined): boolean {
   if (!token) return true;
@@ -112,6 +144,94 @@ export function createHolderServer(options: HolderServerOptions) {
     try {
       const url = new URL(req.url ?? "/", "http://holder");
       const parts = url.pathname.split("/").filter(Boolean);
+
+      if (url.pathname === "/v1/holder/gc/scan" && req.method === "POST") {
+        if (!authorized(req, options.token)) {
+          send(res, 401, { error: "unauthorized" });
+          return;
+        }
+        const body = await readJson(req);
+        const referenced = body.referenced;
+        if (!Array.isArray(referenced) || !referenced.every(isHash)) {
+          send(res, 400, { error: "referenced must be an array of sha256 hashes" });
+          return;
+        }
+        const graceMs = typeof body.gracePeriodMs === "number" && body.gracePeriodMs >= 0
+          ? body.gracePeriodMs
+          : DEFAULT_GC_GRACE_PERIOD_MS;
+        const dryRun = body.dryRun !== false;
+
+        const referencedSet = new Set(referenced);
+        const allShards = store.list();
+        const candidates = loadGcCandidates(options.directory);
+        const now = Date.now();
+        const toDelete: GcCandidate[] = [];
+        const stillReferenced: string[] = [];
+
+        for (const shard of allShards) {
+          if (referencedSet.has(shard.hash)) {
+            stillReferenced.push(shard.hash);
+            candidates.delete(shard.hash);
+          } else {
+            const existing = candidates.get(shard.hash);
+            if (!existing) {
+              candidates.set(shard.hash, { storedAs: shard.hash, firstSeen: now });
+              if (graceMs === 0) {
+                toDelete.push({ storedAs: shard.hash, firstSeen: now });
+              }
+            } else if (now - existing.firstSeen >= graceMs) {
+              toDelete.push(existing);
+            }
+          }
+        }
+
+        if (!dryRun) {
+          for (const c of toDelete) {
+            store.remove(c.storedAs);
+            candidates.delete(c.storedAs);
+          }
+          saveGcCandidates(options.directory, candidates);
+        }
+
+        send(res, 200, {
+          holder: options.id,
+          scanned: allShards.length,
+          referenced: stillReferenced.length,
+          candidates: candidates.size,
+          deleted: dryRun ? 0 : toDelete.length,
+          wouldDelete: toDelete.map((c) => c.storedAs),
+          dryRun,
+          gracePeriodMs: graceMs,
+        });
+        return;
+      }
+
+      if (url.pathname === "/v1/holder/gc/candidates" && req.method === "GET") {
+        if (!authorized(req, options.token)) {
+          send(res, 401, { error: "unauthorized" });
+          return;
+        }
+        const candidates = loadGcCandidates(options.directory);
+        send(res, 200, {
+          holder: options.id,
+          candidates: [...candidates.values()].map((c) => ({
+            storedAs: c.storedAs,
+            firstSeen: new Date(c.firstSeen).toISOString(),
+            ageMs: Date.now() - c.firstSeen,
+          })),
+        });
+        return;
+      }
+
+      if (url.pathname === "/v1/holder/gc/reset" && req.method === "POST") {
+        if (!authorized(req, options.token)) {
+          send(res, 401, { error: "unauthorized" });
+          return;
+        }
+        rmSync(join(options.directory, GC_CANDIDATES_FILE), { force: true });
+        send(res, 200, { holder: options.id, reset: true });
+        return;
+      }
 
       if (!authorized(req, options.token)) {
         send(res, 401, { error: "unauthorized" });
