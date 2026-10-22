@@ -1,0 +1,76 @@
+{
+  "chains": [
+    {
+      "id": "rarex",
+      "name": "RAREXT chain",
+      "family": "rarext",
+      "chainId": "rarex-mainnet-1",
+      "rpc": "http://127.0.0.1:8790"
+    },
+    {
+      "id": "base",
+      "name": "Base",
+      "family": "evm",
+      "chainId": 8453,
+      "rpc": null,
+      "address": null
+    },
+    {
+      "id": "optimism",
+      "name": "OP Mainnet",
+      "family": "evm",
+      "chainId": 10,
+      "rpc": null,
+      "address": null
+    },
+    {
+      "id": "arbitrum",
+      "name": "Arbitrum One",
+      "family": "evm",
+      "chainId": 42161,
+      "rpc": null,
+      "address": null
+    },
+    {
+      "id": "polygon",
+      "name": "Polygon PoS",
+      "family": "evm",
+      "chainId": 137,
+      "rpc": null,
+      "address": null
+    },
+    {
+      "id": "zksync",
+      "name": "ZKsync Era",
+      "family": "evm",
+      "chainId": 324,
+      "rpc": null,
+      "address": null
+    },
+    {
+      "id": "solana",
+      "name": "Solana",
+      "family": "solana",
+      "rpc": null
+    },
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "family": "bitcoin",
+      "rpc": null
+    },
+    {
+      "id": "cosmos",
+      "name": "Cosmos Hub",
+      "family": "cosmos",
+      "chainId": "cosmoshub-4",
+      "rpc": null
+    },
+    {
+      "id": "trac",
+      "name": "Trac Network",
+      "family": "trac",
+      "rpc": null
+    }
+  ]
+}

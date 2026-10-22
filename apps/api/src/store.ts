@@ -2,6 +2,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, resolve } from "node:path";
 
 import type {
+  Revocation,
+  RevocationKind,
+} from "./revocations.ts";
+import type {
   Anchor,
   Artifact,
   BuildLineage,
@@ -28,6 +32,7 @@ interface Snapshot {
   identities: Identity[];
   anchors: Anchor[];
   identityLinks?: IdentityLink[];
+  revocations?: Revocation[];
 }
 
 export class RarextStore {
@@ -39,6 +44,7 @@ export class RarextStore {
   private readonly anchors = new Map<string, Anchor>();
   private readonly anchoredIds = new Set<string>();
   private readonly identityLinks = new Map<string, IdentityLink>();
+  private readonly revocations = new Map<string, Revocation>();
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -300,6 +306,25 @@ export class RarextStore {
       .reverse();
   }
 
+  addRevocation(revocation: Revocation, persist = true): void {
+    if (this.revocations.has(revocation.id)) return;
+    this.revocations.set(revocation.id, revocation);
+    if (persist) this.persist();
+  }
+
+  listRevocations(): Revocation[] {
+    return [...this.revocations.values()].sort((a, b) =>
+      b.issuedAt.localeCompare(a.issuedAt),
+    );
+  }
+
+  isRevoked(kind: RevocationKind, target: string): Revocation | null {
+    for (const revocation of this.revocations.values()) {
+      if (revocation.kind === kind && revocation.target === target) return revocation;
+    }
+    return null;
+  }
+
   addIdentityLink(link: IdentityLink, persist = true): void {
     if (this.identityLinks.has(link.id)) return;
     this.identityLinks.set(link.id, link);
@@ -387,6 +412,10 @@ export class RarextStore {
       for (const link of snapshot.identityLinks ?? []) {
         this.addIdentityLink(link, false);
       }
+
+      for (const revocation of snapshot.revocations ?? []) {
+        this.addRevocation(revocation, false);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[rarext] could not load ${this.filePath}: ${message}`);
@@ -404,6 +433,7 @@ export class RarextStore {
       identities: [...this.identitiesByKey.values()],
       anchors: [...this.anchors.values()],
       identityLinks: [...this.identityLinks.values()],
+      revocations: [...this.revocations.values()],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

@@ -8,6 +8,9 @@ import type {
 
 import { GitHubSourceAdapter } from "./github.ts";
 import { ContentPinAdapter } from "./content.ts";
+import { RelayChainAdapter } from "../chains/relay.ts";
+import { RarextChainAdapter } from "../chains/rarext.ts";
+import { loadChainConfigs } from "../chains/registry.ts";
 import { LocalAnchorAdapter } from "./local.ts";
 import { TapeOutAdapter } from "./tapeout.ts";
 import { TracAnchorAdapter } from "./trac.ts";
@@ -91,6 +94,8 @@ export class AdapterRegistry {
 }
 
 export function createDefaultRegistry(requestFetch: typeof fetch = fetch): AdapterRegistry {
+  const chains = loadChainConfigs();
+
   return new AdapterRegistry([
     new LocalAnchorAdapter(),
     new TracAnchorAdapter(),
@@ -98,6 +103,11 @@ export function createDefaultRegistry(requestFetch: typeof fetch = fetch): Adapt
       serviceUrl: process.env.RAREXT_PIN_URL ?? null,
       fetchImpl: requestFetch,
     }),
+    ...chains.map((config) =>
+      config.family === "rarext"
+        ? new RarextChainAdapter(config, requestFetch, config.signer ?? null)
+        : new RelayChainAdapter(config, requestFetch),
+    ),
     new TapeOutAdapter(),
     new GitHubSourceAdapter(requestFetch),
   ]);

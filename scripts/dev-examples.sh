@@ -49,16 +49,20 @@ python3 examples/launchpad/server.py >"$OUT/launchpad.log" 2>&1 &
 PIDS+=($!)
 python3 examples/storage/server.py >"$OUT/storage.log" 2>&1 &
 PIDS+=($!)
+node apps/chain/src/server.ts >"$OUT/chain.log" 2>&1 &
+PIDS+=($!)
 sleep 1
 
 RAREXT_DATA=none \
 RAREXT_VERIFIERS=".data/examples/verifiers.json" \
 RAREXT_CHALLENGES=".data/examples/challenges.json" \
 RAREXT_SEMANTICS=".data/examples/semantics.json" \
+RAREXT_CHAINS="examples/chains/chains.json" \
 node apps/api/src/server.ts &
 PIDS+=($!)
 
 sleep 2
 echo "registry:  http://127.0.0.1:8787"
+echo "chain:     http://127.0.0.1:8790 (RAREXT chain node)"
 echo "verifiers: http://127.0.0.1:9200 (board games), http://127.0.0.1:9300 (fair launch), http://127.0.0.1:9400 (storage)"
 wait

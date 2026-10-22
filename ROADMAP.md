@@ -30,12 +30,19 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Fair-launch app: policy as a pinned challenge, open verifier, public verdicts
 - [x] Storage economy: content-addressed blobs, proof of possession, open and sealed tiers, metered usage
 - [x] Content-complete anchoring: the Merkle leaf commits to the whole publication, so mirrors are checkable
-- [ ] Portable registry bundle plus a static mirror, verified against the anchor root
-- [ ] IPFS/Arweave pinning adapter, and multi-chain anchoring for the same root
-- [ ] Retention proofs: a time-locked challenge instead of a declared term
-- [ ] Sealed private artifacts with salted proofs and capability-gated retrieval
+- [x] Multi-chain anchoring with independent read-back confirmation
+- [x] RAREXT chain node: a signed, hash-linked log of anchor commitments with inclusion proofs
+- [x] Revocation lists for capabilities and distrusted verifier hashes
+- [x] Registry seed list for mirror discovery
+- [x] Publishable packages, release process, and a takedown test
+- [x] Portable registry bundle plus a static mirror, verified against the anchor root
+- [x] Content-addressing adapter: CIDv1 pointers, with an optional pinning service
+- [x] Retention proofs: a time-locked commitment instead of a declared term
+- [x] Sealed private artifacts: salted proofs and capability-gated retrieval
+- [ ] A deployed EVM anchor contract, audited
+- [ ] A pinning service for the content adapter
 - [ ] Continuous fair-launch attestations as a verifiable trajectory
-- [ ] Own chain, gated on real settlement volume (see [RFC 0004](rfcs/0004-storage-economy.md))
+- [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume
 - [ ] Public testnet registry
 - [ ] First external agent integration
 - [ ] First non-logic app integration in production

@@ -62,7 +62,15 @@ import {
   verifyManifestInclusion,
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
-import { verifyCapability } from "./capabilities.ts";
+import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
+import { verifyCapability, decodeCapability } from "./capabilities.ts";
+import {
+  loadRevocations,
+  verifyRevocation,
+  type Revocation,
+  type RevocationKind,
+} from "./revocations.ts";
+import { registrySeedList } from "./registries.ts";
 import type { StorageInclusionProof } from "../../../packages/core/src/index.ts";
 import {
   createVerifierRegistry,
@@ -90,6 +98,7 @@ export interface AppOptions {
   challenges?: ChallengeRegistry;
   verifiers?: VerifierRegistry;
   semantics?: SemanticsRegistry;
+  chains?: ChainRegistry;
   blobs?: BlobStore;
   fetch?: typeof fetch;
 }
@@ -645,6 +654,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
   const blobs =
     options.blobs ??
     new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
+  const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
 
   async function publish(input: PublishInput): Promise<PublishResult> {
     const challenge = challenges.get(input.challengeId);
@@ -923,6 +933,88 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         }
 
         send(res, 200, withSemanticsHash(record));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/revocations") {
+        send(res, 200, store.listRevocations());
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/revocations") {
+        const body = asRecord(await readJson(req));
+        const raw = body.revocation ?? body;
+        const record = asRecord(raw);
+
+        if (
+          typeof record.id !== "string" ||
+          typeof record.target !== "string" ||
+          !["capability", "verifier", "artifact"].includes(String(record.kind))
+        ) {
+          send(res, 400, {
+            error: "a revocation needs an id, a kind, and a target",
+          });
+          return;
+        }
+
+        const issuer = typeof record.issuer === "string" ? record.issuer : null;
+        const identity = issuer ? store.getIdentity(issuer) : null;
+
+        if (!identity) {
+          send(res, 401, { error: "the issuer is not a registered handle" });
+          return;
+        }
+
+        const signature = typeof body.signature === "string" ? body.signature : null;
+
+        if (!signature) {
+          send(res, 400, { error: "a revocation must be signed" });
+          return;
+        }
+
+        const revocation: Revocation = {
+          id: record.id,
+          kind: record.kind as RevocationKind,
+          target: record.target,
+          reason: typeof record.reason === "string" ? record.reason : "",
+          issuer: issuer ?? "",
+          issuedAt:
+            typeof record.issuedAt === "string"
+              ? record.issuedAt
+              : new Date().toISOString(),
+        };
+
+        if (!verifyRevocation(identity.publicKey, { revocation, signature })) {
+          send(res, 401, { error: "the revocation signature is not valid" });
+          return;
+        }
+
+        store.addRevocation(revocation);
+        send(res, 201, revocation);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/registries") {
+        send(res, 200, {
+          self: {
+            url: `http://${req.headers.host ?? "127.0.0.1:8787"}`,
+            chain: chainRegistry.list().map((chain) => chain.id),
+          },
+          registries: registrySeedList(),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/chains") {
+        send(res, 200, {
+          chains: chainRegistry.list(),
+          adapters: chainRegistry.info(),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/chains/status") {
+        send(res, 200, await chainRegistry.status());
         return;
       }
 
@@ -1353,6 +1445,18 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
           if (!check.ok) {
             send(res, 403, { error: check.reason });
+            return;
+          }
+
+          const decoded = decodeCapability(capability);
+          const revoked = decoded
+            ? store.isRevoked("capability", decoded.grant.nonce)
+            : null;
+
+          if (revoked) {
+            send(res, 403, {
+              error: `this capability was revoked: ${revoked.reason || "no reason given"}`,
+            });
             return;
           }
         }

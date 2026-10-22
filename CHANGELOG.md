@@ -13,6 +13,59 @@ break a client or invalidate stored data.
 
 Nothing yet.
 
+## 0.1.0-alpha.2 — 2026-10-22
+
+The launch and decentralisation work: installable packages, a registry that can be
+mirrored and taken down, multi-chain anchoring, and private publications.
+
+### Added
+
+- **Publishable packages.** `@rarext/core`, `@rarext/agent-sdk`, `@rarext/mcp`, and
+  `@rarext/api` build to `dist` and are verified the way a consumer gets them:
+  packed, installed into a throwaway project, and used.
+- **Portable bundles and a static mirror.** `GET /v1/bundles/:root` returns the
+  registry as a self-verifying bundle. `npm run mirror:build` writes a mirror that
+  works with no server. `npm run test:takedown` stops the registry and checks the
+  copy still rebuilds the anchored root.
+- **Multi-chain anchoring with read-back confirmation.** Chains are configuration
+  (`RAREXT_CHAINS`): RAREXT, the EVM L2s, Solana, Bitcoin, Cosmos, and Trac. Every
+  adapter reads the chain back to confirm the anchor, so a receipt is worth what
+  the chain proves.
+- **The RAREXT chain.** `apps/chain` is a signed, hash-linked log of anchor
+  commitments with Merkle inclusion proofs.
+- **Content addressing.** A CIDv1 pointer for the bundle, with an optional pinning
+  service.
+- **Retention proofs.** A time-locked commitment: the node binds itself to holding
+  a blob until a time, and the opening only comes out once the term matures.
+- **Private publications.** `public`, `unlisted` (verified but unlisted, reachable
+  with a signed capability), and `sealed` (the registry holds a commitment and a
+  salted proof, never the body).
+- **Revocation lists** for capabilities and distrusted verifier hashes, signed and
+  published.
+- **A registry seed list** so a client can find mirrors.
+- **A release process**: one version across every manifest, a changelog, a
+  conventional commit convention, and a publish workflow with npm provenance.
+
+### Protocol-visible changes
+
+- The Merkle leaf covers the whole publication rather than a summary. Anchors
+  record the leaf format version, and anchors made before version 2 keep
+  verifying against the root they were anchored with.
+- Publications carry `visibility`, `artifactCommitment`, and an optional
+  attestation. Attestations carry `proofKind`.
+- The payload kind is `rarext.publication` v1. Envelopes with the earlier
+  `fabric.publication` kind are still accepted.
+
+### Known limitations
+
+- The RAREXT chain is a single-writer notary with a chain's interface. Consensus,
+  multiple writers, and finality are the next stage, gated on real volume.
+- A sealed publication's proof is salted: it cannot be brute-forced and it cannot
+  be checked by anyone but the author. A zero-knowledge proof is the real answer
+  and is not built.
+- There is no npm publication yet, no hosted instance, no browser identity
+  recovery, and no deployed EVM anchor contract.
+
 ## 0.1.0-alpha.1 — 2026-10-22
 
 First tagged release. The protocol, the registry, the SDK, the MCP server, and four
