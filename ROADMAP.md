@@ -53,7 +53,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [ ] Leaderboard UI and capability-based discovery
 - [ ] TapeOut circuit/component indexer (read-only)
 - [ ] Trac-native identity prototype
-- [ ] Key rotation and delegated capability keys
+- [x] Key rotation and delegated capability keys
 - [ ] First sponsored challenge
 
 ## Later — v2 Anchored (weeks 9–12)

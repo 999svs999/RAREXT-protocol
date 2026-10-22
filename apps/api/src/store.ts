@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { migrateSnapshot } from "./migrations.ts";
+import { CURRENT_SNAPSHOT_VERSION, migrateSnapshot } from "./migrations.ts";
 import type {
   Revocation,
   RevocationKind,
@@ -14,10 +14,14 @@ import type {
   BuildSearchQuery,
   BuildSummary,
   Circuit,
+  Delegation,
   Identity,
   IdentityLink,
+  JsonWebKey,
+  KeyRotation,
   Profile,
   Publication,
+  SignatureSuite,
 } from "../../../packages/core/src/index.ts";
 
 export interface FeedQuery {
@@ -28,14 +32,24 @@ export interface FeedQuery {
   offset?: number;
 }
 
+export interface RetiredKey {
+  handle: string;
+  keyId: string;
+  publicKey: JsonWebKey;
+  algorithm: SignatureSuite;
+  retiredAt: string;
+}
+
 interface Snapshot {
-  version: 1;
+  version: number;
   publications: Publication[];
   identities: Identity[];
   anchors: Anchor[];
   identityLinks?: IdentityLink[];
   revocations?: Revocation[];
   credits?: CreditRecord[];
+  rotations?: KeyRotation[];
+  delegations?: Delegation[];
 }
 
 export class RarextStore {
@@ -44,6 +58,9 @@ export class RarextStore {
   private readonly order: string[] = [];
   private readonly identitiesByHandle = new Map<string, Identity>();
   private readonly identitiesByKey = new Map<string, Identity>();
+  private readonly retiredKeys = new Map<string, RetiredKey>();
+  private readonly rotations: KeyRotation[] = [];
+  private readonly delegations: Delegation[] = [];
   private readonly anchors = new Map<string, Anchor>();
   private readonly anchoredIds = new Set<string>();
   private readonly identityLinks = new Map<string, IdentityLink>();
@@ -81,6 +98,7 @@ export class RarextStore {
       taskId: challengeId,
       circuit,
       authorKey: publication.authorKey ?? null,
+      delegatedBy: publication.delegatedBy ?? null,
       verified: publication.verified ?? false,
       signature: publication.signature ?? null,
       nonce: publication.nonce ?? null,
@@ -285,6 +303,130 @@ export class RarextStore {
     return this.identitiesByKey.get(keyId) ?? null;
   }
 
+  /**
+   * A key that ever belonged to a handle: the current key or one it was rotated
+   * from. Old publications and capabilities keep verifying after a rotation.
+   */
+  resolveKey(keyId: string): { handle: string; keyId: string; publicKey: JsonWebKey; algorithm: SignatureSuite; current: boolean } | null {
+    const identity = this.identitiesByKey.get(keyId);
+
+    if (identity) {
+      return {
+        handle: identity.handle,
+        keyId,
+        publicKey: identity.publicKey,
+        algorithm: identity.algorithm,
+        current: true,
+      };
+    }
+
+    const retired = this.retiredKeys.get(keyId);
+
+    return retired ? { ...retired, current: false } : null;
+  }
+
+  keysForHandle(handle: string): { keyId: string; publicKey: JsonWebKey; algorithm: SignatureSuite }[] {
+    const identity = this.identitiesByHandle.get(handle);
+    const keys: { keyId: string; publicKey: JsonWebKey; algorithm: SignatureSuite }[] = [];
+
+    if (identity) {
+      keys.push({ keyId: identity.keyId, publicKey: identity.publicKey, algorithm: identity.algorithm });
+    }
+
+    for (const retired of this.retiredKeys.values()) {
+      if (retired.handle === handle) {
+        keys.push({
+          keyId: retired.keyId,
+          publicKey: retired.publicKey,
+          algorithm: retired.algorithm,
+        });
+      }
+    }
+
+    return keys;
+  }
+
+  addRotation(rotation: KeyRotation, persist = true): void {
+    const identity = this.identitiesByHandle.get(rotation.handle);
+
+    if (!identity) throw new Error("identity is not registered");
+    if (identity.keyId !== rotation.fromKeyId) throw new Error("rotation does not start from the current key");
+    if (rotation.toKeyId === rotation.fromKeyId) throw new Error("rotation must change the key");
+    if (this.resolveKey(rotation.toKeyId)) throw new Error("the new key is already registered");
+    if (this.rotations.some((record) => record.handle === rotation.handle && record.fromKeyId === rotation.fromKeyId)) {
+      throw new Error("this key has already been rotated");
+    }
+
+    this.rotations.push(rotation);
+    this.retiredKeys.set(rotation.fromKeyId, {
+      handle: rotation.handle,
+      keyId: rotation.fromKeyId,
+      publicKey: rotation.fromPublicKey,
+      algorithm: rotation.fromAlgorithm,
+      retiredAt: rotation.createdAt,
+    });
+
+    const next: Identity = {
+      ...identity,
+      keyId: rotation.toKeyId,
+      publicKey: rotation.toPublicKey,
+      algorithm: rotation.toAlgorithm,
+    };
+
+    this.identitiesByKey.delete(rotation.fromKeyId);
+    this.identitiesByHandle.set(rotation.handle, next);
+    this.identitiesByKey.set(rotation.toKeyId, next);
+
+    if (persist) this.persist();
+  }
+
+  rotationsFor(handle: string): KeyRotation[] {
+    return this.rotations.filter((rotation) => rotation.handle === handle);
+  }
+
+  addDelegation(delegation: Delegation, persist = true): void {
+    const identity = this.identitiesByHandle.get(delegation.handle);
+
+    if (!identity) throw new Error("identity is not registered");
+    if (identity.keyId !== delegation.rootKeyId) throw new Error("delegation root is not the current key");
+    if (this.resolveKey(delegation.delegateKeyId) || this.isDelegatedKey(delegation.delegateKeyId)) {
+      throw new Error("the delegate key is already in use");
+    }
+
+    this.delegations.push(delegation);
+    if (persist) this.persist();
+  }
+
+  delegationsFor(handle: string): Delegation[] {
+    return this.delegations.filter((delegation) => delegation.handle === handle);
+  }
+
+  isDelegatedKey(keyId: string): boolean {
+    return this.delegations.some((delegation) => delegation.delegateKeyId === keyId);
+  }
+
+  activeDelegation(
+    handle: string,
+    delegateKeyId: string,
+    app: string | null,
+    now = Date.now(),
+  ): Delegation | null {
+    const identity = this.identitiesByHandle.get(handle);
+
+    if (!identity) return null;
+
+    return (
+      this.delegations.find(
+        (delegation) =>
+          delegation.handle === handle &&
+          delegation.delegateKeyId === delegateKeyId &&
+          delegation.rootKeyId === identity.keyId &&
+          (delegation.app === null || delegation.app === app) &&
+          (delegation.expiresAt === null || Date.parse(delegation.expiresAt) > now),
+      ) ?? null
+    );
+  }
+
   addAnchor(anchor: Anchor, persist = true): void {
     if (this.anchors.has(anchor.id)) return;
     const normalized: Anchor = { ...anchor, receipts: anchor.receipts ?? [] };
@@ -418,6 +560,21 @@ export class RarextStore {
         this.addIdentity(identity, false);
       }
 
+      for (const rotation of snapshot.rotations ?? []) {
+        this.rotations.push(rotation);
+        this.retiredKeys.set(rotation.fromKeyId, {
+          handle: rotation.handle,
+          keyId: rotation.fromKeyId,
+          publicKey: rotation.fromPublicKey,
+          algorithm: rotation.fromAlgorithm,
+          retiredAt: rotation.createdAt,
+        });
+      }
+
+      for (const delegation of snapshot.delegations ?? []) {
+        this.delegations.push(delegation);
+      }
+
       for (const publication of [...(snapshot.publications ?? [])].reverse()) {
         this.addPublication(publication, false);
       }
@@ -447,7 +604,7 @@ export class RarextStore {
     if (!this.filePath) return;
 
     const snapshot: Snapshot = {
-      version: 1,
+      version: CURRENT_SNAPSHOT_VERSION,
       publications: this.order
         .map((id) => this.publications.get(id))
         .filter((publication): publication is Publication => publication !== undefined),
@@ -456,6 +613,8 @@ export class RarextStore {
       identityLinks: [...this.identityLinks.values()],
       revocations: [...this.revocations.values()],
       credits: [...this.credits],
+      rotations: [...this.rotations],
+      delegations: [...this.delegations],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

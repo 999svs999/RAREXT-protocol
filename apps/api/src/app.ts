@@ -85,6 +85,12 @@ import {
 } from "./work.ts";
 import { verifyCapability, decodeCapability } from "./capabilities.ts";
 import {
+  asDelegation,
+  asKeyRotation,
+  verifyDelegation,
+  verifyKeyRotation,
+} from "./key-management.ts";
+import {
   loadRevocations,
   verifyRevocation,
   type Revocation,
@@ -687,6 +693,7 @@ interface PublishInput {
   source: PublicationSource | null;
   createdAt: string;
   authorKey: string | null;
+  delegatedBy?: string | null;
   verified: boolean;
   signature: string | null;
   nonce: string | null;
@@ -836,10 +843,10 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       }
     }
 
-    const authorIdentity = input.authorKey
-      ? store.getIdentityByKey(input.authorKey)
+    const authorKey = input.authorKey
+      ? store.resolveKey(input.authorKey)
       : null;
-    const suite = authorIdentity?.algorithm ?? "ecdsa-p256";
+    const suite = authorKey?.algorithm ?? "ecdsa-p256";
 
     if (verification !== "operator") {
       attestation.signatureAlgorithm = suite;
@@ -857,6 +864,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       id: randomUUID(),
       author: input.author,
       authorKey: input.authorKey,
+      delegatedBy: input.delegatedBy ?? null,
       signatureAlgorithm: suite,
       title: input.title,
       body: input.body,
@@ -1809,12 +1817,40 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             return;
           }
 
+          let signingKey = identity.publicKey;
+          let delegatedBy: string | null = null;
+
           if (identity.keyId !== payload.authorKey) {
-            send(res, 401, { error: "authorKey does not match the registered identity" });
-            return;
+            const app = payload.artifact?.app ?? payload.app ?? null;
+            const delegation = store.activeDelegation(
+              identity.handle,
+              payload.authorKey,
+              app,
+            );
+
+            if (!delegation) {
+              const retired = store.resolveKey(payload.authorKey);
+
+              send(res, 401, {
+                error: retired
+                  ? "authorKey is a retired key; sign with the current key or an active delegated key"
+                  : "authorKey does not match the registered identity",
+              });
+              return;
+            }
+
+            const check = verifyDelegation(delegation, identity);
+
+            if (!check.ok) {
+              send(res, 401, { error: `delegated key is not valid: ${check.reason}` });
+              return;
+            }
+
+            signingKey = delegation.delegatePublicKey;
+            delegatedBy = identity.keyId;
           }
 
-          if (!verifyPayload(identity.publicKey, rawPayload, body.signature)) {
+          if (!verifyPayload(signingKey, rawPayload, body.signature)) {
             send(res, 401, { error: "invalid publication signature" });
             return;
           }
@@ -1839,7 +1875,8 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             parentId: payload.parentId,
             source: payload.source ?? null,
             createdAt: payload.createdAt,
-            authorKey: identity.keyId,
+            authorKey: payload.authorKey,
+            delegatedBy,
             verified: true,
             signature: body.signature,
             nonce: payload.nonce,
@@ -1940,20 +1977,24 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         if (publication.visibility !== "public") {
           const capability = url.searchParams.get("capability");
-          const identity = publication.authorKey
-            ? store.getIdentityByKey(publication.authorKey)
-            : null;
+          const identity = store.getIdentity(publication.author);
+          const keys = identity ? store.keysForHandle(identity.handle) : [];
 
-          if (!capability || !identity) {
+          if (!capability || keys.length === 0) {
             send(res, 404, { error: "publication not found" });
             return;
           }
 
-          const check = verifyCapability(
-            identity.publicKey,
-            capability,
-            publication.id,
-          );
+          let check: { ok: boolean; reason: string | null } = {
+            ok: false,
+            reason: "no key could verify this capability",
+          };
+
+          for (const key of keys) {
+            check = verifyCapability(key.publicKey, capability, publication.id);
+
+            if (check.ok) break;
+          }
 
           if (!check.ok) {
             send(res, 403, { error: check.reason });
@@ -2007,8 +2048,8 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           return;
         }
 
-        if (store.getIdentityByKey(id)) {
-          send(res, 409, { error: "public key is already registered" });
+        if (store.resolveKey(id) || store.isDelegatedKey(id)) {
+          send(res, 409, { error: "public key is already in use" });
           return;
         }
 
@@ -2022,6 +2063,115 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         store.addIdentity(identity);
         send(res, 201, identity);
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/identities/") &&
+        pathname.endsWith("/rotate")
+      ) {
+        const handle = decodeURIComponent(
+          pathname.slice("/v1/identities/".length, -"/rotate".length),
+        );
+        const rotation = asKeyRotation(await readJson(req));
+        const identity = store.getIdentity(handle);
+
+        if (!identity) {
+          send(res, 404, { error: "identity not found" });
+          return;
+        }
+
+        const check = verifyKeyRotation(rotation, identity);
+
+        if (!check.ok) {
+          send(res, 401, { error: check.reason });
+          return;
+        }
+
+        if (store.resolveKey(rotation.toKeyId) || store.isDelegatedKey(rotation.toKeyId)) {
+          send(res, 409, { error: "the new key is already in use" });
+          return;
+        }
+
+        try {
+          store.addRotation(rotation);
+        } catch (error) {
+          send(res, 409, { error: error instanceof Error ? error.message : "rotation refused" });
+          return;
+        }
+
+        send(res, 201, { identity: store.getIdentity(handle), rotation });
+        return;
+      }
+
+      if (
+        req.method === "GET" &&
+        pathname.startsWith("/v1/identities/") &&
+        pathname.endsWith("/rotations")
+      ) {
+        const handle = decodeURIComponent(
+          pathname.slice("/v1/identities/".length, -"/rotations".length),
+        );
+
+        if (!store.getIdentity(handle)) {
+          send(res, 404, { error: "identity not found" });
+          return;
+        }
+
+        send(res, 200, store.rotationsFor(handle));
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/identities/") &&
+        pathname.endsWith("/delegations")
+      ) {
+        const handle = decodeURIComponent(
+          pathname.slice("/v1/identities/".length, -"/delegations".length),
+        );
+        const delegation = asDelegation(await readJson(req));
+        const identity = store.getIdentity(handle);
+
+        if (!identity) {
+          send(res, 404, { error: "identity not found" });
+          return;
+        }
+
+        const check = verifyDelegation(delegation, identity);
+
+        if (!check.ok) {
+          send(res, 401, { error: check.reason });
+          return;
+        }
+
+        try {
+          store.addDelegation(delegation);
+        } catch (error) {
+          send(res, 409, { error: error instanceof Error ? error.message : "delegation refused" });
+          return;
+        }
+
+        send(res, 201, delegation);
+        return;
+      }
+
+      if (
+        req.method === "GET" &&
+        pathname.startsWith("/v1/identities/") &&
+        pathname.endsWith("/delegations")
+      ) {
+        const handle = decodeURIComponent(
+          pathname.slice("/v1/identities/".length, -"/delegations".length),
+        );
+
+        if (!store.getIdentity(handle)) {
+          send(res, 404, { error: "identity not found" });
+          return;
+        }
+
+        send(res, 200, store.delegationsFor(handle));
         return;
       }
 

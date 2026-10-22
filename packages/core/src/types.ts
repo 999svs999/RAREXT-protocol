@@ -358,10 +358,51 @@ export interface IdentityLinkPayload {
   nonce: string;
 }
 
+export interface KeyRotationPayload {
+  kind: "rarext.key-rotation";
+  version: 1;
+  handle: string;
+  fromKeyId: string;
+  fromPublicKey: JsonWebKey;
+  fromAlgorithm: SignatureSuite;
+  toKeyId: string;
+  toPublicKey: JsonWebKey;
+  toAlgorithm: SignatureSuite;
+  createdAt: string;
+  nonce: string;
+}
+
+export interface KeyRotation extends KeyRotationPayload {
+  signature: string;
+}
+
+export type DelegationScope = "publish";
+
+export interface DelegationPayload {
+  kind: "rarext.delegation";
+  version: 1;
+  handle: string;
+  rootKeyId: string;
+  delegateKeyId: string;
+  delegatePublicKey: JsonWebKey;
+  algorithm: SignatureSuite;
+  scopes: DelegationScope[];
+  app: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  nonce: string;
+}
+
+export interface Delegation extends DelegationPayload {
+  signature: string;
+}
+
 export interface Publication {
   id: string;
   author: string;
   authorKey: string | null;
+  /** Root key id when `authorKey` is a delegated publishing key. */
+  delegatedBy?: string | null;
   signatureAlgorithm: SignatureSuite;
   title: string;
   body: string;

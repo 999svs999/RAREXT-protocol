@@ -30,6 +30,10 @@
 
 **Key ID** — `sha256(canonicalize(publicKeyJwk))`. Used as the stable identity reference in signed payloads.
 
+**Key rotation** — A signed record from the retiring key that moves a handle to a new key. The old key stays resolvable for existing publications and capabilities but cannot sign new ones ([RFC 0008](../rfcs/0008-key-rotation-and-delegation.md)).
+
+**Delegation** — A signed record from a root key authorizing another key to publish for a handle, optionally restricted to one app and an expiry. The delegate can publish only; it cannot rotate or delegate further.
+
 **Ledger** — An external ordering and ownership substrate such as TapeOut on BNB Chain or Trac. RAREXT anchors roots there but does not store content on a ledger or operate one.
 
 **LATCH** — A level-sensitive D latch. In this repository: `inputs: [data, enable]`.

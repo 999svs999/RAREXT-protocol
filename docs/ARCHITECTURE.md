@@ -36,7 +36,7 @@ rfcs/             Protocol and economics proposals
 - Tests: inverter, half-adder, latch behavior, oscillation detection, canonical hashing, scoring, publish/feed/profile/verify, remix lineage, signed envelopes, replay rejection, Merkle proofs, anchoring receipts, adapters, commit-pinned GitHub imports, identity links, source validation, pagination, external app verification, generic signed artifacts, leaderboards, and persistence across restart.
 
 
-The store persists publications, profiles, identities, and anchors to `.data/rarext.json`
+The store persists publications, profiles, identities, key rotations, delegations, and anchors to `.data/rarext.json`
 by default. `RAREXT_DATA=none` restores ephemeral behavior for tests and demos. Writes use a
 temp file plus rename so a crash cannot leave a half-written store.
 
@@ -152,6 +152,10 @@ Base URL: `http://127.0.0.1:8787`
 | GET | `/v1/profiles/:handle` | — | `Profile` |
 | POST | `/v1/identities` | `{ handle, publicKey }` | `Identity` (201) |
 | GET | `/v1/identities/:handle` | — | `Identity` |
+| POST | `/v1/identities/:handle/rotate` | rotation record signed by the retiring key | `{ identity, rotation }` (201) |
+| GET | `/v1/identities/:handle/rotations` | — | `KeyRotation[]` |
+| POST | `/v1/identities/:handle/delegations` | delegation record signed by the root key | `Delegation` (201) |
+| GET | `/v1/identities/:handle/delegations` | — | `Delegation[]` |
 | POST | `/v1/identity-links` | `{ payload, signature }` | `IdentityLink` (201) |
 | GET | `/v1/identity-links?handle=` | — | `IdentityLink[]` |
 | GET | `/v1/identity-links/:handle` | — | `IdentityLink[]` |
@@ -164,7 +168,7 @@ Base URL: `http://127.0.0.1:8787`
 | POST | `/v1/verify` | `{ publicationId }` | `{ valid, attestation, recomputed }` |
 
 Errors return `{ "error": "..." }` with status 400 (invalid input), 401 (bad signature or
-unregistered signer), 404 (unknown route/task/challenge/app/publication), 409 (handle, nonce, link, or anchor
+unregistered signer), 404 (unknown route/task/challenge/app/publication), 409 (handle, key, nonce, link, or anchor
 conflict), or 422 (an artifact that does not pass its challenge, or a failed identity proof).
 
 Publishing requires a passing artifact. For logic, the server computes a canonical circuit hash and a trace hash over every table case. For external apps, it hashes the canonical artifact and the verifier proof. `POST /v1/verify` re-runs the app verifier and compares the attestation.
@@ -266,8 +270,11 @@ signature says who, a verifier says which mechanical property, an anchor says wh
 - **Indexer lag** — publication shows as pending; no scoring depends on indexer freshness.
 - **Trac unavailable** — the API continues to operate; anchors are stored locally with
   `adapter: "local"` and can be re-announced later.
-- **Lost signing key** — the handle cannot publish signed updates, but existing signed
-  publications remain verifiable. Key rotation is not implemented in v0.
+- **Lost signing key** — if the current root key is lost the handle cannot rotate (the
+  retiring key must sign) or publish signed updates, but existing publications and
+  capabilities remain verifiable through the key history. Delegations held before the
+  loss cannot be replaced by the delegate: only the root can delegate. Recovery would
+  require a new identity-link policy, not a protocol change.
 - **Corrupt or newer store file** — the API refuses to start rather than serving partial
   state or overwriting the only copy. Restore a backup or upgrade the node; see
   [`OPERATIONS.md`](OPERATIONS.md).
@@ -286,7 +293,8 @@ signature says who, a verifier says which mechanical property, an anchor says wh
 
 ## Open decisions
 
-1. Migration from v0 ECDSA P-256 browser keys to Trac-native identity, and key rotation.
+1. Migration from v0 ECDSA P-256 browser keys to Trac-native identity, and social recovery
+   for a lost root key (rotation itself is implemented; see RFC 0008).
 2. Whether signed publication and attestation envelopes converge with a Trac-native format
    or remain neutral canonical JSON.
 3. Metadata schema versioning and content-hash canonicalization.

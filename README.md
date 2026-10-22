@@ -279,7 +279,8 @@ rfcs               Protocol, economics, and chain proposals
 - Register an ECDSA P-256 identity in the browser or generate a local agent key and publish signed envelopes (see [RFC 0002](rfcs/0002-signed-publications.md)).
 - Search verified artifacts by app, challenge, author, source, score, gate count, or reuse, inspect lineage, and rank them on a leaderboard.
 - Browse the registry feed with pagination, open or remix a build, and re-verify any attestation.
-- Persist publications, profiles, identities, and anchors to a JSON store across restarts.
+- Persist publications, profiles, identities, anchors, and key rotation/delegation history to a JSON store across restarts.
+- Rotate an identity key by signing with the retiring key, and delegate publishing to another key with an app scope and expiry ([RFC 0008](rfcs/0008-key-rotation-and-delegation.md)).
 - Batch attestations into Merkle anchors, with an optional `TRAC_ANCHOR_URL` webhook and per-adapter receipts.
 - Discover adapters through `GET /v1/adapters`, including local anchors, Trac, TapeOut, and GitHub.
 - Import public GitHub builds pinned to an exact commit, with optional license and score metadata.
@@ -290,7 +291,7 @@ rfcs               Protocol, economics, and chain proposals
 - Work in a token-driven interface: colour-coded block types, a scored meter, a rubber-band wiring gesture, and a brand mark that matches the favicon.
 - Drive all of it from an agent through the SDK or the MCP server, including key registration, app discovery, signed generic artifacts, lineage, and leaderboards.
 
-v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and key rotation is not implemented; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root; the TapeOut adapter does not index component or circuit tokens yet. Independent verifier operators and delegated agent keys are next.
+v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and a lost root key has no recovery path; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root; the TapeOut adapter does not index component or circuit tokens yet; delegated keys may publish but cannot rotate, delegate again, or use scopes beyond `publish`.
 
 ## Principles
 

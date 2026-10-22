@@ -29,7 +29,12 @@ import type {
   Identity,
   IdentityLink,
   IdentityLinkPayload,
+  Delegation,
+  DelegationPayload,
+  DelegationScope,
   InputValues,
+  KeyRotation,
+  KeyRotationPayload,
   LeaderboardEntry,
   OperatorAttestation,
   Profile,
@@ -43,6 +48,7 @@ import type {
   SourceResolution,
   Task,
   Values,
+  Visibility,
 } from "@rarext/core";
 
 export type {
@@ -118,6 +124,7 @@ export interface ArtifactPublishInput {
   artifact: Artifact;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
   operatorAttestation?: OperatorAttestation | null;
+  visibility?: Visibility;
   parentId?: string | null;
   source?: PublicationSource | null;
 }
@@ -156,6 +163,23 @@ export interface AgentPublishInput {
   nonce?: string;
 }
 
+export interface RotateIdentityInput {
+  handle: string;
+  toPublicKey: JsonWebKey;
+  createdAt?: string;
+  nonce?: string;
+}
+
+export interface DelegateKeyInput {
+  handle: string;
+  delegatePublicKey: JsonWebKey;
+  app?: string | null;
+  expiresAt?: string | null;
+  createdAt?: string;
+  nonce?: string;
+  scopes?: DelegationScope[];
+}
+
 export interface AgentArtifactPublishInput {
   author: string;
   title: string;
@@ -164,6 +188,7 @@ export interface AgentArtifactPublishInput {
   artifact: Artifact;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
   operatorAttestation?: OperatorAttestation | null;
+  visibility?: Visibility;
   parentId?: string | null;
   source?: PublicationSource | null;
   createdAt?: string;
@@ -322,12 +347,64 @@ export class AgentSigner {
       taskId: input.challengeId,
       claim: input.claim ?? null,
       operatorAttestation: input.operatorAttestation ?? null,
+      visibility: input.visibility ?? "public",
       parentId: input.parentId ?? null,
       source: input.source ?? null,
       createdAt: input.createdAt ?? new Date().toISOString(),
       nonce: input.nonce ?? randomUUID(),
     };
   }
+}
+
+/**
+ * The payload a root key signs to move a handle to a new key. Rotation is signed
+ * by the key being retired, so a stolen new key cannot perform it alone.
+ */
+export function keyRotationPayload(
+  signer: AgentSigner,
+  input: RotateIdentityInput,
+): KeyRotationPayload {
+  return {
+    kind: "rarext.key-rotation",
+    version: 1,
+    handle: input.handle,
+    fromKeyId: signer.keyId,
+    fromPublicKey: signer.publicKey as never,
+    fromAlgorithm: signer.suite,
+    toKeyId: publicKeyId(input.toPublicKey),
+    toPublicKey: input.toPublicKey as never,
+    toAlgorithm: suiteOf(input.toPublicKey),
+    createdAt: input.createdAt ?? new Date().toISOString(),
+    nonce: input.nonce ?? randomUUID(),
+  };
+}
+
+/**
+ * A root key delegates publishing to another key. The delegate can sign
+ * publications for the handle; it cannot rotate the root or delegate further.
+ */
+export function delegationPayload(
+  signer: AgentSigner,
+  input: DelegateKeyInput,
+): DelegationPayload {
+  const delegateKeyId = publicKeyId(input.delegatePublicKey);
+
+  if (delegateKeyId === signer.keyId) throw new Error("a delegation must name a different key");
+
+  return {
+    kind: "rarext.delegation",
+    version: 1,
+    handle: input.handle,
+    rootKeyId: signer.keyId,
+    delegateKeyId,
+    delegatePublicKey: input.delegatePublicKey as never,
+    algorithm: suiteOf(input.delegatePublicKey),
+    scopes: input.scopes ?? ["publish"],
+    app: input.app ?? null,
+    createdAt: input.createdAt ?? new Date().toISOString(),
+    expiresAt: input.expiresAt ?? null,
+    nonce: input.nonce ?? randomUUID(),
+  };
 }
 
 export function createAgentKeyfile(handle: string, keypair = generateAgentKeypair()): AgentKeyfile {
@@ -554,6 +631,7 @@ export class RarextClient {
       artifact: input.artifact,
       claim: input.claim ?? null,
       operatorAttestation: input.operatorAttestation ?? null,
+      visibility: input.visibility ?? "public",
       parentId: input.parentId ?? null,
       source: input.source ?? null,
     });
@@ -577,6 +655,35 @@ export class RarextClient {
 
   registerAgent(signer: AgentSigner, handle: string): Promise<Identity> {
     return this.registerIdentity({ handle, publicKey: signer.publicKey });
+  }
+
+  rotateIdentity(
+    signer: AgentSigner,
+    input: RotateIdentityInput,
+  ): Promise<{ identity: Identity; rotation: KeyRotation }> {
+    const payload = keyRotationPayload(signer, input);
+
+    return this.request(`/v1/identities/${encodeURIComponent(input.handle)}/rotate`, {
+      ...payload,
+      signature: signer.sign(payload),
+    });
+  }
+
+  rotations(handle: string): Promise<KeyRotation[]> {
+    return this.request(`/v1/identities/${encodeURIComponent(handle)}/rotations`);
+  }
+
+  delegateKey(signer: AgentSigner, input: DelegateKeyInput): Promise<Delegation> {
+    const payload = delegationPayload(signer, input);
+
+    return this.request(`/v1/identities/${encodeURIComponent(input.handle)}/delegations`, {
+      ...payload,
+      signature: signer.sign(payload),
+    });
+  }
+
+  delegations(handle: string): Promise<Delegation[]> {
+    return this.request(`/v1/identities/${encodeURIComponent(handle)}/delegations`);
   }
 
   publishAs(signer: AgentSigner, input: AgentPublishInput): Promise<Publication> {

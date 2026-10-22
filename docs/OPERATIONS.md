@@ -12,7 +12,7 @@ By default the API writes to `.data/`. `RAREXT_DATA` moves the store file
 
 | Path | What it is | If lost |
 | --- | --- | --- |
-| `.data/rarext.json` | Publications, profiles, identities, anchors, identity links, revocations, the credit ledger | The registry loses its index and reputation. Anchors on chain still commit to the publications, but the registry cannot serve them. |
+| `.data/rarext.json` | Publications, profiles, identities, key rotations and delegations, anchors, identity links, revocations, the credit ledger (snapshot v2) | The registry loses its index and reputation. Anchors on chain still commit to the publications, but the registry cannot serve them. |
 | `.data/placements/` | Signed placement records: blob hash, shard map, steward key | The registry forgets where shard bytes live. The records are also published over `/v1/placements`, so a steward or a reader may still hold a copy. |
 | `.data/verifier-operators/` | Self-signed verifier operator registrations | The registry cannot check operator attestations until it sees the records again. The operator's key is in the record, so re-registration is cheap. |
 | Holder directories | Shard bytes (`RAREXT_HOLDER_DIR` per holder) | Data loss for that holder. Erasure coding and repair cover a lost holder only if the placement is current and a spare exists. |
@@ -37,10 +37,14 @@ A corrupt or partially written file stops the process with `could not load …` 
 of starting from an empty store. That is deliberate: the first write after an empty
 start would replace the only copy of the registry's history.
 
-Snapshot version 1 is current; there are no migrations yet. Adding one means adding an
-entry to `snapshotMigrations` in `apps/api/src/migrations.ts` with `from`, `to`
-(`from + 1`), a description, and a pure function from the old snapshot to the new one.
-An older snapshot without a full chain to the current version is refused.
+Snapshot version 2 is current. Version 1 is still readable: migration 1 → 2 adds empty
+`rotations` and `delegations` arrays, so a store that never rotated a key loads unchanged.
+Adding a migration means adding an entry to `snapshotMigrations` in
+`apps/api/src/migrations.ts` with `from`, `to` (`from + 1`), a description, and a pure
+function from the old snapshot to the new one. An older snapshot without a full chain to
+the current version is refused. Take a verified backup before upgrading a node that holds
+the only copy of a key history: retired keys are rebuilt from rotation records, not from
+a separate archive.
 
 ## Backup
 

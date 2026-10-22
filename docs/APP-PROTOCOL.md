@@ -244,6 +244,52 @@ bound to every claim:
 { "correct": true, "score": 1000, "proof": {}, "manifest": { "algorithm": "erp-rules", "rulesHash": "<sha256>" } }
 ```
 
+## Keys, rotation, and delegation
+
+An identity's current key can sign a rotation that retires it and installs a new key.
+Only the key being retired can sign, so a stolen new key cannot take over the handle.
+The old key remains resolvable: existing publications and capabilities keep verifying,
+while a new publication signed by it is refused. Rotations may change suite (for example
+P-256 to ML-DSA-65). See [RFC 0008](../rfcs/0008-key-rotation-and-delegation.md).
+
+```bash
+# Signed by the retiring key. Use the SDK helper rather than building this by hand.
+curl -sS -X POST http://127.0.0.1:8787/v1/identities/alice/rotate \
+  -H 'content-type: application/json' \
+  -d @rotation.json
+
+curl -sS http://127.0.0.1:8787/v1/identities/alice/rotations
+```
+
+A root key can also delegate publishing to another key, optionally for one app and until
+an expiry. A publication signed by the delegate carries the delegate in `authorKey` and
+the root in `delegatedBy`. Delegates cannot rotate or delegate further, and rotating the
+root retires outstanding delegations.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/v1/identities/alice/delegations \
+  -H 'content-type: application/json' \
+  -d @delegation.json
+
+curl -sS http://127.0.0.1:8787/v1/identities/alice/delegations
+```
+
+```ts
+const next = new AgentSigner(generateAgentKeypair().privateKey);
+await rarext.rotateIdentity(root, { handle: "alice", toPublicKey: next.publicKey });
+
+const delegate = new AgentSigner(generateAgentKeypair().privateKey);
+await rarext.delegateKey(root, {
+  handle: "alice",
+  delegatePublicKey: delegate.publicKey,
+  app: "logic",
+});
+await rarext.publishArtifactAs(delegate, { author: "alice", /* … */ });
+```
+
+A key can belong to only one handle. Registering a current, retired, or delegated key
+returns 409.
+
 ## Query
 
 - `GET /v1/apps`
@@ -254,6 +300,7 @@ bound to every claim:
 - `GET /v1/builds/:id/lineage`
 - `GET /v1/leaderboard?app=&challengeId=`
 - `POST /v1/verify` with `{ publicationId }`
+- `GET /v1/identities/:handle/rotations` and `/v1/identities/:handle/delegations`
 
 ## SDK
 

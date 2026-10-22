@@ -13,6 +13,17 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Key rotation and delegated publishing keys.** A rotation record is signed by the key
+  being retired and moves the handle to a new key, optionally changing suite; the old
+  key stays resolvable so existing publications and capabilities keep verifying, while a
+  new publish signed by it is refused. A delegation record lets the root key authorize a
+  second key to publish for the handle, optionally scoped to one app and an expiry;
+  delegated publications record both `authorKey` and `delegatedBy`. Rotating the root
+  retires outstanding delegations. Snapshot version 2 stores rotation and delegation
+  history (migration 1 → 2 adds empty arrays). SDK helpers: `rotateIdentity`,
+  `delegations`, `delegateKey`, `rotations`, `keyRotationPayload`, `delegationPayload`.
+  RFC 0008 documents the records and their trust boundaries. 6 new tests.
+
 - **The durability ledger.** `apps/api/src/durability.ts` places erasure shards on
   independent holders, refuses co-location, challenges with a nonce-bound Merkle leaf
   proof, audits live holders against a tier (`ephemeral` 1, `pinned` k+1, `durable`
