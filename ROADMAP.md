@@ -93,7 +93,7 @@ does not ship behind a marketing claim. The acceptance criteria and the limits a
 - [x] One learned codec and one parametric representation, measured with the decoder counted
 - [x] Data availability sampling for media, with a stated soundness bound
 - [x] Repair-bandwidth measurement for erasure-coded blobs at 1 GB
-- [ ] A publishable negative result when a direction fails
+- [x] A publishable negative result when a direction fails
 
 ## Explicitly not planned
 

@@ -119,7 +119,9 @@ The 2026-10-23 run (`RESULTS.md`) gives both sides of the ledger:
   cannot represent the corpus's texture. Per the research rule, that is a bounded row
   and a negative result, not a compression claim.
 
-Neither negative result is hidden: the table and JSON carry the labels.
+Neither negative result is hidden: the table and JSON carry the labels. The full
+write-up, including what would overturn each result and its threats to validity, is in
+[`NEGATIVE-RESULTS.md`](NEGATIVE-RESULTS.md).
 
 ## Adding a method
 

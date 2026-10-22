@@ -13,6 +13,13 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Published negative results for both research directions.**
+  `bench/storage/NEGATIVE-RESULTS.md` records the held-out Huffman expansion (0.64x,
+  14.15 MiB total for 9.00 MiB) and the degree-10 Legendre fidelity failure (2212.70x
+  ratio, 19.79 dB, 98.84% differing bytes, no residual). It states the acceptance
+  criteria, what would overturn each result, threats to validity, and exact
+  reproduction. Roadmap research item checked.
+
 - **A self-hosted pinning service for the content adapter.** `apps/api/src/pin-server.ts`
   accepts a bundle and its CID, recomputes the CID from the bytes, stores them under
   `RAREXT_PIN_DIR`, and serves pin metadata/content over HTTP. The adapter now sends the
