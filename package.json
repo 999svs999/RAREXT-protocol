@@ -40,7 +40,8 @@
     "pretest": "npm run build:packages && npm run build:verifiers",
     "build:verifiers": "node scripts/build-verifiers.mjs",
     "dev:chess": "node apps/verifiers/chess/server.ts",
-    "pin": "node apps/api/src/pin-server.ts"
+    "pin": "node apps/api/src/pin-server.ts",
+    "net": "node scripts/run-storage-net.mjs"
   },
   "engines": {
     "node": ">=22.18"

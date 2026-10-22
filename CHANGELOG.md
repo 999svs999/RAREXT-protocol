@@ -37,7 +37,7 @@ break a client or invalidate stored data.
   token-protected holders, an API, and a pin service. One integration test covers the
   same verbs directly.
 
-- **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
+- **Storage roadmap completion (Issues #6–10 closed).** Client-side AES-256-GCM envelope encryption for sealed payloads (`apps/api/src/sealed-encryption.ts`), Proof of Retrievability specification (RFC 0013), byte and request quotas with rate limiting for holders and pins, signed independent audit attestations (RFC 0014), and orphan shard garbage collection with grace period and dry run. Added `npm run net` local storage network runner and throughput/memory benchmarks.
   blobs and its index through unique temp files and renames, rolls back a new blob when
   the index write fails, and no longer swallows index errors. Durability repair reads
   exactly `k` survivors, stages every replacement before moving the signed placement,
