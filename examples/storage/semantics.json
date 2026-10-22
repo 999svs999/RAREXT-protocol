@@ -1,0 +1,23 @@
+{
+  "semantics": [
+    {
+      "id": "storage/storage-v1",
+      "app": "storage",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Open storage manifest",
+      "summary": "As of the time of the attestation, every blob listed in the manifest was present in the storage node, hashed to the digest named in the manifest, matched its declared size, and was held under a tier the policy licenses. Sealed entries were stored as sealed envelopes rather than plaintext. The claim is about one storage node at one moment; it is not a guarantee about future availability, and it says nothing about the contents of a sealed blob.",
+      "specHash": "e2b207582304ead9e0f83e9ceccec4ca40baa32bea8b000af621adbdb2285b89",
+      "inputs": ["manifest", "blob"],
+      "outputs": ["present", "held"],
+      "interpretation": {
+        "doc": "https://apesdaily.com/semantics/storage/storage-v1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

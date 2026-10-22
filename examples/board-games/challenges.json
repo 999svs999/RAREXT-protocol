@@ -1,0 +1,74 @@
+{
+  "challenges": [
+    {
+      "id": "chess-mate-1",
+      "app": "chess",
+      "title": "Chess: back-rank mate",
+      "description": "White to move. Find a mate in one. Moves use UCI coordinates.",
+      "version": 1,
+      "spec": {
+        "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+        "objective": "mate",
+        "maxPlies": 3
+      },
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "semanticsId": "chess/chess-mate-1",
+      "semanticsVersion": 1
+    },
+    {
+      "id": "xiangqi-mate-1",
+      "app": "xiangqi",
+      "title": "Xiangqi: palace mate",
+      "description": "Red to move. Force a win. Moves use ICCS a0-i9 coordinates.",
+      "version": 1,
+      "spec": {
+        "fen": "R2aka3/4p4/9/9/9/9/9/9/9/3K5 w - - 0 1",
+        "objective": "win",
+        "maxPlies": 3
+      },
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "semanticsId": "xiangqi/xiangqi-mate-1",
+      "semanticsVersion": 1
+    },
+    {
+      "id": "go-capture-1",
+      "app": "go",
+      "title": "Go: capture a stone",
+      "description": "Black to move. Capture the white stone on E5. Pass with \"pass\".",
+      "version": 1,
+      "spec": {
+        "size": 9,
+        "next": "black",
+        "objective": "capture",
+        "maxMoves": 5,
+        "initial": [
+          {
+            "color": "white",
+            "point": "E5"
+          },
+          {
+            "color": "black",
+            "point": "D5"
+          },
+          {
+            "color": "black",
+            "point": "F5"
+          },
+          {
+            "color": "black",
+            "point": "E6"
+          }
+        ],
+        "target": {
+          "color": "white",
+          "points": [
+            "E5"
+          ]
+        }
+      },
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "semanticsId": "go/go-capture-1",
+      "semanticsVersion": 1
+    }
+  ]
+}

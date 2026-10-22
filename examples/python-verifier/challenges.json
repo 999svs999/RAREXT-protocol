@@ -1,0 +1,13 @@
+{
+  "challenges": [
+    {
+      "id": "echo-1",
+      "app": "echo-lab",
+      "title": "Echo a signal",
+      "description": "Return a deterministic proof for the submitted signal.",
+      "version": 1,
+      "spec": { "kind": "echo" },
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

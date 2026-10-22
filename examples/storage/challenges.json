@@ -1,0 +1,22 @@
+{
+  "challenges": [
+    {
+      "id": "storage-v1",
+      "app": "storage",
+      "title": "Open storage manifest",
+      "description": "Check that every blob in the manifest is present, hashes to its name, matches its declared size, and is held under a tier the policy licenses. Sealed entries must be stored as sealed envelopes.",
+      "version": 1,
+      "spec": {
+        "policy": "storage-v1",
+        "limits": {
+          "tiers": ["public", "sealed"],
+          "requireSealedEnvelope": true
+        },
+        "failClosed": true
+      },
+      "semanticsId": "storage/storage-v1",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

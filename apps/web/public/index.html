@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ApesDaily — verifiable builds</title>
+    <meta name="description" content="Build, verify, and share decentralized apps, token launches, and tiny machines. Runs on the RAREXT protocol." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="ApesDaily">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path
+              d="M9.5 9.5h13M9.5 22.5h13M9.5 9.5v13M22.5 9.5v13"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              opacity=".38"
+            />
+            <rect x="3.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" />
+            <rect x="16.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="3.5" y="16.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="16.5" y="16.5" width="12" height="12" rx="3.5" fill="var(--brand-accent)" />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">ApesDaily</span>
+          <span class="badge"><i></i>pre-alpha</span>
+        </span>
+      </a>
+
+      <nav class="tabs" aria-label="Views">
+        <button class="tab active" data-view="workbench" data-i18n="nav.play">Play</button>
+        <button class="tab" data-view="feed" data-i18n="nav.community">Community</button>
+      </nav>
+
+      <div class="topbar-extra">
+        <span class="tagline" data-i18n="tagline">Build tiny machines. Share them.</span>
+
+        <div class="lang">
+          <svg class="lang-glyph" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.3" />
+            <path d="M1.7 8h12.6M8 1.7c1.9 2 2.8 4.1 2.8 6.3S9.9 12.3 8 14.3C6.1 12.3 5.2 10.2 5.2 8S6.1 3.7 8 1.7z" />
+          </svg>
+          <select
+            id="locale-select"
+            aria-label="Language"
+            data-i18n-aria="lang"
+            data-i18n-title="lang"
+            title="Language"
+          ></select>
+        </div>
+
+        <button
+          id="open-guide"
+          class="help-button"
+          aria-label="How ApesDaily works"
+          title="How ApesDaily works"
+          data-i18n-aria="guide"
+          data-i18n-title="guide"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.4" />
+            <path d="M6.2 6.1a1.85 1.85 0 1 1 2.4 1.78c-.5.17-.7.55-.7 1.02v.3" />
+            <circle cx="8" cy="11.4" r=".85" fill="currentColor" stroke="none" />
+          </svg>
+          <span data-i18n="guide">How ApesDaily works</span>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section id="view-workbench" class="view workbench">
+        <aside class="panel panel-left">
+          <section class="challenge">
+            <div class="challenge-head">
+              <p class="eyebrow" id="task-progress">Puzzle 1 of 3</p>
+              <div class="challenge-dots" id="challenge-dots"></div>
+            </div>
+            <select id="task-select" aria-label="Choose a puzzle" data-i18n-aria="wb.choose"></select>
+            <p id="task-description" class="task-description"></p>
+          </section>
+
+          <section class="palette">
+            <p class="section-label" data-i18n="wb.addBlock">Add a block</p>
+            <div class="palette-grid">
+              <button
+                id="add-nand"
+                class="block-card"
+                aria-label="Add a NOT-BOTH block"
+                data-i18n-aria="wb.addNandAria"
+                data-type="nand"
+              >
+                <span class="block-glyph" aria-hidden="true">
+                  <svg viewBox="0 0 28 20">
+                    <rect x="1.5" y="3" width="16" height="14" rx="2.5" />
+                    <circle cx="22" cy="10" r="2.7" />
+                    <path d="M17.5 10h1.8" />
+                  </svg>
+                </span>
+                <span class="block-text">
+                  <strong data-i18n="wb.notBoth">NOT-BOTH</strong>
+                  <small data-i18n="wb.notBothShort">both on = off</small>
+                </span>
+              </button>
+              <button
+                id="add-latch"
+                class="block-card"
+                aria-label="Add a MEMORY block"
+                data-i18n-aria="wb.addLatchAria"
+                data-type="latch"
+              >
+                <span class="block-glyph" aria-hidden="true">
+                  <svg viewBox="0 0 28 20">
+                    <rect x="1.5" y="3" width="16" height="14" rx="2.5" />
+                    <circle cx="21.5" cy="10" r="5" />
+                    <path d="M21.5 6.9V10l2.3 1.5" />
+                  </svg>
+                </span>
+                <span class="block-text">
+                  <strong data-i18n="wb.memory">MEMORY</strong>
+                  <small data-i18n="wb.memoryShort">remembers a bit</small>
+                </span>
+              </button>
+            </div>
+            <div class="panel-actions">
+              <button id="delete-node" class="quiet" data-i18n="wb.remove">Remove block</button>
+              <button id="reset-circuit" class="quiet" data-i18n="wb.restart">Start over</button>
+            </div>
+            <button id="view-board" class="ghost board-button" data-i18n="wb.viewBoard">
+              View board
+            </button>
+            <p class="part-help" data-i18n="wb.partHelp">
+              NOT-BOTH is on unless both inputs are on. MEMORY holds one value.
+            </p>
+          </section>
+
+          <div class="scorecard">
+            <div class="score-hero">
+              <div>
+                <span class="score-label" data-i18n="wb.points">Points</span>
+                <strong id="score-value" class="score-number">—</strong>
+              </div>
+              <span id="score-status" class="status-pill idle" data-i18n="wb.ready">Ready</span>
+            </div>
+            <div
+              class="meter"
+              id="score-meter-bar"
+              role="img"
+              aria-label="Checks passed"
+              data-i18n-aria="wb.checksPassed"
+            >
+              <div class="meter-fill" id="score-meter"></div>
+            </div>
+            <div class="score-stats">
+              <div>
+                <span data-i18n="wb.checksPassed">Checks passed</span>
+                <strong id="score-cases">—</strong>
+              </div>
+              <div>
+                <span data-i18n="wb.blocksUsed">Blocks used</span>
+                <strong id="score-gates">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <div id="next-step" class="next-step hidden">
+            <strong data-i18n="wb.solved">Puzzle solved.</strong>
+            <p data-i18n="wb.nextReady">Ready for the next one?</p>
+            <button id="next-puzzle" class="primary" data-i18n="wb.nextPuzzle">Next puzzle</button>
+          </div>
+
+          <button id="hint-button" class="ghost hint-button" data-i18n="wb.needHint">
+            Need a hint?
+          </button>
+          <p id="hint-box" class="hint-box hidden"></p>
+
+          <details class="advanced">
+            <summary data-i18n="wb.builders">For builders</summary>            <p class="hint" data-i18n="wb.buildersHelp">
+              NOT-BOTH is a NAND block and MEMORY is a LATCH. Tap a green dot, then a
+              gray dot, to link blocks.
+            </p>
+            <button id="copy-json" class="ghost" data-i18n="wb.copyCode">Copy build code</button>
+            <div class="source-import">
+              <label class="field">
+                <span data-i18n="wb.github">GitHub project</span>
+                <input
+                  id="source-repo"
+                  placeholder="owner/name"
+                  data-i18n-placeholder="wb.repoPlaceholder"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="field">
+                <span>
+                  <span data-i18n="wb.buildFile">Build file</span>
+                  <em data-i18n="wb.optional">optional</em>
+                </span>
+                <input
+                  id="source-path"
+                  placeholder="circuits/my-build.json"
+                  data-i18n-placeholder="wb.pathPlaceholder"
+                  autocomplete="off"
+                />
+              </label>
+              <div class="tools tools-secondary">
+                <button id="import-source" class="ghost slim" data-i18n="wb.import">
+                  Bring in build
+                </button>
+                <button id="clear-source" class="ghost slim hidden" data-i18n="wb.clearSource">
+                  Clear source
+                </button>
+              </div>
+              <p id="source-status" class="field-help" data-i18n="wb.publicSource">
+                Public projects only. We pin the exact commit.
+              </p>
+            </div>
+          </details>
+          <p class="protocol-note panel-note" data-i18n="footer.protocol">
+            Runs on the RAREXT protocol.
+          </p>
+        </aside>
+
+        <section class="canvas-wrap">
+          <svg
+            id="canvas"
+            viewBox="0 0 1000 640"
+            aria-label="Build area"
+            data-i18n-aria="wb.buildArea"
+          ></svg>
+
+          <div id="remix-banner" class="remix hidden">
+            <span id="remix-title"></span>
+            <button id="clear-remix" data-i18n="dyn.remove">remove</button>
+          </div>
+
+          <div id="canvas-help" class="canvas-help">
+            <div>
+              <strong data-i18n="wb.linkBlocks">Link the blocks</strong>
+              <span id="canvas-help-text"></span>
+            </div>
+            <button id="dismiss-canvas-help" aria-label="Dismiss tip" data-i18n-aria="wb.dismiss">
+              &times;
+            </button>
+          </div>
+
+          <div class="canvas-controls">
+            <button
+              id="zoom-out"
+              title="Zoom out"
+              aria-label="Zoom out"
+              data-i18n-title="wb.zoomOut"
+              data-i18n-aria="wb.zoomOut"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg>
+            </button>
+            <button
+              id="zoom-in"
+              title="Zoom in"
+              aria-label="Zoom in"
+              data-i18n-title="wb.zoomIn"
+              data-i18n-aria="wb.zoomIn"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+            </button>
+            <span class="control-divider"></span>
+            <button
+              id="zoom-fit"
+              class="control-wide"
+              title="Fit build"
+              aria-label="Fit build"
+              data-i18n="wb.fit"
+              data-i18n-title="wb.zoomFit"
+              data-i18n-aria="wb.zoomFit"
+            >
+              Fit
+            </button>
+          </div>
+        </section>
+
+        <aside class="panel panel-right">
+          <div class="panel-section">
+            <div class="section-head">
+              <h2 data-i18n="wb.checks">Checks</h2>
+              <span id="test-summary" class="status-pill idle" data-i18n="wb.notYet">not yet</span>
+            </div>
+            <div
+              class="meter"
+              id="check-meter-bar"
+              role="img"
+              aria-label="Checks passed"
+              data-i18n-aria="wb.checksPassed"
+            >
+              <div class="meter-fill" id="check-meter"></div>
+            </div>
+            <p class="section-copy" data-i18n="wb.checksCopy">
+              Each row is one try. Match the right side to pass.
+            </p>
+            <div id="truth-table" class="table-wrap"></div>
+          </div>
+
+          <div id="share-locked" class="panel-section share-locked">
+            <div class="share-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 3v12M8 7l4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+              </svg>
+            </div>
+            <div>
+              <h2 data-i18n="wb.share">Share your build</h2>
+              <p id="share-locked-copy" class="section-copy" data-i18n="wb.shareLocked">
+                Solve the puzzle to share it with the community.
+              </p>
+            </div>
+          </div>
+
+          <div id="share-section" class="panel-section publish-section hidden">
+            <h2 data-i18n="wb.share">Share your build</h2>
+            <p class="section-copy" data-i18n="wb.noSignup">No sign-up needed.</p>
+            <label class="field">
+              <span data-i18n="wb.yourName">Your name</span>
+              <input
+                id="author"
+                maxlength="32"
+                placeholder="e.g. sam"
+                data-i18n-placeholder="wb.namePlaceholder"
+                autocomplete="off"
+              />
+            </label>
+            <p class="field-help" data-i18n="wb.nameHelp">
+              Lowercase letters, numbers, dashes, and underscores.
+            </p>
+            <label class="field">
+              <span data-i18n="wb.nameBuild">Name your build</span>
+              <input
+                id="title"
+                maxlength="120"
+                placeholder="e.g. My first adding machine"
+                data-i18n-placeholder="wb.titlePlaceholder"
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>
+                <span data-i18n="wb.note">Add a note</span>
+                <em data-i18n="wb.optional">optional</em>
+              </span>
+              <textarea
+                id="body"
+                maxlength="2000"
+                rows="3"
+                placeholder="What did you figure out?"
+                data-i18n-placeholder="wb.notePlaceholder"
+              ></textarea>
+            </label>
+            <button id="publish" class="primary" data-i18n="wb.publish">Share build</button>
+            <p id="identity-status" class="identity-status" data-i18n="wb.identity">
+              No sign-up. We’ll keep your name on this device.
+            </p>
+            <details class="advanced">
+              <summary data-i18n="wb.account">Account details</summary>
+              <p class="field-help" data-i18n="wb.accountHelp">
+                Your name stays on this device. Every build you share is checked by RAREXT.
+              </p>
+              <button id="reset-identity" class="ghost slim hidden" data-i18n="wb.forget">
+                Forget name
+              </button>
+            </details>
+            <p id="publish-status" class="muted"></p>
+          </div>
+        </aside>
+      </section>
+
+      <section id="view-feed" class="view hidden">
+        <div class="feed-head">
+          <div>
+            <h1 data-i18n="feed.title">Community builds</h1>
+            <p class="muted" data-i18n="feed.copy">
+              Open a build, make a copy, or check the answers.
+            </p>
+            <p id="chain-status" class="chain-status hidden"></p>
+          </div>
+          <div class="feed-actions">
+            <button id="refresh-feed" class="ghost" data-i18n="feed.refresh">Refresh</button>
+          </div>
+        </div>
+        <div id="feed" class="feed"></div>
+        <div class="feed-more">
+          <button id="load-more" class="ghost hidden" data-i18n="feed.more">
+            Show more builds
+          </button>
+        </div>
+        <details class="network-tools">
+          <summary data-i18n="feed.builders">For builders</summary>
+          <p data-i18n="feed.saveHelp">Save a checkpoint of new builds.</p>
+          <button id="anchor-feed" class="ghost" data-i18n="feed.save">Save checkpoint</button>
+          <div id="adapter-list" class="adapter-list">
+            <p class="field-help" data-i18n="feed.loading">Loading networks…</p>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <div id="welcome" class="welcome hidden" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <div class="welcome-card">
+        <button
+          id="welcome-close"
+          class="welcome-close"
+          aria-label="Close"
+          data-i18n-aria="wb.close"
+        >
+          &times;
+        </button>
+        <div class="welcome-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path
+              d="M9.5 9.5h13M9.5 22.5h13M9.5 9.5v13M22.5 9.5v13"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              opacity=".38"
+            />
+            <rect x="3.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" />
+            <rect x="16.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="3.5" y="16.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="16.5" y="16.5" width="12" height="12" rx="3.5" fill="var(--brand-accent)" />
+          </svg>
+        </div>
+        <p class="eyebrow" data-i18n="welcome.eyebrow">Welcome to ApesDaily</p>
+        <h1 id="welcome-title" data-i18n="welcome.title">
+          Build tiny machines. Share them with everyone.
+        </h1>
+        <p class="welcome-lede" data-i18n="welcome.lede">
+          A simple puzzle game about connecting blocks. No experience needed—a bit
+          is just on or off (1 or 0).
+        </p>
+        <ol class="steps">
+          <li>
+            <span>1</span>
+            <div>
+              <strong data-i18n="welcome.step1">Pick a puzzle</strong>
+              <p data-i18n="welcome.step1copy">Start with a simple adding puzzle.</p>
+            </div>
+          </li>
+          <li>
+            <span>2</span>
+            <div>
+              <strong data-i18n="welcome.step2">Connect the blocks</strong>
+              <p data-i18n="welcome.step2copy">
+                Add blocks, then link a green dot to a gray dot.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span>3</span>
+            <div>
+              <strong data-i18n="welcome.step3">Share and compare</strong>
+              <p data-i18n="welcome.step3copy">
+                Get a checked score, then copy other people’s builds.
+              </p>
+            </div>
+          </li>
+        </ol>
+        <div class="welcome-actions">
+          <button id="welcome-start" class="primary" data-i18n="welcome.start">
+            Start playing
+          </button>
+          <button id="welcome-explore" class="ghost" data-i18n="welcome.explore">
+            See community builds
+          </button>
+        </div>
+        <details class="welcome-glossary">
+          <summary data-i18n="welcome.glossary">What are these blocks?</summary>
+          <dl>
+            <div>
+              <dt data-i18n="welcome.notboth">NOT-BOTH</dt>
+              <dd data-i18n="welcome.notbothCopy">
+                A block that turns off only when both inputs are on. It is the only
+                block you need.
+              </dd>
+            </div>
+            <div>
+              <dt data-i18n="welcome.memory">MEMORY</dt>
+              <dd data-i18n="welcome.memoryCopy">A block that remembers one on/off value.</dd>
+            </div>
+            <div>
+              <dt data-i18n="welcome.bit">Bit</dt>
+              <dd data-i18n="welcome.bitCopy">A bit is just on or off (1 or 0).</dd>
+            </div>
+            <div>
+              <dt data-i18n="welcome.startanswer">Start / answer</dt>
+              <dd data-i18n="welcome.startanswerCopy">
+                The values you start with and the answer you build.
+              </dd>
+            </div>
+          </dl>
+        </details>
+        <p class="protocol-note welcome-note" data-i18n="footer.protocol">
+          Runs on the RAREXT protocol.
+        </p>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

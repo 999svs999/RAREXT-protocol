@@ -1,0 +1,12 @@
+{
+  "verifiers": [
+    {
+      "app": "launchpad",
+      "name": "Fair Launchpad",
+      "version": "1",
+      "description": "Checks a launch against the pinned fair-launch policy. Read-only: it never transacts.",
+      "url": "http://127.0.0.1:9300/launch/verify",
+      "artifactKinds": ["launch.plan"]
+    }
+  ]
+}

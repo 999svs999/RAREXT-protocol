@@ -1,0 +1,61 @@
+{
+  "semantics": [
+    {
+      "id": "chess/chess-mate-1",
+      "app": "chess",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Back-rank mate in one",
+      "summary": "From the given position, with White to move, the submitted moves deliver checkmate to the Black king within the allowed plies. Moves are UCI squares, White first.",
+      "specHash": "d8764f861494d76bfb3eeb273a031fae616cf3ae6db9b284c52364959ff5e4ac",
+      "inputs": ["artifact.moves"],
+      "outputs": ["mate"],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/chess/chess-mate-1@1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "xiangqi/xiangqi-mate-1",
+      "app": "xiangqi",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Palace mate in three",
+      "summary": "From the given position, with Red to move, the submitted moves force a win for Red within the allowed plies. Moves are ICCS coordinates in the a0-i9 space.",
+      "specHash": "678a8c5b9db4738e61c2abbd4bd8d1d336e9039711d83f01be7d0f1ae4f4017d",
+      "inputs": ["artifact.moves"],
+      "outputs": ["win"],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/xiangqi/xiangqi-mate-1@1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "go/go-capture-1",
+      "app": "go",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Capture the target stone",
+      "summary": "From the given position, the submitted moves capture the white stone on E5 within the allowed moves, without an illegal suicide move and without violating positional superko.",
+      "specHash": "0d40c1a421dd35dbdb7b22681fab714a1870425ca631e1c7d73c0a35501db120",
+      "inputs": ["artifact.moves"],
+      "outputs": ["capture"],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/go/go-capture-1@1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

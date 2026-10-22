@@ -1,0 +1,30 @@
+{
+  "base": {
+    "0xsafe": {
+      "deployed": true,
+      "ownerRenounced": true,
+      "upgradeable": false,
+      "supplyBurnedPct": 30.4,
+      "topHolderPct": 1.8,
+      "uniqueTopHolders": 11,
+      "lp": "burned"
+    },
+    "0xrug": {
+      "deployed": true,
+      "ownerRenounced": false,
+      "upgradeable": true,
+      "supplyBurnedPct": 4.0,
+      "topHolderPct": 22.5,
+      "uniqueTopHolders": 2,
+      "lp": "unsafe"
+    },
+    "0xpartial": {
+      "deployed": true,
+      "ownerRenounced": true,
+      "upgradeable": false,
+      "topHolderPct": 1.2,
+      "uniqueTopHolders": 8,
+      "lp": "burned"
+    }
+  }
+}

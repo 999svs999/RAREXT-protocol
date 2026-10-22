@@ -1,0 +1,26 @@
+{
+  "challenges": [
+    {
+      "id": "fair-launch-v1",
+      "app": "launchpad",
+      "title": "Fair launch",
+      "description": "Check a launch against the fair-launch policy: mint and freeze revoked, contract not upgradeable, supply burned, no whale, liquidity burned or curve-managed, no transfer tax, and creator allocation under the cap.",
+      "version": 1,
+      "spec": {
+        "policy": "fair-launch-v1",
+        "limits": {
+          "minSupplyBurnedPct": 25,
+          "maxTopHolderPct": 3,
+          "minUniqueTopHolders": 5,
+          "maxCreatorAllocationPct": 5,
+          "maxTransferTaxPct": 1
+        },
+        "scorePenaltyPerFailedCheck": 30,
+        "failClosed": true
+      },
+      "semanticsId": "launchpad/fair-launch-v1",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

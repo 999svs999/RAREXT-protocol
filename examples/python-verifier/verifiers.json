@@ -1,0 +1,12 @@
+{
+  "verifiers": [
+    {
+      "app": "echo-lab",
+      "name": "Echo Lab",
+      "version": "1",
+      "description": "Example external verifier in Python.",
+      "url": "http://127.0.0.1:9100/verify",
+      "artifactKinds": ["echo.signal"]
+    }
+  ]
+}

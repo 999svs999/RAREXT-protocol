@@ -1,0 +1,12 @@
+{
+  "verifiers": [
+    {
+      "app": "storage",
+      "name": "Storage",
+      "version": "1",
+      "description": "Proves possession of the bytes a manifest claims, and that they are held under the licensed tier. Read-only: it never writes or deletes.",
+      "url": "http://127.0.0.1:9400/storage/verify",
+      "artifactKinds": ["storage.manifest"]
+    }
+  ]
+}

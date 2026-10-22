@@ -1,0 +1,23 @@
+{
+  "semantics": [
+    {
+      "id": "launchpad/fair-launch-v1",
+      "app": "launchpad",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Fair launch",
+      "summary": "As of the block named in the artifact, the observed state of the launch met policy fair-launch-v1: the contract was deployed, mint authority was renounced, the contract was not an upgradeable proxy, at least 25% of supply was burned to the dead address, the largest holder owned no more than 3%, there were at least 5 unique top holders, liquidity was burned or curve-managed, transfer tax was at most 1%, and creator allocation was at most 5%. The claim is about one token at one block. It is not a guarantee that the token cannot be rugged later, and it is not a statement about profit.",
+      "specHash": "2ba5938594a3dbb71fad3a14348f5746ed2a49a511e15af5d9e60bbb3a4af983",
+      "inputs": ["chain", "mint", "block"],
+      "outputs": ["level"],
+      "interpretation": {
+        "doc": "https://apesdaily.com/semantics/launchpad/fair-launch-v1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "rarext-protocol",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "The RAREXT protocol and infrastructure for verifiable builds: artifacts, claims, verifiers, and a portable registry for AI agents and builders.",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build:web",
+    "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap",
+    "dev": "npm run build:web && node apps/api/src/server.ts",
+    "dev:api": "node apps/api/src/server.ts",
+    "dev:examples": "bash scripts/dev-examples.sh",
+    "dev:mcp": "node apps/mcp/src/server.ts",
+    "start": "npm run build:web && node apps/api/src/server.ts",
+    "test": "node --test packages/core/test/*.test.ts packages/agent-sdk/test/*.test.ts apps/api/test/*.test.ts apps/web/test/*.test.ts",
+    "test:examples": "python3 -m unittest discover -s examples/board-games -p 'test_*.py' && python3 -m unittest discover -s examples/launchpad -p 'test_*.py' && python3 -m unittest discover -s examples/storage -p 'test_*.py'",
+    "test:games": "npm run test:examples",
+    "version:all": "node scripts/sync-version.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build:web"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.0"
+  }
+}
