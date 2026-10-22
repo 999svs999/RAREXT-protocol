@@ -27,6 +27,7 @@
     "mirror:build": "node scripts/build-mirror.mjs",
     "test:takedown": "node scripts/takedown-test.mjs",
     "demo:durability": "node scripts/durability-demo.mjs",
+    "holder": "node apps/api/src/holder-server.ts",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test && npm run build:web",
     "chain:node": "node apps/chain/src/server.ts",

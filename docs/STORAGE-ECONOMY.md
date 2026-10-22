@@ -108,12 +108,13 @@ directory. With the anchor root committed to the bytes:
 - The operator can lie and the proof breaks.
 - The operator can delete and the record of the commitment stays.
 
-What is still centralised, and honestly so: the front door (a domain and a host),
-the write path (who may publish), and the transport between holders — the durability
-ledger runs in-process today, with directories standing in for machines. The first is
-fixed by decentralized naming over a content hash; the second is fixed by many
-registries accepting the same signed publications and gossiping between them. The
-third is the next build: a holder API any machine or agent can join.
+What is still missing, and honestly so: the front door (a domain and a host), the
+write path (who may publish), and the economics between holders. The first is fixed
+by decentralized naming over a content hash; the second is fixed by many registries
+accepting the same signed publications and gossiping between them. The third — who
+pays a holder, and how a holder proves it is still serving — is open. The transport
+a holder needs in order to join is no longer missing: see
+[RFC 0005](../rfcs/0005-durable-placements.md).
 
 ## Erasure coding: replication becomes reconstruction
 
@@ -175,16 +176,39 @@ tier decides `required`: `ephemeral` 1, `pinned` k+1, `durable` k+m.
 
 **Repair.** `repair()` rebuilds every failed shard from any k survivors, verifies
 the payload digest, and places the new shard on a holder that does not already hold
-one for that blob. It reports both directions: reading k shards is about one
-payload, writing one shard is about `1/k` of it. A spare holder is required by
-design — repair never co-locates.
+one for that blob and that answers a reachability probe. It reports both directions.
+A spare holder is required by design — repair never co-locates.
+
+The accounting is worth stating exactly. With `k = 4, m = 2`, the stored set is
+`1.5×` the payload. Repairing one failed shard reads the five survivors
+(`1.25×` the payload) and writes one shard (`0.25×` the payload). It is not cheaper
+to repair early than to repair late; it is cheaper to keep `required` than to fall
+below it.
+
+**Holders on other machines.** `apps/api/src/holder-server.ts` is the wire protocol
+in [RFC 0005](../rfcs/0005-durable-placements.md): a holder stores shard bytes under
+their own digest, answers nonce-bound leaf challenges with a Merkle path, and never
+learns the blob hash or the placement. `npm run holder` starts one
+(`RAREXT_HOLDER_ID`, `RAREXT_HOLDER_DIR`, `RAREXT_HOLDER_PORT`). `httpHolder()` is
+the client the ledger uses, so the same `place`, `challenge`, `audit`, and `repair`
+calls work across processes. The transport test runs eight holders over HTTP, stops
+one, watches the audit go `under-replicated`, repairs onto a reachable spare, and
+decodes the payload from the new placement.
+
+**Signed placement records.** `apps/api/src/placements.ts` signs a placement with the
+steward's key, embeds the public key, and chains each repair as a new record
+(`sequence` + `previous` digest). `POST /v1/placements` appends one;
+`GET /v1/placements/:blobHash` returns the latest;
+`GET /v1/placements/:blobHash/history` returns the chain. The registry verifies every
+record and refuses a fork, but it is a mirror, not an authority: a holder can re-serve
+the record that names it and a reader can verify it without the registry.
 
 What this does **not** prove: a holder could keep every leaf, discard the bytes, and
 still answer challenges. That is the gap between proof of possession and proof of
-retrievability, and it is a research step, not a solved problem. Nor is the placement
-record published yet: the ledger is in-process, so a restart loses the map.
-Publishing signed placement records to the registry is the next change, and it is
-what makes the map survive the node.
+retrievability, and it is a research step, not a solved problem. The map now survives
+the node (signed records, persisted by the registry), but two registries can still
+disagree about a fork: the protocol detects it and has no rule yet to resolve it. That
+rule belongs with the chain anchor.
 
 ## The chain path
 

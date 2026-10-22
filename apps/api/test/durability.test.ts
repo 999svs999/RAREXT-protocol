@@ -28,14 +28,14 @@ function setup(count: number): {
   return { root, holders, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-test("every shard lands on a distinct holder", () => {
+test("every shard lands on a distinct holder", async () => {
   const { holders, cleanup } = setup(6);
 
   try {
     const payload = randomBytes(2048);
     const shards = encodeBytes(payload, 4, 2);
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(shards, holders, "durable");
+    const placement = await ledger.place(shards, holders, "durable");
 
     assert.equal(placement.shards.length, 6);
     assert.equal(new Set(placement.shards.map((shard) => shard.holder)).size, 6);
@@ -45,7 +45,7 @@ test("every shard lands on a distinct holder", () => {
 
     for (const shard of placement.shards) {
       const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-      const bytes = holder.get(shard.storedAs);
+      const bytes = await holder.get(shard.storedAs);
       assert.ok(bytes);
       assert.equal(bytes.length, shard.size);
     }
@@ -54,12 +54,12 @@ test("every shard lands on a distinct holder", () => {
   }
 });
 
-test("placement refuses when there are fewer holders than shards", () => {
+test("placement refuses when there are fewer holders than shards", async () => {
   const { holders, cleanup } = setup(4);
 
   try {
     const ledger = new DurabilityLedger();
-    assert.throws(
+    await assert.rejects(
       () => ledger.place(encodeBytes(randomBytes(512), 3, 2), holders, "durable"),
       /5 distinct holders/,
     );
@@ -68,14 +68,14 @@ test("placement refuses when there are fewer holders than shards", () => {
   }
 });
 
-test("placement is deterministic for the same blob and holder set", () => {
+test("placement is deterministic for the same blob and holder set", async () => {
   const { holders, cleanup } = setup(8);
 
   try {
     const shards = encodeBytes(randomBytes(4096), 4, 2);
-    const first = new DurabilityLedger().place(shards, holders, "durable");
+    const first = await new DurabilityLedger().place(shards, holders, "durable");
     const shuffled = [...holders].reverse();
-    const second = new DurabilityLedger().place(shards, shuffled, "durable");
+    const second = await new DurabilityLedger().place(shards, shuffled, "durable");
 
     assert.deepEqual(
       first.shards.map((shard) => shard.holder),
@@ -90,13 +90,13 @@ test("placement is deterministic for the same blob and holder set", () => {
   }
 });
 
-test("a challenge passes while the holder has the shard", () => {
+test("a challenge passes while the holder has the shard", async () => {
   const { holders, cleanup } = setup(6);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(1024), 4, 2), holders, "durable");
-    const outcomes = ledger.challenge(placement.blobHash, holders);
+    const placement = await ledger.place(encodeBytes(randomBytes(1024), 4, 2), holders, "durable");
+    const outcomes = await ledger.challenge(placement.blobHash, holders);
 
     assert.equal(outcomes.length, 6);
     assert.ok(outcomes.every((outcome) => outcome.ok), JSON.stringify(outcomes));
@@ -106,18 +106,18 @@ test("a challenge passes while the holder has the shard", () => {
   }
 });
 
-test("losing the bytes fails the challenge and the audit says so", () => {
+test("losing the bytes fails the challenge and the audit says so", async () => {
   const { holders, cleanup } = setup(5);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(1024), 3, 2), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(1024), 3, 2), holders, "durable");
     const lost = placement.shards[2]!;
     const lostHolder = holders.find((candidate) => candidate.id === lost.holder)!;
 
-    assert.equal(lostHolder.remove(lost.storedAs), true);
+    assert.equal(await lostHolder.remove(lost.storedAs), true);
 
-    const outcomes = ledger.challenge(placement.blobHash, holders);
+    const outcomes = await ledger.challenge(placement.blobHash, holders);
     assert.equal(outcomes.find((outcome) => outcome.index === 2)?.ok, false);
 
     const report = ledger.audit(placement.blobHash);
@@ -131,17 +131,17 @@ test("losing the bytes fails the challenge and the audit says so", () => {
   }
 });
 
-test("a challenge response is bound to its nonce", () => {
+test("a challenge response is bound to its nonce", async () => {
   const { holders, cleanup } = setup(2);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(256), 1, 1), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(256), 1, 1), holders, "durable");
     const shard = placement.shards[0]!;
     const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-    const bytes = Uint8Array.from(holder.get(shard.storedAs)!);
+    const bytes = Uint8Array.from((await holder.get(shard.storedAs))!);
 
-    const answer = respondToChallenge(bytes, shard, 0, "nonce-one");
+    const answer = respondToChallenge(bytes, 0, "nonce-one")!;
     assert.equal(verifyChallengeResponse(shard, answer), true);
 
     const replayed = { ...answer, nonce: "nonce-two" };
@@ -151,18 +151,18 @@ test("a challenge response is bound to its nonce", () => {
   }
 });
 
-test("a response for one leaf does not verify as another leaf", () => {
+test("a response for one leaf does not verify as another leaf", async () => {
   const { holders, cleanup } = setup(2);
 
   try {
     const ledger = new DurabilityLedger();
     const payload = randomBytes(8192);
-    const placement = ledger.place(encodeBytes(payload, 1, 1), holders, "durable");
+    const placement = await ledger.place(encodeBytes(payload, 1, 1), holders, "durable");
     const shard = placement.shards[0]!;
     const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-    const bytes = Uint8Array.from(holder.get(shard.storedAs)!);
+    const bytes = Uint8Array.from((await holder.get(shard.storedAs))!);
 
-    const answer = respondToChallenge(bytes, shard, 0, "nonce");
+    const answer = respondToChallenge(bytes, 0, "nonce")!;
     const moved = { ...answer, index: 1, proof: answer.proof };
     assert.equal(verifyChallengeResponse(shard, moved), false);
   } finally {
@@ -170,15 +170,15 @@ test("a response for one leaf does not verify as another leaf", () => {
   }
 });
 
-test("the audit goes stale when the challenge window passes", () => {
+test("the audit goes stale when the challenge window passes", async () => {
   const { holders, cleanup } = setup(4);
 
   try {
     let clock = 1_000_000;
     const ledger = new DurabilityLedger({ now: () => clock, windowMs: 60_000 });
-    const placement = ledger.place(encodeBytes(randomBytes(512), 3, 1), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(512), 3, 1), holders, "durable");
 
-    ledger.challenge(placement.blobHash, holders);
+    await ledger.challenge(placement.blobHash, holders);
     assert.equal(ledger.audit(placement.blobHash).status, "ok");
 
     clock += 120_000;
@@ -190,30 +190,30 @@ test("the audit goes stale when the challenge window passes", () => {
   }
 });
 
-test("the required holder count follows the tier", () => {
+test("the required holder count follows the tier", async () => {
   assert.equal(requiredHolders("ephemeral", { dataShards: 4, parityShards: 2 }), 1);
   assert.equal(requiredHolders("pinned", { dataShards: 4, parityShards: 2 }), 5);
   assert.equal(requiredHolders("durable", { dataShards: 4, parityShards: 2 }), 6);
 });
 
-test("repair rebuilds the lost shard and the blob still decodes", () => {
+test("repair rebuilds the lost shard and the blob still decodes", async () => {
   const { holders, cleanup } = setup(8);
 
   try {
     const payload = randomBytes(4096);
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(payload, 4, 2), holders, "durable");
+    const placement = await ledger.place(encodeBytes(payload, 4, 2), holders, "durable");
     const lost = placement.shards[1]!;
     const shardSize = lost.size;
     const lostHolderId = lost.holder;
 
     const lostHolder = holders.find((candidate) => candidate.id === lostHolderId)!;
-    assert.equal(lostHolder.remove(lost.storedAs), true);
+    assert.equal(await lostHolder.remove(lost.storedAs), true);
 
-    ledger.challenge(placement.blobHash, holders);
+    await ledger.challenge(placement.blobHash, holders);
     assert.equal(ledger.audit(placement.blobHash).status, "under-replicated");
 
-    const repaired = ledger.repair(placement.blobHash, holders);
+    const repaired = await ledger.repair(placement.blobHash, holders);
     assert.equal(repaired.filled, 1);
     assert.equal(repaired.writtenBytes, shardSize);
     assert.equal(repaired.readBytes, shardSize * 5);
@@ -223,7 +223,7 @@ test("repair rebuilds the lost shard and the blob still decodes", () => {
     assert.notEqual(moved.holder, lostHolderId, "the replacement is a different holder");
 
     const afterRepair = ledger.get(placement.blobHash)!;
-    const all = afterRepair.shards.map((shard) => {
+    const all = await Promise.all(afterRepair.shards.map(async (shard) => {
       const holder = holders.find((candidate) => candidate.id === shard.holder)!;
       return {
         index: shard.index,
@@ -231,14 +231,14 @@ test("repair rebuilds the lost shard and the blob still decodes", () => {
         parityShards: afterRepair.parityShards,
         length: afterRepair.length,
         payloadDigest: afterRepair.blobHash,
-        bytes: Uint8Array.from(holder.get(shard.storedAs)!),
+        bytes: Uint8Array.from((await holder.get(shard.storedAs))!),
         digest: shard.digest,
       };
-    });
+    }));
 
     assert.deepEqual(Buffer.from(decodeBytes(all.slice(0, 4))), payload);
 
-    ledger.challenge(placement.blobHash, holders);
+    await ledger.challenge(placement.blobHash, holders);
     const report = ledger.audit(placement.blobHash);
     assert.equal(report.status, "ok");
     assert.equal(report.live, 6);
@@ -247,57 +247,57 @@ test("repair rebuilds the lost shard and the blob still decodes", () => {
   }
 });
 
-test("repair refuses when fewer than k shards survive", () => {
+test("repair refuses when fewer than k shards survive", async () => {
   const { holders, cleanup } = setup(6);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(2048), 3, 1), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(2048), 3, 1), holders, "durable");
 
     for (const shard of placement.shards.slice(0, 2)) {
       const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-      holder.remove(shard.storedAs);
+      await holder.remove(shard.storedAs);
     }
 
-    ledger.challenge(placement.blobHash, holders);
-    assert.throws(() => ledger.repair(placement.blobHash, holders), /only 2 of 3/);
+    await ledger.challenge(placement.blobHash, holders);
+    await assert.rejects(() => ledger.repair(placement.blobHash, holders), /only 2 of 3/);
   } finally {
     cleanup();
   }
 });
 
-test("repair will not co-locate a shard and needs a spare holder", () => {
+test("repair will not co-locate a shard and needs a spare holder", async () => {
   const { holders, cleanup } = setup(4);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(1024), 3, 1), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(1024), 3, 1), holders, "durable");
     const lost = placement.shards[0]!;
-    holders.find((candidate) => candidate.id === lost.holder)!.remove(lost.storedAs);
-    ledger.challenge(placement.blobHash, holders);
+    await holders.find((candidate) => candidate.id === lost.holder)!.remove(lost.storedAs);
+    await ledger.challenge(placement.blobHash, holders);
 
-    assert.throws(() => ledger.repair(placement.blobHash, holders), /no spare holder/);
+    await assert.rejects(() => ledger.repair(placement.blobHash, holders), /no spare holder/);
   } finally {
     cleanup();
   }
 });
 
-test("repair refuses before writing when there are not enough spares", () => {
+test("repair refuses before writing when there are not enough spares", async () => {
   const { holders, cleanup } = setup(7);
 
   try {
     const ledger = new DurabilityLedger();
-    const placement = ledger.place(encodeBytes(randomBytes(1024), 4, 2), holders, "durable");
+    const placement = await ledger.place(encodeBytes(randomBytes(1024), 4, 2), holders, "durable");
 
     for (const shard of placement.shards.slice(0, 2)) {
       const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-      holder.remove(shard.storedAs);
+      await holder.remove(shard.storedAs);
     }
 
-    ledger.challenge(placement.blobHash, holders);
+    await ledger.challenge(placement.blobHash, holders);
     const before = ledger.get(placement.blobHash)!.shards.map((shard) => shard.holder);
 
-    assert.throws(() => ledger.repair(placement.blobHash, holders), /no spare holder/);
+    await assert.rejects(() => ledger.repair(placement.blobHash, holders), /no spare holder/);
     assert.deepEqual(
       ledger.get(placement.blobHash)!.shards.map((shard) => shard.holder),
       before,

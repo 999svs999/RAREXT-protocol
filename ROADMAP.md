@@ -62,8 +62,8 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Shard placement across independent holders, with no co-location
 - [x] Nonce-bound retention challenges and a live-holder audit
 - [x] Repair from any k survivors, with read and write accounting
-- [ ] A holder transport: another machine or agent joins the shard set
-- [ ] Signed placement records published to the registry, so the map survives the node
+- [x] A holder transport: another machine or agent joins the shard set
+- [x] Signed placement records published to the registry, so the map survives the node
 - [ ] Scheduled challenges, not only on demand
 - [ ] Durability tier and an auditable replica count on the publication itself
 - [ ] Independent verifier operators

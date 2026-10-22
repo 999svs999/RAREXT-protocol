@@ -9,20 +9,28 @@ import { BlobStore, sha256Bytes } from "./storage.ts";
  * places erasure shards on independent holders, challenges them for possession,
  * counts the ones that answered, and rebuilds what was lost.
  *
- * A holder is anything that can put and get bytes: a directory here, a browser
- * or another machine behind a transport later. An agent is a holder.
+ * A holder is anything that can put, get, and answer a challenge: a directory
+ * here, another machine over HTTP, an agent with a store. Every method is async
+ * so the same ledger runs against all of them.
  */
 
 export const SHARD_CHUNK_BYTES = 4096;
 
 export type DurabilityTier = "ephemeral" | "pinned" | "durable";
 
+export interface HolderChallenge {
+  storedAs: string;
+  leafIndex: number;
+  nonce: string;
+}
+
 export interface DurabilityHolder {
   readonly id: string;
-  put(bytes: Uint8Array): string;
-  get(storedAs: string): Uint8Array | null;
-  remove(storedAs: string): boolean;
-  has(storedAs: string): boolean;
+  put(bytes: Uint8Array): Promise<string>;
+  get(storedAs: string): Promise<Uint8Array | null>;
+  remove(storedAs: string): Promise<boolean>;
+  has(storedAs: string): Promise<boolean>;
+  respond(challenge: HolderChallenge): Promise<ChallengeResponse | null>;
 }
 
 export interface ShardPlacement {
@@ -125,14 +133,91 @@ export function directoryHolder(id: string, directory: string): DurabilityHolder
 
   return {
     id,
-    put: (bytes) => store.put(bytes).hash,
-    get: (storedAs) => store.get(storedAs)?.bytes ?? null,
-    remove: (storedAs) => store.remove(storedAs),
-    has: (storedAs) => store.has(storedAs),
+    put: async (bytes) => store.put(bytes).hash,
+    get: async (storedAs) => store.get(storedAs)?.bytes ?? null,
+    remove: async (storedAs) => store.remove(storedAs),
+    has: async (storedAs) => store.has(storedAs),
+    respond: async ({ storedAs, leafIndex, nonce }) => {
+      const bytes = store.get(storedAs)?.bytes;
+
+      return bytes ? respondToChallenge(bytes, leafIndex, nonce) : null;
+    },
   };
 }
 
-function chunkLeaves(bytes: Uint8Array): string[] {
+/**
+ * A holder on another machine. The wire protocol is in rfcs/0005.
+ */
+export function httpHolder(
+  id: string,
+  baseUrl: string,
+  options: { fetch?: typeof fetch } = {},
+): DurabilityHolder {
+  const base = baseUrl.replace(/\/+$/, "");
+  const call = options.fetch ?? fetch;
+
+  async function expect(response: Response, what: string): Promise<Response> {
+    if (!response.ok) {
+      throw new Error(`holder ${id} failed ${what}: ${response.status}`);
+    }
+
+    return response;
+  }
+
+  return {
+    id,
+    async put(bytes) {
+      const response = await expect(
+        await call(`${base}/v1/holder/shards`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: Buffer.from(bytes).toString("base64") }),
+        }),
+        "put",
+      );
+
+      const body = (await response.json()) as { storedAs: string };
+      return body.storedAs;
+    },
+    async get(storedAs) {
+      const response = await call(`${base}/v1/holder/shards/${storedAs}`);
+
+      if (response.status === 404) return null;
+
+      await expect(response, "get");
+      const body = (await response.json()) as { content: string };
+      return Uint8Array.from(Buffer.from(body.content, "base64"));
+    },
+    async remove(storedAs) {
+      const response = await call(`${base}/v1/holder/shards/${storedAs}`, {
+        method: "DELETE",
+      });
+
+      return response.ok;
+    },
+    async has(storedAs) {
+      const response = await call(`${base}/v1/holder/shards/${storedAs}`, {
+        method: "HEAD",
+      });
+
+      return response.ok;
+    },
+    async respond(challenge) {
+      const response = await call(`${base}/v1/holder/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(challenge),
+      });
+
+      if (response.status === 404) return null;
+
+      await expect(response, "challenge");
+      return (await response.json()) as ChallengeResponse;
+    },
+  };
+}
+
+export function chunkLeaves(bytes: Uint8Array): string[] {
   const leaves: string[] = [];
 
   for (let offset = 0; offset < bytes.length; offset += SHARD_CHUNK_BYTES) {
@@ -147,20 +232,19 @@ function nonceBinding(nonce: string, leaf: string): string {
 }
 
 /**
- * A holder answers a challenge for one leaf of one shard. The leaf and its path
- * prove possession against the committed root; the nonce binding proves the
- * answer was computed after the challenge and cannot be replayed.
+ * Answer a challenge for one leaf. The leaf and its path prove possession
+ * against the committed root; the nonce binding proves the answer was computed
+ * after the challenge and cannot be replayed.
  */
 export function respondToChallenge(
   bytes: Uint8Array,
-  shard: ShardPlacement,
   leafIndex: number,
   nonce: string,
-): ChallengeResponse {
+): ChallengeResponse | null {
   const leaves = chunkLeaves(bytes);
 
   if (!Number.isInteger(leafIndex) || leafIndex < 0 || leafIndex >= leaves.length) {
-    throw new Error(`leaf ${leafIndex} is outside the shard`);
+    return null;
   }
 
   const leaf = leaves[leafIndex]!;
@@ -207,11 +291,32 @@ export class DurabilityLedger {
     return this.placements.get(blobHash) ?? null;
   }
 
-  place(
+  /** Writes the map into the ledger so a published record can be rebuilt. */
+  adopt(placement: Placement): Placement {
+    this.placements.set(placement.blobHash, placement);
+    this.witnesses.set(
+      placement.blobHash,
+      new Map(
+        placement.shards.map((shard) => [
+          shard.index,
+          {
+            holder: shard.holder,
+            lastSuccess: null,
+            lastFailure: null,
+            misses: 0,
+          },
+        ]),
+      ),
+    );
+
+    return placement;
+  }
+
+  async place(
     shards: ErasureShard[],
     holders: DurabilityHolder[],
     tier: DurabilityTier,
-  ): Placement {
+  ): Promise<Placement> {
     const first = shards[0];
 
     if (!first) throw new Error("at least one shard is required");
@@ -277,7 +382,7 @@ export class DurabilityLedger {
 
     for (const shard of shards) {
       const holder = chosen[shard.index]!;
-      const storedAs = holder.put(shard.bytes);
+      const storedAs = await holder.put(shard.bytes);
       const leaves = chunkLeaves(shard.bytes);
 
       placement.shards.push({
@@ -306,7 +411,10 @@ export class DurabilityLedger {
     return placement;
   }
 
-  challenge(blobHash: string, holders: DurabilityHolder[]): ChallengeOutcome[] {
+  async challenge(
+    blobHash: string,
+    holders: DurabilityHolder[],
+  ): Promise<ChallengeOutcome[]> {
     const placement = this.placements.get(blobHash);
 
     if (!placement) throw new Error(`unknown blob ${blobHash}`);
@@ -326,20 +434,29 @@ export class DurabilityLedger {
         continue;
       }
 
-      const bytes = holder.get(shard.storedAs);
-
-      if (!bytes) {
-        outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "shard-missing" });
-        this.miss(witness, now);
-        continue;
-      }
-
       const leafIndex = this.random(shard.leaves);
       const nonce = randomBytesNode(16).toString("hex");
-      const response = respondToChallenge(bytes, shard, leafIndex, nonce);
 
-      if (!verifyChallengeResponse(shard, response)) {
-        outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "bad-proof" });
+      try {
+        const response = await holder.respond({
+          storedAs: shard.storedAs,
+          leafIndex,
+          nonce,
+        });
+
+        if (!response) {
+          outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "shard-missing" });
+          this.miss(witness, now);
+          continue;
+        }
+
+        if (!verifyChallengeResponse(shard, response)) {
+          outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "bad-proof" });
+          this.miss(witness, now);
+          continue;
+        }
+      } catch {
+        outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "holder-missing" });
         this.miss(witness, now);
         continue;
       }
@@ -402,7 +519,7 @@ export class DurabilityLedger {
    * places it on a holder that does not already hold a shard of this blob. The
    * returned placement is the same object, updated.
    */
-  repair(blobHash: string, holders: DurabilityHolder[]): RepairOutcome {
+  async repair(blobHash: string, holders: DurabilityHolder[]): Promise<RepairOutcome> {
     const placement = this.placements.get(blobHash);
 
     if (!placement) throw new Error(`unknown blob ${blobHash}`);
@@ -420,7 +537,17 @@ export class DurabilityLedger {
         witness.lastFailure !== null &&
         (witness.lastSuccess === null || witness.lastFailure > witness.lastSuccess);
 
-      if (!holder || failed || !holder.has(shard.storedAs)) degraded.add(shard.index);
+      let present = false;
+
+      if (holder) {
+        try {
+          present = await holder.has(shard.storedAs);
+        } catch {
+          present = false;
+        }
+      }
+
+      if (!holder || failed || !present) degraded.add(shard.index);
     }
 
     if (degraded.size === 0) {
@@ -435,10 +562,17 @@ export class DurabilityLedger {
       );
     }
 
-    const survivorShards: ErasureShard[] = survivors.map((shard) => {
+    const survivorShards: ErasureShard[] = [];
+
+    for (const shard of survivors) {
       const holder = byId.get(shard.holder)!;
-      const bytes = holder.get(shard.storedAs)!;
-      return {
+      const bytes = await holder.get(shard.storedAs);
+
+      if (!bytes) {
+        throw new Error(`holder ${shard.holder} lost shard ${shard.index} during repair`);
+      }
+
+      survivorShards.push({
         index: shard.index,
         dataShards: placement.dataShards,
         parityShards: placement.parityShards,
@@ -446,15 +580,25 @@ export class DurabilityLedger {
         payloadDigest: placement.blobHash,
         bytes: Uint8Array.from(bytes),
         digest: shard.digest,
-      };
-    });
+      });
+    }
 
     const payload = decodeBytes(survivorShards);
-    const reference = survivorShards[0]!;
-    const reencoded = encodeBytes(payload, reference.dataShards, reference.parityShards);
-    const spare = holders
-      .filter((holder) => !used.has(holder.id))
-      .sort((left, right) => left.id.localeCompare(right.id));
+    const reencoded = encodeBytes(payload, placement.dataShards, placement.parityShards);
+    const probe = placement.shards.find((shard) => degraded.has(shard.index))!.storedAs;
+    const spare: DurabilityHolder[] = [];
+
+    for (const candidate of holders) {
+      if (used.has(candidate.id)) continue;
+
+      try {
+        if (!(await candidate.has(probe))) spare.push(candidate);
+      } catch {
+        continue;
+      }
+    }
+
+    spare.sort((left, right) => left.id.localeCompare(right.id));
 
     let readBytes = 0;
     for (const shard of survivorShards) readBytes += shard.bytes.length;
@@ -471,7 +615,7 @@ export class DurabilityLedger {
     for (const index of [...degraded].sort((left, right) => left - right)) {
       const next = spare.shift()!;
       const bytes = reencoded.find((shard) => shard.index === index)!.bytes;
-      const storedAs = next.put(bytes);
+      const storedAs = await next.put(bytes);
       const leaves = chunkLeaves(bytes);
       const target = placement.shards.find((shard) => shard.index === index)!;
 

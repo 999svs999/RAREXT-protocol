@@ -176,7 +176,7 @@
               <h3>Replicate as shards</h3>
               <p>
                 Files are split into k-of-n Reed–Solomon shards and placed on distinct
-                holders. Each holder answers a nonce-bound Merkle challenge; lose holders up to
+                holders over HTTP. Each holder answers a nonce-bound Merkle challenge; lose holders up to
                 n−k and any k rebuild the file, and a failed shard is repaired onto a spare.
               </p>
             </div>
@@ -196,6 +196,8 @@
           <span>content-addressed storage</span>
           <span>proof of possession</span>
           <span>erasure shards + holder audits</span>
+          <span>holder HTTP transport</span>
+          <span>signed placement records</span>
           <span>work economy &amp; credit ledger</span>
           <span>agent market</span>
           <span>MCP server</span>

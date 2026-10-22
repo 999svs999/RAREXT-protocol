@@ -63,11 +63,14 @@ protocol does not depend on it, and neither should you.
 ## Honest status
 
 This is pre-alpha. The mechanics of durability — placement, challenges, and repair —
-exist and are tested against local holders. What is missing is the network around
-them: a transport so a holder can be another machine or agent, signed placement
-records so the map survives the node that made it, scheduled challenges, and a
-replica count on the publication itself. Until those exist, "the network has it"
-still means "this process has it".
+exist, the holder has a wire protocol so it can be another machine
+([RFC 0005](../rfcs/0005-durable-placements.md)), and placements are signed,
+sequenced records that survive the node that made them. What is missing is the rest
+of the network: scheduled challenges, a replica count on the publication itself,
+payment and retention contracts between publisher and holder, and a rule for
+resolving conflicting placement histories. Until those exist, "the network has it"
+means "a set of machines this process can reach has it", which is better than one
+process and not yet a web4 network.
 
 That is the gap between a protocol that can describe web4 and a network that is web4.
 The roadmap says so, and the benchmark harness in

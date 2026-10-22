@@ -19,6 +19,18 @@ break a client or invalidate stored data.
   k+m), and repairs any failed shard from k survivors with read/write accounting. 13
   tests, and `npm run demo:durability` runs the whole sequence: 6/6 live, lose one,
   5/6 under-replicated, repair, 6/6, payload matches.
+- **A holder wire protocol.** `apps/api/src/holder-server.ts` stores shard bytes under
+  their own digest, answers nonce-bound leaf challenges with a Merkle path, and never
+  learns the blob hash. `npm run holder` starts one; `httpHolder()` is the client, so
+  placement, challenges, and repair work across processes. Three transport tests run
+  eight holders over HTTP, stop one, watch the audit degrade, and repair onto a
+  reachable spare.
+- **Signed placement records.** `apps/api/src/placements.ts` signs a placement with the
+  steward's key, embeds the public key, and chains each repair as a new record
+  (`sequence` + `previous`). `POST /v1/placements`,
+  `GET /v1/placements/:blobHash`, and `GET /v1/placements/:blobHash/history` expose the
+  chain; a file-backed registry verifies records and refuses forks. `RFC 0005`
+  documents the protocol and its trust boundaries.
 
 ## 0.1.0-alpha.3 — 2026-10-22
 

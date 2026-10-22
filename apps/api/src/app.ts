@@ -71,6 +71,7 @@ import {
 import { buildBundle, verifyBundle } from "./bundle.ts";
 import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
 import { VerifierModuleRegistry } from "./verifierModules.ts";
+import { PlacementRegistry, asSignedPlacement } from "./placements.ts";
 import { verifyWorkerSignature } from "./worker.ts";
 import {
   ACTIONS,
@@ -117,6 +118,7 @@ export interface AppOptions {
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
   blobs?: BlobStore;
+  placements?: PlacementRegistry;
   fetch?: typeof fetch;
 }
 
@@ -681,6 +683,9 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
   const blobs =
     options.blobs ??
     new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
+  const placements =
+    options.placements ??
+    new PlacementRegistry(process.env.RAREXT_PLACEMENTS_DIR ?? ".data/placements");
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
@@ -1359,6 +1364,60 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         }
 
         send(res, term.matured ? 200 : 425, term);
+        return;
+      }
+
+      if (pathname === "/v1/placements") {
+        if (req.method === "GET") {
+          send(res, 200, placements.list());
+          return;
+        }
+
+        if (req.method === "POST") {
+          const signed = asSignedPlacement(await readJson(req));
+
+          if (!signed) {
+            throw new Error("body must be a signed placement record");
+          }
+
+          const result = placements.put(signed);
+
+          send(res, result.status, result.error
+            ? { error: result.error }
+            : {
+              status: result.status === 201 ? "recorded" : "unchanged",
+              blobHash: signed.record.placement.blobHash,
+              sequence: signed.record.sequence,
+            });
+          return;
+        }
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/placements/")) {
+        const rest = pathname.slice("/v1/placements/".length);
+        const history = rest.endsWith("/history");
+        const hash = history ? rest.slice(0, -"/history".length) : rest;
+
+        if (history) {
+          const records = placements.historyFor(hash);
+
+          if (records.length === 0) {
+            send(res, 404, { error: "no placement records for this blob" });
+            return;
+          }
+
+          send(res, 200, records);
+          return;
+        }
+
+        const latest = placements.get(hash);
+
+        if (!latest) {
+          send(res, 404, { error: "no placement record for this blob" });
+          return;
+        }
+
+        send(res, 200, latest);
         return;
       }
 

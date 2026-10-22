@@ -39,42 +39,42 @@ line("blob", `${digest.slice(0, 16)}… (${(SIZE / 1024 / 1024).toFixed(1)} MB)`
 line("code", "4 data + 2 parity, tier durable");
 line("holders", `${HOLDERS} directories on this machine (a stand-in for a network)`);
 
-const placement = ledger.place(shards, holders, "durable");
+const placement = await ledger.place(shards, holders, "durable");
 line(
   "placed",
   placement.shards.map((shard) => `${shard.index}→${shard.holder}`).join("  "),
 );
 
-ledger.challenge(placement.blobHash, holders);
+await ledger.challenge(placement.blobHash, holders);
 let report = ledger.audit(placement.blobHash);
 line("challenge", `${report.live}/${report.required} answered`);
 line("audit", `live ${report.live}/${report.required} · ${report.status}`);
 
 const lost = placement.shards[1];
 const lostHolder = holders.find((holder) => holder.id === lost.holder);
-lostHolder.remove(lost.storedAs);
+await lostHolder.remove(lost.storedAs);
 line("lost", `${lost.holder} stopped holding shard ${lost.index}`);
 
-ledger.challenge(placement.blobHash, holders);
+await ledger.challenge(placement.blobHash, holders);
 report = ledger.audit(placement.blobHash);
 line("challenge", `${report.live}/${report.required} answered`);
 line("audit", `live ${report.live}/${report.required} · ${report.status}`);
 
-const repaired = ledger.repair(placement.blobHash, holders);
+const repaired = await ledger.repair(placement.blobHash, holders);
 line(
   "repair",
   `${repaired.filled} shard rebuilt · read ${kilobytes(repaired.readBytes)} · wrote ${kilobytes(repaired.writtenBytes)}`,
 );
 
-ledger.challenge(placement.blobHash, holders);
+await ledger.challenge(placement.blobHash, holders);
 report = ledger.audit(placement.blobHash);
 line("challenge", `${report.live}/${report.required} answered`);
 line("audit", `live ${report.live}/${report.required} · ${report.status}`);
 
 const final = ledger.get(placement.blobHash);
-const recovered = final.shards.slice(0, 4).map((shard) => {
+const recovered = await Promise.all(final.shards.slice(0, 4).map(async (shard) => {
   const holder = holders.find((candidate) => candidate.id === shard.holder);
-  const bytes = holder.get(shard.storedAs);
+  const bytes = await holder.get(shard.storedAs);
 
   return {
     index: shard.index,
@@ -85,7 +85,7 @@ const recovered = final.shards.slice(0, 4).map((shard) => {
     bytes: Uint8Array.from(bytes),
     digest: shard.digest,
   };
-});
+}));
 
 const rebuilt = createHash("sha256").update(decodeBytes(recovered)).digest("hex");
 line("decode", rebuilt === digest ? "payload matches the original" : "PAYLOAD MISMATCH");
