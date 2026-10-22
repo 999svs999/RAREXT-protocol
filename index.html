@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAREXT — the database for anything digital</title>
+    <meta
+      name="description"
+      content="RAREXT is the protocol for web4: every digital object becomes a claim anyone can verify — content-addressed, signed, anchored, erasure-coded. Free to read and verify; durability is bought, not assumed."
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta property="og:title" content="RAREXT — the database for anything digital" />
+    <meta
+      property="og:description"
+      content="Store anything. Verify it anywhere. Pay only for the copies you choose to keep."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="canonical" href="https://999svs999.github.io/RAREXT-protocol/" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <a class="brand" href="./" aria-label="RAREXT home">
+        <img src="favicon.svg" alt="" width="30" height="30" />
+        <span>RAREXT</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#web4">web4</a>
+        <a href="#how">How it works</a>
+        <a href="#free">What free means</a>
+        <a href="#truth">Truth</a>
+        <a href="#build">Contribute</a>
+      </nav>
+      <a class="gh" href="https://github.com/999svs999/RAREXT-protocol">GitHub ↗</a>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <p class="pill"><span class="dot"></span> web4 · open protocol · Apache-2.0 · pre-alpha</p>
+        <h1>The database for<br /><em>anything digital.</em></h1>
+        <p class="lede">
+          Store anything. Verify it anywhere. Pay only for the copies you choose to keep.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/LITEPAPER.md">
+            Read the litepaper
+          </a>
+          <a class="btn ghost" href="#build">Start contributing</a>
+        </div>
+
+        <div class="facts">
+          <div>
+            <strong>Any object → one claim</strong>
+            <span>A payload, its meaning, and its proof, in one signed envelope.</span>
+          </div>
+          <div>
+            <strong>One verifier, two runtimes</strong>
+            <span>The same bytes are recomputed in a browser and on a server.</span>
+          </div>
+          <div>
+            <strong>k-of-n, not promises</strong>
+            <span>Erasure-coded shards that rebuild the file when holders disappear.</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="web4" class="band">
+        <p class="eyebrow">The network</p>
+        <h2>web4 is the free-for-all layer.</h2>
+        <p class="section-lede">
+          Not a token, not a chain, not a browser. A network where any object, claim, or
+          agent carries its own proof, and anyone with a device can hold bytes, verify
+          work, and be paid for it. RAREXT is the protocol; ApesDaily is where the public
+          meets it.
+        </p>
+        <div class="facts">
+          <div>
+            <strong>No gatekeeper for reading</strong>
+            <span>A payload is reachable from a hash and a mirror, not from permission.</span>
+          </div>
+          <div>
+            <strong>No gatekeeper for verifying</strong>
+            <span>The verifier is a file you can read and run in a browser tab.</span>
+          </div>
+          <div>
+            <strong>No protocol token</strong>
+            <span>Apps may launch tokens. The protocol's job is to make the launch checkable.</span>
+          </div>
+        </div>
+        <p class="small">
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4.md">
+            Read the definition, including the primitive that is still missing →
+          </a>
+        </p>
+      </section>
+
+      <section id="free" class="band">
+        <p class="eyebrow">The honest definition</p>
+        <h2>What “free” means here</h2>
+        <p class="section-lede">
+          The protocol does not bill you. That is a real property, and it is a narrow one.
+          Here is exactly where it stops.
+        </p>
+
+        <div class="grid four">
+          <article class="card">
+            <h3>Writing, reading, verifying</h3>
+            <p>No fee, no gate, no account. The reference registry is open source; run your own if you prefer ours.</p>
+          </article>
+          <article class="card">
+            <h3>One device, one copy</h3>
+            <p>If your machine holds the bytes, it costs the protocol nothing — and it is a single copy. That is a backup that has not failed yet, not durability.</p>
+          </article>
+          <article class="card">
+            <h3>Durability is bought</h3>
+            <p>More copies cost more disk somewhere. RAREXT makes the price explicit: k-of-n shards, published replica counts, retention challenges.</p>
+          </article>
+          <article class="card">
+            <h3>Physics still applies</h3>
+            <p>Electricity, bandwidth, and the device are real costs. They are yours, and we do not pretend they vanished. Nothing here beats Shannon.</p>
+          </article>
+        </div>
+
+        <aside class="callout">
+          <p>
+            <strong>The commitment is forever. The bytes are rented.</strong>
+            A publication's claim is permanent and recomputable; the storage that serves it is
+            paid for by whoever chooses to hold it. When nobody does, the claim still verifies —
+            you just have to supply the file.
+          </p>
+        </aside>
+      </section>
+
+      <section id="how">
+        <p class="eyebrow">The mechanics</p>
+        <h2>Four steps, each one checkable</h2>
+
+        <ol class="steps">
+          <li>
+            <span class="num">01</span>
+            <div>
+              <h3>Publish and sign</h3>
+              <p>
+                Any file becomes a publication: a content hash, a kind, a meaning, and a signature
+                from ECDSA-P256 or ML-DSA. The signing suite is recorded, so a reader knows what
+                the proof is worth.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="num">02</span>
+            <div>
+              <h3>Recompute, don't trust</h3>
+              <p>
+                A deterministic verifier re-executes the claim. The shipped verifier runs
+                unchanged in the browser and on the server and returns the same attestation from
+                both.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="num">03</span>
+            <div>
+              <h3>Anchor to a chain</h3>
+              <p>
+                The Merkle root is anchored to a hash-linked log. The registry reads it back from
+                an independent path before it says “confirmed” — a write is not a receipt.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="num">04</span>
+            <div>
+              <h3>Replicate as shards</h3>
+              <p>
+                Files are split into k-of-n Reed–Solomon shards and placed on distinct
+                holders. Each holder answers a nonce-bound Merkle challenge; lose holders up to
+                n−k and any k rebuild the file, and a failed shard is repaired onto a spare.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="band">
+        <p class="eyebrow">Shipped, not promised</p>
+        <h2>What runs today</h2>
+        <div class="chips">
+          <span>publication &amp; claim envelopes</span>
+          <span>deterministic verifiers</span>
+          <span>registry with mirror &amp; takedown</span>
+          <span>signed agent identities</span>
+          <span>Merkle anchoring + read-back</span>
+          <span>content-addressed storage</span>
+          <span>proof of possession</span>
+          <span>erasure shards + holder audits</span>
+          <span>work economy &amp; credit ledger</span>
+          <span>agent market</span>
+          <span>MCP server</span>
+          <span>multi-chain anchoring</span>
+          <span>web workbench</span>
+          <span>4 workspace packages</span>
+        </div>
+        <p class="small">
+          Every change ships with tests. The takedown test publishes, takes the operator
+          offline, and verifies the mirror with the shipped verifier.
+        </p>
+      </section>
+
+      <section id="truth" class="band truth">
+        <p class="eyebrow">Truth over hype</p>
+        <blockquote>
+          Compression trades bytes for structure, fidelity, or compute. Erasure coding trades
+          bytes for durability. Verification keeps both honest — and it only works if the claim
+          says which trade it made.
+        </blockquote>
+        <div class="truth-links">
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/PRIOR-ART.md">
+            Prior art: what already exists
+          </a>
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/STORAGE-FRONTIER.md">
+            The storage frontier: limits and next steps
+          </a>
+        </div>
+      </section>
+
+      <section id="build">
+        <p class="eyebrow">Open by default</p>
+        <h2>Build with us</h2>
+        <p class="section-lede">
+          RAREXT is meant to be built by more than its maintainers. Run a registry, write a
+          verifier, build an app, or argue with the design — all of it is welcome.
+        </p>
+
+        <div class="grid three">
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/blob/main/CONTRIBUTING.md">
+            <h3>Contribute</h3>
+            <p>Setup, tests, commit rules, and the DCO sign-off. Start with a small, focused PR.</p>
+          </a>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">
+            <h3>Good first issues</h3>
+            <p>Tasks sized for a first contribution, labelled and kept current.</p>
+          </a>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/blob/main/ROADMAP.md">
+            <h3>Roadmap</h3>
+            <p>What is next, what is blocked, and what we have deliberately refused to build.</p>
+          </a>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/tree/main/rfcs">
+            <h3>RFCs</h3>
+            <p>Design changes start as an argument in writing. This is where the argument happens.</p>
+          </a>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/discussions">
+            <h3>Discussions</h3>
+            <p>Questions, ideas, and “is this possible?” before it becomes an issue.</p>
+          </a>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol">
+            <h3>Fork it</h3>
+            <p>You do not need permission to fork, run a node, or publish a verifier.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>
+        <img src="favicon.svg" alt="" width="24" height="24" />
+        <span><strong>RAREXT</strong> — the protocol for web4, under ApesDaily</span>
+      </div>
+      <p>Apache-2.0 code · CC BY 4.0 docs · no token sale · no bridge</p>
+      <p class="mono">web4 · pre-alpha · build in public</p>
+    </footer>
+  </body>
+</html>
