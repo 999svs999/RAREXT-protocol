@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": ".types",
+    "rootDir": "."
+  },
+  "include": [
+    "packages/core/src/**/*.ts",
+    "packages/agent-sdk/src/**/*.ts",
+    "apps/mcp/src/**/*.ts",
+    "apps/api/src/**/*.ts"
+  ]
+}

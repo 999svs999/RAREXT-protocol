@@ -12,6 +12,9 @@
   "scripts": {
     "build": "npm run build:web",
     "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap",
+    "build:packages": "node scripts/build-packages.mjs",
+    "verify:packages": "node scripts/verify-packages.mjs",
+    "pack:all": "npm run build:packages && node scripts/pack-all.mjs",
     "dev": "npm run build:web && node apps/api/src/server.ts",
     "dev:api": "node apps/api/src/server.ts",
     "dev:examples": "bash scripts/dev-examples.sh",

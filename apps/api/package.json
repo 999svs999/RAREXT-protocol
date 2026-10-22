@@ -1,11 +1,53 @@
 {
   "name": "@rarext/api",
   "version": "0.1.0-alpha.1",
-  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
     "dev": "node src/server.ts",
     "start": "node src/server.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/999svs999/RAREXT-protocol.git",
+    "directory": "."
+  },
+  "bugs": {
+    "url": "https://github.com/999svs999/RAREXT-protocol/issues"
+  },
+  "homepage": "https://github.com/999svs999/RAREXT-protocol#readme",
+  "description": "The RAREXT registry: artifact protocol, signed identities, feed, lineage, Merkle anchoring, and storage.",
+  "keywords": [
+    "registry",
+    "api",
+    "attestations",
+    "anchoring",
+    "storage"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "rarext-api": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@rarext/core": "0.1.0-alpha.1"
   }
 }

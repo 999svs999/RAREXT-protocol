@@ -571,8 +571,7 @@ type PublishResult =
 
 export function createApp(options: AppOptions = {}): ReturnType<typeof createServer> {
   const store = options.store ?? new RarextStore();
-  const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
-  const registry = options.registry ?? createDefaultRegistry(options.fetch);
+  const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;  const registry = options.registry ?? createDefaultRegistry(options.fetch);
   const challenges = options.challenges ?? createChallengeRegistry();
   const semantics = options.semantics ?? createSemanticsRegistry(() => challenges.list());
   const verifiers =
