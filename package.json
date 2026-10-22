@@ -24,6 +24,8 @@
     "test:examples": "python3 -m unittest discover -s examples/board-games -p 'test_*.py' && python3 -m unittest discover -s examples/launchpad -p 'test_*.py' && python3 -m unittest discover -s examples/storage -p 'test_*.py'",
     "test:games": "npm run test:examples",
     "version:all": "node scripts/sync-version.mjs",
+    "mirror:build": "node scripts/build-mirror.mjs",
+    "test:takedown": "node scripts/takedown-test.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test && npm run build:web"
   },

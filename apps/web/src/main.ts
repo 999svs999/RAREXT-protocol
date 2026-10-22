@@ -15,6 +15,7 @@ import type {
   Challenge,
   PublicationPayload,
   PublicationSource,
+  Semantics,
   SourceResolution,
   Task,
 } from "../../../packages/core/src/index.ts";
@@ -191,6 +192,79 @@ let hintIndex = 0;
 let view = { x: 0, y: 0, w: SVG_WIDTH };
 
 const touchPoints = new Map<number, { x: number; y: number }>();
+
+/**
+ * A mirror ships the registry as a bundle, so the workbench keeps working with
+ * the operator offline. When a bundle is present the read paths are answered
+ * from it; writes still need a live registry.
+ */
+interface MirrorBundle {
+  manifest: {
+    root: string;
+    leafVersion: number;
+    anchorId: string | null;
+    createdAt: string;
+    counts: Record<string, number>;
+  };
+  publications: Publication[];
+  challenges: (Challenge & { semanticsBinding?: string })[];
+  semantics: (Semantics & { semanticsHash?: string })[];
+}
+
+declare global {
+  interface Window {
+    __RAREXT_BUNDLE__?: MirrorBundle;
+  }
+}
+
+function mirrorResponse(path: string): unknown {
+  const bundle = window.__RAREXT_BUNDLE__;
+  if (!bundle) return null;
+
+  const url = new URL(path, "https://mirror.invalid");
+  const publications = [...bundle.publications].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt),
+  );
+
+  if (url.pathname === "/v1/feed" || url.pathname === "/v1/artifacts") {
+    const limit = Number(url.searchParams.get("limit") ?? "50");
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    return publications.slice(offset, offset + limit);
+  }
+
+  if (url.pathname === "/v1/challenges") return bundle.challenges;
+  if (url.pathname === "/v1/semantics") return bundle.semantics;
+
+  if (url.pathname === "/v1/apps") {
+    return bundle.challenges.map((challenge) => ({
+      id: challenge.app,
+      name: challenge.app,
+      version: "1",
+      description: challenge.description,
+      artifactKinds: [],
+      challengeCount: 1,
+      verifier: "builtin",
+      configured: true,
+      url: null,
+    }));
+  }
+
+  if (url.pathname === "/v1/adapters") return [];
+  if (url.pathname === "/v1/tapeout/status") {
+    return { configured: false, chainId: null, blockNumber: null };
+  }
+
+  return null;
+}
+
+async function apiGet(path: string): Promise<unknown> {
+  const mirrored = mirrorResponse(path);
+  if (mirrored !== null) return mirrored;
+
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${response.status} ${path}`);
+  return response.json();
+}
 
 function currentTask(): Task {
   const task = tasks.find((item) => item.id === taskId);
@@ -1613,12 +1687,9 @@ async function loadFeed(reset: boolean): Promise<void> {
   }
 
   try {
-    const response = await fetch(
-      `/v1/feed?limit=${PAGE_SIZE}&offset=${feedOffset}`,
-    );
-    if (!response.ok) throw new Error(t("err.feed"));
-
-    const page = (await response.json()) as Publication[];
+    const page = (await apiGet(
+      `/v1/feed?limit=${PAGE_SIZE}&offset=`,
+    )) as Publication[];
     feedItems = reset ? page : [...feedItems, ...page];
     feedOffset += page.length;
     feedHasMore = page.length === PAGE_SIZE;
@@ -1691,9 +1762,7 @@ function adapterStatusLabel(status: AdapterInfo["status"]): string {
 
 async function refreshAdapters(): Promise<void> {
   try {
-    const response = await fetch("/v1/adapters");
-    if (!response.ok) throw new Error("adapter request failed");
-    const adapters = (await response.json()) as AdapterInfo[];
+    const adapters = (await apiGet("/v1/adapters")) as AdapterInfo[];
 
     adapterList.innerHTML = adapters
       .map(
@@ -1710,10 +1779,7 @@ async function refreshAdapters(): Promise<void> {
 
 async function refreshChainStatus(): Promise<void> {
   try {
-    const response = await fetch("/v1/tapeout/status");
-    if (!response.ok) throw new Error("status request failed");
-
-    const status = (await response.json()) as {
+    const status = (await apiGet("/v1/tapeout/status")) as {
       configured: boolean;
       chainId: string | null;
       blockNumber: string | null;

@@ -57,6 +57,7 @@ import {
   manifestInclusion,
   verifyManifestInclusion,
 } from "./storage.ts";
+import { buildBundle, verifyBundle } from "./bundle.ts";
 import type { StorageInclusionProof } from "../../../packages/core/src/index.ts";
 import {
   createVerifierRegistry,
@@ -844,6 +845,31 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
       if (req.method === "GET" && pathname === "/v1/storage/tiers") {
         send(res, 200, storageTiers());
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/bundles")) {
+        const requested = pathname.slice("/v1/bundles".length).replace(/^\//, "");
+        const bundle = buildBundle(
+          store,
+          challenges.list(),
+          semantics.list(),
+          requested && requested !== "latest" ? requested : undefined,
+        );
+
+        if (!bundle) {
+          send(res, 404, {
+            error: requested ? `no anchor with root ${requested}` : "nothing has been anchored yet",
+          });
+          return;
+        }
+
+        if (url.searchParams.get("verify") === "1") {
+          send(res, 200, { ...bundle, verification: verifyBundle(bundle) });
+          return;
+        }
+
+        send(res, 200, bundle);
         return;
       }
 

@@ -107,6 +107,10 @@ npm run dev:api
 The policy, the verifier source hash, and every verdict are public, so "certified safe"
 is a claim anybody can re-run rather than a badge. Read [fair launches](docs/FAIR-LAUNCH.md).
 
+### Mirrors
+
+The registry can be copied. `npm run mirror:build` writes a static mirror — the workbench, the bundle, and a page that recomputes the Merkle root in the browser — and `npm run test:takedown` stops the registry and checks the copy still verifies against the chain. Read [mirrors and takedown](docs/MIRRORS.md).
+
 ### Storage
 
 The [`examples/storage`](examples/storage) app turns storage into a verifiable claim: a
@@ -210,7 +214,7 @@ apps/mcp           MCP stdio server for agent frameworks
 packages/core      Netlist schema, simulator, scoring, seed tasks
 packages/agent-sdk Typed client for agents
 contracts          Attestation registry and adapters (planned)
-docs               Litepaper, architecture, app protocol, semantics, branding, storage economy
+docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors
 examples           Cross-language verifier examples
 rfcs               Protocol, economics, and chain proposals
 ```
