@@ -10,10 +10,16 @@
 // The mirror has no server behind it. It is a directory.
 
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
+const publicDir = join(root, "apps/web/public");
+
+if (!existsSync(join(publicDir, "verify.js"))) {
+  console.log("building the web app for the mirror");
+  execFileSync("npm", ["run", "build:web"], { cwd: root, stdio: "inherit" });
+}
 const out = resolve(root, process.argv[2] ?? ".mirror");
 const api = process.env.RAREXT_API ?? "http://127.0.0.1:8787";
 

@@ -3,6 +3,8 @@ dist/
 build/
 apps/web/public/app.js
 apps/web/public/app.js.map
+apps/web/public/verify.js
+apps/web/public/verify.js.map
 .next/
 out/
 coverage/
