@@ -137,20 +137,34 @@ export interface ErasureShard {
   digest: string;
 }
 
+/**
+ * A V8 string cannot exceed ~512 MB. A shard whose hex encoding would cross that
+ * limit cannot use the original digest input, and no such shard could have been
+ * created before this branch existed. Stream those bytes instead, with an
+ * explicit marker so the two encodings cannot collide.
+ */
+const MAX_HEX_CHARS = 0x1fffffe8;
+
 export function shardDigest(
   shard: Omit<ErasureShard, "digest"> | ErasureShard,
 ): string {
+  const metadata = {
+    index: shard.index,
+    dataShards: shard.dataShards,
+    parityShards: shard.parityShards,
+    length: shard.length,
+    payloadDigest: shard.payloadDigest,
+  };
+
+  if (shard.bytes.length * 2 <= MAX_HEX_CHARS) {
+    return createHash("sha256")
+      .update(canonicalize({ ...metadata, bytes: Buffer.from(shard.bytes).toString("hex") }))
+      .digest("hex");
+  }
+
   return createHash("sha256")
-    .update(
-      canonicalize({
-        index: shard.index,
-        dataShards: shard.dataShards,
-        parityShards: shard.parityShards,
-        length: shard.length,
-        payloadDigest: shard.payloadDigest,
-        bytes: Buffer.from(shard.bytes).toString("hex"),
-      }),
-    )
+    .update(canonicalize({ ...metadata, bytes: null, byteLength: shard.bytes.length, streamed: true }))
+    .update(shard.bytes)
     .digest("hex");
 }
 

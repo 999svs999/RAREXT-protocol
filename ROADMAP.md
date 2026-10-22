@@ -92,7 +92,7 @@ does not ship behind a marketing claim. The acceptance criteria and the limits a
 - [x] RFC: representation kinds — `exact`, `bounded`, `generative` — with a verifier contract
 - [ ] One learned codec and one implicit representation, measured with the decoder counted
 - [ ] Data availability sampling for media, with a stated soundness bound
-- [ ] Repair-bandwidth measurement for erasure-coded blobs at 1 GB
+- [x] Repair-bandwidth measurement for erasure-coded blobs at 1 GB
 - [ ] A publishable negative result when a direction fails
 
 ## Explicitly not planned

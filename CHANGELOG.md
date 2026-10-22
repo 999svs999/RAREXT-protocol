@@ -13,6 +13,16 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Repair-bandwidth measurement at 1 GB.** `bench/repair` encodes a deterministic
+  1 GiB payload with the shipped 4 + 2 code, loses a shard, rebuilds it from four
+  survivors, and checks both digests. Measured: 1.000 GiB read, 0.250 GiB written,
+  1.250 GiB total for a single loss. The `< 1/k` target in the storage contract is
+  arithmetically unreachable for an MDS code; the README states the floor (`1 + 1/k`) and
+  what a local-reconstruction code would require instead. This run also exposed and fixed
+  a real bug: shard digests converted bytes to a hex string, which throws beyond ~512 MB.
+  Large shards now stream into the hash with a distinct domain, so a 1 GiB payload
+  encodes, verifies, and repairs.
+
 - **RFC 0009: representation kinds.** Defines `exact`, `bounded`, and `generative`
   artifacts, the signed representation record, the verifier result block, semantics
   declarations, display rules, and the acceptance criterion before a research codec can

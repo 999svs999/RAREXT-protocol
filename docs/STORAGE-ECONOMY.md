@@ -179,6 +179,12 @@ the payload digest, and places the new shard on a holder that does not already h
 one for that blob and that answers a reachability probe. It reports both directions.
 A spare holder is required by design — repair never co-locates.
 
+Repair cost is measured, not asserted: [`bench/repair`](../bench/repair/README.md) rebuilds
+one lost shard of a 1 GiB blob and records the bytes actually moved. For the shipped
+systematic code the floor is `1 + 1/k` of the payload, which is above the contract's older
+`< 1/k` target; reaching that target needs local reconstruction or sub-chunking, not a
+tuning change.
+
 The accounting is worth stating exactly. With `k = 4, m = 2`, the stored set is
 `1.5×` the payload. Repairing one failed shard reads the five survivors
 (`1.25×` the payload) and writes one shard (`0.25×` the payload). It is not cheaper

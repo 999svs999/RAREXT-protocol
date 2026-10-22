@@ -1,0 +1,15 @@
+{
+  "payloadBytes": 1073741824,
+  "dataShards": 4,
+  "parityShards": 2,
+  "shardBytes": 268435456,
+  "readBytes": 1073741824,
+  "writeBytes": 268435456,
+  "totalBytes": 1342177280,
+  "readRatio": 1,
+  "writeRatio": 0.25,
+  "totalRatio": 1.25,
+  "idealRatio": 0.25,
+  "exact": true,
+  "elapsedMs": 117834.256099
+}
