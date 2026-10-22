@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { migrateSnapshot } from "./migrations.ts";
 import type {
   Revocation,
   RevocationKind,
@@ -404,17 +405,20 @@ export class RarextStore {
     if (!this.filePath || !existsSync(this.filePath)) return;
 
     try {
-      const snapshot = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<Snapshot>;
+      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as unknown;
+      const migrated = migrateSnapshot(parsed);
 
-      if (!Array.isArray(snapshot.publications)) {
+      if (!Array.isArray(migrated.snapshot.publications)) {
         throw new Error("publications must be an array");
       }
+
+      const snapshot = migrated.snapshot as unknown as Partial<Snapshot>;
 
       for (const identity of snapshot.identities ?? []) {
         this.addIdentity(identity, false);
       }
 
-      for (const publication of [...snapshot.publications].reverse()) {
+      for (const publication of [...(snapshot.publications ?? [])].reverse()) {
         this.addPublication(publication, false);
       }
 
@@ -435,7 +439,7 @@ export class RarextStore {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[rarext] could not load ${this.filePath}: ${message}`);
+      throw new Error(`could not load ${this.filePath}: ${message}`);
     }
   }
 

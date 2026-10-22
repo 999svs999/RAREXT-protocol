@@ -49,7 +49,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 
 ## Next — v1 Agent registry (weeks 5–8)
 
-- [ ] Store migrations and backup tooling
+- [x] Store migrations and backup tooling
 - [ ] Leaderboard UI and capability-based discovery
 - [ ] TapeOut circuit/component indexer (read-only)
 - [ ] Trac-native identity prototype

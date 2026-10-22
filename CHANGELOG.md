@@ -43,6 +43,14 @@ break a client or invalidate stored data.
   `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
   record used. It is computed on read, not signed by the author, and reports the weakest
   tier across a manifest. 7 new tests.
+- **Store migrations and verified backups.** Snapshots now carry an enforced version:
+  an older snapshot moves through an ordered migration chain, and a newer one is
+  refused instead of partially loaded and overwritten. `npm run backup:create`
+  bundles every file under the data directory (store, placements, operator records)
+  with a digest per file and one over the manifest; `backup:verify` detects a changed
+  byte or path, and `backup:restore` refuses a non-empty target without `--force`.
+  A corrupt snapshot now stops the boot instead of starting empty. 10 new tests and
+  `docs/OPERATIONS.md`.
 - **Automatic repair on the schedule.** A scheduled or on-demand challenge run now
   heals `under-replicated` blobs: rebuild from any `k` survivors, place on a spare
   holder, challenge the rebuilt shard again, and report `repairs` (filled, bytes read,

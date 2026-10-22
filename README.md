@@ -155,7 +155,8 @@ proof, never the body). Read [privacy and access](docs/PRIVACY.md).
 
 ### Mirrors
 
-The registry can be copied. `npm run mirror:build` writes a static mirror — the workbench, the bundle, and a page that recomputes the Merkle root in the browser — and `npm run test:takedown` stops the registry and checks the copy still verifies against the chain. Read [mirrors and takedown](docs/MIRRORS.md).
+The registry can be copied. `npm run mirror:build` writes a static mirror — the workbench, the bundle, and a page that recomputes the Merkle root in the browser — and `npm run test:takedown` stops the registry and checks the copy still verifies against the chain. Read [mirrors and takedown](docs/MIRRORS.md), and [operations](docs/OPERATIONS.md) for
+the data layout, verified backups, restores, and snapshot migrations.
 
 ### Storage
 
