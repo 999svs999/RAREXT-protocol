@@ -878,6 +878,19 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         return;
       }
 
+      if (req.method === "GET" && pathname.startsWith("/v1/storage/retention/")) {
+        const hash = pathname.slice("/v1/storage/retention/".length);
+        const term = blobs.retention(hash);
+
+        if (!term) {
+          send(res, 404, { error: "blob not found" });
+          return;
+        }
+
+        send(res, term.matured ? 200 : 425, term);
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/v1/blobs") {
         send(res, 200, blobs.list());
         return;
@@ -900,6 +913,8 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           mediaType: typeof body.mediaType === "string" ? body.mediaType : undefined,
           tier,
           sealed: body.sealed === true || tier === "sealed",
+          retentionUntil:
+            typeof body.retentionUntil === "string" ? body.retentionUntil : null,
         });
 
         send(res, 201, record);

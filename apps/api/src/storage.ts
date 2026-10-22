@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -130,6 +130,44 @@ export function asManifest(value: unknown): StorageManifest {
  * the directory and every name is self-verifying. Writes are atomic: the file
  * lands under a temporary name and is renamed into place.
  */
+/**
+ * A retention commitment: the node binds itself to holding a blob until a
+ * time, by committing to a secret it will only reveal once the term matures.
+ *
+ * The commitment is published in a manifest, and the manifest is anchored, so the
+ * commitment is timestamped. The opening comes later, and the claim of retention
+ * needs both: the earlier commitment and a possession attestation after the term
+ * matured. Deleting the blob early breaks the second half, and the opening is
+ * useless without the first.
+ */
+export function retentionCommitment(
+  secret: string,
+  hash: string,
+  retentionUntil: string,
+): string {
+  return sha256Bytes(
+    Buffer.from(
+      `${secret}:${canonicalize({ hash, retentionUntil })}`,
+      "utf8",
+    ),
+  );
+}
+
+export function manifestEntry(
+  record: BlobRecord,
+  opening: string | null = null,
+): StorageManifestEntry {
+  return {
+    hash: record.hash,
+    size: record.size,
+    tier: record.tier,
+    sealed: record.sealed,
+    retentionUntil: record.retentionUntil,
+    retentionCommitment: record.retentionCommitment,
+    retentionOpening: opening,
+  };
+}
+
 export class BlobStore {
   readonly directory: string;
   private readonly records = new Map<string, BlobRecord>();
@@ -164,6 +202,9 @@ export class BlobStore {
         tier: "public",
         sealed: false,
         createdAt: new Date().toISOString(),
+        retentionUntil: null,
+        retentionCommitment: null,
+        retentionSecret: null,
       });
     }
 
@@ -195,7 +236,12 @@ export class BlobStore {
 
   put(
     bytes: Uint8Array,
-    options: { mediaType?: string; tier?: StorageTier; sealed?: boolean } = {},
+    options: {
+      mediaType?: string;
+      tier?: StorageTier;
+      sealed?: boolean;
+      retentionUntil?: string | null;
+    } = {},
   ): BlobRecord {
     const hash = blobHash(bytes);
     const target = this.path(hash);
@@ -206,18 +252,79 @@ export class BlobStore {
       renameSync(temporary, target);
     }
 
+    const existing = this.records.get(hash);
+    const retentionUntil = options.retentionUntil ?? existing?.retentionUntil ?? null;
+
+    let secret = existing?.retentionSecret ?? null;
+    let commitment = existing?.retentionCommitment ?? null;
+
+    if (retentionUntil && !commitment) {
+      secret = randomBytes(32).toString("base64url");
+      commitment = retentionCommitment(secret, hash, retentionUntil);
+    }
+
     const record: BlobRecord = {
       hash,
       size: bytes.length,
-      mediaType: options.mediaType ?? "application/octet-stream",
-      tier: options.tier ?? "public",
-      sealed: options.sealed ?? false,
-      createdAt: this.records.get(hash)?.createdAt ?? new Date().toISOString(),
+      mediaType: options.mediaType ?? existing?.mediaType ?? "application/octet-stream",
+      tier: options.tier ?? existing?.tier ?? "public",
+      sealed: options.sealed ?? existing?.sealed ?? false,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      retentionUntil,
+      retentionCommitment: commitment,
+      retentionSecret: secret,
     };
 
     this.records.set(hash, record);
     this.saveIndex();
     return record;
+  }
+
+  /**
+   * The opening for a retention commitment. It is only released once the term
+   * has matured, so a node cannot publish an opening early and pass it off as a
+   * retention proof.
+   */
+  opening(hash: string): { opening: string; commitment: string; retentionUntil: string } | null {
+    const record = this.records.get(hash);
+    if (!record?.retentionSecret || !record.retentionCommitment || !record.retentionUntil) {
+      return null;
+    }
+
+    if (Date.now() < Date.parse(record.retentionUntil)) return null;
+
+    return {
+      opening: record.retentionSecret,
+      commitment: record.retentionCommitment,
+      retentionUntil: record.retentionUntil,
+    };
+  }
+
+  /**
+   * The state of a retention term. The commitment is public from the start; the
+   * opening only becomes available once the term has matured.
+   */
+  retention(hash: string): {
+    hash: string;
+    retentionUntil: string | null;
+    commitment: string | null;
+    matured: boolean;
+    opening: string | null;
+  } | null {
+    const record = this.records.get(hash);
+    if (!record) return null;
+
+    const matured = Boolean(
+      record.retentionUntil && Date.now() >= Date.parse(record.retentionUntil),
+    );
+
+    return {
+      hash,
+      retentionUntil: record.retentionUntil,
+      commitment: record.retentionCommitment,
+      matured,
+      opening: matured ? record.retentionSecret : null,
+    };
   }
 
   get(hash: string): { record: BlobRecord; bytes: Buffer } | null {
@@ -236,6 +343,9 @@ export class BlobStore {
       tier: "public" as StorageTier,
       sealed: false,
       createdAt: new Date().toISOString(),
+      retentionUntil: null,
+      retentionCommitment: null,
+      retentionSecret: null,
     };
 
     return { record, bytes };

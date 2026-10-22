@@ -142,3 +142,50 @@ test("a blob with no manifest has no inclusion proof", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a retention term commits immediately and opens only when it matures", async () => {
+  const { store: blobs, dir } = tempBlobs();
+  const { server, base } = await start(new RarextStore(), { blobs });
+
+  try {
+    const future = (await (
+      await post(base, "/v1/blobs", {
+        content: "kept for a year",
+        retentionUntil: "2099-01-01T00:00:00.000Z",
+      })
+    ).json()) as { hash: string; retentionCommitment: string | null; retentionUntil: string };
+
+    assert.ok(future.retentionCommitment, "the node commits when the blob is stored");
+    assert.equal(future.retentionUntil, "2099-01-01T00:00:00.000Z");
+
+    const early = await fetch(`${base}/v1/storage/retention/${future.hash}`);
+    assert.equal(early.status, 425, "the opening is not released before the term matures");
+
+    const earlyBody = (await early.json()) as { matured: boolean; opening: string | null };
+    assert.equal(earlyBody.matured, false);
+    assert.equal(earlyBody.opening, null);
+
+    const past = (await (
+      await post(base, "/v1/blobs", {
+        content: "kept until yesterday",
+        retentionUntil: "2000-01-01T00:00:00.000Z",
+      })
+    ).json()) as { hash: string; retentionCommitment: string | null };
+
+    const matured = await fetch(`${base}/v1/storage/retention/${past.hash}`);
+    assert.equal(matured.status, 200);
+
+    const maturedBody = (await matured.json()) as {
+      matured: boolean;
+      opening: string | null;
+      commitment: string | null;
+    };
+
+    assert.equal(maturedBody.matured, true);
+    assert.ok(maturedBody.opening, "the opening is released once the term matures");
+    assert.equal(maturedBody.commitment, past.retentionCommitment);
+  } finally {
+    await stop(server);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

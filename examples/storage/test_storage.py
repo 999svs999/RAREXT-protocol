@@ -150,5 +150,79 @@ class StorageTests(unittest.TestCase):
             storage_rules.verify(artifact([]), CHALLENGE)
 
 
+class RetentionTests(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="fabric-retention-test-")
+        self.previous = os.environ.get("RAREXT_BLOB_DIR")
+        os.environ["RAREXT_BLOB_DIR"] = self.root
+
+    def tearDown(self):
+        if self.previous is None:
+            os.environ.pop("RAREXT_BLOB_DIR", None)
+        else:
+            os.environ["RAREXT_BLOB_DIR"] = self.previous
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def commit(self, digest, retention_until, opening=None):
+        entry = manifest_entry(digest, 1, retention=retention_until)
+        entry["retentionCommitment"] = storage_rules.retention_commitment(
+            "secret-1", digest, retention_until
+        )
+        if opening is not None:
+            entry["retentionOpening"] = opening
+        return entry
+
+    def test_a_committed_term_is_recorded(self):
+        digest, size = write_blob(self.root, "held for a while")
+        entry = self.commit(digest, "2099-01-01T00:00:00.000Z")
+        entry["size"] = size
+
+        result = storage_rules.verify(artifact([entry]), CHALLENGE)
+
+        self.assertTrue(result["correct"])
+        self.assertEqual(result["proof"]["retention"]["committed"], 1)
+        self.assertEqual(result["proof"]["retention"]["matured"], 0)
+
+    def test_a_matured_term_with_a_matching_opening_proves_retention(self):
+        digest, size = write_blob(self.root, "held for a while")
+        entry = self.commit(digest, "2000-01-01T00:00:00.000Z", opening="secret-1")
+        entry["size"] = size
+
+        result = storage_rules.verify(artifact([entry]), CHALLENGE)
+
+        self.assertTrue(result["correct"])
+        self.assertEqual(result["proof"]["retention"]["matured"], 1)
+
+    def test_an_opening_that_does_not_match_the_commitment_is_rejected(self):
+        digest, size = write_blob(self.root, "held for a while")
+        entry = self.commit(digest, "2000-01-01T00:00:00.000Z", opening="wrong")
+        entry["size"] = size
+
+        result = storage_rules.verify(artifact([entry]), CHALLENGE)
+
+        self.assertFalse(result["correct"])
+        self.assertIn("does not match its commitment", result["details"]["problems"][0])
+
+    def test_a_term_cannot_be_opened_before_it_matures(self):
+        digest, size = write_blob(self.root, "held for a while")
+        entry = self.commit(digest, "2099-01-01T00:00:00.000Z", opening="secret-1")
+        entry["size"] = size
+
+        result = storage_rules.verify(artifact([entry]), CHALLENGE)
+
+        self.assertFalse(result["correct"])
+        self.assertIn("before it matured", result["details"]["problems"][0])
+
+    def test_a_commitment_without_a_term_is_rejected(self):
+        digest, size = write_blob(self.root, "held for a while")
+        entry = manifest_entry(digest, size)
+        entry["retentionCommitment"] = "a" * 64
+
+        result = storage_rules.verify(artifact([entry]), CHALLENGE)
+
+        self.assertFalse(result["correct"])
+        self.assertIn("without a term", result["details"]["problems"][0])
+
+
 if __name__ == "__main__":
     unittest.main()

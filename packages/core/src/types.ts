@@ -165,6 +165,9 @@ export interface BlobRecord {
   tier: StorageTier;
   sealed: boolean;
   createdAt: string;
+  retentionUntil: string | null;
+  retentionCommitment: string | null;
+  retentionSecret: string | null;
 }
 
 export interface StorageManifestEntry {
@@ -173,6 +176,8 @@ export interface StorageManifestEntry {
   tier: StorageTier;
   sealed: boolean;
   retentionUntil: string | null;
+  retentionCommitment?: string | null;
+  retentionOpening?: string | null;
 }
 
 export interface StorageManifest {

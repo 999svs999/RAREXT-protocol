@@ -7,6 +7,7 @@ import type {
 } from "../../../../packages/core/src/index.ts";
 
 import { GitHubSourceAdapter } from "./github.ts";
+import { ContentPinAdapter } from "./content.ts";
 import { LocalAnchorAdapter } from "./local.ts";
 import { TapeOutAdapter } from "./tapeout.ts";
 import { TracAnchorAdapter } from "./trac.ts";
@@ -93,6 +94,10 @@ export function createDefaultRegistry(requestFetch: typeof fetch = fetch): Adapt
   return new AdapterRegistry([
     new LocalAnchorAdapter(),
     new TracAnchorAdapter(),
+    new ContentPinAdapter({
+      serviceUrl: process.env.RAREXT_PIN_URL ?? null,
+      fetchImpl: requestFetch,
+    }),
     new TapeOutAdapter(),
     new GitHubSourceAdapter(requestFetch),
   ]);

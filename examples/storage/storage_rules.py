@@ -18,10 +18,32 @@ not a pass.
 import hashlib
 import json
 import os
+import time
 
 TIERS = ("public", "sealed")
 SEALED_ALGORITHMS = ("xchacha20-poly1305", "aes-256-gcm", "hpke")
 MAX_BLOB_BYTES = 5_000_000
+
+
+def canonicalize(value):
+    """The canonical JSON form the protocol hashes."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    if isinstance(value, list):
+        return "[" + ",".join(canonicalize(item) for item in value) + "]"
+    keys = sorted(key for key in value if value[key] is not None)
+    return (
+        "{"
+        + ",".join(
+            json.dumps(key) + ":" + canonicalize(value[key]) for key in keys
+        )
+        + "}"
+    )
+
+
+def retention_commitment(opening, digest, retention_until):
+    payload = f"{opening}:{canonicalize({'hash': digest, 'retentionUntil': retention_until})}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def blob_dir():
@@ -95,10 +117,12 @@ def verify(artifact, challenge):
     if not isinstance(entries, list) or len(entries) == 0:
         raise ValueError("storage manifest must list at least one blob")
 
+    now = time.time()
     root = blob_dir()
     checks = []
     problems = []
     present = 0
+    retention = {"committed": 0, "matured": 0, "unproven": 0}
 
     for entry in entries:
         if not isinstance(entry, dict):
@@ -143,6 +167,39 @@ def verify(artifact, challenge):
         present += 1
         checks.append({"hash": digest, "tier": tier, "read": True, "ok": True})
 
+        # Retention: the commitment says the node bound itself to holding the
+        # blob until a time. The opening, once the term has matured, shows the
+        # commitment was made by whoever still holds the blob. A node that
+        # deleted the blob early cannot produce either half.
+        commitment = entry.get("retentionCommitment")
+        retention_until = entry.get("retentionUntil")
+
+        if commitment:
+            if not isinstance(commitment, str) or len(commitment) != 64:
+                problems.append(f"blob {digest[:12]} has a malformed retention commitment")
+                retention["unproven"] += 1
+            elif not retention_until:
+                problems.append(f"blob {digest[:12]} commits to retention without a term")
+                retention["unproven"] += 1
+            else:
+                retention["committed"] += 1
+                opening = entry.get("retentionOpening")
+
+                if opening:
+                    expected = retention_commitment(opening, digest, retention_until)
+                    if expected != commitment:
+                        problems.append(
+                            f"blob {digest[:12]} has a retention opening that does not match its commitment"
+                        )
+                        retention["unproven"] += 1
+                    elif now < _time(retention_until):
+                        problems.append(
+                            f"blob {digest[:12]} opened a retention term before it matured"
+                        )
+                        retention["unproven"] += 1
+                    else:
+                        retention["matured"] += 1
+
     correct = len(problems) == 0 and present == len(entries)
 
     return {
@@ -153,11 +210,22 @@ def verify(artifact, challenge):
             "blobs": len(entries),
             "present": present,
             "checks": checks,
+            "retention": retention,
         },
         "details": {
             "policy": policy,
             "present": present,
             "listed": len(entries),
             "problems": problems,
+            "retention": retention,
         },
     }
+
+
+def _time(value):
+    import datetime
+
+    try:
+        return datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return 0
