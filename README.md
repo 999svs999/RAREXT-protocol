@@ -54,7 +54,7 @@ disagree with a decision, the RFC folder is where the argument happens.
 - Existing ledgers provide ordering and ownership. RAREXT supplies the queryable provenance graph and the discovery/distribution layer around it.
 - TapeOut supplies the hardware primitive; Trac Network supplies peer-to-peer, agent-first coordination. RAREXT connects them without becoming a chain, a bridge, or a custodian.
 
-Read the [architecture](docs/ARCHITECTURE.md), and the [prior art](docs/PRIOR-ART.md) that says plainly what this is and is not.
+Read the [architecture](docs/ARCHITECTURE.md), the [trust model](rfcs/0007-trust-model.md), and the [prior art](docs/PRIOR-ART.md) that says plainly what this is and is not.
 
 ## Quickstart
 

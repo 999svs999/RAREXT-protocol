@@ -43,6 +43,10 @@ break a client or invalidate stored data.
   `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
   record used. It is computed on read, not signed by the author, and reports the weakest
   tier across a manifest. 7 new tests.
+- **Trust model RFC.** `rfcs/0007-trust-model.md` states what each claim proves, what the
+  registry, an app operator, an independent verifier, a holder, and an anchor can lie
+  about, the composition rules a reader should follow, and what Trac anchoring would and
+  would not add. Documentation only; no behavior change.
 - **Store migrations and verified backups.** Snapshots now carry an enforced version:
   an older snapshot moves through an ordered migration chain, and a newer one is
   refused instead of partially loaded and overwritten. `npm run backup:create`

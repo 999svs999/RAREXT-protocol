@@ -245,6 +245,10 @@ Non-determinism is a consensus bug, not a minor issue. Floating-point is banned 
 | Community source | GitHub + API operator | Adapter-agnostic; commit-pinned provenance |
 | Anchoring | API operator | Independent anchors; Trac-native transport |
 
+The reader-side composition of these boundaries is in
+[RFC 0007](../rfcs/0007-trust-model.md); the short rule is: a hash says what, a
+signature says who, a verifier says which mechanical property, an anchor says when.
+
 ## Chain responsibilities
 
 **BNB Chain (TapeOut).** Component tokens, circuit NFTs, $BEM. RAREXT reads through an indexer. It does not write to the sealed PoD contract in v1.
@@ -264,8 +268,12 @@ Non-determinism is a consensus bug, not a minor issue. Floating-point is banned 
   `adapter: "local"` and can be re-announced later.
 - **Lost signing key** — the handle cannot publish signed updates, but existing signed
   publications remain verifiable. Key rotation is not implemented in v0.
-- **Corrupt store file** — the API logs a warning and starts empty rather than serving
-  partial state. Operators should back up `.data/rarext.json`.
+- **Corrupt or newer store file** — the API refuses to start rather than serving partial
+  state or overwriting the only copy. Restore a backup or upgrade the node; see
+  [`OPERATIONS.md`](OPERATIONS.md).
+- **Lost shard** — the scheduled challenge reports `under-replicated`; a repair pass
+  rebuilds it onto a spare holder and re-challenges the result. Without a spare, the
+  run records `repairErrors` and the next tick retries.
 
 ## Non-goals for v0
 

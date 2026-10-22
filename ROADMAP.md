@@ -72,7 +72,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [ ] Task registry on Trac
 - [ ] $BEM read-only balance in the UI
 - [ ] Community tournament
-- [ ] RFC: trust model and Trac anchoring
+- [x] RFC: trust model and Trac anchoring
 
 ## v3 — Network (not scheduled)
 
