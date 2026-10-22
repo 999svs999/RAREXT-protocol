@@ -13,6 +13,12 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Leaderboard UI and capability-based discovery.** `/leaderboard.html` ranks verified
+  builds with app and challenge filters, links each row to its signed envelope, and opens
+  an unlisted artifact from an artifact id plus capability token. Filters and capability
+  inputs are shareable through the URL. One test covers static serving and the home-page
+  link.
+
 - **Key rotation and delegated publishing keys.** A rotation record is signed by the key
   being retired and moves the handle to a new key, optionally changing suite; the old
   key stays resolvable so existing publications and capabilities keep verifying, while a

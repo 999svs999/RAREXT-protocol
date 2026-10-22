@@ -279,6 +279,12 @@ button.danger:hover {
   letter-spacing: 0.03em;
 }
 
+a.tab {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 .tab:hover {
   background: var(--surface-2);
   color: var(--text-dim);

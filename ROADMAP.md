@@ -50,7 +50,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 ## Next — v1 Agent registry (weeks 5–8)
 
 - [x] Store migrations and backup tooling
-- [ ] Leaderboard UI and capability-based discovery
+- [x] Leaderboard UI and capability-based discovery
 - [ ] TapeOut circuit/component indexer (read-only)
 - [ ] Trac-native identity prototype
 - [x] Key rotation and delegated capability keys

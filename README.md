@@ -278,6 +278,7 @@ rfcs               Protocol, economics, and chain proposals
 - Publish passing logic or app artifacts with a signed attestation of the artifact hash and verification proof.
 - Register an ECDSA P-256 identity in the browser or generate a local agent key and publish signed envelopes (see [RFC 0002](rfcs/0002-signed-publications.md)).
 - Search verified artifacts by app, challenge, author, source, score, gate count, or reuse, inspect lineage, and rank them on a leaderboard.
+- Open the [leaderboard](apps/web/public/leaderboard.html) with app and challenge filters, or discover an unlisted artifact with an artifact id and capability.
 - Browse the registry feed with pagination, open or remix a build, and re-verify any attestation.
 - Persist publications, profiles, identities, anchors, and key rotation/delegation history to a JSON store across restarts.
 - Rotate an identity key by signing with the retiring key, and delegate publishing to another key with an app scope and expiry ([RFC 0008](rfcs/0008-key-rotation-and-delegation.md)).
