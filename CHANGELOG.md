@@ -13,6 +13,11 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Documentation index.** `docs/README.md` links every document in `docs/` exactly
+  once, gives reading orders for app developers, verifier operators, and researchers,
+  names the draft or stale documents, and points back to the storage frontier. The root
+  README links it.
+
 - **Open Graph image for the landing page.** `site/og.png` (1200×630) carries the
   brand mark, headline, and one-line promise; `site/index.html` now declares
   `og:image`, dimensions, alt text, and a large Twitter card. No build step.

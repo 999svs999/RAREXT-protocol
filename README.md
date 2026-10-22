@@ -33,6 +33,7 @@ welcome.
 
 - **Contributing** — [CONTRIBUTING.md](CONTRIBUTING.md): setup, tests, commit rules, sign-off.
 - **Good first issues** — [open tasks labelled `good first issue`](https://github.com/999svs999/RAREXT-protocol/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- **Documentation index** — [docs/README.md](docs/README.md): every document, what question it answers, and three reading paths.
 - **Roadmap** — [ROADMAP.md](ROADMAP.md). Items move by doing them.
 - **Design discussions** — open an issue, or write an RFC in [`rfcs/`](rfcs/).
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
