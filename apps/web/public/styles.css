@@ -1636,7 +1636,6 @@ td.fail {
   color: var(--text-muted);
   font-size: 12px;
 }
-
 .network-tools > summary {
   cursor: pointer;
   color: var(--text-muted);
@@ -2146,4 +2145,109 @@ td.fail {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ---------- rewards ---------- */
+
+.rewards-total {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--brand);
+}
+
+.rewards-board,
+.rewards-orders {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 26px 20px 0;
+}
+
+.rewards-orders {
+  padding-bottom: 60px;
+}
+
+.rewards-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.reward-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.reward-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.reward-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reward-head strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.reward-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--brand);
+}
+
+.reward-desc {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reward-unit {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.reward-earned {
+  margin: 8px 0 0;
+  color: var(--brand);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rewards-orders-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reward-order {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.reward-order-id {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
 }

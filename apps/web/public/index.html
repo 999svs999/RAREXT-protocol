@@ -35,6 +35,7 @@
       <nav class="tabs" aria-label="Views">
         <button class="tab active" data-view="workbench" data-i18n="nav.play">Play</button>
         <button class="tab" data-view="feed" data-i18n="nav.community">Community</button>
+        <button class="tab" data-view="rewards" data-i18n="nav.rewards">Rewards</button>
       </nav>
 
       <div class="topbar-extra">
@@ -371,6 +372,31 @@
             <p id="publish-status" class="muted"></p>
           </div>
         </aside>
+      </section>
+
+      <section id="view-rewards" class="view hidden">
+        <div class="feed-head">
+          <div>
+            <h1 data-i18n="rewards.title">Your work, your credits</h1>
+            <p class="muted" data-i18n="rewards.credits">Credits</p>
+            <p id="rewards-total" class="rewards-total">0</p>
+          </div>
+          <div class="feed-actions">
+            <button id="rewards-work" class="primary" data-i18n="rewards.work">
+              Work now
+            </button>
+          </div>
+        </div>
+
+        <div class="rewards-board">
+          <h2 class="section-label" data-i18n="rewards.board">Ways to earn</h2>
+          <div id="rewards-actions" class="rewards-actions"></div>
+        </div>
+
+        <div class="rewards-orders">
+          <h2 class="section-label" data-i18n="wb.checks">Checks</h2>
+          <div id="rewards-orders" class="rewards-orders-list"></div>
+        </div>
       </section>
 
       <section id="view-feed" class="view hidden">

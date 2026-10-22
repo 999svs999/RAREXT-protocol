@@ -1,0 +1,782 @@
+{
+  "cases": [
+    {
+      "correct": true,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "a1a8"
+      ],
+      "proof": {
+        "checkmate": true,
+        "finalFen": "R5k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 1000,
+      "title": "Back-rank mate in one"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "a1a7"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/R4ppp/8/8/8/8/5PPP/6K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Back-rank mate in one"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "a1b1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/8/8/5PPP/1R4K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Back-rank mate in one"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "h2h4"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/7P/8/5PP1/R5K1 b - h3 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Back-rank mate in one"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "g2g3"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/8/6P1/5P1P/R5K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Back-rank mate in one"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+      "moves": [
+        "e8e7",
+        "f3e5"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbq1bnr/ppppkppp/8/4N3/4P3/8/PPPP1PPP/RNBQKB1R b KQ - 0 1",
+        "game": "chess",
+        "plies": 2,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Scholar's mate"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "w"
+      },
+      "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+      "moves": [
+        "d7d5"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/ppp2ppp/8/3pp3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq d6 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Scholar's mate"
+    },
+    {
+      "error": "illegal move: e5d7",
+      "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+      "moves": [
+        "e5d7"
+      ],
+      "title": "Scholar's mate"
+    },
+    {
+      "correct": true,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "w"
+      },
+      "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+      "moves": [
+        "d8h4"
+      ],
+      "proof": {
+        "checkmate": true,
+        "finalFen": "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 1000,
+      "title": "Fool's mate"
+    },
+    {
+      "error": "illegal move: d8h4",
+      "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+      "moves": [
+        "e5e4",
+        "d8h4"
+      ],
+      "title": "Fool's mate"
+    },
+    {
+      "error": "illegal move: h8h7",
+      "fen": "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+      "moves": [
+        "h8h7"
+      ],
+      "title": "Stalemate"
+    },
+    {
+      "error": "illegal move: f7f8",
+      "fen": "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+      "moves": [
+        "f7f8"
+      ],
+      "title": "Stalemate"
+    },
+    {
+      "error": "illegal move: e1g1",
+      "fen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1",
+      "moves": [
+        "e1g1"
+      ],
+      "title": "Castling both sides"
+    },
+    {
+      "error": "illegal move: e1c1",
+      "fen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1",
+      "moves": [
+        "e1c1"
+      ],
+      "title": "Castling both sides"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1",
+      "moves": [
+        "a1b1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/1R2K2R b Kkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Castling both sides"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1",
+      "moves": [
+        "h1f1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3KR2 b Qkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Castling both sides"
+    },
+    {
+      "error": "illegal move: e1d2",
+      "fen": "r3k2r/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w KQkq - 0 1",
+      "moves": [
+        "e1d2"
+      ],
+      "title": "Castling both sides"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+      "moves": [
+        "e5d6"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/3P4/8/8/8/8/4K3 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "En passant"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+      "moves": [
+        "e5e6"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/4P3/3p4/8/8/8/4K3 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "En passant"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+      "moves": [
+        "e1e2"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/8/3pP3/8/8/4K3/8 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "En passant"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "8/P6k/8/8/8/8/8/K7 w - - 0 1",
+      "moves": [
+        "a7a8q"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "Q7/7k/8/8/8/8/8/K7 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Promotion"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "8/P6k/8/8/8/8/8/K7 w - - 0 1",
+      "moves": [
+        "a7a8n"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "N7/7k/8/8/8/8/8/K7 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Promotion"
+    },
+    {
+      "error": "illegal move: a7a7",
+      "fen": "8/P6k/8/8/8/8/8/K7 w - - 0 1",
+      "moves": [
+        "a7a7"
+      ],
+      "title": "Promotion"
+    },
+    {
+      "error": "no piece on b1",
+      "fen": "8/P6k/8/8/8/8/8/K7 w - - 0 1",
+      "moves": [
+        "b1b2"
+      ],
+      "title": "Promotion"
+    },
+    {
+      "error": "illegal move: e8e7",
+      "fen": "4k3/8/8/8/8/8/4R3/4K3 b - - 0 1",
+      "moves": [
+        "e8e7"
+      ],
+      "title": "Pinned piece"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "w"
+      },
+      "fen": "4k3/8/8/8/8/8/4R3/4K3 b - - 0 1",
+      "moves": [
+        "e8f7"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "8/5k2/8/8/8/8/4R3/4K3 w - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Pinned piece"
+    },
+    {
+      "error": "illegal move: e1e2",
+      "fen": "4k3/8/8/8/8/2n5/8/4K3 w - - 0 1",
+      "moves": [
+        "e1e2"
+      ],
+      "title": "Double check"
+    },
+    {
+      "error": "illegal move: e1d1",
+      "fen": "4k3/8/8/8/8/2n5/8/4K3 w - - 0 1",
+      "moves": [
+        "e1d1"
+      ],
+      "title": "Double check"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/8/8/2n5/8/4K3 w - - 0 1",
+      "moves": [
+        "e1f1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/8/8/8/2n5/8/5K2 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Double check"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/8/8/8/4r3/4K3 w - - 0 1",
+      "moves": [
+        "e1e2"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/8/8/8/8/4K3/8 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "King cannot step into check"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/8/8/8/4r3/4K3 w - - 0 1",
+      "moves": [
+        "e1d1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/8/8/8/8/4r3/3K4 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "King cannot step into check"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "4k3/8/8/8/8/8/4r3/4K3 w - - 0 1",
+      "moves": [
+        "e1f1"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "4k3/8/8/8/8/8/4r3/5K2 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "King cannot step into check"
+    },
+    {
+      "error": "illegal move: e1d2",
+      "fen": "4k3/8/8/8/8/8/4r3/4K3 w - - 0 1",
+      "moves": [
+        "e1d2"
+      ],
+      "title": "King cannot step into check"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1",
+      "moves": [
+        "g6h6"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "7k/5Q2/7K/8/8/8/8/8 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": true
+      },
+      "score": 0,
+      "title": "No legal moves"
+    },
+    {
+      "correct": true,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1",
+      "moves": [
+        "f7g7"
+      ],
+      "proof": {
+        "checkmate": true,
+        "finalFen": "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 1000,
+      "title": "No legal moves"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1",
+      "moves": [
+        "g6f6"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "7k/5Q2/5K2/8/8/8/8/8 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": true
+      },
+      "score": 0,
+      "title": "No legal moves"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "e2e4"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Normal opening"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "d2d4"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Normal opening"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "g1f3"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Normal opening"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "e2e3"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Normal opening"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "b1c3"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Normal opening"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "f2f4"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/5P2/8/6PP/R5K1 b - f3 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Mate in two"
+    },
+    {
+      "correct": true,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "a1a8"
+      ],
+      "proof": {
+        "checkmate": true,
+        "finalFen": "R5k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 1000,
+      "title": "Mate in two"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "h2h3"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/8/7P/5PP1/R5K1 b - - 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Mate in two"
+    },
+    {
+      "correct": false,
+      "details": {
+        "maxPlies": 3,
+        "sideToMove": "b"
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+      "moves": [
+        "g2g4"
+      ],
+      "proof": {
+        "checkmate": false,
+        "finalFen": "6k1/5ppp/8/8/6P1/8/5P1P/R5K1 b - g3 0 1",
+        "game": "chess",
+        "plies": 1,
+        "stalemate": false
+      },
+      "score": 0,
+      "title": "Mate in two"
+    },
+    {
+      "error": "illegal move: e2e5",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "e2e5"
+      ],
+      "title": "Illegal move"
+    },
+    {
+      "error": "illegal move: a1a8",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "a1a8"
+      ],
+      "title": "Illegal move"
+    },
+    {
+      "error": "illegal move: b1b8",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "b1b8"
+      ],
+      "title": "Illegal move"
+    },
+    {
+      "error": "illegal move: e1e2",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "e1e2"
+      ],
+      "title": "Illegal move"
+    }
+  ]
+}

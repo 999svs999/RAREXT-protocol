@@ -5,6 +5,7 @@ import type {
   Revocation,
   RevocationKind,
 } from "./revocations.ts";
+import type { CreditRecord } from "./work.ts";
 import type {
   Anchor,
   Artifact,
@@ -33,6 +34,7 @@ interface Snapshot {
   anchors: Anchor[];
   identityLinks?: IdentityLink[];
   revocations?: Revocation[];
+  credits?: CreditRecord[];
 }
 
 export class RarextStore {
@@ -45,6 +47,7 @@ export class RarextStore {
   private readonly anchoredIds = new Set<string>();
   private readonly identityLinks = new Map<string, IdentityLink>();
   private readonly revocations = new Map<string, Revocation>();
+  private readonly credits: CreditRecord[] = [];
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -306,6 +309,15 @@ export class RarextStore {
       .reverse();
   }
 
+  addCredit(record: CreditRecord): void {
+    this.credits.push(record);
+    this.persist();
+  }
+
+  listCredits(): CreditRecord[] {
+    return [...this.credits];
+  }
+
   addRevocation(revocation: Revocation, persist = true): void {
     if (this.revocations.has(revocation.id)) return;
     this.revocations.set(revocation.id, revocation);
@@ -416,6 +428,10 @@ export class RarextStore {
       for (const revocation of snapshot.revocations ?? []) {
         this.addRevocation(revocation, false);
       }
+
+      for (const credit of snapshot.credits ?? []) {
+        this.credits.push(credit);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[rarext] could not load ${this.filePath}: ${message}`);
@@ -434,6 +450,7 @@ export class RarextStore {
       anchors: [...this.anchors.values()],
       identityLinks: [...this.identityLinks.values()],
       revocations: [...this.revocations.values()],
+      credits: [...this.credits],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

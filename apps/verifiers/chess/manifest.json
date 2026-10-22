@@ -1,0 +1,11 @@
+{
+  "id": "chess",
+  "app": "chess",
+  "kind": "chess.moves",
+  "format": "es-module",
+  "entry": "chess.mjs",
+  "abi": "rarext.verifier.v1",
+  "hash": "ca195e7e8acb5c8ba5dd931fdfe76226f554a5cd2ef13f256ec509fbe2d78bc2",
+  "bytes": 14790,
+  "description": "Chess mate puzzles in UCI notation. Standard movement, promotion, en passant, castling, check, checkmate, and stalemate."
+}

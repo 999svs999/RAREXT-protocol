@@ -20,6 +20,7 @@ import type {
   Task,
 } from "../../../packages/core/src/index.ts";
 import { initI18n, localeTag, t } from "./i18n.ts";
+import { runWork, type WorkBoard } from "./work.ts";
 
 const NODE_WIDTH = 144;
 const NODE_HEIGHT = 64;
@@ -163,6 +164,10 @@ const remixTitle = el("remix-title");
 const identityStatus = el("identity-status");
 const resetIdentityButton = el<HTMLButtonElement>("reset-identity");
 const loadMoreButton = el<HTMLButtonElement>("load-more");
+const rewardsTotal = el("rewards-total");
+const rewardsActions = el("rewards-actions");
+const rewardsOrders = el("rewards-orders");
+const rewardsWork = el<HTMLButtonElement>("rewards-work");
 const anchorFeedButton = el<HTMLButtonElement>("anchor-feed");
 const chainStatus = el("chain-status");
 const adapterList = el("adapter-list");
@@ -1854,19 +1859,106 @@ async function verifyPublication(publication: Publication): Promise<void> {
   }
 }
 
-function switchView(view: "workbench" | "feed", scroll = true): void {
+async function refreshRewards(): Promise<void> {
+  const identity = loadStoredIdentity();
+
+  try {
+    const board = (await apiGet(
+      `/v1/work?keyId=${encodeURIComponent(identity?.keyId ?? "")}`,
+    )) as WorkBoard;
+
+    rewardsTotal.textContent = String(board.earnings?.credits ?? 0);
+
+    rewardsActions.innerHTML = board.actions
+      .map((action) => {
+        const earned = board.earnings?.byAction?.[action.id];
+        return `<div class="reward-card">
+          <div class="reward-head">
+            <strong>${escapeHtml(t(`action.${action.id}` as Parameters<typeof t>[0]))}</strong>
+            <span class="reward-value">${action.base * action.difficulty}</span>
+          </div>
+          <p class="reward-desc">${escapeHtml(action.description)}</p>
+          <p class="reward-unit">${escapeHtml(action.unit)}</p>
+          ${
+            earned
+              ? `<p class="reward-earned">${earned.jobs} · ${earned.credits}</p>`
+              : ""
+          }
+        </div>`;
+      })
+      .join("");
+
+    rewardsOrders.innerHTML = board.orders.length
+      ? board.orders
+          .map(
+            (order) => `<div class="reward-order">
+              <div>
+                <strong>${escapeHtml(order.app)}</strong>
+                <span class="reward-order-id">${escapeHtml(order.challengeId)}</span>
+              </div>
+              <span class="reward-value">${order.bounty}</span>
+            </div>`,
+          )
+          .join("")
+      : `<div class="empty">${escapeHtml(t("rewards.empty"))}</div>`;
+  } catch {
+    rewardsActions.innerHTML = `<div class="empty">${escapeHtml(t("rewards.empty"))}</div>`;
+    rewardsOrders.innerHTML = "";
+  }
+}
+
+async function workNow(): Promise<void> {
+  const identity = loadStoredIdentity();
+
+  if (!identity) {
+    toast(t("rewards.empty"), true);
+    return;
+  }
+
+  rewardsWork.disabled = true;
+
+  try {
+    const results = await runWork({
+      identity: {
+        keyId: identity.keyId,
+        publicKey: identity.publicKey as Record<string, string>,
+        privateKey: identity.privateKey as Record<string, string>,
+      },
+      onProgress: (result) => {
+        toast(
+          result.accepted
+            ? `${result.challengeId} · ${result.bounty}`
+            : `${result.challengeId} · ${result.error ?? "failed"}`,
+          !result.accepted,
+        );
+      },
+    });
+
+    const accepted = results.filter((result) => result.accepted).length;
+    toast(`${accepted} / ${results.length}`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    rewardsWork.disabled = false;
+    await refreshRewards();
+  }
+}
+
+function switchView(view: "workbench" | "feed" | "rewards", scroll = true): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
 
   el("view-workbench").classList.toggle("hidden", view !== "workbench");
   el("view-feed").classList.toggle("hidden", view !== "feed");
+  el("view-rewards").classList.toggle("hidden", view !== "rewards");
 
   if (scroll && window.matchMedia("(max-width: 1080px)").matches) {
     window.scrollTo(0, 0);
   }
 
   if (view === "workbench") updateCanvasHelp();
+  if (view === "rewards") void refreshRewards();
 }
 
 feedEl.addEventListener("click", (event) => {
@@ -1948,6 +2040,7 @@ welcomeExploreButton.addEventListener("click", () => {
 welcomeEl.addEventListener("click", (event) => {
   if (event.target === welcomeEl) closeWelcome();
 });
+rewardsWork.addEventListener("click", () => void workNow());
 el("refresh-feed").addEventListener("click", () => {
   void refreshFeed();
   void refreshChainStatus();
@@ -2005,7 +2098,12 @@ el("copy-json").addEventListener("click", async () => {
 
 document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
-    const view = button.dataset.view === "feed" ? "feed" : "workbench";
+    const view =
+      button.dataset.view === "feed"
+        ? "feed"
+        : button.dataset.view === "rewards"
+          ? "rewards"
+          : "workbench";
     switchView(view);
     if (view === "feed") {
       void refreshFeed();

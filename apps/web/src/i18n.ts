@@ -246,6 +246,19 @@ const en: Record<string, string> = {
   "toast.verified": "Checks passed. This build matches the original.",
   "toast.mismatch": "This build did not match. It may have changed.",
   "toast.checkpointNone": "There are no new builds to save.",
+  "nav.rewards": "Rewards",
+  "rewards.title": "Your work, your credits",
+  "rewards.credits": "Credits",
+  "rewards.board": "Ways to earn",
+  "rewards.work": "Work now",
+  "rewards.empty": "No work is available right now.",
+  "action.verify": "Verify a build",
+  "action.store": "Hold bytes",
+  "action.mirror": "Mirror the registry",
+  "action.relay": "Relay an anchor",
+  "action.publish": "Publish a build",
+  "action.remix": "Remix a build",
+  "action.report": "Report a bad claim",
 };
 
 const zhHans: Record<string, string> = {
@@ -470,6 +483,19 @@ const zhHans: Record<string, string> = {
   "toast.verified": "检查通过。此构建与原始版本一致。",
   "toast.mismatch": "此构建不匹配，可能已被修改。",
   "toast.checkpointNone": "没有新的构建需要保存。",
+  "nav.rewards": "奖励",
+  "rewards.title": "你的劳动，你的积分",
+  "rewards.credits": "积分",
+  "rewards.board": "赚取方式",
+  "rewards.work": "开始工作",
+  "rewards.empty": "当前没有可领取的工作。",
+  "action.verify": "验证构建",
+  "action.store": "保存数据",
+  "action.mirror": "镜像注册表",
+  "action.relay": "转发锚定",
+  "action.publish": "发布构建",
+  "action.remix": "复刻构建",
+  "action.report": "举报虚假声明",
 };
 
 const zhHant: Record<string, string> = {
@@ -695,6 +721,19 @@ const zhHant: Record<string, string> = {
   "toast.verified": "檢查通過。此建構與原始版本一致。",
   "toast.mismatch": "此建構不匹配，可能已被修改。",
   "toast.checkpointNone": "沒有新的建構需要儲存。",
+  "nav.rewards": "獎勵",
+  "rewards.title": "你的勞動，你的積分",
+  "rewards.credits": "積分",
+  "rewards.board": "賺取方式",
+  "rewards.work": "開始工作",
+  "rewards.empty": "目前沒有可領取的工作。",
+  "action.verify": "驗證建構",
+  "action.store": "保存資料",
+  "action.mirror": "鏡像註冊表",
+  "action.relay": "轉發錨定",
+  "action.publish": "發布建構",
+  "action.remix": "複刻建構",
+  "action.report": "檢舉虛假聲明",
 };
 
 const es: Record<string, string> = {
@@ -919,6 +958,19 @@ const es: Record<string, string> = {
   "toast.verified": "Comprobaciones superadas. Coincide con el original.",
   "toast.mismatch": "No coincide. Puede haber cambiado.",
   "toast.checkpointNone": "No hay construcciones nuevas que guardar.",
+  "nav.rewards": "Recompensas",
+  "rewards.title": "Tu trabajo, tus créditos",
+  "rewards.credits": "Créditos",
+  "rewards.board": "Formas de ganar",
+  "rewards.work": "Trabajar ahora",
+  "rewards.empty": "No hay trabajo disponible ahora mismo.",
+  "action.verify": "Verificar una construcción",
+  "action.store": "Guardar bytes",
+  "action.mirror": "Reflejar el registro",
+  "action.relay": "Retransmitir un ancla",
+  "action.publish": "Publicar una construcción",
+  "action.remix": "Remezclar una construcción",
+  "action.report": "Reportar una afirmación falsa",
 };
 
 const fr: Record<string, string> = {
@@ -1143,6 +1195,19 @@ const fr: Record<string, string> = {
   "toast.verified": "Tests réussis. Cette construction correspond à l’original.",
   "toast.mismatch": "Cette construction ne correspond pas. Elle a peut-être changé.",
   "toast.checkpointNone": "Aucune nouvelle construction à enregistrer.",
+  "nav.rewards": "Récompenses",
+  "rewards.title": "Votre travail, vos crédits",
+  "rewards.credits": "Crédits",
+  "rewards.board": "Façons de gagner",
+  "rewards.work": "Travailler maintenant",
+  "rewards.empty": "Aucun travail disponible pour le moment.",
+  "action.verify": "Vérifier une construction",
+  "action.store": "Héberger des octets",
+  "action.mirror": "Miroiter le registre",
+  "action.relay": "Relayer un ancrage",
+  "action.publish": "Publier une construction",
+  "action.remix": "Remixer une construction",
+  "action.report": "Signaler une affirmation fausse",
 };
 
 const pt: Record<string, string> = {
@@ -1367,6 +1432,19 @@ const pt: Record<string, string> = {
   "toast.verified": "Verificações passaram. Corresponde ao original.",
   "toast.mismatch": "Não corresponde. Pode ter mudado.",
   "toast.checkpointNone": "Não há novas construções para salvar.",
+  "nav.rewards": "Recompensas",
+  "rewards.title": "Seu trabalho, seus créditos",
+  "rewards.credits": "Créditos",
+  "rewards.board": "Formas de ganhar",
+  "rewards.work": "Trabalhar agora",
+  "rewards.empty": "Não há trabalho disponível agora.",
+  "action.verify": "Verificar uma construção",
+  "action.store": "Guardar bytes",
+  "action.mirror": "Espelhar o registo",
+  "action.relay": "Encaminhar uma âncora",
+  "action.publish": "Publicar uma construção",
+  "action.remix": "Remisturar uma construção",
+  "action.report": "Denunciar uma afirmação falsa",
 };
 
 const ja: Record<string, string> = {
@@ -1591,6 +1669,19 @@ const ja: Record<string, string> = {
   "toast.verified": "チェックに合格しました。元のビルドと一致します。",
   "toast.mismatch": "一致しませんでした。変更された可能性があります。",
   "toast.checkpointNone": "保存する新しいビルドはありません。",
+  "nav.rewards": "報酬",
+  "rewards.title": "あなたの労働、あなたのクレジット",
+  "rewards.credits": "クレジット",
+  "rewards.board": "収益の方法",
+  "rewards.work": "働き始める",
+  "rewards.empty": "現在、受注できる作業はありません。",
+  "action.verify": "ビルドを検証する",
+  "action.store": "バイトを保管する",
+  "action.mirror": "レジストリをミラーする",
+  "action.relay": "アンカーを中継する",
+  "action.publish": "ビルドを公開する",
+  "action.remix": "ビルドをリミックスする",
+  "action.report": "不正な主張を報告する",
 };
 
 const ar: Record<string, string> = {
@@ -1815,6 +1906,19 @@ const ar: Record<string, string> = {
   "toast.verified": "نجحت الفحوصات. هذا البناء يطابق الأصل.",
   "toast.mismatch": "هذا البناء غير مطابق. ربما تغيّر.",
   "toast.checkpointNone": "لا توجد أبنية جديدة لحفظها.",
+  "nav.rewards": "المكافآت",
+  "rewards.title": "عملك، رصيدك",
+  "rewards.credits": "الرصيد",
+  "rewards.board": "طرق الكسب",
+  "rewards.work": "ابدأ العمل",
+  "rewards.empty": "لا يوجد عمل متاح الآن.",
+  "action.verify": "تحقّق من بناء",
+  "action.store": "احتفظ بالبيانات",
+  "action.mirror": "اعكس السجل",
+  "action.relay": "أعِد بثّ مرساة",
+  "action.publish": "انشر بناء",
+  "action.remix": "أعد مزج بناء",
+  "action.report": "أبلغ عن ادعاء خاطئ",
 };
 
 const dictionaries: Record<Exclude<Locale, "en">, Record<string, string>> = {

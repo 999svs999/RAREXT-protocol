@@ -13,7 +13,18 @@
       },
       "createdAt": "2026-01-01T00:00:00.000Z",
       "semanticsId": "chess/chess-mate-1",
-      "semanticsVersion": 1
+      "semanticsVersion": 1,
+      "sampleArtifact": {
+        "app": "chess",
+        "kind": "chess.moves",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "moves": [
+            "a1a8"
+          ]
+        }
+      }
     },
     {
       "id": "xiangqi-mate-1",

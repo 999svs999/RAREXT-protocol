@@ -51,6 +51,8 @@ export interface Challenge {
   description: string;
   version: number;
   spec: unknown;
+  /** A warm-up artifact for the work queue. Not part of the challenge meaning. */
+  sampleArtifact?: SampleArtifact;
   semanticsId: string;
   semanticsVersion: number;
   createdAt: string;
@@ -114,6 +116,14 @@ export interface AppInfo {
   verifier: "builtin" | "http";
   configured: boolean;
   url: string | null;
+}
+
+export interface SampleArtifact {
+  app: string;
+  kind: string;
+  version: number;
+  mediaType: string;
+  body: unknown;
 }
 
 export interface VerificationOutput {

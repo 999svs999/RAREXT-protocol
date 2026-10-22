@@ -107,6 +107,10 @@ npm run dev:api
 The policy, the verifier source hash, and every verdict are public, so "certified safe"
 is a claim anybody can re-run rather than a badge. Read [fair launches](docs/FAIR-LAUNCH.md).
 
+### Work and rewards
+
+Any visitor can be useful. A phone can run a portable verifier, hold bytes, or mirror the registry, and the registry recomputes the result before it pays. Seven actions, each priced differently, all paid from demand rather than from an emission schedule. Read [work and rewards](docs/WORK.md).
+
 ### Chains
 
 The registry anchors to every chain you list, and each adapter **reads the chain back** to confirm the anchor, so a receipt is worth what the chain can prove rather than what the operator says. RAREXT ships its own chain — a signed, hash-linked log of anchor commitments with inclusion proofs — plus adapters for the EVM L2s, Solana, Bitcoin, Cosmos, and Trac. Read [chains](docs/CHAINS.md).
@@ -224,7 +228,7 @@ apps/mcp           MCP stdio server for agent frameworks
 packages/core      Netlist schema, simulator, scoring, seed tasks
 packages/agent-sdk Typed client for agents
 contracts          Attestation registry and adapters (planned)
-docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors, privacy, chains
+docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors, privacy, chains, work
 examples           Cross-language verifier examples
 rfcs               Protocol, economics, and chain proposals
 ```

@@ -1,11 +1,29 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import { tasks } from "../../../packages/core/src/index.ts";
-import type { Challenge, Task } from "../../../packages/core/src/index.ts";
+import type { Challenge, SampleArtifact, Task } from "../../../packages/core/src/index.ts";
 
 const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z";
 
+const SAMPLE_CIRCUITS: Record<string, { components: { id: string; type: string; inputs?: string[] }[] }> = {
+  "half-adder": {
+    components: [
+      { id: "a", type: "INPUT" },
+      { id: "b", type: "INPUT" },
+      { id: "n3", type: "NAND", inputs: ["a", "b"] },
+      { id: "n1", type: "NAND", inputs: ["a", "n3"] },
+      { id: "n2", type: "NAND", inputs: ["b", "n3"] },
+      { id: "n4", type: "NAND", inputs: ["n1", "n2"] },
+      { id: "n5", type: "NAND", inputs: ["n3", "n3"] },
+      { id: "sum", type: "OUTPUT", inputs: ["n4"] },
+      { id: "carry", type: "OUTPUT", inputs: ["n5"] },
+    ],
+  },
+};
+
 export function challengeFromTask(task: Task): Challenge {
+  const sample = SAMPLE_CIRCUITS[task.id];
+
   return {
     id: task.id,
     app: "logic",
@@ -13,9 +31,43 @@ export function challengeFromTask(task: Task): Challenge {
     description: task.description,
     version: 1,
     spec: task,
+    sampleArtifact: sample
+      ? {
+          app: "logic",
+          kind: "logic.netlist",
+          version: 1,
+          mediaType: "application/json",
+          body: sample,
+        }
+      : undefined,
     semanticsId: `logic/${task.id}`,
     semanticsVersion: 1,
     createdAt: SEED_CREATED_AT,
+  };
+}
+
+function asSampleArtifact(value: unknown): SampleArtifact | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Partial<SampleArtifact>;
+
+  if (
+    typeof record.app !== "string" ||
+    typeof record.kind !== "string" ||
+    typeof record.mediaType !== "string" ||
+    typeof record.version !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    app: record.app,
+    kind: record.kind,
+    version: record.version,
+    mediaType: record.mediaType,
+    body: record.body ?? null,
   };
 }
 
@@ -49,6 +101,7 @@ function asChallenge(value: unknown): Challenge {
     description: challenge.description,
     version: typeof challenge.version === "number" ? challenge.version : 1,
     spec: challenge.spec,
+    sampleArtifact: asSampleArtifact(challenge.sampleArtifact),
     semanticsId:
       typeof challenge.semanticsId === "string" && challenge.semanticsId.length > 0
         ? challenge.semanticsId

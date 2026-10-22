@@ -34,6 +34,7 @@ export type {
   Publication,
   PublicationPayload,
   PublicationSource,
+  SampleArtifact,
   Semantics,
   SemanticsBinding,
   SemanticsInterpretation,

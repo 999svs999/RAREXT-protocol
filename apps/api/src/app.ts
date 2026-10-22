@@ -63,6 +63,15 @@ import {
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
 import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
+import { VerifierModuleRegistry } from "./verifierModules.ts";
+import { verifyWorkerSignature } from "./worker.ts";
+import {
+  ACTIONS,
+  actionFor,
+  summarizeEarnings,
+  workOrders,
+  type VerificationSubmission,
+} from "./work.ts";
 import { verifyCapability, decodeCapability } from "./capabilities.ts";
 import {
   loadRevocations,
@@ -79,6 +88,7 @@ import {
 
 const MAX_BODY_BYTES = 1_000_000;
 const DEFAULT_PUBLIC_DIR = fileURLToPath(new URL("../../web/public/", import.meta.url));
+const VERIFIER_MODULES_DIR = fileURLToPath(new URL("../../verifiers/", import.meta.url));
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -655,6 +665,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     options.blobs ??
     new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
+  const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
   async function publish(input: PublishInput): Promise<PublishResult> {
     const challenge = challenges.get(input.challengeId);
@@ -933,6 +944,164 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         }
 
         send(res, 200, withSemanticsHash(record));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/verifiers") {
+        send(res, 200, {
+          verifiers: verifierModules.list().map((module) => ({
+            ...module,
+            url: `/v1/verifiers/${module.app}/${module.hash}.mjs`,
+          })),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/verifiers/")) {
+        const rest = pathname.slice("/v1/verifiers/".length);
+        const [id, file] = rest.split("/");
+
+        if (!id || !file || !file.endsWith(".mjs")) {
+          send(res, 404, { error: "not found" });
+          return;
+        }
+
+        const hash = file.slice(0, -".mjs".length);
+        const found = verifierModules.bytesFor(id, hash, VERIFIER_MODULES_DIR);
+
+        if (!found) {
+          send(res, 404, { error: "no module with that hash" });
+          return;
+        }
+
+        res.writeHead(200, {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "public, max-age=31536000, immutable",
+          "x-rarext-module-hash": found.module.hash,
+        });
+        res.end(found.bytes);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/work") {
+        const keyId = url.searchParams.get("keyId");
+        send(res, 200, {
+          actions: ACTIONS,
+          orders: workOrders(challenges.list(), {
+            verifiers: Object.fromEntries(
+              verifierModules.list().map((module) => [
+                module.app,
+                {
+                  id: module.id,
+                  hash: module.hash,
+                  format: module.format,
+                  url: `/v1/verifiers/${module.app}/${module.hash}.mjs`,
+                },
+              ]),
+            ),
+          }),
+          earnings: keyId ? summarizeEarnings(keyId, store.listCredits()) : null,
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/work/earnings") {
+        const keyId = url.searchParams.get("keyId") ?? "";
+        send(res, 200, summarizeEarnings(keyId, store.listCredits()));
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/verifications") {
+        const body = asRecord(await readJson(req));
+        const submission = body as unknown as VerificationSubmission;
+
+        if (
+          typeof submission.challengeId !== "string" ||
+          !submission.artifact ||
+          !submission.attestation ||
+          !submission.worker?.keyId
+        ) {
+          send(res, 400, { error: "a verification needs a challenge, an artifact, an attestation, and a worker" });
+          return;
+        }
+
+        const challenge = challenges.get(submission.challengeId);
+
+        if (!challenge) {
+          send(res, 404, { error: "unknown challenge" });
+          return;
+        }
+
+        // The registry recomputes the attestation itself. A worker that hands
+        // back something the verifier would not produce gets nothing.
+        let recomputed: Attestation;
+
+        try {
+          recomputed = await verifiers.verify(
+            submission.artifact as Artifact,
+            challenge,
+          );
+        } catch (error) {
+          send(res, 422, {
+            error: error instanceof Error ? error.message : "verification failed",
+          });
+          return;
+        }
+
+        const matches =
+          recomputed.circuitHash === submission.attestation.circuitHash &&
+          recomputed.traceHash === submission.attestation.traceHash &&
+          recomputed.correct === submission.attestation.correct &&
+          recomputed.score === submission.attestation.score;
+
+        if (!matches) {
+          send(res, 422, {
+            error: "the attestation does not match what the verifier produced",
+          });
+          return;
+        }
+
+        const workerOk = verifyWorkerSignature(submission);
+
+        if (!workerOk) {
+          send(res, 401, { error: "the worker signature is not valid" });
+          return;
+        }
+
+        const order = workOrders([challenge])[0];
+        const bounty = order?.bounty ?? actionFor("verify").base;
+
+        const artifactHash = recomputed.circuitHash;
+        const alreadyPaid = store
+          .listCredits()
+          .some(
+            (credit) =>
+              credit.keyId === submission.worker.keyId &&
+              credit.artifactHash === artifactHash,
+          );
+
+        if (alreadyPaid) {
+          send(res, 409, {
+            error: "this work has already been credited to this worker",
+          });
+          return;
+        }
+
+        store.addCredit({
+          keyId: submission.worker.keyId,
+          action: "verify",
+          bounty,
+          challengeId: challenge.id,
+          artifactHash,
+          at: new Date().toISOString(),
+        });
+
+        send(res, 201, {
+          accepted: true,
+          bounty,
+          attestation: recomputed,
+          earnings: summarizeEarnings(submission.worker.keyId, store.listCredits()),
+        });
         return;
       }
 

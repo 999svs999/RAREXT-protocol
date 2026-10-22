@@ -20,6 +20,12 @@ mirrored and taken down, multi-chain anchoring, and private publications.
 
 ### Added
 
+- **A work economy.** Seven actions with different payouts, a work queue, a portable
+  verifier format, signed worker submissions, a credit ledger that never pays twice
+  for the same artifact, and a rewards board in the web app.
+- **A portable verifier.** The chess rules as a single TypeScript implementation
+  served by hash, runnable in a browser and on the server, with the same attestation
+  from both. The Python implementation was retired behind generated fixtures.
 - **Publishable packages.** `@rarext/core`, `@rarext/agent-sdk`, `@rarext/mcp`, and
   `@rarext/api` build to `dist` and are verified the way a consumer gets them:
   packed, installed into a throwaway project, and used.
