@@ -118,6 +118,63 @@ Rules:
 - The request times out after 10 seconds. Keep verification stateless and reproducible.
 - The API does not execute app code in-process. External verifiers are isolated services.
 
+## Independent verifier operators
+
+A verifier does not have to run inside the registry. An independent operator
+registers a self-signed record once:
+
+```json
+{
+  "operator": {
+    "kind": "rarext.verifier-operator",
+    "version": 1,
+    "name": "Echo Lab Verifier",
+    "keyId": "sha256(canonical publicKey)",
+    "publicKey": { "kty": "EC", "crv": "P-256", "x": "…", "y": "…" },
+    "algorithm": "ecdsa-p256",
+    "apps": ["echo-lab"],
+    "url": "https://verify.example",
+    "createdAt": "2026-10-23T00:00:00.000Z"
+  },
+  "signature": "base64"
+}
+```
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/v1/verifier-operators   -H 'content-type: application/json' -d @operator.json
+```
+
+`GET /v1/verifier-operators` lists operators; `GET /v1/verifier-operators/:keyId`
+returns one. Registration is permissionless and self-signed; the key is in the
+record, so a reader does not need the registry to verify it.
+
+A publisher then sends the operator's attestation with the artifact:
+
+```json
+{
+  "author": "alice",
+  "title": "Echo build",
+  "challengeId": "echo-1",
+  "artifact": { "app": "echo-lab", "kind": "echo.signal", "version": 1, "mediaType": "application/json", "body": { "value": 42 } },
+  "operatorAttestation": {
+    "keyId": "…",
+    "attestation": { "correct": true, "score": 88, "…": "…" },
+    "signature": "base64"
+  }
+}
+```
+
+The attestation must bind the same app, challenge, semantics record, and artifact
+hash; the operator must be authorised for the app; and the signature must verify.
+The registry stores the attestation exactly as signed, and records
+`verification: "operator"`, `attestationKeyId`, and `attestationSignature`.
+
+`POST /v1/verify` re-checks an operator-attested publication without the local
+verifier and returns `recomputed: null`. The trust decision is the reader's: the
+publication names the operator and carries the signature. Sealed publications
+cannot use an operator, because the operator cannot read the body. The full
+contract is [RFC 0006](../rfcs/0006-independent-verifiers.md).
+
 ## Publish
 
 ```bash

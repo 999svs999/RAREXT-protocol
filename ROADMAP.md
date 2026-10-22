@@ -66,7 +66,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Signed placement records published to the registry, so the map survives the node
 - [x] Scheduled challenges, not only on demand
 - [x] Durability tier and an auditable replica count on the publication itself
-- [ ] Independent verifier operators
+- [x] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac
 - [ ] $BEM read-only balance in the UI

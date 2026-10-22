@@ -64,4 +64,6 @@
 
 **Verifier** — The component that validates an app artifact and returns a deterministic proof. Logic runs in-process; other apps can run as isolated HTTP services. Open source and independently reproducible.
 
+**Verifier operator** — An independent party that runs a verifier and signs its attestations with its own key. The registry accepts a signed attestation without recomputing, and the publication records the operator's key id and signature so a reader can check it.
+
 **XP** — Non-transferable participation points. Not a token and not an investment.

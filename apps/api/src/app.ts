@@ -91,11 +91,20 @@ import {
   type RevocationKind,
 } from "./revocations.ts";
 import { registrySeedList } from "./registries.ts";
-import type { StorageInclusionProof } from "../../../packages/core/src/index.ts";
+import type {
+  OperatorAttestation,
+  StorageInclusionProof,
+} from "../../../packages/core/src/index.ts";
 import {
   createVerifierRegistry,
   type VerifierRegistry,
 } from "./verifiers.ts";
+import {
+  VerifierOperatorRegistry,
+  asOperatorAttestation,
+  asSignedOperator,
+  verifyOperatorAttestation,
+} from "./verifier-operators.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
 const DEFAULT_PUBLIC_DIR = fileURLToPath(new URL("../../web/public/", import.meta.url));
@@ -118,6 +127,7 @@ export interface AppOptions {
   registry?: AdapterRegistry;
   challenges?: ChallengeRegistry;
   verifiers?: VerifierRegistry;
+  operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
   blobs?: BlobStore;
@@ -470,6 +480,15 @@ function asPayload(value: Record<string, unknown>): PublicationPayload {
     throw new Error("payload.nonce must be between 8 and 128 characters");
   }
 
+  const operatorAttestation =
+    value.operatorAttestation === undefined || value.operatorAttestation === null
+      ? null
+      : asOperatorAttestation(value.operatorAttestation);
+
+  if (value.operatorAttestation !== undefined && value.operatorAttestation !== null && !operatorAttestation) {
+    throw new Error("payload.operatorAttestation is invalid");
+  }
+
   return {
     kind: "rarext.publication",
     version: 1,
@@ -491,6 +510,7 @@ function asPayload(value: Record<string, unknown>): PublicationPayload {
         : undefined),
     parentId: optionalId(value.parentId),
     claim: asClaim(value.claim) ?? null,
+    operatorAttestation,
     visibility: asVisibility(value.visibility),
     artifactCommitment:
       typeof value.artifactCommitment === "string" ? value.artifactCommitment : null,
@@ -671,6 +691,7 @@ interface PublishInput {
   signature: string | null;
   nonce: string | null;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
+  operatorAttestation?: OperatorAttestation | null;
   visibility?: Visibility;
   artifactCommitment?: string | null;
   attestation?: Attestation;
@@ -687,6 +708,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
   const semantics = options.semantics ?? createSemanticsRegistry(() => challenges.list());
   const verifiers =
     options.verifiers ?? createVerifierRegistry(options.fetch, semantics);
+  const operators =
+    options.operators ??
+    new VerifierOperatorRegistry(
+      process.env.RAREXT_VERIFIER_OPERATORS_DIR ?? ".data/verifier-operators",
+    );
   const blobs =
     options.blobs ??
     new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
@@ -737,11 +763,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
     const verifier = verifiers.get(input.app);
 
-    if (!verifier) {
+    if (!verifier && !input.operatorAttestation) {
       return { status: 404, body: { error: `no verifier for app: ${input.app}` } };
     }
 
-    if (!verifier.supports(input.artifact, challenge)) {
+    if (verifier && !verifier.supports(input.artifact, challenge) && !input.operatorAttestation) {
       return {
         status: 422,
         body: {
@@ -750,9 +776,38 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       };
     }
 
-    let attestation: Attestation;
+    if (input.visibility === "sealed" && input.operatorAttestation) {
+      return {
+        status: 422,
+        body: {
+          error:
+            "a sealed publication cannot use a verifier operator, because the operator cannot read the body either",
+        },
+      };
+    }
 
-    if (input.visibility === "sealed") {
+    let attestation: Attestation;
+    let verification: Publication["verification"] = "recomputed";
+    let attestationKeyId: string | null = null;
+    let attestationSignature: string | null = null;
+
+    if (input.operatorAttestation) {
+      const checked = verifyOperatorAttestation(
+        input.operatorAttestation,
+        operators,
+        challenge,
+        input.artifact,
+      );
+
+      if (!checked.ok) {
+        return { status: 422, body: { error: checked.reason ?? "operator attestation failed" } };
+      }
+
+      attestation = input.operatorAttestation.attestation;
+      verification = "operator";
+      attestationKeyId = checked.operator!.keyId;
+      attestationSignature = input.operatorAttestation.signature;
+    } else if (input.visibility === "sealed") {
       // The registry never sees the body, so it cannot run the verifier. The
       // author attests to it instead, and the proof is salted so it cannot be
       // brute-forced or checked by a third party. The claim is weaker on
@@ -768,6 +823,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       }
 
       attestation = input.attestation;
+      verification = "attested";
     } else {
       try {
         attestation = await verifiers.verify(input.artifact, challenge, {
@@ -785,8 +841,10 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       : null;
     const suite = authorIdentity?.algorithm ?? "ecdsa-p256";
 
-    attestation.signatureAlgorithm = suite;
-    attestation.cryptoProfile = profileFor(suite);
+    if (verification !== "operator") {
+      attestation.signatureAlgorithm = suite;
+      attestation.cryptoProfile = profileFor(suite);
+    }
 
     if (!attestation.correct) {
       return {
@@ -820,6 +878,9 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       signature: input.signature,
       nonce: input.nonce,
       attestation,
+      verification,
+      attestationKeyId,
+      attestationSignature,
     };
 
     store.addPublication(publication);
@@ -1007,6 +1068,46 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         }
 
         send(res, 200, withSemanticsHash(record));
+        return;
+      }
+
+      if (pathname === "/v1/verifier-operators") {
+        if (req.method === "GET") {
+          send(res, 200, operators.list());
+          return;
+        }
+
+        if (req.method === "POST") {
+          const signed = asSignedOperator(await readJson(req));
+
+          if (!signed) {
+            throw new Error("body must be a signed operator registration");
+          }
+
+          const result = operators.register(signed);
+
+          send(res, result.status, result.error
+            ? { error: result.error }
+            : {
+              status: result.status === 201 ? "registered" : "unchanged",
+              keyId: signed.operator.keyId,
+              name: signed.operator.name,
+              apps: signed.operator.apps,
+            });
+          return;
+        }
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/verifier-operators/")) {
+        const keyId = pathname.slice("/v1/verifier-operators/".length);
+        const operator = operators.get(keyId);
+
+        if (!operator) {
+          send(res, 404, { error: "verifier operator not found" });
+          return;
+        }
+
+        send(res, 200, operator);
         return;
       }
 
@@ -1743,6 +1844,10 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             signature: body.signature,
             nonce: payload.nonce,
             claim: asClaim(body.claim) ?? asClaim(payload.claim),
+            operatorAttestation:
+              asOperatorAttestation(body.operatorAttestation) ??
+              payload.operatorAttestation ??
+              null,
             visibility: asVisibility(payload.visibility),
             artifactCommitment:
               typeof payload.artifactCommitment === "string"
@@ -1811,6 +1916,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           signature: null,
           nonce: null,
           claim: asClaim(body.claim),
+          operatorAttestation: asOperatorAttestation(body.operatorAttestation),
           visibility: asVisibility(body.visibility),
           artifactCommitment:
             typeof body.artifactCommitment === "string"
@@ -2155,6 +2261,28 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         if (!challenge) {
           send(res, 404, { error: "challenge not found" });
+          return;
+        }
+
+        if (publication.attestationKeyId && publication.attestationSignature) {
+          const checked = verifyOperatorAttestation(
+            {
+              keyId: publication.attestationKeyId,
+              attestation: publication.attestation,
+              signature: publication.attestationSignature,
+            },
+            operators,
+            challenge,
+            publication.artifact,
+          );
+
+          send(res, 200, {
+            valid: checked.ok,
+            reason: checked.reason,
+            attestation: publication.attestation,
+            recomputed: null,
+            operator: checked.operator,
+          });
           return;
         }
 

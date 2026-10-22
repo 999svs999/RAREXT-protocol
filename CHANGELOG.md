@@ -43,6 +43,12 @@ break a client or invalidate stored data.
   `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
   record used. It is computed on read, not signed by the author, and reports the weakest
   tier across a manifest. 7 new tests.
+- **Independent verifier operators.** A verifier can register a self-signed operator
+  record (`POST /v1/verifier-operators`) for one app or `*`, and a publisher can attach
+  that operator's signed attestation. The registry accepts it without a local verifier,
+  stores the attestation exactly as signed, records `verification: "operator"` plus the
+  key id and signature, and `/v1/verify` re-checks it with `recomputed: null`. The
+  envelope, bindings, and trust trade are in `RFC 0006`. 4 new tests.
 
 ## 0.1.0-alpha.3 — 2026-10-22
 

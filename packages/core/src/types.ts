@@ -380,7 +380,23 @@ export interface Publication {
   signature: string | null;
   nonce: string | null;
   attestation: Attestation;
+  /** How the attestation was obtained. Older records omit it. */
+  verification?: VerificationMode;
+  attestationKeyId?: string | null;
+  attestationSignature?: string | null;
   durability?: PublicationDurability | null;
+}
+
+export type VerificationMode = "recomputed" | "operator" | "attested";
+
+/**
+ * An attestation produced and signed by an independent verifier operator. The
+ * publication stores it verbatim so any reader can check the signature.
+ */
+export interface OperatorAttestation {
+  keyId: string;
+  attestation: Attestation;
+  signature: string;
 }
 
 export type DurabilityTier = "ephemeral" | "pinned" | "durable";
@@ -503,6 +519,7 @@ export interface PublicationPayload {
   taskId: string;
   circuit?: Circuit;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null } | null;
+  operatorAttestation?: OperatorAttestation | null;
   visibility?: Visibility;
   artifactCommitment?: string | null;
   attestation?: Attestation;

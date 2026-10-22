@@ -237,7 +237,7 @@ Non-determinism is a consensus bug, not a minor issue. Floating-point is banned 
 | Component | Trusted in v0 | Target |
 |---|---|---|
 | Built-in logic verifier | Repository maintainers | Reproducible builds, multiple independent implementations |
-| External app verifier | App operator | Signed attestations, challenge window, independent verifiers |
+| External app verifier | App operator | Signed attestations, challenge window, independent verifier operators (RFC 0006) |
 | Challenge registry | API operator | Trac-anchored app/challenge registry |
 | Circuit ownership | BNB Chain | Unchanged |
 | $BEM balance | BNB Chain / configured RPC | Read-only mirror, no custody |

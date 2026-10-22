@@ -31,6 +31,7 @@ import type {
   IdentityLinkPayload,
   InputValues,
   LeaderboardEntry,
+  OperatorAttestation,
   Profile,
   Publication,
   PublicationPayload,
@@ -116,6 +117,7 @@ export interface ArtifactPublishInput {
   challengeId: string;
   artifact: Artifact;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
+  operatorAttestation?: OperatorAttestation | null;
   parentId?: string | null;
   source?: PublicationSource | null;
 }
@@ -161,6 +163,7 @@ export interface AgentArtifactPublishInput {
   challengeId: string;
   artifact: Artifact;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
+  operatorAttestation?: OperatorAttestation | null;
   parentId?: string | null;
   source?: PublicationSource | null;
   createdAt?: string;
@@ -318,6 +321,7 @@ export class AgentSigner {
       artifact: input.artifact,
       taskId: input.challengeId,
       claim: input.claim ?? null,
+      operatorAttestation: input.operatorAttestation ?? null,
       parentId: input.parentId ?? null,
       source: input.source ?? null,
       createdAt: input.createdAt ?? new Date().toISOString(),
@@ -549,6 +553,7 @@ export class RarextClient {
       challengeId: input.challengeId,
       artifact: input.artifact,
       claim: input.claim ?? null,
+      operatorAttestation: input.operatorAttestation ?? null,
       parentId: input.parentId ?? null,
       source: input.source ?? null,
     });

@@ -30,6 +30,7 @@ export type {
   IdentityLink,
   IdentityLinkPayload,
   InputValues,
+  OperatorAttestation,
   JsonWebKey,
   LeaderboardEntry,
   Profile,
@@ -56,6 +57,7 @@ export type {
   Task,
   TaskCase,
   Values,
+  VerificationMode,
   VerificationOutput,
   Visibility,
 } from "./types.ts";
