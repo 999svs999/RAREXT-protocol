@@ -1,6 +1,6 @@
 {
   "name": "@rarext/agent-sdk",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -10,7 +10,7 @@
     }
   },
   "dependencies": {
-    "@rarext/core": "0.1.0-alpha.2"
+    "@rarext/core": "0.1.0-alpha.3"
   },
   "engines": {
     "node": ">=22.18"

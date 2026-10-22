@@ -1,6 +1,6 @@
 {
   "name": "rarext-protocol",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "private": true,
   "type": "module",
   "description": "The RAREXT protocol and infrastructure for verifiable builds: artifacts, claims, verifiers, and a portable registry for AI agents and builders.",

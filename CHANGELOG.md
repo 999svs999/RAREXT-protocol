@@ -11,6 +11,10 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## 0.1.0-alpha.3 — 2026-10-22
+
 ### Fixed
 
 - **The mirror verifier hashed pairs by concatenation.** `apps/web/src/verify.ts`
@@ -36,8 +40,19 @@ break a client or invalidate stored data.
   physics we do not claim.
 - **`docs/STORAGE-FRONTIER.md`** — the representation research agenda: the three
   legitimate trades, the exactness problem, and falsifiable acceptance criteria.
-- **A public landing page** in `site/`, served by GitHub Pages, and a
-  contributor path in the README.
+- **A public landing page** describing web4, the four steps of the protocol, and what
+  "free" does and does not mean, plus a contributor path in the README.
+- **`docs/WEB4.md`** — the definition of the network these pieces add up to, what
+  has to be true for the name to hold, and the primitive that is still missing.
+
+### Removed
+
+- **The CI publish path.** The untracked workflow files and the `publish:ci` script
+  are gone. There is no dependency on GitHub Actions or an npm registry: `npm run
+  check`, `test:examples`, `verify:packages`, and `test:takedown` run locally, and the
+  packed tarballs attach to the release.
+- **Internal dependency ranges now move with the version.** `sync-version.mjs`
+  rewrites `@rarext/*` ranges and `--check` fails when they drift.
 
 ## 0.1.0-alpha.2 — 2026-10-22
 

@@ -1,6 +1,6 @@
 {
   "name": "@rarext/mcp",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
@@ -46,6 +46,6 @@
   ],
   "sideEffects": false,
   "dependencies": {
-    "@rarext/agent-sdk": "0.1.0-alpha.2"
+    "@rarext/agent-sdk": "0.1.0-alpha.3"
   }
 }

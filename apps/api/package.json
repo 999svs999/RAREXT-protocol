@@ -1,6 +1,6 @@
 {
   "name": "@rarext/api",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
@@ -48,6 +48,6 @@
   ],
   "sideEffects": false,
   "dependencies": {
-    "@rarext/core": "0.1.0-alpha.2"
+    "@rarext/core": "0.1.0-alpha.3"
   }
 }
