@@ -91,7 +91,7 @@ These are open issues, not implementation details to be papered over:
 | Finding | Issue |
 | --- | --- |
 | Payloads and shards are plaintext; `sealed` does not encrypt holder-visible bytes. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
-| Possession is not retrievability; leaf-only storage can pass a challenge. | [#7](https://github.com/999svs999/RAREXT-protocol/issues/7) |
+| Possession is not retrievability; leaf-only storage can pass a challenge. | Addressed in [RFC 0013](0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, token rotation window, or writer identity; placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
 | A verifier can self-report `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
 | Crash, failed repair, and abandoned puts leave orphan shards with no GC. | [#10](https://github.com/999svs999/RAREXT-protocol/issues/10) |

@@ -118,7 +118,7 @@ manager's secret file.
 | Finding | Issue |
 | --- | --- |
 | Shards and pins are stored in plaintext; the `sealed` tier is not encryption. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
-| A challenge proves possession, not retrievability; leaf-only storage can pass. | [#7](https://github.com/999svs999/RAREXT-protocol/issues/7) |
+| A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
 | Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | [#10](https://github.com/999svs999/RAREXT-protocol/issues/10) |
