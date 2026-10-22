@@ -1,8 +1,8 @@
-import { createPublicKey, verify } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
-import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { JsonWebKey } from "../../../packages/core/src/index.ts";
+
+import { verifyPayload } from "./identity.ts";
 
 export type RevocationKind = "capability" | "verifier" | "artifact";
 
@@ -35,14 +35,7 @@ export function verifyRevocation(
   signed: SignedRevocation,
 ): boolean {
   try {
-    const key = createPublicKey({ key: publicKey, format: "jwk" });
-
-    return verify(
-      "sha256",
-      Buffer.from(canonicalize(signed.revocation), "utf8"),
-      { key, dsaEncoding: "ieee-p1363" },
-      Buffer.from(signed.signature, "base64"),
-    );
+    return verifyPayload(publicKey, signed.revocation, signed.signature);
   } catch {
     return false;
   }

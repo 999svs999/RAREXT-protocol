@@ -5,6 +5,7 @@ import type {
 
 import { statusFor } from "../adapters/types.ts";
 import type { RarextAdapter } from "../adapters/types.ts";
+import { merkleRoot } from "../merkle.ts";
 import type { ChainConfig, ChainReceipt } from "./relay.ts";
 
 interface ChainState {
@@ -30,27 +31,6 @@ interface InclusionProof {
   blockHash: string;
   index: number;
   path: { hash: string; side: "left" | "right" }[];
-}
-
-function hashPair(left: string, right: string): string {
-  return left + right;
-}
-
-function merkleRoot(leaves: string[]): string {
-  if (leaves.length === 0) return "";
-  if (leaves.length === 1) return leaves[0]!;
-
-  let level = [...leaves];
-
-  while (level.length > 1) {
-    const next: string[] = [];
-    for (let index = 0; index < level.length; index += 2) {
-      next.push(hashPair(level[index]!, level[index + 1] ?? level[index]!));
-    }
-    level = next;
-  }
-
-  return level[0]!;
 }
 
 /**

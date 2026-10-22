@@ -36,11 +36,11 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-function hashPair(left: string, right: string): string {
-  return left + right;
+async function hashPair(left: string, right: string): Promise<string> {
+  return sha256Hex(left + right);
 }
 
-function merkleRoot(leaves: string[]): string {
+async function merkleRoot(leaves: string[]): Promise<string> {
   if (leaves.length === 0) return "";
   if (leaves.length === 1) return leaves[0]!;
 
@@ -49,7 +49,9 @@ function merkleRoot(leaves: string[]): string {
   while (level.length > 1) {
     const next: string[] = [];
     for (let index = 0; index < level.length; index += 2) {
-      next.push(hashPair(level[index]!, level[index + 1] ?? level[index]!));
+      next.push(
+        await hashPair(level[index]!, level[index + 1] ?? level[index]!),
+      );
     }
     level = next;
   }
@@ -68,7 +70,7 @@ export async function verifyBundle(bundle: Bundle): Promise<BundleVerification> 
     );
   }
 
-  const computedRoot = merkleRoot(leaves);
+  const computedRoot = await merkleRoot(leaves);
   const listed = bundle.manifest.publications.map((entry) => entry.leaf);
   const listMatches = JSON.stringify(listed) === JSON.stringify(leaves);
 

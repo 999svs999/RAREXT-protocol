@@ -3,6 +3,10 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
+import {
+  AgentSigner,
+  generateAgentKeypair,
+} from "../../../packages/agent-sdk/src/index.ts";
 import type { JsonWebKey } from "../../../packages/core/src/index.ts";
 import {
   isRevoked,
@@ -61,4 +65,30 @@ test("a revocation is found by kind and target", () => {
   assert.equal(isRevoked(list, "verifier", "a".repeat(64))?.id, "rev-1");
   assert.equal(isRevoked(list, "capability", "a".repeat(64)), null);
   assert.equal(isRevoked(list, "verifier", "b".repeat(64)), null);
+});
+
+test("a revocation signed with a post-quantum key verifies", () => {
+  const keypair = generateAgentKeypair("ml-dsa-44");
+  const signer = new AgentSigner(keypair.privateKey);
+
+  assert.equal(
+    verifyRevocation(keypair.publicKey as unknown as JsonWebKey, {
+      revocation,
+      signature: signer.sign(revocation),
+    }),
+    true,
+  );
+});
+
+test("a post-quantum revocation signature over other content does not verify", () => {
+  const keypair = generateAgentKeypair("ml-dsa-44");
+  const signer = new AgentSigner(keypair.privateKey);
+
+  assert.equal(
+    verifyRevocation(keypair.publicKey as unknown as JsonWebKey, {
+      revocation,
+      signature: signer.sign({ ...revocation, target: "b".repeat(64) }),
+    }),
+    false,
+  );
 });

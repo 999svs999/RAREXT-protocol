@@ -21,6 +21,7 @@ import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { canonicalize, leafPayload } from "../packages/core/src/index.ts";
 
@@ -118,27 +119,46 @@ try {
     ],
   };
 
-  const published = await (
-    await fetch(`${api}/v1/artifacts`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        author: "takedown-test",
-        title: "Survives the operator",
-        body: "This build has to outlive the server that published it.",
-        challengeId: "half-adder",
-        artifact: {
-          app: "logic",
-          kind: "logic.netlist",
-          version: 1,
-          mediaType: "application/json",
-          body: circuit,
-        },
-      }),
-    })
-  ).json();
+  async function publish(title, body) {
+    return (
+      await fetch(`${api}/v1/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          author: "takedown-test",
+          title,
+          body: "This build has to outlive the server that published it.",
+          challengeId: "half-adder",
+          artifact: {
+            app: "logic",
+            kind: "logic.netlist",
+            version: 1,
+            mediaType: "application/json",
+            body,
+          },
+        }),
+      })
+    ).json();
+  }
+
+  const published = await publish("Survives the operator", circuit);
 
   check("the publication was accepted", Boolean(published.id), JSON.stringify(published).slice(0, 120));
+
+  // A second, different publication. A mirror with one entry cannot tell a
+  // working Merkle fold from a broken one, so the tree has to have a shape.
+  const secondCircuit = {
+    components: [
+      ...circuit.components.filter((component) => component.id !== "sum"),
+      { id: "n6", type: "NAND", inputs: ["n4", "n4"] },
+      { id: "n7", type: "NAND", inputs: ["n6", "n6"] },
+      { id: "sum", type: "OUTPUT", inputs: ["n7"] },
+    ],
+  };
+
+  const second = await publish("Survives the operator too", secondCircuit);
+
+  check("a second publication was accepted", Boolean(second.id), JSON.stringify(second).slice(0, 120));
 
   const anchor = await (
     await fetch(`${api}/v1/anchors`, {
@@ -221,6 +241,22 @@ try {
     served.manifest.root === anchor.root,
   );
 
+  // The verifier the mirror ships is the verifier a stranger runs. It has to
+  // agree with the root computation above, for the served bundle as it is.
+  const shipped = await import(pathToFileURL(join(mirror, "verify.js")).href);
+  const verdict = await shipped.verifyBundle(served);
+
+  check(
+    "the verifier the mirror ships accepts the mirror",
+    verdict.valid === true,
+    String(verdict.reason),
+  );
+  check(
+    "the shipped verifier saw every publication",
+    verdict.publications === served.publications.length,
+    `${verdict.publications} != ${served.publications.length}`,
+  );
+
   const altered = JSON.parse(JSON.stringify(served));
   altered.publications[0].title = "something else";
   const alteredLeaves = altered.publications.map((publication) =>
@@ -229,6 +265,12 @@ try {
   check(
     "an altered mirror would not verify",
     merkleRoot(alteredLeaves) !== altered.manifest.root,
+  );
+
+  const alteredVerdict = await shipped.verifyBundle(altered);
+  check(
+    "the shipped verifier rejects an altered mirror",
+    alteredVerdict.valid === false,
   );
 
   server.close();

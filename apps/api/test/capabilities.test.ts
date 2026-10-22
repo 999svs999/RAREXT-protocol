@@ -3,6 +3,10 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
+import {
+  AgentSigner,
+  generateAgentKeypair,
+} from "../../../packages/agent-sdk/src/index.ts";
 import type { CapabilityGrant, JsonWebKey } from "../../../packages/core/src/index.ts";
 import {
   decodeCapability,
@@ -101,4 +105,27 @@ test("the key id of a public key is stable", () => {
     id,
     createHash("sha256").update(canonicalize(jwk)).digest("hex"),
   );
+});
+
+test("a post-quantum author can grant a capability", () => {
+  const keypair = generateAgentKeypair("ml-dsa-44");
+  const signer = new AgentSigner(keypair.privateKey);
+  const value = grant({ artifactId: "artifact-pq" });
+
+  const token = encodeCapability({ grant: value, signature: signer.sign(value) });
+
+  const check = verifyCapability(keypair.publicKey as unknown as JsonWebKey, token, "artifact-pq");
+  assert.equal(check.ok, true, check.reason ?? "");
+});
+
+test("a post-quantum capability for another artifact does not open this one", () => {
+  const keypair = generateAgentKeypair("ml-dsa-44");
+  const signer = new AgentSigner(keypair.privateKey);
+  const value = grant({ artifactId: "artifact-other" });
+
+  const token = encodeCapability({ grant: value, signature: signer.sign(value) });
+
+  const check = verifyCapability(keypair.publicKey as unknown as JsonWebKey, token, "artifact-pq");
+  assert.equal(check.ok, false);
+  assert.match(check.reason ?? "", /different artifact/);
 });

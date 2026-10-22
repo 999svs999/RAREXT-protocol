@@ -1,7 +1,6 @@
-import { createPublicKey, verify } from "node:crypto";
-
-import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { CapabilityGrant, JsonWebKey } from "../../../packages/core/src/index.ts";
+
+import { verifyPayload } from "./identity.ts";
 
 export interface CapabilityToken {
   grant: CapabilityGrant;
@@ -67,15 +66,7 @@ export function verifyCapability(
   }
 
   try {
-    const key = createPublicKey({ key: publicKey, format: "jwk" });
-    const valid = verify(
-      "sha256",
-      Buffer.from(canonicalize(decoded.grant), "utf8"),
-      { key, dsaEncoding: "ieee-p1363" },
-      Buffer.from(decoded.signature, "base64"),
-    );
-
-    if (!valid) {
+    if (!verifyPayload(publicKey, decoded.grant, decoded.signature)) {
       return { ok: false, reason: "the capability signature is not valid" };
     }
   } catch {

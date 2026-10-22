@@ -116,3 +116,41 @@ test("a single root is its own merkle root", () => {
   const leaf = "a".repeat(64);
   assert.equal(merkleRoot([leaf]), leaf);
 });
+
+test("the chain's Merkle fold agrees with the registry's for every tree shape", async () => {
+  const registry = await import("../../api/src/merkle.ts");
+
+  for (const leaves of [
+    ["a1"],
+    ["a1", "b2"],
+    ["a1", "b2", "c3"],
+    ["a1", "b2", "c3", "d4"],
+    ["a1", "b2", "c3", "d4", "e5"],
+    ["a1", "b2", "c3", "d4", "e5", "f6", "g7"],
+  ]) {
+    assert.equal(
+      merkleRoot(leaves),
+      registry.merkleRoot(leaves),
+      `the roots differ for ${leaves.length} leaves`,
+    );
+
+    for (let index = 0; index < leaves.length; index += 1) {
+      const path = merklePath(leaves, index);
+      assert.equal(
+        verifyPath(leaves[index]!, path, registry.merkleRoot(leaves)),
+        true,
+        `the chain path does not verify against the registry root at ${index}`,
+      );
+      assert.equal(
+        registry.verifyProof(
+          leaves[index]!,
+          registry.merkleProof(leaves, index),
+          merkleRoot(leaves),
+          index,
+        ),
+        true,
+        `the registry proof does not verify against the chain root at ${index}`,
+      );
+    }
+  }
+});

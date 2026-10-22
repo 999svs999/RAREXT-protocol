@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { RarextChainAdapter } from "../src/chains/rarext.ts";
 import { base58Decode } from "../src/chains/relay.ts";
+import { merkleRoot } from "../src/merkle.ts";
 
 const repoRoot = new URL("../../..", import.meta.url).pathname;
 
@@ -152,4 +153,104 @@ test("base58 decodes what it should", () => {
     "hello world",
   );
   assert.equal(base58Decode("0OIl"), null);
+});
+
+test("the adapter confirms a block that holds more than one root", async () => {
+  const roots = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
+  const block = {
+    height: 7,
+    hash: "d".repeat(64),
+    prevHash: "0".repeat(64),
+    timestamp: "2026-01-01T00:00:00.000Z",
+    roots,
+    root: merkleRoot(roots),
+    signer: "s".repeat(64),
+    signature: "c2ln",
+  };
+
+  const fakeFetch: typeof fetch = async (input) => {
+    const url = String(input);
+
+    if (url.endsWith("/chain/anchor")) {
+      return new Response(
+        JSON.stringify({ height: block.height, hash: block.hash }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    if (url.endsWith(`/chain/blocks/${block.height}`)) {
+      return new Response(JSON.stringify(block), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    return new Response("not found", { status: 404 });
+  };
+
+  const adapter = new RarextChainAdapter(
+    {
+      id: "rarex",
+      name: "RAREXT chain",
+      family: "rarext",
+      chainId: "rarex-test-1",
+      rpc: "http://node.test",
+    },
+    fakeFetch,
+  );
+
+  const receipt = await adapter.anchor(roots[1]!, ["pub-1"]);
+
+  assert.equal(receipt.confirmed, true, receipt.error ?? "");
+  assert.equal(receipt.status, "ok");
+});
+
+test("the adapter refuses a block whose root does not cover its roots", async () => {
+  const roots = ["a".repeat(64), "b".repeat(64)];
+  const block = {
+    height: 8,
+    hash: "e".repeat(64),
+    prevHash: "0".repeat(64),
+    timestamp: "2026-01-01T00:00:00.000Z",
+    roots,
+    root: "f".repeat(64),
+    signer: "s".repeat(64),
+    signature: "c2ln",
+  };
+
+  const fakeFetch: typeof fetch = async (input) => {
+    const url = String(input);
+
+    if (url.endsWith("/chain/anchor")) {
+      return new Response(
+        JSON.stringify({ height: block.height, hash: block.hash }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    if (url.endsWith(`/chain/blocks/${block.height}`)) {
+      return new Response(JSON.stringify(block), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    return new Response("not found", { status: 404 });
+  };
+
+  const adapter = new RarextChainAdapter(
+    {
+      id: "rarex",
+      name: "RAREXT chain",
+      family: "rarext",
+      chainId: "rarex-test-1",
+      rpc: "http://node.test",
+    },
+    fakeFetch,
+  );
+
+  const receipt = await adapter.anchor(roots[0]!, ["pub-1"]);
+
+  assert.equal(receipt.confirmed, false);
+  assert.equal(receipt.status, "skipped");
 });
