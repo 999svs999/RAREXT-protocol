@@ -13,6 +13,18 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
+  blobs and its index through unique temp files and renames, rolls back a new blob when
+  the index write fails, and no longer swallows index errors. Durability repair reads
+  exactly `k` survivors, stages every replacement before moving the signed placement,
+  adopts an already-written shard on retry, and fails loudly on a corrupt survivor. Five
+  failure-injection tests cover partial repair writes, tampered shards, crash/restart,
+  holder churn with two losses, and disk/index failures; `docs/HARDENING.md` records the
+  recovery behavior and the remaining limits (no `fsync`, orphan shards, whole-payload
+  memory, possession not retrievability). The repair benchmark now takes `--losses`;
+  a 1 GiB `4+2`, two-loss run measured 1.000 GiB read + 0.500 GiB written = 1.500x,
+  matching the MDS floor `1 + m/k`.
+
 - **Documentation index.** `docs/README.md` links every document in `docs/` exactly
   once, gives reading orders for app developers, verifier operators, and researchers,
   names the draft or stale documents, and points back to the storage frontier. The root

@@ -574,9 +574,13 @@ export class DurabilityLedger {
       );
     }
 
+    // An MDS repair needs exactly k shards; reading every survivor is overhead,
+    // not extra safety. If one of the chosen shards is corrupt, decode fails
+    // loudly rather than silently reading around it.
+    const chosen = survivors.slice(0, placement.dataShards);
     const survivorShards: ErasureShard[] = [];
 
-    for (const shard of survivors) {
+    for (const shard of chosen) {
       const holder = byId.get(shard.holder)!;
       const bytes = await holder.get(shard.storedAs);
 
@@ -597,20 +601,25 @@ export class DurabilityLedger {
 
     const payload = decodeBytes(survivorShards);
     const reencoded = encodeBytes(payload, placement.dataShards, placement.parityShards);
-    const probe = placement.shards.find((shard) => degraded.has(shard.index))!.storedAs;
+    const probe = placement.shards[0]!.storedAs;
+    const candidates = holders
+      .filter((candidate) => !used.has(candidate.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+
+    // A configured holder may be offline. Probe before staging so an
+    // unreachable spare is skipped instead of failing the whole repair.
+    // `has` is read-only and content-addressed, so a holder that survived a
+    // crash with the orphaned shard is still a valid candidate.
     const spare: DurabilityHolder[] = [];
 
-    for (const candidate of holders) {
-      if (used.has(candidate.id)) continue;
-
+    for (const candidate of candidates) {
       try {
-        if (!(await candidate.has(probe))) spare.push(candidate);
+        await candidate.has(probe);
+        spare.push(candidate);
       } catch {
-        continue;
+        // Offline or refusing the read; leave it out of this repair.
       }
     }
-
-    spare.sort((left, right) => left.id.localeCompare(right.id));
 
     let readBytes = 0;
     for (const shard of survivorShards) readBytes += shard.bytes.length;
@@ -621,34 +630,55 @@ export class DurabilityLedger {
       );
     }
 
-    let writtenBytes = 0;
-    let filled = 0;
+    // Stage every write before touching the placement. A failed write, a full
+    // spare, or a crash leaves the signed placement exactly as it was; a retry
+    // is idempotent because the holder store is content-addressed.
+    const staged: {
+      index: number;
+      holder: DurabilityHolder;
+      storedAs: string;
+      bytes: Uint8Array;
+      leaves: string[];
+    }[] = [];
 
-    for (const index of [...degraded].sort((left, right) => left - right)) {
-      const next = spare.shift()!;
+    for (const [position, index] of [...degraded].sort((left, right) => left - right).entries()) {
+      const holder = spare[position]!;
       const bytes = reencoded.find((shard) => shard.index === index)!.bytes;
-      const storedAs = await next.put(bytes);
-      const leaves = chunkLeaves(bytes);
-      const target = placement.shards.find((shard) => shard.index === index)!;
 
-      target.holder = next.id;
-      target.storedAs = storedAs;
-      target.size = bytes.length;
-      target.leaves = leaves.length;
-      target.root = merkleRoot(leaves);
+      try {
+        const storedAs = await holder.put(bytes);
+        staged.push({ index, holder, storedAs, bytes, leaves: chunkLeaves(bytes) });
+      } catch (error) {
+        throw new Error(
+          `repair write failed for shard ${index} on ${holder.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
 
-      witnesses.set(index, {
-        holder: next.id,
+    let writtenBytes = 0;
+
+    for (const entry of staged) {
+      const target = placement.shards.find((shard) => shard.index === entry.index)!;
+
+      target.holder = entry.holder.id;
+      target.storedAs = entry.storedAs;
+      target.size = entry.bytes.length;
+      target.leaves = entry.leaves.length;
+      target.root = merkleRoot(entry.leaves);
+
+      witnesses.set(entry.index, {
+        holder: entry.holder.id,
         lastSuccess: null,
         lastFailure: null,
         misses: 0,
       });
 
-      used.add(next.id);
-      writtenBytes += bytes.length;
-      filled += 1;
+      used.add(entry.holder.id);
+      writtenBytes += entry.bytes.length;
     }
 
-    return { filled, readBytes, writtenBytes, placement };
+    return { filled: staged.length, readBytes, writtenBytes, placement };
   }
 }

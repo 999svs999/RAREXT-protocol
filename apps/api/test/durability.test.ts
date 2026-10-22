@@ -216,7 +216,7 @@ test("repair rebuilds the lost shard and the blob still decodes", async () => {
     const repaired = await ledger.repair(placement.blobHash, holders);
     assert.equal(repaired.filled, 1);
     assert.equal(repaired.writtenBytes, shardSize);
-    assert.equal(repaired.readBytes, shardSize * 5);
+    assert.equal(repaired.readBytes, shardSize * 4);
 
     const after = ledger.get(placement.blobHash)!;
     const moved = after.shards.find((shard) => shard.index === 1)!;

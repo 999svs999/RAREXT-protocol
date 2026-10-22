@@ -185,17 +185,19 @@ Availability can be sampled before a full download: random 4 KiB chunks with Mer
 proofs give the bound in [RFC 0010](../rfcs/0010-data-availability-sampling.md). Sampling
 measures what is served now; it does not replace the retention schedule or repair.
 
-Repair cost is measured, not asserted: [`bench/repair`](../bench/repair/README.md) rebuilds
-one lost shard of a 1 GiB blob and records the bytes actually moved. For the shipped
-systematic code the floor is `1 + 1/k` of the payload, which is above the contract's older
-`< 1/k` target; reaching that target needs local reconstruction or sub-chunking, not a
-tuning change.
+Repair cost is measured, not asserted: [`bench/repair`](../bench/repair/README.md)
+rebuilds lost shards of a 1 GiB blob and records both sides. For the shipped systematic
+code the floor is `1 + m/k` of the payload, which replaces the contract's older `< 1/k`
+target; reaching below it needs local reconstruction or sub-chunking, not a tuning
+change. The derivation is in issue #4 and the failure limits are in
+[`HARDENING.md`](HARDENING.md).
 
 The accounting is worth stating exactly. With `k = 4, m = 2`, the stored set is
-`1.5×` the payload. Repairing one failed shard reads the five survivors
-(`1.25×` the payload) and writes one shard (`0.25×` the payload). It is not cheaper
-to repair early than to repair late; it is cheaper to keep `required` than to fall
-below it.
+`1.5×` the payload. Repairing one failed shard reads exactly four survivors
+(`1.0×` the payload) and writes one shard (`0.25×` the payload), so total is `1.25×`.
+Repairing two reads one payload and writes `0.5×`, total `1.5×`. It is not cheaper to
+repair early than to repair late; it is cheaper to keep `required` than to fall below
+it.
 
 **Holders on other machines.** `apps/api/src/holder-server.ts` is the wire protocol
 in [RFC 0005](../rfcs/0005-durable-placements.md): a holder stores shard bytes under

@@ -224,13 +224,14 @@ export class BlobStore {
   }
 
   private saveIndex(): void {
+    const target = this.indexPath();
+    const temporary = `${target}.${randomBytes(6).toString("hex")}.tmp`;
+
     try {
-      writeFileSync(
-        this.indexPath(),
-        JSON.stringify([...this.records.values()], null, 2),
-      );
-    } catch {
-      return;
+      writeFileSync(temporary, JSON.stringify([...this.records.values()], null, 2));
+      renameSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
     }
   }
 
@@ -245,11 +246,17 @@ export class BlobStore {
   ): BlobRecord {
     const hash = blobHash(bytes);
     const target = this.path(hash);
+    const created = !existsSync(target);
 
-    if (!existsSync(target)) {
-      const temporary = `${target}.${process.pid}.tmp`;
-      writeFileSync(temporary, bytes);
-      renameSync(temporary, target);
+    if (created) {
+      const temporary = `${target}.${randomBytes(6).toString("hex")}.tmp`;
+
+      try {
+        writeFileSync(temporary, bytes);
+        renameSync(temporary, target);
+      } finally {
+        rmSync(temporary, { force: true });
+      }
     }
 
     const existing = this.records.get(hash);
@@ -276,7 +283,16 @@ export class BlobStore {
     };
 
     this.records.set(hash, record);
-    this.saveIndex();
+
+    try {
+      this.saveIndex();
+    } catch (error) {
+      if (created) rmSync(target, { force: true });
+      if (existing) this.records.set(hash, existing);
+      else this.records.delete(hash);
+      throw error;
+    }
+
     return record;
   }
 

@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-// Measures what it actually costs to rebuild one lost erasure shard.
+// Measures what it actually costs to rebuild lost erasure shards.
 //
-// The storage contract asks for repair traffic below 1/k of the blob for a
-// single loss. For an MDS code that is arithmetically impossible: rebuilding
-// one shard needs k shards, so the read alone is the whole payload. This
-// harness records the measurement instead of assuming the answer, and keeps
-// the negative result in view.
+// For an MDS code the repair floor is read = the payload and write = losses/k,
+// so total >= 1 + losses/k. This harness records both sides and checks the
+// rebuilt shard digests instead of assuming the answer.
 
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
@@ -44,7 +42,16 @@ function pattern(length) {
   return bytes;
 }
 
-export function measureRepair({ bytes = GiB, dataShards = 4, parityShards = 2, write = true } = {}) {
+export function measureRepair({
+  bytes = GiB,
+  dataShards = 4,
+  parityShards = 2,
+  losses = 1,
+  write = true,
+} = {}) {
+  if (!Number.isInteger(losses) || losses < 1) throw new Error("losses must be a positive integer");
+  if (losses > parityShards) throw new Error("cannot lose more shards than the parity count");
+
   const payload = pattern(bytes);
   const payloadDigest = digest(payload);
 
@@ -53,8 +60,8 @@ export function measureRepair({ bytes = GiB, dataShards = 4, parityShards = 2, w
     if (!verifyShard(shard)) throw new Error(`shard ${shard.index} failed verification`);
   }
 
-  const lost = encoded[0];
-  const survivors = encoded.slice(1);
+  const lost = encoded.slice(0, losses);
+  const survivors = encoded.slice(losses);
 
   if (survivors.length < dataShards) throw new Error("not enough survivors");
 
@@ -62,20 +69,25 @@ export function measureRepair({ bytes = GiB, dataShards = 4, parityShards = 2, w
   const keep = survivors.slice(0, dataShards);
   const readBytes = keep.reduce((total, shard) => total + shard.bytes.byteLength, 0);
   const rebuiltPayload = decodeBytes(keep);
-  const rebuilt = encodeBytes(rebuiltPayload, dataShards, parityShards)[lost.index];
-  const writeBytes = rebuilt.bytes.byteLength;
+  const reencoded = encodeBytes(rebuiltPayload, dataShards, parityShards);
+  const rebuilt = lost.map((shard) => reencoded[shard.index]);
+  const writeBytes = rebuilt.reduce((total, shard) => total + shard.bytes.byteLength, 0);
   const elapsedMs = performance.now() - started;
 
-  if (!verifyShard(rebuilt)) throw new Error("rebuilt shard failed verification");
-  if (rebuilt.digest !== lost.digest) throw new Error("rebuilt shard digest differs");
   if (digest(rebuiltPayload) !== payloadDigest) throw new Error("rebuilt payload digest differs");
 
-  const shardBytes = lost.bytes.byteLength;
+  for (const [index, shard] of rebuilt.entries()) {
+    if (!verifyShard(shard)) throw new Error(`rebuilt shard ${shard.index} failed verification`);
+    if (shard.digest !== lost[index].digest) throw new Error(`rebuilt shard ${shard.index} digest differs`);
+  }
+
+  const shardBytes = lost[0].bytes.byteLength;
   const totalBytes = readBytes + writeBytes;
   const result = {
     payloadBytes: bytes,
     dataShards,
     parityShards,
+    losses,
     shardBytes,
     readBytes,
     writeBytes,
@@ -83,7 +95,7 @@ export function measureRepair({ bytes = GiB, dataShards = 4, parityShards = 2, w
     readRatio: readBytes / bytes,
     writeRatio: writeBytes / bytes,
     totalRatio: totalBytes / bytes,
-    idealRatio: 1 / dataShards,
+    floorRatio: 1 + losses / dataShards,
     exact: true,
     elapsedMs,
   };
@@ -104,16 +116,17 @@ function main() {
   const bytes = Number(argument("bytes", String(GiB)));
   const dataShards = Number(argument("data", "4"));
   const parityShards = Number(argument("parity", "2"));
+  const losses = Number(argument("losses", "1"));
   const write = !flag("no-write");
-  const result = measureRepair({ bytes, dataShards, parityShards, write });
+  const result = measureRepair({ bytes, dataShards, parityShards, losses, write });
 
   console.log(`payload        ${bytes.toLocaleString()} bytes (${human(bytes)})`);
-  console.log(`code           ${dataShards} data + ${parityShards} parity`);
+  console.log(`code           ${dataShards} data + ${parityShards} parity, ${result.losses} loss(es)`);
   console.log(`read           ${human(result.readBytes)} (${result.readRatio.toFixed(3)}x blob)`);
   console.log(`write          ${human(result.writeBytes)} (${result.writeRatio.toFixed(3)}x blob)`);
   console.log(`total          ${human(result.totalBytes)} (${result.totalRatio.toFixed(3)}x blob)`);
-  console.log(`target < 1/k   ${result.idealRatio.toFixed(3)}x blob — not reachable for one MDS shard`);
-  console.log(`verified       payload and rebuilt shard digests match`);
+  console.log(`MDS floor      ${result.floorRatio.toFixed(3)}x blob (read 1.0x + write ${losses}/${dataShards})`);
+  console.log(`verified       payload and ${result.losses} rebuilt shard digest(s) match`);
   console.log(`elapsed        ${(result.elapsedMs / 1000).toFixed(1)}s`);
 }
 

@@ -34,6 +34,7 @@ Those are names, not links, so every document is linked once in the reference be
 | [CRYPTO.md](CRYPTO.md) | What does the protocol assume cryptographically, and what breaks under a quantum adversary? |
 | [FAIR-LAUNCH.md](FAIR-LAUNCH.md) | How does a token launch become a checkable trajectory instead of a badge? |
 | [GLOSSARY.md](GLOSSARY.md) | What does this protocol mean by adapter, anchor, attestation, build, or holder? |
+| [HARDENING.md](HARDENING.md) | What storage failures are tested, what is recovered, and what is still not handled? |
 | [LITEPAPER.md](LITEPAPER.md) | What is the thesis, and what is explicitly not being sold? |
 | [MARKET.md](MARKET.md) | How can agents, robots, and people trade on the same terms without the protocol knowing what they are? |
 | [MIRRORS.md](MIRRORS.md) | Can the registry survive its operator, and what exactly does a mirror prove? |
