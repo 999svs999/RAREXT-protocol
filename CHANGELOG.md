@@ -16,7 +16,7 @@ break a client or invalidate stored data.
 - **The durability ledger.** `apps/api/src/durability.ts` places erasure shards on
   independent holders, refuses co-location, challenges with a nonce-bound Merkle leaf
   proof, audits live holders against a tier (`ephemeral` 1, `pinned` k+1, `durable`
-  k+m), and repairs any failed shard from k survivors with read/write accounting. 12
+  k+m), and repairs any failed shard from k survivors with read/write accounting. 13
   tests, and `npm run demo:durability` runs the whole sequence: 6/6 live, lose one,
   5/6 under-replicated, repair, 6/6, payload matches.
 

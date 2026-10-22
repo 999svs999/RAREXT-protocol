@@ -459,18 +459,17 @@ export class DurabilityLedger {
     let readBytes = 0;
     for (const shard of survivorShards) readBytes += shard.bytes.length;
 
+    if (spare.length < degraded.size) {
+      throw new Error(
+        `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`,
+      );
+    }
+
     let writtenBytes = 0;
     let filled = 0;
 
     for (const index of [...degraded].sort((left, right) => left - right)) {
-      const next = spare.shift();
-
-      if (!next) {
-        throw new Error(
-          `no spare holder for shard ${index}: every holder already holds a shard of this blob`,
-        );
-      }
-
+      const next = spare.shift()!;
       const bytes = reencoded.find((shard) => shard.index === index)!.bytes;
       const storedAs = next.put(bytes);
       const leaves = chunkLeaves(bytes);

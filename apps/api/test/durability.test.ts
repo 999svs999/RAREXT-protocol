@@ -281,3 +281,29 @@ test("repair will not co-locate a shard and needs a spare holder", () => {
     cleanup();
   }
 });
+
+test("repair refuses before writing when there are not enough spares", () => {
+  const { holders, cleanup } = setup(7);
+
+  try {
+    const ledger = new DurabilityLedger();
+    const placement = ledger.place(encodeBytes(randomBytes(1024), 4, 2), holders, "durable");
+
+    for (const shard of placement.shards.slice(0, 2)) {
+      const holder = holders.find((candidate) => candidate.id === shard.holder)!;
+      holder.remove(shard.storedAs);
+    }
+
+    ledger.challenge(placement.blobHash, holders);
+    const before = ledger.get(placement.blobHash)!.shards.map((shard) => shard.holder);
+
+    assert.throws(() => ledger.repair(placement.blobHash, holders), /no spare holder/);
+    assert.deepEqual(
+      ledger.get(placement.blobHash)!.shards.map((shard) => shard.holder),
+      before,
+      "a refused repair changes nothing",
+    );
+  } finally {
+    cleanup();
+  }
+});
