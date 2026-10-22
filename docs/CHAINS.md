@@ -33,7 +33,7 @@ never `ok`.
 | **Bitcoin** | `bitcoin` | an `OP_RETURN` output | the raw transaction, searched for the root |
 | **Cosmos** | `cosmos` | a memo in a transaction | the transaction's memo |
 | **Trac** | `trac` | an anchor announcement | the announcement response |
-| **Content addressing** | `content` | a CIDv1 over the bundle | the CID, computed locally and pinned if a service is configured |
+| **Content addressing** | `content` | a CIDv1 over the bundle | the CID, computed locally and pinned through `RAREXT_PIN_URL`; `npm run pin` serves that contract |
 | **Local** | `local` | a durable record in the store | the record itself |
 
 The relay chains use a relay: an endpoint that submits the transaction and

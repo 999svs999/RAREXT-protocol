@@ -13,6 +13,12 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **A self-hosted pinning service for the content adapter.** `apps/api/src/pin-server.ts`
+  accepts a bundle and its CID, recomputes the CID from the bytes, stores them under
+  `RAREXT_PIN_DIR`, and serves pin metadata/content over HTTP. The adapter now sends the
+  bundle bytes, so the service can verify what it pins. `npm run pin`; RFC 0011; five
+  tests covering restart, CID mismatch, HTTP round-trip, adapter integration, and refusal.
+
 - **Data availability sampling for media.** `apps/api/src/das.ts` commits 4 KiB chunks
   as Merkle trees over the shards a placement already proves, samples distinct chunks,
   and verifies each byte and proof. It reports the exact hypergeometric miss bound

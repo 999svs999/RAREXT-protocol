@@ -38,7 +38,8 @@
     "chain:node": "node apps/chain/src/server.ts",
     "pretest": "npm run build:packages && npm run build:verifiers",
     "build:verifiers": "node scripts/build-verifiers.mjs",
-    "dev:chess": "node apps/verifiers/chess/server.ts"
+    "dev:chess": "node apps/verifiers/chess/server.ts",
+    "pin": "node apps/api/src/pin-server.ts"
   },
   "engines": {
     "node": ">=22.18"

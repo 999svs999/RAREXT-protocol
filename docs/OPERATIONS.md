@@ -16,11 +16,20 @@ By default the API writes to `.data/`. `RAREXT_DATA` moves the store file
 | `.data/placements/` | Signed placement records: blob hash, shard map, steward key | The registry forgets where shard bytes live. The records are also published over `/v1/placements`, so a steward or a reader may still hold a copy. |
 | `.data/verifier-operators/` | Self-signed verifier operator registrations | The registry cannot check operator attestations until it sees the records again. The operator's key is in the record, so re-registration is cheap. |
 | Holder directories | Shard bytes (`RAREXT_HOLDER_DIR` per holder) | Data loss for that holder. Erasure coding and repair cover a lost holder only if the placement is current and a spare exists. |
+| Pin directory | Pinned bundle bytes (`RAREXT_PIN_DIR`, default `.data/pins`) | The content adapter loses its locally pinned copy; the CID still names the bytes, but this host no longer serves them. |
 
 Shard directories are not inside `.data/` unless you put them there. Back them up
 separately, or treat them as replaceable: the registry can repair a missing shard from
 any `k` survivors when a spare holder is configured. A backup of `.data/` alone restores
 the map, not the bytes.
+
+## Pinning service
+
+`npm run pin` starts the reference service on `127.0.0.1:9700` with
+`RAREXT_PIN_DIR=.data/pins`. Point the API at it with
+`RAREXT_PIN_URL=http://127.0.0.1:9700/v1/pins`. It verifies that every claimed CID
+matches the bytes it receives, writes pins atomically, and stores no secrets. Back up
+the pin directory with `.data/`; a pin is one replica, not a permanence guarantee.
 
 ## Snapshots and migrations
 

@@ -118,7 +118,12 @@ export class ContentPinAdapter implements RarextAdapter {
     const response = await requestFetch(this.options.serviceUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cid, root, publicationIds }),
+      body: JSON.stringify({
+        cid,
+        root,
+        publicationIds,
+        content: Buffer.from(payload, "utf8").toString("base64"),
+      }),
       signal: AbortSignal.timeout(10_000),
     });
 
