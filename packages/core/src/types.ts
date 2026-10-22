@@ -380,6 +380,44 @@ export interface Publication {
   signature: string | null;
   nonce: string | null;
   attestation: Attestation;
+  durability?: PublicationDurability | null;
+}
+
+export type DurabilityTier = "ephemeral" | "pinned" | "durable";
+
+export type DurabilityObservationStatus =
+  | "ok"
+  | "under-replicated"
+  | "unverified"
+  | "unplaced";
+
+export interface PublicationBlobDurability {
+  hash: string;
+  tier: DurabilityTier | null;
+  required: number;
+  live: number;
+  status: DurabilityObservationStatus;
+  /** Sequence number of the placement record the observation used. */
+  sequence: number | null;
+  /** Digest of that record, so a reader can fetch and verify it. */
+  placementDigest: string | null;
+}
+
+/**
+ * A reader's observation of a publication's durability, not part of the
+ * author's signature. `live` counts holders that answered a challenge within the
+ * ledger window; the placement record it points at is signed by the steward.
+ */
+export interface PublicationDurability {
+  policy: "durability-v1";
+  source: "registry-observation";
+  tier: DurabilityTier | null;
+  required: number;
+  live: number;
+  status: DurabilityObservationStatus;
+  observedAt: string;
+  windowMs: number;
+  blobs: PublicationBlobDurability[];
 }
 
 export type BuildSort = "recent" | "score" | "gates" | "reuses";

@@ -37,6 +37,12 @@ break a client or invalidate stored data.
   `RAREXT_HOLDERS` (`id=url,…`) and `RAREXT_CHALLENGE_INTERVAL_MS`; `GET /v1/durability`
   exposes the schedule and audits, `POST /v1/durability/challenge` runs a pass on demand.
   The ledger is rebuilt from persisted placement records on boot. 7 new tests.
+- **Durability on the publication itself.** When an artifact lists blobs, the API attaches
+  a `durability` observation to the publication (and to feed/build responses): tier, the
+  tier's required count, the live count from the last challenge, `unplaced` /
+  `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
+  record used. It is computed on read, not signed by the author, and reports the weakest
+  tier across a manifest. 7 new tests.
 
 ## 0.1.0-alpha.3 — 2026-10-22
 

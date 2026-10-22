@@ -210,6 +210,47 @@ does not survive a restart, and it does not alert anyone yet — it records. Wha
 guarantee is that `live` in an audit is the result of a challenge this process actually
 ran, not a value copied from the placement record.
 
+**Durability on the publication.** A reader should not have to find a placement
+registry to know whether a manifest's bytes still have holders. When a publication's
+artifact lists blobs, the API attaches a `durability` block computed on the way out —
+an observation by the reader, not a field the author signed:
+
+```json
+{
+  "policy": "durability-v1",
+  "source": "registry-observation",
+  "tier": "durable",
+  "required": 5,
+  "live": 5,
+  "status": "ok",
+  "observedAt": "2026-10-23T00:00:00.000Z",
+  "windowMs": 86400000,
+  "blobs": [
+    {
+      "hash": "…",
+      "tier": "durable",
+      "required": 5,
+      "live": 5,
+      "status": "ok",
+      "sequence": 0,
+      "placementDigest": "…"
+    }
+  ]
+}
+```
+
+`live` is the number of shards that answered a challenge inside the ledger window, and
+`required` comes from the tier. `status` is `unplaced` when no signed record names the
+blob, `unverified` when a record exists but no challenge has run since boot, and only
+then `ok` or `under-replicated`. `placementDigest` pins the exact record the observation
+used, so a reader can fetch it from `/v1/placements/:blobHash`, verify the steward's
+signature, and re-run the challenges themselves. A manifest with several blobs reports
+every blob and the weakest tier; the publication is `ok` only when every blob is.
+
+This is deliberately not inside the author's signature. The author signs the bytes they
+published; whether those bytes still have holders is a fact about the world that changes
+after signing, and it should be dated (`observedAt`) rather than frozen.
+
 **Signed placement records.** `apps/api/src/placements.ts` signs a placement with the
 steward's key, embeds the public key, and chains each repair as a new record
 (`sequence` + `previous` digest). `POST /v1/placements` appends one;

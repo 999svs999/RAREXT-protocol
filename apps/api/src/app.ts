@@ -74,6 +74,7 @@ import { VerifierModuleRegistry } from "./verifierModules.ts";
 import { PlacementRegistry, asSignedPlacement } from "./placements.ts";
 import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
 import { ChallengeScheduler } from "./durability-schedule.ts";
+import { publicationDurability } from "./publication-durability.ts";
 import { verifyWorkerSignature } from "./worker.ts";
 import {
   ACTIONS,
@@ -707,6 +708,16 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       holders: () => holders,
       intervalMs: options.challengeIntervalMs,
     });
+
+  /**
+   * Durability is an observation by the reader, not a field the author signed.
+   * It is attached on the way out so it cannot go stale inside the store.
+   */
+  function observeDurability<T extends Publication>(publication: T): T {
+    const observation = publicationDurability(publication, placements, durability);
+
+    return observation ? { ...publication, durability: observation } : publication;
+  }
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
@@ -812,7 +823,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     };
 
     store.addPublication(publication);
-    return { status: 201, body: publication };
+    return { status: 201, body: observeDurability(publication) };
   }
 
   async function maybeAnchor(): Promise<void> {
@@ -1567,13 +1578,15 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         send(
           res,
           200,
-          store.listFeed({
-            taskId: searchParams.get("taskId") ?? undefined,
-            author: searchParams.get("author") ?? undefined,
-            parentId: parentId === null ? undefined : parentId,
-            limit: parseLimit(searchParams.get("limit")),
-            offset: parseOffset(searchParams.get("offset")),
-          }),
+          store
+            .listFeed({
+              taskId: searchParams.get("taskId") ?? undefined,
+              author: searchParams.get("author") ?? undefined,
+              parentId: parentId === null ? undefined : parentId,
+              limit: parseLimit(searchParams.get("limit")),
+              offset: parseOffset(searchParams.get("offset")),
+            })
+            .map(observeDurability),
         );
         return;
       }
@@ -1598,7 +1611,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           offset: parseOffset(searchParams.get("offset")),
         };
 
-        send(res, 200, store.searchBuilds(query));
+        send(res, 200, store.searchBuilds(query).map(observeDurability));
         return;
       }
 
@@ -1645,7 +1658,12 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             return;
           }
 
-          send(res, 200, lineage);
+          send(res, 200, {
+            ...lineage,
+            build: observeDurability(lineage.build),
+            ancestors: lineage.ancestors.map(observeDurability),
+            descendants: lineage.descendants.map(observeDurability),
+          });
           return;
         }
 
@@ -1661,7 +1679,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           return;
         }
 
-        send(res, 200, build);
+        send(res, 200, observeDurability(build));
         return;
       }
 
@@ -1849,7 +1867,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           }
         }
 
-        send(res, 200, publication);
+        send(res, 200, observeDurability(publication));
         return;
       }
 

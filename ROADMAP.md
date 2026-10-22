@@ -65,7 +65,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] A holder transport: another machine or agent joins the shard set
 - [x] Signed placement records published to the registry, so the map survives the node
 - [x] Scheduled challenges, not only on demand
-- [ ] Durability tier and an auditable replica count on the publication itself
+- [x] Durability tier and an auditable replica count on the publication itself
 - [ ] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac

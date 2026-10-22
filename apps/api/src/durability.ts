@@ -3,6 +3,9 @@ import { randomBytes as randomBytesNode } from "node:crypto";
 import { decodeBytes, encodeBytes, verifyShard, type ErasureShard } from "./erasure.ts";
 import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
+import type { DurabilityTier } from "../../../packages/core/src/index.ts";
+
+export type { DurabilityTier };
 
 /**
  * Durability is a claim about *holders*, not about a directory. This module
@@ -15,8 +18,6 @@ import { BlobStore, sha256Bytes } from "./storage.ts";
  */
 
 export const SHARD_CHUNK_BYTES = 4096;
-
-export type DurabilityTier = "ephemeral" | "pinned" | "durable";
 
 export interface HolderChallenge {
   storedAs: string;

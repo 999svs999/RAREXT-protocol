@@ -66,9 +66,10 @@ This is pre-alpha. The mechanics of durability — placement, challenges, and re
 exist, the holder has a wire protocol so it can be another machine
 ([RFC 0005](../rfcs/0005-durable-placements.md)), placements are signed,
 sequenced records that survive the node that made them, and challenges run on a
-schedule without a caller. What is missing is the rest of the network: payment and
-retention contracts between publisher and holder, and a rule for resolving
-conflicting placement histories. Until those exist, "the network has it"
+schedule without a caller, and a publication reports its durability tier and live,
+challenged replica count as a dated observation beside the signed bytes. What is
+missing is the rest of the network: payment and retention contracts between
+publisher and holder, and a rule for resolving conflicting placement histories. Until those exist, "the network has it"
 means "a set of machines this process can reach has it", which is better than one
 process and not yet a web4 network.
 

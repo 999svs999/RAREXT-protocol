@@ -166,6 +166,25 @@ and the current audits; `POST /v1/durability/challenge` runs the same pass on
 demand. Holders come from `RAREXT_HOLDERS` (`id=url`, comma-separated), which keeps
 the holder set configuration rather than protocol.
 
+### Duty of an observation
+
+A placement record says who *should* hold a shard. It says nothing about whether
+they still do, and it is signed at a moment that may be months old. So a reader
+that wants to know the current state gets a dated observation instead of the
+record: `durability` on the publication, computed from the registry's latest record
+plus the ledger's last challenge.
+
+- `unplaced` — no signed record names this blob.
+- `unverified` — a record exists, but no challenge has run since the process
+  started (the ledger was rebuilt but not yet exercised).
+- `ok` / `under-replicated` — live shards against the tier's required count.
+
+`live` counts answers inside the ledger window; `placementDigest` names the record
+the observation used, so the reader can verify the steward's signature and run the
+challenges again. The observation is not signed by the publication's author: it is
+a fact about the world after signing, and it carries `observedAt` so it cannot be
+mistaken for a promise.
+
 ## Tiers
 
 `required` is derived from the tier, not chosen per blob:
@@ -226,7 +245,9 @@ shard at or above `required` is visible in the report but still `ok`.
 
 Implemented and tested: erasure coding, the durability ledger, the holder HTTP
 server, the HTTP holder client, signed placement records with a file-backed
-registry, the `/v1/placements` API, the scheduled challenge pass with
+registry, the `/v1/placements` API, the publication-level durability observation
+(tier, required, live, status, and the digest of the record it used), the scheduled
+challenge pass with
 `GET /v1/durability` and `POST /v1/durability/challenge`, and a transport test that
 places across eight real HTTP holders, stops one, watches the audit degrade, repairs
 onto a reachable spare, and decodes the payload from the new placement. The schedule
