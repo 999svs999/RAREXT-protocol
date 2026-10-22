@@ -78,6 +78,8 @@ export interface DurabilityReport {
   tier: DurabilityTier;
   required: number;
   live: number;
+  /** Whether any shard has been challenged at least once. */
+  challenged: boolean;
   status: "ok" | "under-replicated";
   shards: {
     index: number;
@@ -277,7 +279,7 @@ export class DurabilityLedger {
   private readonly placements = new Map<string, Placement>();
   private readonly witnesses = new Map<string, Map<number, Witness>>();
   private readonly now: () => number;
-  private readonly windowMs: number;
+  readonly windowMs: number;
   private readonly random: (upper: number) => number;
 
   constructor(options: DurabilityOptions = {}) {
@@ -289,6 +291,11 @@ export class DurabilityLedger {
 
   get(blobHash: string): Placement | null {
     return this.placements.get(blobHash) ?? null;
+  }
+
+  /** Every placement this ledger can challenge. */
+  list(): Placement[] {
+    return [...this.placements.values()];
   }
 
   /** Writes the map into the ledger so a published record can be rebuilt. */
@@ -503,12 +510,16 @@ export class DurabilityLedger {
     });
 
     const live = shards.filter((shard) => shard.ok).length;
+    const challenged = shards.some(
+      (shard) => shard.lastSuccess !== null || shard.misses > 0,
+    );
 
     return {
       blobHash,
       tier: placement.tier,
       required: placement.required,
       live,
+      challenged,
       status: live >= placement.required ? "ok" : "under-replicated",
       shards,
     };

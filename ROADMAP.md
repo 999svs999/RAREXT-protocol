@@ -64,7 +64,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Repair from any k survivors, with read and write accounting
 - [x] A holder transport: another machine or agent joins the shard set
 - [x] Signed placement records published to the registry, so the map survives the node
-- [ ] Scheduled challenges, not only on demand
+- [x] Scheduled challenges, not only on demand
 - [ ] Durability tier and an auditable replica count on the publication itself
 - [ ] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))

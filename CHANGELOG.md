@@ -31,6 +31,12 @@ break a client or invalidate stored data.
   `GET /v1/placements/:blobHash`, and `GET /v1/placements/:blobHash/history` expose the
   chain; a file-backed registry verifies records and refuses forks. `RFC 0005`
   documents the protocol and its trust boundaries.
+- **Scheduled retention challenges.** `apps/api/src/durability-schedule.ts` challenges
+  every placed blob on an interval, records each run, reschedules only after the run
+  finishes, and shares an in-flight run between callers. The node enables it from
+  `RAREXT_HOLDERS` (`id=url,…`) and `RAREXT_CHALLENGE_INTERVAL_MS`; `GET /v1/durability`
+  exposes the schedule and audits, `POST /v1/durability/challenge` runs a pass on demand.
+  The ledger is rebuilt from persisted placement records on boot. 7 new tests.
 
 ## 0.1.0-alpha.3 — 2026-10-22
 

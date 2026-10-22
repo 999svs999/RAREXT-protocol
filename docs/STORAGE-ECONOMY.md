@@ -195,6 +195,21 @@ calls work across processes. The transport test runs eight holders over HTTP, st
 one, watches the audit go `under-replicated`, repairs onto a reachable spare, and
 decodes the payload from the new placement.
 
+**A schedule, not a button.** `apps/api/src/durability-schedule.ts` runs the challenge
+pass on an interval — six hours by default, `RAREXT_CHALLENGE_INTERVAL_MS` to change it —
+whenever the node starts with holders configured
+(`RAREXT_HOLDERS=holder-0=http://…,holder-1=https://…`). A run challenges every placed
+blob, records the audits, the under-replicated blobs, and any errors, then schedules the
+next run after it finishes; runs never overlap, and concurrent callers share one run.
+`GET /v1/durability` returns the schedule state and the current audits, and
+`POST /v1/durability/challenge` runs the same pass on demand.
+
+A shard lost between runs therefore shows up as `under-replicated` on the next run with
+nobody asking. Two limits are worth saying out loud: the schedule is per-process state and
+does not survive a restart, and it does not alert anyone yet — it records. What it does
+guarantee is that `live` in an audit is the result of a challenge this process actually
+ran, not a value copied from the placement record.
+
 **Signed placement records.** `apps/api/src/placements.ts` signs a placement with the
 steward's key, embeds the public key, and chains each repair as a new record
 (`sequence` + `previous` digest). `POST /v1/placements` appends one;

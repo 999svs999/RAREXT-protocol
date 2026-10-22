@@ -64,11 +64,11 @@ protocol does not depend on it, and neither should you.
 
 This is pre-alpha. The mechanics of durability — placement, challenges, and repair —
 exist, the holder has a wire protocol so it can be another machine
-([RFC 0005](../rfcs/0005-durable-placements.md)), and placements are signed,
-sequenced records that survive the node that made them. What is missing is the rest
-of the network: scheduled challenges, a replica count on the publication itself,
-payment and retention contracts between publisher and holder, and a rule for
-resolving conflicting placement histories. Until those exist, "the network has it"
+([RFC 0005](../rfcs/0005-durable-placements.md)), placements are signed,
+sequenced records that survive the node that made them, and challenges run on a
+schedule without a caller. What is missing is the rest of the network: payment and
+retention contracts between publisher and holder, and a rule for resolving
+conflicting placement histories. Until those exist, "the network has it"
 means "a set of machines this process can reach has it", which is better than one
 process and not yet a web4 network.
 

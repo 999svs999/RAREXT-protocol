@@ -150,6 +150,22 @@ one shard therefore reads roughly `1/k` of the payload per failed shard, not
 caller that wants an immutable historical snapshot should sign a record before
 repairing, or copy the placement first.
 
+### The schedule
+
+A challenge that only runs when a publisher remembers to call it is an audit of the
+publisher, not of the holder. `ChallengeScheduler` runs the pass on an interval
+(six hours by default), challenges every blob the ledger knows, records the run,
+and schedules the next one after the run finishes — so a slow run delays the next
+tick instead of overlapping it, and two callers asking for a pass at the same time
+share one.
+
+The schedule is per process. It does not survive a restart, and it does not alert;
+it records. On boot the node rebuilds the ledger from the placement registry, so a
+restart resumes the map but not the history. `GET /v1/durability` exposes the state
+and the current audits; `POST /v1/durability/challenge` runs the same pass on
+demand. Holders come from `RAREXT_HOLDERS` (`id=url`, comma-separated), which keeps
+the holder set configuration rather than protocol.
+
 ## Tiers
 
 `required` is derived from the tier, not chosen per blob:
@@ -187,6 +203,8 @@ shard at or above `required` is visible in the report but still `ok`.
   the supplied set, which gives deterministic assignment and no co-location, not
   geographic or administrative diversity.
 - No fork resolution between registries; no federation.
+- No automatic repair. A scheduled run records `under-replicated`; it does not spend
+  another operator's bandwidth rebuilding shards by itself.
 - No authentication of holders. A holder id is a label, not a verified identity.
 
 ## Open questions
@@ -201,13 +219,20 @@ shard at or above `required` is visible in the report but still `ok`.
    deposit, or both?
 5. When a registry sees a fork, should it keep both branches rather than refuse
    the second?
+6. Should a scheduled run repair what it finds, and if so who authorises the write
+   to a holder the steward did not choose?
 
 ## Implementation status
 
 Implemented and tested: erasure coding, the durability ledger, the holder HTTP
 server, the HTTP holder client, signed placement records with a file-backed
-registry, the `/v1/placements` API, and a transport test that places across eight
-real HTTP holders, stops one, watches the audit degrade, repairs onto a reachable
-spare, and decodes the payload from the new placement.
+registry, the `/v1/placements` API, the scheduled challenge pass with
+`GET /v1/durability` and `POST /v1/durability/challenge`, and a transport test that
+places across eight real HTTP holders, stops one, watches the audit degrade, repairs
+onto a reachable spare, and decodes the payload from the new placement. The schedule
+is covered by a fake-timer test that advances the clock and observes challenges fire
+with no caller, a lost-shard test that watches the next run report
+`under-replicated`, and a shared-run test that proves two callers cannot double the
+load.
 
 Not implemented: everything in "What this RFC does not do".

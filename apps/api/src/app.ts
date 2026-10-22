@@ -72,6 +72,8 @@ import { buildBundle, verifyBundle } from "./bundle.ts";
 import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
 import { VerifierModuleRegistry } from "./verifierModules.ts";
 import { PlacementRegistry, asSignedPlacement } from "./placements.ts";
+import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
+import { ChallengeScheduler } from "./durability-schedule.ts";
 import { verifyWorkerSignature } from "./worker.ts";
 import {
   ACTIONS,
@@ -119,6 +121,10 @@ export interface AppOptions {
   chains?: ChainRegistry;
   blobs?: BlobStore;
   placements?: PlacementRegistry;
+  durability?: DurabilityLedger;
+  holders?: DurabilityHolder[];
+  scheduler?: ChallengeScheduler;
+  challengeIntervalMs?: number;
   fetch?: typeof fetch;
 }
 
@@ -686,6 +692,21 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
   const placements =
     options.placements ??
     new PlacementRegistry(process.env.RAREXT_PLACEMENTS_DIR ?? ".data/placements");
+  const durability = options.durability ?? new DurabilityLedger();
+  const holders = options.holders ?? [];
+
+  for (const summary of placements.list()) {
+    const signed = placements.get(summary.blobHash);
+    if (signed) durability.adopt(signed.record.placement);
+  }
+
+  const scheduler =
+    options.scheduler ??
+    new ChallengeScheduler({
+      ledger: durability,
+      holders: () => holders,
+      intervalMs: options.challengeIntervalMs,
+    });
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
@@ -1382,6 +1403,8 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
           const result = placements.put(signed);
 
+          if (result.status === 201) durability.adopt(signed.record.placement);
+
           send(res, result.status, result.error
             ? { error: result.error }
             : {
@@ -1418,6 +1441,21 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         }
 
         send(res, 200, latest);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/durability") {
+        send(res, 200, {
+          schedule: scheduler.state,
+          audits: durability
+            .list()
+            .map((placement) => durability.audit(placement.blobHash)),
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/durability/challenge") {
+        send(res, 200, await scheduler.runNow());
         return;
       }
 
