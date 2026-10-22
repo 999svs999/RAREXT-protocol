@@ -96,6 +96,15 @@ erasure-coded baseline on the same corpus.
 **Acceptance:** the harness runs in CI on a 100 MB corpus and publishes a table.
 **Falsifies:** any claim that cannot fill in the table.
 
+**Implemented:** [`bench/storage`](../bench/storage/README.md). The deterministic,
+hash-locked default corpus is 99.96 MiB across video, photos, audio, text, source,
+and a point cloud; runners cover x265, AV1, zstd, and the shipped 4+2 erasure path.
+A full run takes about 66 seconds on the reference laptop. The table is
+[`RESULTS.md`](../bench/storage/RESULTS.md). It records exactness by comparing
+decoded bytes to the committed reference digest — never by asking the codec — and
+requires a learned codec to count its decoder in the stored cost. Classical decoders
+are the system's and are not yet counted; that is stated with the table.
+
 ### 2. Erasure-coded durability at scale (near)
 
 Place shards across independent holders, challenge retention on a schedule, publish

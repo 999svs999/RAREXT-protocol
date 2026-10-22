@@ -1,0 +1,197 @@
+{
+  "generatedAt": "2026-10-22T16:48:18.799Z",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "darwin 24.6.0",
+    "cpu": "Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz",
+    "ffmpeg": "ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "zstd": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***"
+  },
+  "corpus": {
+    "digest": "c769fecf9daccee32bff693772feae3edb2a908f3d7445578ecaff8bce476efe",
+    "totalBytes": 104817195,
+    "slices": [
+      {
+        "path": "audio.wav",
+        "modality": "audio",
+        "bytes": 5760044,
+        "digest": "b289ddc7de5c3c69c7ece19d6b0ad29c7fe2c90f3477822b010edc00012bbdaa"
+      },
+      {
+        "path": "photos/photo-1.ppm",
+        "modality": "photo",
+        "bytes": 9437201,
+        "digest": "827cf8b4e95bcc6fcf3be273d2ea46c3626b36f67191fb537ca34b35a9f556cd"
+      },
+      {
+        "path": "photos/photo-2.ppm",
+        "modality": "photo",
+        "bytes": 9437201,
+        "digest": "1222cf00c915bd71e0fd87687e994c024165bb73a92ff62d18a54de1b623ae99"
+      },
+      {
+        "path": "photos/photo-3.ppm",
+        "modality": "photo",
+        "bytes": 9437201,
+        "digest": "f822c06e3c3cc1037ed9bb8c699104ae715b347b916d0b1adab4a3447fc1365b"
+      },
+      {
+        "path": "photos/photo-4.ppm",
+        "modality": "photo",
+        "bytes": 9437201,
+        "digest": "d6c80bc8720bc9a4671c82afb110a9898dcc2486be28b41931ba469b81ef25a0"
+      },
+      {
+        "path": "scan.ply",
+        "modality": "3d",
+        "bytes": 6392165,
+        "digest": "63d9663ae74b9f2e91fc8a9d1b5bfc96c11bb36385bcb3d4ebaecfe5fa409bdd"
+      },
+      {
+        "path": "source.js",
+        "modality": "code",
+        "bytes": 10485849,
+        "digest": "51284da2e2467316cf94d639ce3ed97faa84eaba9d65d9701ce58f06e06ea0d4"
+      },
+      {
+        "path": "text.txt",
+        "modality": "text",
+        "bytes": 9437203,
+        "digest": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240"
+      },
+      {
+        "path": "video.y4m",
+        "modality": "video",
+        "bytes": 34993130,
+        "digest": "bf7b5e187fbd4973efb614be07aa4c84669dfaa0a67d7ad71c2c158a8d0fa35a"
+      }
+    ]
+  },
+  "budget": {
+    "maxMinutes": 15,
+    "elapsedMs": 66002.528597,
+    "passed": true
+  },
+  "rows": [
+    {
+      "method": "x265 lossless",
+      "kind": "classical",
+      "slice": "video",
+      "inputBytes": 34992000,
+      "storedBytes": 26186916,
+      "decoderBytes": null,
+      "totalBytes": 26186916,
+      "ratio": 1.3362398229711356,
+      "classification": "exact",
+      "exact": true,
+      "errorRatio": 0,
+      "psnr": null,
+      "verifyMs": 67.84396399999991,
+      "decodeMs": 412.93079899999975,
+      "encodeMs": 1348.2715320000002,
+      "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "reconstructedDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "notes": "lossless libx265; system ffmpeg decoder not counted"
+    },
+    {
+      "method": "x265 CRF 28",
+      "kind": "classical",
+      "slice": "video",
+      "inputBytes": 34992000,
+      "storedBytes": 1686219,
+      "decoderBytes": null,
+      "totalBytes": 1686219,
+      "ratio": 20.75175288619094,
+      "classification": "bounded",
+      "exact": false,
+      "errorRatio": 0.956921582075903,
+      "psnr": 28.9083992280508,
+      "verifyMs": 4.427482999999938,
+      "decodeMs": 116.52484200000026,
+      "encodeMs": 539.8232389999998,
+      "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "reconstructedDigest": "30bc8ce24101cf8c4538f716fd2858ce3743d3166066f38b3cd543f68aca8c5d",
+      "notes": "lossy libx265; system ffmpeg decoder not counted; PSNR 28.91 dB; 95.69% bytes differ"
+    },
+    {
+      "method": "AV1 lossless",
+      "kind": "classical",
+      "slice": "video",
+      "inputBytes": 34992000,
+      "storedBytes": 25446089,
+      "decoderBytes": null,
+      "totalBytes": 25446089,
+      "ratio": 1.3751425612006623,
+      "classification": "exact",
+      "exact": true,
+      "errorRatio": 0,
+      "psnr": null,
+      "verifyMs": 60.121320000000196,
+      "decodeMs": 1374.048162,
+      "encodeMs": 2708.2766720000004,
+      "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "reconstructedDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "notes": "lossless libsvtav1; system ffmpeg decoder not counted"
+    },
+    {
+      "method": "AV1 CRF 35",
+      "kind": "classical",
+      "slice": "video",
+      "inputBytes": 34992000,
+      "storedBytes": 3414713,
+      "decoderBytes": null,
+      "totalBytes": 3414713,
+      "ratio": 10.24742050063944,
+      "classification": "bounded",
+      "exact": false,
+      "errorRatio": 0.9410387802926383,
+      "psnr": 31.17648370757277,
+      "verifyMs": 8.738319000000047,
+      "decodeMs": 321.16372500000034,
+      "encodeMs": 588.4741199999999,
+      "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
+      "reconstructedDigest": "594ce9960295ee9ad5799d8ea32cdb674378ab698110c396138443054f9a0961",
+      "notes": "lossy libsvtav1; system ffmpeg decoder not counted; PSNR 31.18 dB; 94.10% bytes differ"
+    },
+    {
+      "method": "zstd -19",
+      "kind": "classical",
+      "slice": "all files",
+      "inputBytes": 104817195,
+      "storedBytes": 71370142,
+      "decoderBytes": null,
+      "totalBytes": 71370142,
+      "ratio": 1.4686420968589358,
+      "classification": "exact",
+      "exact": true,
+      "errorRatio": 0,
+      "psnr": null,
+      "verifyMs": 170.5557409999965,
+      "decodeMs": 692.5607910000035,
+      "encodeMs": 40414.208985,
+      "referenceDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
+      "reconstructedDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
+      "notes": "per-file level 19; system zstd decoder not counted"
+    },
+    {
+      "method": "erasure 4+2",
+      "kind": "classical",
+      "slice": "all files",
+      "inputBytes": 104817195,
+      "storedBytes": 157227420,
+      "decoderBytes": null,
+      "totalBytes": 157227420,
+      "ratio": 0.666659765834738,
+      "classification": "exact",
+      "exact": true,
+      "errorRatio": 0,
+      "psnr": null,
+      "verifyMs": 372.35233299999527,
+      "decodeMs": 3958.0516560000033,
+      "encodeMs": 10962.344298999997,
+      "referenceDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
+      "reconstructedDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
+      "notes": "4 data + 2 parity; no compression, 1.50x durability overhead; system decoder not counted"
+    }
+  ]
+}

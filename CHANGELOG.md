@@ -43,6 +43,14 @@ break a client or invalidate stored data.
   `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
   record used. It is computed on read, not signed by the author, and reports the weakest
   tier across a manifest. 7 new tests.
+- **Storage benchmark harness.** `npm run bench:storage` generates a deterministic,
+  hash-locked 99.96 MiB corpus (video, photos, audio, text, source, 3D), runs x265,
+  AV1, zstd, and the shipped 4+2 erasure path, and writes a Markdown table with
+  stored bytes, exactness against the reference digest, PSNR/byte error for bounded
+  rows, verify and decode time. A learned runner must declare its decoder size, which
+  is added to the storage cost; a declared-lossless mismatch is downgraded to
+  `bounded`. Full run: about 66 s on the reference laptop, under a 15-minute enforced
+  budget. See `bench/storage/README.md` and `RESULTS.md`.
 - **Trust model RFC.** `rfcs/0007-trust-model.md` states what each claim proves, what the
   registry, an app operator, an independent verifier, a holder, and an anchor can lie
   about, the composition rules a reader should follow, and what Trac anchoring would and

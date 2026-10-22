@@ -26,3 +26,5 @@ venv/
 release/
 .mirror/
 .types/
+
+bench/storage/.corpus/

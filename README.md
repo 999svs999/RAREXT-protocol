@@ -36,7 +36,7 @@ welcome.
 - **Roadmap** — [ROADMAP.md](ROADMAP.md). Items move by doing them.
 - **Design discussions** — open an issue, or write an RFC in [`rfcs/`](rfcs/).
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
-- **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim.
+- **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, and the [storage benchmark](bench/storage/README.md) that gates it.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
 
 You do not need permission to fork, run a node, or publish a verifier. If you

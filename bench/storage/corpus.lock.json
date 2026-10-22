@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "slices": [
+    {
+      "path": "audio.wav",
+      "bytes": 5760044,
+      "sha256": "b289ddc7de5c3c69c7ece19d6b0ad29c7fe2c90f3477822b010edc00012bbdaa"
+    },
+    {
+      "path": "photos/photo-1.ppm",
+      "bytes": 9437201,
+      "sha256": "827cf8b4e95bcc6fcf3be273d2ea46c3626b36f67191fb537ca34b35a9f556cd"
+    },
+    {
+      "path": "photos/photo-2.ppm",
+      "bytes": 9437201,
+      "sha256": "1222cf00c915bd71e0fd87687e994c024165bb73a92ff62d18a54de1b623ae99"
+    },
+    {
+      "path": "photos/photo-3.ppm",
+      "bytes": 9437201,
+      "sha256": "f822c06e3c3cc1037ed9bb8c699104ae715b347b916d0b1adab4a3447fc1365b"
+    },
+    {
+      "path": "photos/photo-4.ppm",
+      "bytes": 9437201,
+      "sha256": "d6c80bc8720bc9a4671c82afb110a9898dcc2486be28b41931ba469b81ef25a0"
+    },
+    {
+      "path": "scan.ply",
+      "bytes": 6392165,
+      "sha256": "63d9663ae74b9f2e91fc8a9d1b5bfc96c11bb36385bcb3d4ebaecfe5fa409bdd"
+    },
+    {
+      "path": "source.js",
+      "bytes": 10485849,
+      "sha256": "51284da2e2467316cf94d639ce3ed97faa84eaba9d65d9701ce58f06e06ea0d4"
+    },
+    {
+      "path": "text.txt",
+      "bytes": 9437203,
+      "sha256": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240"
+    },
+    {
+      "path": "video.y4m",
+      "bytes": 34993130,
+      "sha256": "bf7b5e187fbd4973efb614be07aa4c84669dfaa0a67d7ad71c2c158a8d0fa35a"
+    }
+  ],
+  "totalBytes": 104817195
+}
