@@ -3,9 +3,9 @@
 The README says what the project is. This page says which document answers your
 question, and in what order to read them.
 
-The open questions are not hidden in a roadmap footnote: they live in the
-[storage frontier](STORAGE-FRONTIER.md). Read that before treating any storage claim
-here as settled.
+The open questions are not hidden in a roadmap footnote: they live in the storage
+frontier, linked once below. Read that before treating any storage claim here as
+settled.
 
 ## Suggested reading order
 
@@ -57,4 +57,4 @@ Those are names, not links, so every document is linked once in the reference be
   [`bench/storage/NEGATIVE-RESULTS.md`](../bench/storage/NEGATIVE-RESULTS.md), and a
   result that is not in the benchmark has no storage claim.
 
-Where the open questions live: [the storage frontier](STORAGE-FRONTIER.md).
+Where the open questions live: the storage frontier, in the reference above.
