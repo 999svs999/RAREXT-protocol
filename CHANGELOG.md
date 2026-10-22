@@ -11,7 +11,33 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The mirror verifier hashed pairs by concatenation.** `apps/web/src/verify.ts`
+  folded `left + right` instead of hashing the pair, so any publication with more
+  than one leaf produced a root that did not match the registry. It now runs the
+  same async SHA-256 fold as the canonical `merkle.ts`, on every tree shape.
+- **The chain adapter's read-back confirmation silently degraded to `skipped`** for
+  blocks with more than one root, because its local `merkleRoot` used the same
+  broken fold. The duplicate was deleted and the adapter now imports the shared
+  implementation.
+- **Capabilities and revocations were verified with ECDSA only.** Both routes now
+  use the suite-aware `verifyPayload`, so ML-DSA authors can grant capabilities and
+  revoke publications.
+
+### Added
+
+- **Erasure-coded storage.** Systematic Reed–Solomon over GF(256) (`k`-of-`n`), with
+  shard digests that bind index, parameters, original length, and payload digest.
+  Shards are ordinary content-addressed blobs; any `k` rebuild the file and the
+  reconstruction is checked against the committed digest. 14 tests.
+- **`docs/PRIOR-ART.md`** — what exists (Arweave, Filecoin, Ordinals, EIP-4844,
+  Celestia, IPFS, Automerge, neural representations), what none of it does, and the
+  physics we do not claim.
+- **`docs/STORAGE-FRONTIER.md`** — the representation research agenda: the three
+  legitimate trades, the exactness problem, and falsifiable acceptance criteria.
+- **A public landing page** in `site/`, served by GitHub Pages, and a
+  contributor path in the README.
 
 ## 0.1.0-alpha.2 — 2026-10-22
 

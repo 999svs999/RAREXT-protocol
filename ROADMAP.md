@@ -58,6 +58,9 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 
 ## Later — v2 Anchored (weeks 9–12)
 
+- [x] Erasure-coded blobs: any k of n shards reconstruct, digests bind identity
+- [ ] Durability tiers and an auditable replica count per publication
+- [ ] Retention challenges on a schedule, not only at upload
 - [ ] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac
@@ -72,6 +75,19 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [ ] Migration plan for game-native state
 
 Graduation to v3 requires sustained blockspace demand that anchoring cannot serve, plus a published cost and security analysis. There is no target date.
+
+## Research track — representation (long horizon)
+
+A separate, slower track with its own standard of proof. It does not gate v2 and it
+does not ship behind a marketing claim. The acceptance criteria and the limits are in
+[`docs/STORAGE-FRONTIER.md`](docs/STORAGE-FRONTIER.md).
+
+- [ ] Benchmark harness over a fixed public corpus (photos, video, audio, text, code, 3D)
+- [ ] RFC: representation kinds — `exact`, `bounded`, `generative` — with a verifier contract
+- [ ] One learned codec and one implicit representation, measured with the decoder counted
+- [ ] Data availability sampling for media, with a stated soundness bound
+- [ ] Repair-bandwidth measurement for erasure-coded blobs at 1 GB
+- [ ] A publishable negative result when a direction fails
 
 ## Explicitly not planned
 

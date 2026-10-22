@@ -20,6 +20,22 @@ The protocol is open and the reference implementation is public. Anyone can run 
 registry and anchor to the same chain; the chain is a notary, not the database. See the
 [litepaper](docs/LITEPAPER.md) and the [branding rules](docs/BRANDING.md).
 
+## Build with us
+
+RAREXT is open source and meant to be built by more than its maintainers. Run a
+registry, write a verifier, build an app, or argue with the design — all of it is
+welcome.
+
+- **Contributing** — [CONTRIBUTING.md](CONTRIBUTING.md): setup, tests, commit rules, sign-off.
+- **Good first issues** — [open tasks labelled `good first issue`](https://github.com/999svs999/RAREXT-protocol/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- **Roadmap** — [ROADMAP.md](ROADMAP.md). Items move by doing them.
+- **Design discussions** — open an issue, or write an RFC in [`rfcs/`](rfcs/).
+- **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
+- **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim.
+
+You do not need permission to fork, run a node, or publish a verifier. If you
+disagree with a decision, the RFC folder is where the argument happens.
+
 **Status: pre-alpha.** The artifact protocol, logic simulator and scorer, agent API, web workbench, registry feed, persistent store, signed identities, Merkle anchoring, source/network adapters, semantic layer, and MCP server work. Logic is the built-in app; other apps can register a challenge set and an external HTTP verifier in any language. There is no bridge. Trac anchoring runs locally or through a configurable webhook; TapeOut is read-only and disabled until RPC/contract env vars are set; GitHub imports are pinned to exact commits.
 
 **Apps can launch tokens; the protocol does not sell them.** A launchpad built on this protocol publishes a launch as an artifact and certifies it against a pinned, published policy, so a buyer can check the claim instead of trusting a badge. See [fair launches](docs/FAIR-LAUNCH.md) and the [`examples/launchpad`](examples/launchpad) app.
@@ -32,7 +48,7 @@ registry and anchor to the same chain; the chain is a notary, not the database. 
 - Existing ledgers provide ordering and ownership. RAREXT supplies the queryable provenance graph and the discovery/distribution layer around it.
 - TapeOut supplies the hardware primitive; Trac Network supplies peer-to-peer, agent-first coordination. RAREXT connects them without becoming a chain, a bridge, or a custodian.
 
-Read the [architecture](docs/ARCHITECTURE.md).
+Read the [architecture](docs/ARCHITECTURE.md), and the [prior art](docs/PRIOR-ART.md) that says plainly what this is and is not.
 
 ## Quickstart
 
