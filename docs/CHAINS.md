@@ -82,7 +82,7 @@ What a real network adds, and what this does not have:
 - **an incentive** — who pays to write a block, and why.
 
 The gate for moving to a real chain is in
-[RFC 0004](rfcs/0004-storage-economy.md): volume to settle, a written and narrow
+[RFC 0004](../rfcs/0004-storage-economy.md): volume to settle, a written and narrow
 job for the chain, and a funded validator set. Building a chain before there is
 volume is vanity infrastructure, and the interface above means we can defer it
 without deferring the protocol.

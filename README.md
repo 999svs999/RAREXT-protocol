@@ -16,6 +16,11 @@ Two brands, one company:
   launchpad, the store, and the decentralized web apps built on the protocol. This is
   where the public meets the infrastructure.
 
+The network these parts add up to we call **web4**: verification as the primitive,
+storage and compute contributed by participants, identity as a keypair, and no
+protocol token. The [definition](docs/WEB4.md) is short, and it says what is still
+missing.
+
 The protocol is open and the reference implementation is public. Anyone can run their own
 registry and anchor to the same chain; the chain is a notary, not the database. See the
 [litepaper](docs/LITEPAPER.md) and the [branding rules](docs/BRANDING.md).
@@ -32,6 +37,7 @@ welcome.
 - **Design discussions** — open an issue, or write an RFC in [`rfcs/`](rfcs/).
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim.
+- **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
 disagree with a decision, the RFC folder is where the argument happens.
