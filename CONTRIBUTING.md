@@ -48,15 +48,31 @@ By signing off you certify that you wrote the change or have the right to submit
 The workspace shares one version. `npm run version:all` writes it into every package
 so the published packages can never drift from each other.
 
-Releases are cut from `main` after CI is green:
+Releases are cut from `main` when the local check is green. There is no CI service and
+no registry dependency:
 
-1. `npm run version:all 0.2.0-alpha.1`
-2. Commit as `chore(release): 0.2.0-alpha.1`.
-3. `git tag -s v0.2.0-alpha.1 -m "0.2.0-alpha.1"` and push the tag.
-4. `npm publish` for each publishable package, in dependency order: `@rarext/core`,
-   then `@rarext/agent-sdk`, then `@rarext/mcp`. The publish workflow does this with
-   npm provenance.
-5. Update [`CHANGELOG.md`](CHANGELOG.md) with the release notes and tag the commit.
+```bash
+npm run check
+npm run test:examples
+npm run verify:packages
+npm run test:takedown
+```
+
+1. `npm run version:all 0.2.0-alpha.1` — writes the version into every package and
+   rewrites the `@rarext/*` dependency ranges. `npm run version:all -- --check` fails if
+   they drift.
+2. `npm run pack:all` — builds `release/*.tgz` in dependency order.
+3. Commit as `chore(release): 0.2.0-alpha.1`, tag `v0.2.0-alpha.1`, push both.
+4. Create the GitHub release, attach the four tarballs, and mark it pre-release.
+5. Update [`CHANGELOG.md`](CHANGELOG.md) with the release notes.
+
+Consumers install from the release, by URL:
+
+```bash
+npm install https://github.com/999svs999/RAREXT-protocol/releases/download/v0.2.0-alpha.1/rarext-core-0.2.0-alpha.1.tgz
+```
+
+Publishing to a public registry is optional. The protocol never depends on it.
 
 The registry protocol version and the package version are different things. A change to
 the payload format, the attestation, or the semantics binding is a **protocol** change:

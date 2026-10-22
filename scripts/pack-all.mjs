@@ -7,12 +7,13 @@
 // before the SDK and the MCP server that depend on it.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 const out = join(root, "release");
 
+rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 for (const dir of [

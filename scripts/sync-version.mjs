@@ -56,6 +56,20 @@ if (!requested) {
 }
 
 if (requested === "--check") {
+  const drifted = packages.filter((entry) => {
+    const ranges = [
+      ...Object.entries(entry.meta.dependencies ?? {}),
+      ...Object.entries(entry.meta.devDependencies ?? {}),
+      ...Object.entries(entry.meta.peerDependencies ?? {}),
+    ];
+    return ranges.some(([name, range]) => name.startsWith("@rarext/") && range !== current);
+  });
+
+  if (drifted.length > 0) {
+    console.error(`internal dependency ranges drifted in: ${drifted.map((entry) => entry.meta.name).join(", ")}`);
+    process.exit(1);
+  }
+
   console.log(current);
   process.exit(0);
 }
@@ -67,11 +81,17 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(requested)) {
 
 for (const entry of packages) {
   const meta = JSON.parse(readFileSync(entry.path, "utf8"));
-  if (meta.version === requested) continue;
-
+  const before = JSON.stringify(meta);
   meta.version = requested;
-  const body = `${JSON.stringify(meta, null, 2)}\n`;
-  writeFileSync(entry.path, body);
+
+  for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
+    for (const [name, range] of Object.entries(meta[field] ?? {})) {
+      if (name.startsWith("@rarext/")) meta[field][name] = requested;
+    }
+  }
+
+  if (JSON.stringify(meta) === before) continue;
+  writeFileSync(entry.path, `${JSON.stringify(meta, null, 2)}\n`);
   console.log(`${meta.name} -> ${requested}`);
 }
 
