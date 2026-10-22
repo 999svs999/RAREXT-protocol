@@ -1,5 +1,29 @@
 export type Bit = 0 | 1;
 
+/**
+ * The WebCrypto JSON Web Key shape, declared here so the protocol types do not
+ * depend on a DOM library.
+ */
+export interface JsonWebKey {
+  [key: string]: unknown;
+  kty?: string;
+  crv?: string;
+  x?: string;
+  y?: string;
+  n?: string;
+  e?: string;
+  d?: string;
+  dp?: string;
+  dq?: string;
+  qi?: string;
+  p?: string;
+  q?: string;
+  ext?: boolean;
+  key_ops?: string[];
+  alg?: string;
+  use?: string;
+}
+
 export type ComponentType = "INPUT" | "OUTPUT" | "NAND" | "LATCH";
 
 export interface Component {
@@ -34,7 +58,7 @@ export interface Challenge {
 
 export type ClaimKind = "satisfies" | "attests" | "produces" | "derives";
 
-export type ProofKind = "recomputable" | "committed" | "attested";
+export type ProofKind = "recomputable" | "committed" | "attested" | "salted";
 
 export interface ClaimScope {
   [key: string]: string;
@@ -153,10 +177,28 @@ export interface Attestation {
   claimKind: ClaimKind;
   scope: ClaimScope | null;
   verifierHash: string;
+  proofKind: ProofKind;
   createdAt: string;
 }
 
 export type StorageTier = "public" | "sealed";
+
+/**
+ * Who can see a publication.
+ *
+ * - `public`   anyone, and it is in the feed
+ * - `unlisted` it exists and is addressable, but only to a holder of a capability
+ * - `sealed`   the registry stores a commitment and a salted proof, never the body
+ */
+export type Visibility = "public" | "unlisted" | "sealed";
+
+export interface CapabilityGrant {
+  artifactId: string;
+  issuedAt: string;
+  expiresAt: string | null;
+  nonce: string;
+  grantee: string | null;
+}
 
 export interface BlobRecord {
   hash: string;
@@ -295,6 +337,8 @@ export interface Publication {
   artifact: Artifact;
   taskId: string;
   circuit?: Circuit;
+  visibility: Visibility;
+  artifactCommitment: string | null;
   parentId: string | null;
   source: PublicationSource | null;
   createdAt: string;
@@ -386,6 +430,9 @@ export interface PublicationPayload {
   taskId: string;
   circuit?: Circuit;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null } | null;
+  visibility?: Visibility;
+  artifactCommitment?: string | null;
+  attestation?: Attestation;
   parentId: string | null;
   source?: PublicationSource | null;
   createdAt: string;

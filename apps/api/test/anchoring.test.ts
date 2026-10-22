@@ -30,6 +30,8 @@ function publication(overrides: Partial<Publication> = {}): Publication {
     verified: true,
     signature: "c2lnbmF0dXJl",
     nonce: "nonce-1",
+    visibility: "public",
+    artifactCommitment: null,
     attestation: {
       id: "att-1",
       verifier: "fabric-v0",
@@ -47,6 +49,7 @@ function publication(overrides: Partial<Publication> = {}): Publication {
       claimKind: "satisfies",
       scope: null,
       verifierHash: "verifier-hash",
+      proofKind: "recomputable",
       createdAt: "2026-01-01T00:00:00.000Z",
     },
     ...overrides,

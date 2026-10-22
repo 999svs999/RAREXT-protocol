@@ -128,6 +128,7 @@ test("a claim binds subject, meaning, and proof", () => {
     claimKind: "satisfies",
     scope: null,
     verifierHash: "verifier-hash",
+    proofKind: "recomputable",
     createdAt: "2026-01-01T00:00:00.000Z",
   };
 

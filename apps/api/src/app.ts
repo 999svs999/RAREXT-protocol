@@ -31,7 +31,11 @@ import type {
   PublicationSource,
   Semantics,
   SourceQuery,
+  SourceResolution,
+  Task,
   Values,
+  VerificationOutput,
+  Visibility,
 } from "../../../packages/core/src/index.ts";
 
 import { AdapterRegistry, createDefaultRegistry } from "./adapters/registry.ts";
@@ -58,6 +62,7 @@ import {
   verifyManifestInclusion,
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
+import { verifyCapability } from "./capabilities.ts";
 import type { StorageInclusionProof } from "../../../packages/core/src/index.ts";
 import {
   createVerifierRegistry,
@@ -202,6 +207,56 @@ function asArtifact(value: unknown): Artifact {
     mediaType: record.mediaType,
     body: record.body,
   };
+}
+
+function asAttestation(value: unknown): Attestation | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Partial<Attestation>;
+
+  if (
+    typeof record.circuitHash !== "string" ||
+    typeof record.traceHash !== "string" ||
+    typeof record.correct !== "boolean"
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: typeof record.id === "string" ? record.id : randomUUID(),
+    verifier: typeof record.verifier === "string" ? record.verifier : "author",
+    app: typeof record.app === "string" ? record.app : undefined,
+    challengeId:
+      typeof record.challengeId === "string" ? record.challengeId : undefined,
+    taskId: typeof record.taskId === "string" ? record.taskId : "unknown",
+    circuitHash: record.circuitHash,
+    traceHash: record.traceHash,
+    correct: record.correct,
+    score: typeof record.score === "number" ? record.score : 0,
+    gateCount: typeof record.gateCount === "number" ? record.gateCount : 0,
+    semanticsId:
+      typeof record.semanticsId === "string" ? record.semanticsId : "unknown",
+    semanticsVersion:
+      typeof record.semanticsVersion === "number" ? record.semanticsVersion : 1,
+    semanticsHash:
+      typeof record.semanticsHash === "string" ? record.semanticsHash : "",
+    claimKind: record.claimKind ?? "satisfies",
+    scope: record.scope ?? null,
+    verifierHash:
+      typeof record.verifierHash === "string" ? record.verifierHash : "",
+    proofKind: record.proofKind === "salted" ? "salted" : "recomputable",
+    createdAt:
+      typeof record.createdAt === "string"
+        ? record.createdAt
+        : new Date().toISOString(),
+  };
+}
+
+function asVisibility(value: unknown): Visibility {
+  if (value === "unlisted" || value === "sealed") return value;
+  return "public";
 }
 
 function asClaim(value: unknown): { kind?: ClaimKind; scope?: ClaimScope | null } | undefined {
@@ -383,11 +438,18 @@ function asPayload(value: Record<string, unknown>): PublicationPayload {
     taskId: challengeId,
     circuit:
       circuit ??
-      (artifact.app === "logic" && artifact.kind === "logic.netlist"
+      (artifact.app === "logic" &&
+      artifact.kind === "logic.netlist" &&
+      typeof artifact.body === "object" &&
+      artifact.body !== null
         ? asCircuit(artifact.body)
         : undefined),
     parentId: optionalId(value.parentId),
-    claim: asClaim(value.claim),
+    claim: asClaim(value.claim) ?? null,
+    visibility: asVisibility(value.visibility),
+    artifactCommitment:
+      typeof value.artifactCommitment === "string" ? value.artifactCommitment : null,
+    attestation: asAttestation(value.attestation),
     source:
       value.source === undefined || value.source === null
         ? null
@@ -564,6 +626,9 @@ interface PublishInput {
   signature: string | null;
   nonce: string | null;
   claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
+  visibility?: Visibility;
+  artifactCommitment?: string | null;
+  attestation?: Attestation;
 }
 
 type PublishResult =
@@ -612,14 +677,32 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
     let attestation: Attestation;
 
-    try {
-      attestation = await verifiers.verify(input.artifact, challenge, {
-        claimKind: input.claim?.kind,
-        scope: input.claim?.scope ?? null,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "verification failed";
-      return { status: 422, body: { error: message } };
+    if (input.visibility === "sealed") {
+      // The registry never sees the body, so it cannot run the verifier. The
+      // author attests to it instead, and the proof is salted so it cannot be
+      // brute-forced or checked by a third party. The claim is weaker on
+      // purpose, and the semantics record says so.
+      if (!input.attestation) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "a sealed publication must carry the author's own attestation, because the registry cannot verify what it cannot read",
+          },
+        };
+      }
+
+      attestation = input.attestation;
+    } else {
+      try {
+        attestation = await verifiers.verify(input.artifact, challenge, {
+          claimKind: input.claim?.kind,
+          scope: input.claim?.scope ?? null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "verification failed";
+        return { status: 422, body: { error: message } };
+      }
     }
 
     if (!attestation.correct) {
@@ -637,9 +720,14 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       body: input.body,
       app: input.app,
       challengeId: challenge.id,
-      artifact: input.artifact,
+      artifact:
+        input.visibility === "sealed"
+          ? { ...input.artifact, body: null }
+          : input.artifact,
       taskId: challenge.id,
       circuit: input.circuit,
+      visibility: input.visibility ?? "public",
+      artifactCommitment: input.artifactCommitment ?? null,
       parentId: input.parentId,
       source: input.source,
       createdAt: input.createdAt,
@@ -1157,6 +1245,12 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             signature: body.signature,
             nonce: payload.nonce,
             claim: asClaim(body.claim) ?? asClaim(payload.claim),
+            visibility: asVisibility(payload.visibility),
+            artifactCommitment:
+              typeof payload.artifactCommitment === "string"
+                ? payload.artifactCommitment
+                : null,
+            attestation: asAttestation(payload.attestation),
           });
 
           send(res, result.status, result.body);
@@ -1219,6 +1313,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           signature: null,
           nonce: null,
           claim: asClaim(body.claim),
+          visibility: asVisibility(body.visibility),
+          artifactCommitment:
+            typeof body.artifactCommitment === "string"
+              ? body.artifactCommitment
+              : null,
         });
 
         send(res, result.status, result.body);
@@ -1233,6 +1332,29 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         if (!publication) {
           send(res, 404, { error: "publication not found" });
           return;
+        }
+
+        if (publication.visibility !== "public") {
+          const capability = url.searchParams.get("capability");
+          const identity = publication.authorKey
+            ? store.getIdentityByKey(publication.authorKey)
+            : null;
+
+          if (!capability || !identity) {
+            send(res, 404, { error: "publication not found" });
+            return;
+          }
+
+          const check = verifyCapability(
+            identity.publicKey,
+            capability,
+            publication.id,
+          );
+
+          if (!check.ok) {
+            send(res, 403, { error: check.reason });
+            return;
+          }
         }
 
         send(res, 200, publication);

@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
+import type { JsonWebKey } from "../../../packages/core/src/index.ts";
 
 type NodeJwk = import("node:crypto").JsonWebKey;
 

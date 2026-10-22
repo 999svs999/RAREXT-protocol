@@ -19,6 +19,7 @@ export type {
   Claim,
   ClaimKind,
   ClaimScope,
+  CapabilityGrant,
   Component,
   ComponentType,
   DesignScore,
@@ -26,6 +27,7 @@ export type {
   IdentityLink,
   IdentityLinkPayload,
   InputValues,
+  JsonWebKey,
   LeaderboardEntry,
   Profile,
   ProofKind,
@@ -47,6 +49,7 @@ export type {
   TaskCase,
   Values,
   VerificationOutput,
+  Visibility,
 } from "./types.ts";
 
 export { canonicalize } from "./canonical.ts";

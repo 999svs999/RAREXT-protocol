@@ -74,6 +74,8 @@ export class RarextStore {
       verified: publication.verified ?? false,
       signature: publication.signature ?? null,
       nonce: publication.nonce ?? null,
+      visibility: publication.visibility ?? "public",
+      artifactCommitment: publication.artifactCommitment ?? null,
       source: publication.source ?? null,
       attestedAt: publication.attestedAt ?? publication.attestation.createdAt,
     };
@@ -126,6 +128,7 @@ export class RarextStore {
     return this.order
       .map((id) => this.publications.get(id))
       .filter((publication): publication is Publication => publication !== undefined)
+      .filter((publication) => publication.visibility === "public")
       .filter((publication) => !query.taskId || publication.taskId === query.taskId)
       .filter((publication) => !query.author || publication.author === query.author)
       .filter(
@@ -139,6 +142,7 @@ export class RarextStore {
     const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
     const offset = Math.max(query.offset ?? 0, 0);
     const builds = this.allSummaries()
+      .filter((build) => build.visibility === "public")
       .filter((build) => !query.taskId || build.taskId === query.taskId)
       .filter(
         (build) => !query.challengeId || build.challengeId === query.challengeId,

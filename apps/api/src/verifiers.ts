@@ -98,6 +98,7 @@ function logicVerifier(semantics: SemanticsRegistry | null): AppVerifier {
         semanticsHash: bound ? hashValue(bound) : "",
         claimKind: bound?.claimKind ?? "satisfies",
         scope: null,
+        proofKind: "recomputable",
         verifierHash: logicVerifierHash(),
       });
 
@@ -203,6 +204,7 @@ function externalVerifier(
         semanticsHash: "",
         claimKind: "satisfies",
         scope: null,
+        proofKind: "recomputable",
         verifierHash: hashValue(manifest),
         createdAt: new Date().toISOString(),
       };

@@ -76,7 +76,7 @@ test("lists adapters and records local anchor receipts", async () => {
     const adapters = (await (await fetch(`${base}/v1/adapters`)).json()) as AdapterInfo[];
     assert.deepEqual(
       adapters.map((adapter) => adapter.id),
-      ["local", "trac", "tapeout", "github"],
+      ["local", "trac", "content", "tapeout", "github"],
     );
 
     const trac = adapters.find((adapter) => adapter.id === "trac");
