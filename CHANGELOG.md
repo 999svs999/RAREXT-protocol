@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+### Security
+
+- **Storage challenge, transport, placement, and pin hardening.** Challenge responses
+  now bind to the requested leaf index and a fresh nonce, reject replays, cap nonce and
+  proof sizes, and require an exact Merkle depth. `httpHolder` verifies shard bytes
+  against `storedAs`, caps responses, and times out; holder and pin servers support
+  optional bearer tokens, bounded bodies, constant-time comparison, and bounded caches.
+  Placements reject co-location, oversized or inconsistent shards, impossible required
+  counts, and malformed claims before adoption. The pin store recomputes CIDs and writes
+  metadata atomically. `docs/STORAGE-SECURITY.md` and RFC 0012 record the model and the
+  still-open findings (confidentiality, retrievability, quotas/TLS/identity, lying
+  verifiers, orphan GC). Eight security tests.
+
 ### Added
 
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes

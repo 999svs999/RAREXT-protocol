@@ -25,6 +25,8 @@ export interface HolderChallenge {
   nonce: string;
 }
 
+export const MAX_CHALLENGE_NONCE = 200;
+
 export interface DurabilityHolder {
   readonly id: string;
   put(bytes: Uint8Array): Promise<string>;
@@ -154,10 +156,22 @@ export function directoryHolder(id: string, directory: string): DurabilityHolder
 export function httpHolder(
   id: string,
   baseUrl: string,
-  options: { fetch?: typeof fetch } = {},
+  options: { fetch?: typeof fetch; token?: string; timeoutMs?: number } = {},
 ): DurabilityHolder {
   const base = baseUrl.replace(/\/+$/, "");
   const call = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const headers: Record<string, string> = options.token
+    ? { authorization: `Bearer ${options.token}` }
+    : {};
+
+  async function request(url: string, init: RequestInit = {}): Promise<Response> {
+    return call(url, {
+      ...init,
+      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+  }
 
   async function expect(response: Response, what: string): Promise<Response> {
     if (!response.ok) {
@@ -167,46 +181,96 @@ export function httpHolder(
     return response;
   }
 
+  async function json(response: Response, what: string, limit: number): Promise<unknown> {
+    const declared = Number(response.headers.get("content-length") ?? "0");
+
+    if (declared > limit) {
+      throw new Error(`holder ${id} ${what} response is too large`);
+    }
+
+    const text = await response.text();
+
+    if (Buffer.byteLength(text) > limit) {
+      throw new Error(`holder ${id} ${what} response is too large`);
+    }
+
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error(`holder ${id} ${what} returned invalid JSON`);
+    }
+  }
+
   return {
     id,
     async put(bytes) {
       const response = await expect(
-        await call(`${base}/v1/holder/shards`, {
+        await request(`${base}/v1/holder/shards`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ content: Buffer.from(bytes).toString("base64") }),
         }),
         "put",
       );
+      const value = await json(response, "put", 4096);
 
-      const body = (await response.json()) as { storedAs: string };
-      return body.storedAs;
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        typeof (value as { storedAs?: unknown }).storedAs !== "string" ||
+        !/^[0-9a-f]{64}$/.test((value as { storedAs: string }).storedAs)
+      ) {
+        throw new Error(`holder ${id} returned an invalid storedAs`);
+      }
+
+      return (value as { storedAs: string }).storedAs;
     },
     async get(storedAs) {
-      const response = await call(`${base}/v1/holder/shards/${storedAs}`);
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) return null;
+
+      const response = await request(`${base}/v1/holder/shards/${storedAs}`);
 
       if (response.status === 404) return null;
 
       await expect(response, "get");
-      const body = (await response.json()) as { content: string };
-      return Uint8Array.from(Buffer.from(body.content, "base64"));
+      const value = await json(response, "get", 48 * 1024 * 1024);
+
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        typeof (value as { content?: unknown }).content !== "string"
+      ) {
+        throw new Error(`holder ${id} returned invalid shard content`);
+      }
+
+      const bytes = Uint8Array.from(Buffer.from((value as { content: string }).content, "base64"));
+
+      if (sha256Bytes(bytes) !== storedAs) {
+        throw new Error(`holder ${id} returned bytes that do not match ${storedAs}`);
+      }
+
+      return bytes;
     },
     async remove(storedAs) {
-      const response = await call(`${base}/v1/holder/shards/${storedAs}`, {
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) return false;
+
+      const response = await request(`${base}/v1/holder/shards/${storedAs}`, {
         method: "DELETE",
       });
 
       return response.ok;
     },
     async has(storedAs) {
-      const response = await call(`${base}/v1/holder/shards/${storedAs}`, {
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) return false;
+
+      const response = await request(`${base}/v1/holder/shards/${storedAs}`, {
         method: "HEAD",
       });
 
       return response.ok;
     },
     async respond(challenge) {
-      const response = await call(`${base}/v1/holder/challenge`, {
+      const response = await request(`${base}/v1/holder/challenge`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(challenge),
@@ -215,7 +279,13 @@ export function httpHolder(
       if (response.status === 404) return null;
 
       await expect(response, "challenge");
-      return (await response.json()) as ChallengeResponse;
+      const value = await json(response, "challenge", 256 * 1024);
+
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        throw new Error(`holder ${id} returned an invalid challenge response`);
+      }
+
+      return value as ChallengeResponse;
     },
   };
 }
@@ -244,8 +314,15 @@ export function respondToChallenge(
   leafIndex: number,
   nonce: string,
 ): ChallengeResponse | null {
-  const leaves = chunkLeaves(bytes);
+  return responseFromLeaves(chunkLeaves(bytes), leafIndex, nonce);
+}
 
+/** Answer from an already-computed leaf set; lets a holder cache the tree. */
+export function responseFromLeaves(
+  leaves: string[],
+  leafIndex: number,
+  nonce: string,
+): ChallengeResponse | null {
   if (!Number.isInteger(leafIndex) || leafIndex < 0 || leafIndex >= leaves.length) {
     return null;
   }
@@ -261,17 +338,35 @@ export function respondToChallenge(
   };
 }
 
+const HEX_64 = /^[0-9a-f]{64}$/;
+
 export function verifyChallengeResponse(
   shard: ShardPlacement,
   response: ChallengeResponse,
+  expected?: HolderChallenge,
 ): boolean {
+  if (!response || typeof response !== "object") return false;
   if (!Number.isInteger(response.index) || response.index < 0) return false;
   if (response.index >= shard.leaves) return false;
   if (typeof response.nonce !== "string" || response.nonce.length === 0) return false;
-  if (typeof response.leaf !== "string" || response.leaf.length !== 64) return false;
-  if (typeof response.digest !== "string") return false;
+  if (response.nonce.length > MAX_CHALLENGE_NONCE) return false;
+  if (typeof response.leaf !== "string" || !HEX_64.test(response.leaf)) return false;
+  if (typeof response.digest !== "string" || !HEX_64.test(response.digest)) return false;
   if (response.digest !== nonceBinding(response.nonce, response.leaf)) return false;
   if (!Array.isArray(response.proof)) return false;
+
+  // A proof has exactly one sibling per tree level. Rejecting an overlong list
+  // before hashing keeps a holder from making the verifier do arbitrary work.
+  const depth = Math.ceil(Math.log2(Math.max(1, shard.leaves)));
+  if (response.proof.length !== depth) return false;
+  if (!response.proof.every((value) => typeof value === "string" && HEX_64.test(value))) {
+    return false;
+  }
+
+  if (expected) {
+    if (response.index !== expected.leafIndex) return false;
+    if (response.nonce !== expected.nonce) return false;
+  }
 
   return verifyProof(response.leaf, response.proof, shard.root, response.index);
 }
@@ -391,6 +486,11 @@ export class DurabilityLedger {
     for (const shard of shards) {
       const holder = chosen[shard.index]!;
       const storedAs = await holder.put(shard.bytes);
+
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) {
+        throw new Error(`holder ${holder.id} returned an invalid storedAs`);
+      }
+
       const leaves = chunkLeaves(shard.bytes);
 
       placement.shards.push({
@@ -444,13 +544,10 @@ export class DurabilityLedger {
 
       const leafIndex = this.random(shard.leaves);
       const nonce = randomBytesNode(16).toString("hex");
+      const request = { storedAs: shard.storedAs, leafIndex, nonce };
 
       try {
-        const response = await holder.respond({
-          storedAs: shard.storedAs,
-          leafIndex,
-          nonce,
-        });
+        const response = await holder.respond(request);
 
         if (!response) {
           outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "shard-missing" });
@@ -458,7 +555,7 @@ export class DurabilityLedger {
           continue;
         }
 
-        if (!verifyChallengeResponse(shard, response)) {
+        if (!verifyChallengeResponse(shard, response, request)) {
           outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "bad-proof" });
           this.miss(witness, now);
           continue;

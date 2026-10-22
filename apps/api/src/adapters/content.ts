@@ -59,6 +59,8 @@ export function cidV1Raw(bytes: Uint8Array): string {
 export interface PinOptions {
   /** A pinning service that accepts a CID and returns a reference. */
   serviceUrl?: string | null;
+  /** Bearer token for a pinning service configured with `RAREXT_PIN_TOKEN`. */
+  token?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -117,7 +119,10 @@ export class ContentPinAdapter implements RarextAdapter {
 
     const response = await requestFetch(this.options.serviceUrl, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(this.options.token ? { authorization: `Bearer ${this.options.token}` } : {}),
+      },
       body: JSON.stringify({
         cid,
         root,
@@ -131,12 +136,23 @@ export class ContentPinAdapter implements RarextAdapter {
       throw new Error(`pinning service returned ${response.status}`);
     }
 
-    const result = (await response.json()) as { reference?: string };
+    const text = await response.text();
+    if (Buffer.byteLength(text) > 64 * 1024) {
+      throw new Error("pinning service response is too large");
+    }
+
+    let result: { reference?: unknown };
+    try {
+      result = JSON.parse(text) as { reference?: unknown };
+    } catch {
+      throw new Error("pinning service returned invalid JSON");
+    }
 
     return {
       adapter: "content",
       status: "ok",
-      reference: result.reference ?? `cid:${cid}`,
+      reference:
+        typeof result.reference === "string" ? result.reference : `cid:${cid}`,
     };
   }
 }

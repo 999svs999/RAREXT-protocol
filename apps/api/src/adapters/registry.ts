@@ -101,6 +101,7 @@ export function createDefaultRegistry(requestFetch: typeof fetch = fetch): Adapt
     new TracAnchorAdapter(),
     new ContentPinAdapter({
       serviceUrl: process.env.RAREXT_PIN_URL ?? null,
+      token: process.env.RAREXT_PIN_TOKEN || null,
       fetchImpl: requestFetch,
     }),
     ...chains.map((config) =>

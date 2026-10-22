@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   existsSync,
@@ -15,6 +15,9 @@ import { pathToFileURL } from "node:url";
 import { cidV1Raw } from "./adapters/content.ts";
 
 const MAX_CONTENT = 32 * 1024 * 1024;
+const MAX_PUBLICATION_IDS = 100;
+const MAX_ID_LENGTH = 200;
+const MAX_ROOT_LENGTH = 2048;
 const CID_PATTERN = /^b[a-z2-7]{20,200}$/;
 
 export interface PinRecord {
@@ -57,6 +60,23 @@ export class PinStore {
     if (!CID_PATTERN.test(input.cid)) throw new Error("cid is not a base32 CIDv1");
     if (input.content.length === 0) throw new Error("content must not be empty");
     if (input.content.length > MAX_CONTENT) throw new Error("content is too large");
+    if (input.root !== undefined && input.root !== null) {
+      if (typeof input.root !== "string" || input.root.length > MAX_ROOT_LENGTH) {
+        throw new Error("root must be a bounded string or null");
+      }
+    }
+
+    const publicationIds = input.publicationIds ?? [];
+
+    if (
+      !Array.isArray(publicationIds) ||
+      publicationIds.length > MAX_PUBLICATION_IDS ||
+      publicationIds.some(
+        (value) => typeof value !== "string" || value.length === 0 || value.length > MAX_ID_LENGTH,
+      )
+    ) {
+      throw new Error("publicationIds must be a bounded list of non-empty strings");
+    }
 
     const computed = cidV1Raw(input.content);
     if (computed !== input.cid) throw new Error("cid does not match the content");
@@ -69,29 +89,72 @@ export class PinStore {
       cid: input.cid,
       bytes: input.content.length,
       root: input.root ?? null,
-      publicationIds: input.publicationIds ?? [],
+      publicationIds,
       pinnedAt: new Date().toISOString(),
     };
-    const temporary = `${paths.content}.${randomUUID()}.tmp`;
+    const contentTemporary = `${paths.content}.${randomUUID()}.tmp`;
+    const metadataTemporary = `${paths.metadata}.${randomUUID()}.tmp`;
+    const contentCreated = !existsSync(paths.content);
 
-    writeFileSync(temporary, input.content);
-    renameSync(temporary, paths.content);
-    writeFileSync(paths.metadata, `${JSON.stringify(record, null, 2)}\n`);
+    try {
+      writeFileSync(contentTemporary, input.content);
+      renameSync(contentTemporary, paths.content);
+      writeFileSync(metadataTemporary, `${JSON.stringify(record, null, 2)}\n`);
+      renameSync(metadataTemporary, paths.metadata);
+    } catch (error) {
+      if (contentCreated) rmSync(paths.content, { force: true });
+      throw error;
+    } finally {
+      rmSync(contentTemporary, { force: true });
+      rmSync(metadataTemporary, { force: true });
+    }
 
     return record;
   }
 
-  get(cid: string): PinRecord | null {
+  private readRecord(cid: string): { record: PinRecord; bytes: Uint8Array } | null {
     const paths = this.paths(cid);
-
     if (!existsSync(paths.metadata) || !existsSync(paths.content)) return null;
 
-    return JSON.parse(readFileSync(paths.metadata, "utf8")) as PinRecord;
+    const value = JSON.parse(readFileSync(paths.metadata, "utf8")) as unknown;
+
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error("pin metadata is not an object");
+    }
+
+    const record = value as Partial<PinRecord>;
+    const bytes = new Uint8Array(readFileSync(paths.content));
+
+    if (record.cid !== cid) throw new Error("pin metadata names another cid");
+    if (!Number.isInteger(record.bytes) || record.bytes !== bytes.length) {
+      throw new Error("pin metadata size does not match its content");
+    }
+    if (record.root !== null && (typeof record.root !== "string" || record.root.length > MAX_ROOT_LENGTH)) {
+      throw new Error("pin metadata root is invalid");
+    }
+    if (
+      !Array.isArray(record.publicationIds) ||
+      record.publicationIds.length > MAX_PUBLICATION_IDS ||
+      record.publicationIds.some(
+        (entry) => typeof entry !== "string" || entry.length === 0 || entry.length > MAX_ID_LENGTH,
+      )
+    ) {
+      throw new Error("pin metadata publicationIds are invalid");
+    }
+    if (typeof record.pinnedAt !== "string" || Number.isNaN(Date.parse(record.pinnedAt))) {
+      throw new Error("pin metadata pinnedAt is invalid");
+    }
+    if (cidV1Raw(bytes) !== cid) throw new Error("pin content does not match its cid");
+
+    return { record: record as PinRecord, bytes };
+  }
+
+  get(cid: string): PinRecord | null {
+    return this.readRecord(cid)?.record ?? null;
   }
 
   content(cid: string): Uint8Array | null {
-    const paths = this.paths(cid);
-    return existsSync(paths.content) ? new Uint8Array(readFileSync(paths.content)) : null;
+    return this.readRecord(cid)?.bytes ?? null;
   }
 
   has(cid: string): boolean {
@@ -102,8 +165,12 @@ export class PinStore {
     return readdirSync(this.directory)
       .filter((name) => name.endsWith(".json"))
       .map((name) => {
+        const cid = name.slice(0, -".json".length);
+
+        if (!CID_PATTERN.test(cid)) return null;
+
         try {
-          return JSON.parse(readFileSync(join(this.directory, name), "utf8")) as PinRecord;
+          return this.get(cid);
         } catch {
           return null;
         }
@@ -123,6 +190,15 @@ export class PinStore {
   }
 }
 
+function authorized(req: IncomingMessage, token: string | undefined): boolean {
+  if (!token) return true;
+
+  const given = Buffer.from(req.headers.authorization ?? "", "utf8");
+  const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
+}
+
 function send(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -133,12 +209,17 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 }
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const declared = Number(req.headers["content-length"] ?? "0");
+  const limit = Math.ceil(MAX_CONTENT * 4 / 3) + 4096;
+
+  if (declared > limit) throw new Error("request body is too large");
+
   const chunks: Buffer[] = [];
   let size = 0;
 
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_CONTENT * 2) throw new Error("request body is too large");
+    if (size > limit) throw new Error("request body is too large");
     chunks.push(chunk as Buffer);
   }
 
@@ -151,13 +232,23 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
   return value as Record<string, unknown>;
 }
 
-export function createPinServer(store: PinStore) {
+export interface PinServerOptions {
+  /** When set, every request except /health must carry a bearer token. */
+  token?: string;
+}
+
+export function createPinServer(store: PinStore, options: PinServerOptions = {}) {
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
 
     try {
       if (req.method === "GET" && url.pathname === "/health") {
         send(res, 200, { ok: true, pins: store.list().length });
+        return;
+      }
+
+      if (!authorized(req, options.token)) {
+        send(res, 401, { error: "unauthorized" });
         return;
       }
 
@@ -174,6 +265,11 @@ export function createPinServer(store: PinStore) {
 
           if (typeof cid !== "string" || typeof content !== "string") {
             send(res, 400, { error: "cid and base64 content are required" });
+            return;
+          }
+
+          if (content.length > Math.ceil(MAX_CONTENT * 4 / 3) + 4) {
+            send(res, 400, { error: "content is too large" });
             return;
           }
 
@@ -236,8 +332,9 @@ export function createPinServer(store: PinStore) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const directory = process.env.RAREXT_PIN_DIR ?? ".data/pins";
   const port = Number(process.env.RAREXT_PIN_PORT ?? "9700");
+  const token = process.env.RAREXT_PIN_TOKEN || undefined;
   const store = new PinStore(directory);
-  const server = createPinServer(store);
+  const server = createPinServer(store, { token });
 
   server.listen(port, "127.0.0.1", () => {
     console.log(`pinning service on http://127.0.0.1:${port} (${directory})`);

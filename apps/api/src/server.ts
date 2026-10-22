@@ -10,7 +10,9 @@ const DATA = process.env.RAREXT_DATA;
 const PUBLIC_DIR = process.env.RAREXT_PUBLIC_DIR;
 const store = DATA === "none" ? new RarextStore() : new RarextStore(DATA ?? ".data/rarext.json");
 
-const holders = holdersFromEnv();
+const holders = holdersFromEnv(undefined, {
+  token: process.env.RAREXT_HOLDER_TOKEN || undefined,
+});
 const durability = new DurabilityLedger();
 const intervalMs = Number(process.env.RAREXT_CHALLENGE_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
 const scheduler = new ChallengeScheduler({

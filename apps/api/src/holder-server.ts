@@ -1,8 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 
-import { chunkLeaves, respondToChallenge, SHARD_CHUNK_BYTES } from "./durability.ts";
+import {
+  chunkLeaves,
+  MAX_CHALLENGE_NONCE,
+  responseFromLeaves,
+  SHARD_CHUNK_BYTES,
+} from "./durability.ts";
 import { merkleProof } from "./merkle.ts";
 import { BlobStore } from "./storage.ts";
 
@@ -11,6 +16,20 @@ const MAX_BODY = 32 * 1024 * 1024;
 export interface HolderServerOptions {
   id: string;
   directory: string;
+  /** When set, every request must carry `Authorization: Bearer <token>`. */
+  token?: string;
+}
+
+const MAX_CACHED_LEAVES = 262_144;
+const MAX_CACHE_ENTRIES = 64;
+
+function authorized(req: IncomingMessage, token: string | undefined): boolean {
+  if (!token) return true;
+
+  const given = Buffer.from(req.headers.authorization ?? "", "utf8");
+  const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
 }
 
 function send(
@@ -30,6 +49,10 @@ function send(
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const declared = Number(req.headers["content-length"] ?? "0");
+
+  if (declared > MAX_BODY) throw new Error("request body is too large");
+
   const chunks: Buffer[] = [];
   let size = 0;
 
@@ -61,11 +84,39 @@ function isHash(value: unknown): value is string {
  */
 export function createHolderServer(options: HolderServerOptions) {
   const store = new BlobStore(options.directory);
+  const leafCache = new Map<string, string[]>();
+  let cachedLeaves = 0;
+
+  function leavesFor(storedAs: string, bytes: Uint8Array): string[] {
+    const cached = leafCache.get(storedAs);
+    if (cached) return cached;
+
+    const leaves = chunkLeaves(bytes);
+    const cost = leaves.length * 64;
+
+    if (leaves.length <= MAX_CACHED_LEAVES && cachedLeaves + cost <= MAX_CACHED_LEAVES * 64) {
+      leafCache.set(storedAs, leaves);
+      cachedLeaves += cost;
+
+      while (leafCache.size > MAX_CACHE_ENTRIES) {
+        const [oldest, oldLeaves] = leafCache.entries().next().value as [string, string[]];
+        leafCache.delete(oldest);
+        cachedLeaves -= oldLeaves.length * 64;
+      }
+    }
+
+    return leaves;
+  }
 
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://holder");
       const parts = url.pathname.split("/").filter(Boolean);
+
+      if (!authorized(req, options.token)) {
+        send(res, 401, { error: "unauthorized" });
+        return;
+      }
 
       if (req.method === "GET" && url.pathname === "/v1/holder") {
         const shards = store.list();
@@ -161,12 +212,13 @@ export function createHolderServer(options: HolderServerOptions) {
         }
 
         const found = isHash(hash) ? store.get(hash) : null;
-        const leaves = found ? chunkLeaves(found.bytes) : [];
 
         if (!found) {
           send(res, 404, { error: "unknown shard" });
           return;
         }
+
+        const leaves = leavesFor(found.record.hash, found.bytes);
 
         if (!Number.isInteger(index) || index < 0 || index >= leaves.length) {
           send(res, 404, { error: "leaf index is out of range" });
@@ -188,8 +240,15 @@ export function createHolderServer(options: HolderServerOptions) {
         const leafIndex = body.leafIndex;
         const nonce = body.nonce;
 
-        if (!isHash(storedAs) || !Number.isInteger(leafIndex) || (leafIndex as number) < 0 || typeof nonce !== "string") {
-          send(res, 400, { error: "storedAs, leafIndex, and nonce are required" });
+        if (
+          !isHash(storedAs) ||
+          !Number.isInteger(leafIndex) ||
+          (leafIndex as number) < 0 ||
+          typeof nonce !== "string" ||
+          nonce.length === 0 ||
+          nonce.length > MAX_CHALLENGE_NONCE
+        ) {
+          send(res, 400, { error: "storedAs, leafIndex, and a bounded nonce are required" });
           return;
         }
 
@@ -199,8 +258,8 @@ export function createHolderServer(options: HolderServerOptions) {
           return;
         }
 
-        const response = respondToChallenge(
-          found.bytes,
+        const response = responseFromLeaves(
+          leavesFor(found.record.hash, found.bytes),
           leafIndex as number,
           nonce,
         );
@@ -228,8 +287,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const directory = process.env.RAREXT_HOLDER_DIR ?? ".data/holder";
   const port = Number(process.env.RAREXT_HOLDER_PORT ?? 9600);
   const host = process.env.RAREXT_HOLDER_HOST ?? "127.0.0.1";
+  const token = process.env.RAREXT_HOLDER_TOKEN || undefined;
+  const loopback = host === "127.0.0.1" || host === "::1" || host === "localhost";
 
-  createHolderServer({ id, directory }).listen(port, host, () => {
+  if (!loopback && !token) {
+    throw new Error("refusing to bind a holder beyond loopback without RAREXT_HOLDER_TOKEN");
+  }
+
+  createHolderServer({ id, directory, token }).listen(port, host, () => {
     console.log(`RAREXT holder ${id} listening on http://${host}:${port}`);
   });
 }

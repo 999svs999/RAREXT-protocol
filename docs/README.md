@@ -14,12 +14,12 @@ APP-PROTOCOL → ARCHITECTURE → SEMANTICS → PRIVACY → STORAGE-ECONOMY → 
 GLOSSARY.
 
 **Verifier operator** — run a node, a holder, or an independent verifier:
-ARCHITECTURE → CRYPTO → SEMANTICS → CHAINS → STORAGE-ECONOMY → OPERATIONS → MIRRORS →
-GLOSSARY.
+ARCHITECTURE → CRYPTO → SEMANTICS → CHAINS → STORAGE-ECONOMY → STORAGE-SECURITY →
+OPERATIONS → MIRRORS → GLOSSARY.
 
 **Researcher or skeptic** — test the claims rather than the pitch:
-LITEPAPER → WEB4 → PRIOR-ART → STORAGE-FRONTIER → STORAGE-ECONOMY → CRYPTO → WORK →
-MARKET.
+LITEPAPER → WEB4 → PRIOR-ART → STORAGE-FRONTIER → STORAGE-ECONOMY → STORAGE-SECURITY →
+CRYPTO → WORK → MARKET.
 
 Those are names, not links, so every document is linked once in the reference below.
 
@@ -44,6 +44,7 @@ Those are names, not links, so every document is linked once in the reference be
 | [SEMANTICS.md](SEMANTICS.md) | What does a passing verifier result mean, who owns that meaning, and how is drift detected? |
 | [STORAGE-ECONOMY.md](STORAGE-ECONOMY.md) | How do erasure coding, placement, retention proofs, repair, and metering fit together? |
 | [STORAGE-FRONTIER.md](STORAGE-FRONTIER.md) | Which compression and representation questions are open, and what would count as an honest answer? |
+| [STORAGE-SECURITY.md](STORAGE-SECURITY.md) | What storage attacks are handled, what do tokens mean, and which security findings are still open? |
 | [WEB4.md](WEB4.md) | What is web4 here, and which primitive is still missing? |
 | [WORK.md](WORK.md) | What work can a person or agent do, how is it checked, and what does it pay? |
 

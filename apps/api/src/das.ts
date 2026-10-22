@@ -169,6 +169,22 @@ export async function sampleAvailability(
     }
 
     bytesRead += sample.bytes.length;
+    const depth = Math.ceil(Math.log2(Math.max(1, shard.leaves)));
+
+    if (sample.bytes.length === 0 || sample.bytes.length > commitment.chunkBytes) {
+      failures.push({ ...unit, reason: "chunk has an invalid size" });
+      continue;
+    }
+
+    if (
+      !Array.isArray(sample.proof) ||
+      sample.proof.length !== depth ||
+      !sample.proof.every((value) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value))
+    ) {
+      failures.push({ ...unit, reason: "proof has an invalid shape" });
+      continue;
+    }
+
     const leaf = sha256Bytes(sample.bytes);
 
     if (!verifyProof(leaf, sample.proof, shard.root, unit.leaf)) {
@@ -266,21 +282,37 @@ export function detectableFraction(units: number, samples: number, epsilon = 0.0
 }
 
 /** A reader for the holder HTTP surface. It never sees a blob hash. */
-export function httpLeafReader(holderUrl: string): LeafReader {
+export function httpLeafReader(
+  holderUrl: string,
+  options: { token?: string; timeoutMs?: number; fetch?: typeof fetch } = {},
+): LeafReader {
+  const call = options.fetch ?? fetch;
+  const headers: Record<string, string> = options.token
+    ? { authorization: `Bearer ${options.token}` }
+    : {};
+
   return {
     async read({ storedAs, leaf }) {
-      const response = await fetch(
+      const response = await call(
         `${holderUrl.replace(/\/+$/, "")}/v1/holder/shards/${encodeURIComponent(storedAs)}/leaves/${leaf}`,
+        { headers, signal: AbortSignal.timeout(options.timeoutMs ?? 15_000) },
       );
 
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`holder returned ${response.status}`);
 
-      const body = (await response.json()) as {
-        index?: number;
-        bytes?: string;
-        proof?: string[];
-      };
+      const declared = Number(response.headers.get("content-length") ?? "0");
+      if (declared > 1024 * 1024) throw new Error("holder leaf response is too large");
+      const text = await response.text();
+      if (Buffer.byteLength(text) > 1024 * 1024) throw new Error("holder leaf response is too large");
+
+      let body: { index?: number; bytes?: string; proof?: string[] };
+
+      try {
+        body = JSON.parse(text) as typeof body;
+      } catch {
+        throw new Error("holder returned invalid leaf JSON");
+      }
 
       if (body.index !== leaf || typeof body.bytes !== "string" || !Array.isArray(body.proof)) {
         throw new Error("holder returned a malformed leaf");

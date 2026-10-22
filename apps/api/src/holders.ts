@@ -40,7 +40,7 @@ export function parseHolderSpec(
 
 export function holdersFromEnv(
   spec?: string,
-  options: { fetch?: typeof fetch } = {},
+  options: { fetch?: typeof fetch; token?: string } = {},
 ): DurabilityHolder[] {
   return parseHolderSpec(spec).map((entry) =>
     httpHolder(entry.id, entry.url, options),

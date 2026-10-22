@@ -28,8 +28,23 @@ the map, not the bytes.
 `npm run pin` starts the reference service on `127.0.0.1:9700` with
 `RAREXT_PIN_DIR=.data/pins`. Point the API at it with
 `RAREXT_PIN_URL=http://127.0.0.1:9700/v1/pins`. It verifies that every claimed CID
-matches the bytes it receives, writes pins atomically, and stores no secrets. Back up
+matches the bytes it receives, writes pins atomically, and stores no secrets. Set
+`RAREXT_PIN_TOKEN` on the service and every client to require a bearer token. Back up
 the pin directory with `.data/`; a pin is one replica, not a permanence guarantee.
+
+## Holder and pin tokens
+
+`RAREXT_HOLDER_TOKEN` and `RAREXT_PIN_TOKEN` are shared bearer secrets, not identities.
+They protect a holder or pin service from unauthenticated clients when it is reachable
+by more than the local process; they do not encrypt traffic, scope access, or survive a
+plain-HTTP observer. The holder CLI refuses to bind a non-loopback host without a token.
+Terminate TLS at a reverse proxy and keep the token in the process environment or a
+secret file, never in a command line.
+
+To rotate, stop the service, change the token, restart, then update every API, holder
+set, and MCP process. There is no overlap window, so a rolling rotation will produce
+401s for clients still using the old token. The full threat model and the open findings
+are in [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md).
 
 ## Snapshots and migrations
 

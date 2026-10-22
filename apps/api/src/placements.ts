@@ -11,6 +11,7 @@ import {
   type DurabilityTier,
   type Placement,
   requiredHolders,
+  SHARD_CHUNK_BYTES,
 } from "./durability.ts";
 import { suiteFor, verifyPayload } from "./identity.ts";
 
@@ -53,6 +54,8 @@ export interface PlacementSummary {
 
 const HASH = /^[0-9a-f]{64}$/;
 const TIERS: DurabilityTier[] = ["ephemeral", "pinned", "durable"];
+const MAX_SHARDS = 255;
+const MAX_SHARD_BYTES = 4 * 1024 * 1024 * 1024;
 
 function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicKey)).digest("hex");
@@ -70,14 +73,21 @@ function placementProblem(value: unknown): string | null {
   if (!HASH.test(placement.blobHash)) return "blobHash must be a sha256 hex digest";
   if (!Number.isInteger(placement.dataShards) || placement.dataShards < 1) return "dataShards must be at least 1";
   if (!Number.isInteger(placement.parityShards) || placement.parityShards < 0) return "parityShards must be at least 0";
+  if (placement.dataShards + placement.parityShards > MAX_SHARDS) return "shard count is too large";
   if (!TIERS.includes(placement.tier)) return "tier is not recognised";
+  if (!Number.isInteger(placement.length) || placement.length < 0) return "length must be a non-negative integer";
   if (!Array.isArray(placement.shards) || placement.shards.length !== placement.dataShards + placement.parityShards) {
     return "shards must contain exactly k + m entries";
   }
 
   const indices = new Set<number>();
+  const holders = new Set<string>();
+  let shardSize: number | null = null;
 
-  for (const shard of placement.shards) {
+  for (const value of placement.shards) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "every shard must be an object";
+    const shard = value;
+
     if (!Number.isInteger(shard.index) || shard.index < 0 || shard.index >= placement.dataShards + placement.parityShards) {
       return "shard index is out of range";
     }
@@ -90,12 +100,33 @@ function placementProblem(value: unknown): string | null {
       return "every shard needs a holder id";
     }
 
+    if (holders.has(shard.holder)) return "two shards of one blob cannot share a holder";
+    holders.add(shard.holder);
+
     if (!HASH.test(shard.digest) || !HASH.test(shard.storedAs) || !HASH.test(shard.root)) {
       return "shard digests must be sha256 hex values";
     }
 
-    if (!Number.isInteger(shard.size) || shard.size < 0) return "shard size is invalid";
-    if (!Number.isInteger(shard.leaves) || shard.leaves < 1) return "shard leaves must be at least 1";
+    if (!Number.isInteger(shard.size) || shard.size < 0 || shard.size > MAX_SHARD_BYTES) {
+      return "shard size is invalid";
+    }
+
+    if (shardSize === null) shardSize = shard.size;
+    else if (shard.size !== shardSize) return "shards must have one size";
+
+    const expectedLeaves = Math.max(1, Math.ceil(shard.size / SHARD_CHUNK_BYTES));
+
+    if (!Number.isInteger(shard.leaves) || shard.leaves !== expectedLeaves) {
+      return "shard leaves do not match its size";
+    }
+  }
+
+  if (shardSize !== null) {
+    const minimumLength = placement.dataShards === 0 ? 0 : (placement.dataShards - 1) * shardSize;
+
+    if (placement.length < minimumLength || placement.length > placement.dataShards * shardSize) {
+      return "payload length does not match the shard size";
+    }
   }
 
   if (placement.required !== requiredHolders(placement.tier, placement)) {
