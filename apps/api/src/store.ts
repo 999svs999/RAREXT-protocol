@@ -142,6 +142,17 @@ export class RarextStore {
     return this.publications.get(id) ?? null;
   }
 
+  /** Every publication in insertion order; callers filter what they expose. */
+  listPublications(): Publication[] {
+    return this.order
+      .map((id) => this.publications.get(id))
+      .filter((publication): publication is Publication => publication !== undefined);
+  }
+
+  isAnchored(publicationId: string): boolean {
+    return this.anchoredIds.has(publicationId);
+  }
+
   findPublicationByNonce(nonce: string): Publication | null {
     for (const id of this.order) {
       const publication = this.publications.get(id);

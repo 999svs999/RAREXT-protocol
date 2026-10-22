@@ -41,7 +41,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Sealed private artifacts: salted proofs and capability-gated retrieval
 - [ ] A deployed EVM anchor contract, audited
 - [x] A pinning service for the content adapter
-- [ ] Continuous fair-launch attestations as a verifiable trajectory
+- [x] Continuous fair-launch attestations as a verifiable trajectory
 - [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume
 - [ ] Public testnet registry
 - [ ] First external agent integration

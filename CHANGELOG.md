@@ -13,6 +13,12 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Verifiable fair-launch trajectories.** `GET /v1/launches/:mint/trajectory?chain=`
+  groups public `launch.plan` attestations by mint and chain, orders them by block,
+  separates policy segments, flags duplicate blocks, and reports safe/unsafe checks and
+  anchor coverage. A failed check makes the verdict `not-safe`; the series never claims
+  safety past its latest check. `apps/api/src/trajectory.ts`, five tests, docs.
+
 - **Published negative results for both research directions.**
   `bench/storage/NEGATIVE-RESULTS.md` records the held-out Huffman expansion (0.64x,
   14.15 MiB total for 9.00 MiB) and the degree-10 Legendre fidelity failure (2212.70x

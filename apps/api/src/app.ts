@@ -97,6 +97,7 @@ import {
   type RevocationKind,
 } from "./revocations.ts";
 import { registrySeedList } from "./registries.ts";
+import { buildLaunchTrajectory, type LaunchCheckInput } from "./trajectory.ts";
 import type {
   OperatorAttestation,
   StorageInclusionProof,
@@ -1746,6 +1747,55 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         send(res, 200, entries);
         return;
+      }
+
+      if (req.method === "GET") {
+        const match = /^\/v1\/launches\/([^/]+)\/trajectory$/.exec(pathname);
+
+        if (match) {
+          const mint = decodeURIComponent(match[1]!);
+          const chain = url.searchParams.get("chain");
+
+          if (!chain) {
+            send(res, 400, { error: "chain is required" });
+            return;
+          }
+
+          const checks: LaunchCheckInput[] = [];
+
+          for (const publication of store.listPublications()) {
+            if (
+              publication.visibility !== "public" ||
+              publication.app !== "launchpad" ||
+              publication.artifact?.kind !== "launch.plan"
+            ) {
+              continue;
+            }
+
+            const body = publication.artifact.body as Record<string, unknown> | null;
+            if (!body || typeof body.mint !== "string" || typeof body.chain !== "string") continue;
+            if (body.mint.toLowerCase() !== mint.toLowerCase()) continue;
+            if (body.chain.toLowerCase() !== chain.toLowerCase()) continue;
+            if (!Number.isInteger(body.block) || (body.block as number) < 0) continue;
+
+            checks.push({
+              publicationId: publication.id,
+              block: body.block as number,
+              correct: publication.attestation.correct,
+              score: publication.attestation.score,
+              challengeId: publication.challengeId,
+              semanticsId: publication.attestation.semanticsId,
+              semanticsVersion: publication.attestation.semanticsVersion,
+              semanticsHash: publication.attestation.semanticsHash,
+              verifierHash: publication.attestation.verifierHash,
+              attestedAt: publication.attestedAt,
+              anchored: store.isAnchored(publication.id),
+            });
+          }
+
+          send(res, 200, buildLaunchTrajectory(mint, chain, checks));
+          return;
+        }
       }
 
       if (

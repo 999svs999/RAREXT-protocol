@@ -53,6 +53,25 @@ This is the strongest reason the protocol and the launchpad belong together: the
 launchpad already runs a continuous certifier, and the protocol turns its output
 from a private snapshot into a public, auditable record.
 
+The registry exposes the series as data, not a badge:
+
+```bash
+curl -s 'http://127.0.0.1:8787/v1/launches/0xsafe/trajectory?chain=base'
+```
+
+The response orders checks by block, splits them into segments when the policy
+(`challengeId`, `semanticsId`, version, or hash) changes, and reports
+`count`, `safe`, `unsafe`, `anchored`, `fullyAnchored`, `policyChanges`,
+`duplicateBlocks`, and one `level` per check. A duplicate block makes the verdict
+`ambiguous`; a single failed check makes it `not-safe`. The summary stops at the
+latest check: it never extrapolates past the last observation.
+
+The registry only accepts publications whose attestation passes, so a failed
+fair-launch check is not stored as a `launch.plan`; it stops the series. That is
+why a stale `lastBlock` matters: absence of a recent check is not a safe verdict.
+Re-run the verifier at a later block and publish the new passing result to extend
+the trajectory.
+
 ## Fail closed
 
 Anything the verifier cannot read is not a pass. Unreadable data yields level

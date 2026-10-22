@@ -299,6 +299,7 @@ returns 409.
 - `GET /v1/builds?app=&challengeId=`
 - `GET /v1/builds/:id/lineage`
 - `GET /v1/leaderboard?app=&challengeId=`
+- `GET /v1/launches/:mint/trajectory?chain=`
 - `POST /v1/verify` with `{ publicationId }`
 - `GET /v1/identities/:handle/rotations` and `/v1/identities/:handle/delegations`
 
