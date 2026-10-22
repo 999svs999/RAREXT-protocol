@@ -32,6 +32,8 @@
 
 **Key rotation** — A signed record from the retiring key that moves a handle to a new key. The old key stays resolvable for existing publications and capabilities but cannot sign new ones ([RFC 0008](../rfcs/0008-key-rotation-and-delegation.md)).
 
+**Data availability sampling (DAS)** — Sampling random committed chunks with Merkle proofs to estimate whether media is being served, with a stated miss probability ([RFC 0010](../rfcs/0010-data-availability-sampling.md)).
+
 **Delegation** — A signed record from a root key authorizing another key to publish for a handle, optionally restricted to one app and an expiry. The delegate can publish only; it cannot rotate or delegate further.
 
 **Ledger** — An external ordering and ownership substrate such as TapeOut on BNB Chain or Trac. RAREXT anchors roots there but does not store content on a ledger or operate one.

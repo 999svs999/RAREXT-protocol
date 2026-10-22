@@ -179,6 +179,10 @@ the payload digest, and places the new shard on a holder that does not already h
 one for that blob and that answers a reachability probe. It reports both directions.
 A spare holder is required by design — repair never co-locates.
 
+Availability can be sampled before a full download: random 4 KiB chunks with Merkle
+proofs give the bound in [RFC 0010](../rfcs/0010-data-availability-sampling.md). Sampling
+measures what is served now; it does not replace the retention schedule or repair.
+
 Repair cost is measured, not asserted: [`bench/repair`](../bench/repair/README.md) rebuilds
 one lost shard of a 1 GiB blob and records the bytes actually moved. For the shipped
 systematic code the floor is `1 + 1/k` of the payload, which is above the contract's older

@@ -13,6 +13,14 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Data availability sampling for media.** `apps/api/src/das.ts` commits 4 KiB chunks
+  as Merkle trees over the shards a placement already proves, samples distinct chunks,
+  and verifies each byte and proof. It reports the exact hypergeometric miss bound
+  `C(N-a,t)/C(N,t)` and the conservative `(1-f)^t`; for 9,216 photo chunks, 44 samples
+  (176 KiB) detect 10% withholding with 99% confidence. A holder route serves one leaf
+  and its proof. RFC 0010 states the bound, its assumptions, and its non-claims. Five
+  tests.
+
 - **Learned and parametric baselines in the storage benchmark.** `bench/storage/learned.mjs`
   adds an order-1 context Huffman codec whose 256×256 model is stored and counted as the
   decoder, and a tensor-product Legendre fit whose coefficients are the entire artifact.

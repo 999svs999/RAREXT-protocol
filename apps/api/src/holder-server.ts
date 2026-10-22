@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 
-import { respondToChallenge } from "./durability.ts";
+import { chunkLeaves, respondToChallenge, SHARD_CHUNK_BYTES } from "./durability.ts";
+import { merkleProof } from "./merkle.ts";
 import { BlobStore } from "./storage.ts";
 
 const MAX_BODY = 32 * 1024 * 1024;
@@ -142,6 +143,43 @@ export function createHolderServer(options: HolderServerOptions) {
           res.end();
           return;
         }
+      }
+
+      if (
+        parts.length === 6 &&
+        parts[0] === "v1" &&
+        parts[1] === "holder" &&
+        parts[2] === "shards" &&
+        parts[4] === "leaves"
+      ) {
+        const hash = parts[3]!;
+        const index = Number(parts[5]);
+
+        if (req.method !== "GET") {
+          send(res, 405, { error: "method not allowed" });
+          return;
+        }
+
+        const found = isHash(hash) ? store.get(hash) : null;
+        const leaves = found ? chunkLeaves(found.bytes) : [];
+
+        if (!found) {
+          send(res, 404, { error: "unknown shard" });
+          return;
+        }
+
+        if (!Number.isInteger(index) || index < 0 || index >= leaves.length) {
+          send(res, 404, { error: "leaf index is out of range" });
+          return;
+        }
+
+        const start = index * SHARD_CHUNK_BYTES;
+        send(res, 200, {
+          index,
+          bytes: found.bytes.subarray(start, start + SHARD_CHUNK_BYTES).toString("base64"),
+          proof: merkleProof(leaves, index),
+        });
+        return;
       }
 
       if (req.method === "POST" && url.pathname === "/v1/holder/challenge") {
