@@ -190,13 +190,29 @@ export class PinStore {
   }
 }
 
-function authorized(req: IncomingMessage, token: string | undefined): boolean {
-  if (!token) return true;
+function parseTokens(tokenConfig?: string | string[]): string[] {
+  if (!tokenConfig) return [];
+  if (Array.isArray(tokenConfig)) {
+    return tokenConfig.flatMap((t) => t.split(",")).map((t) => t.trim()).filter(Boolean);
+  }
+  return tokenConfig.split(",").map((t) => t.trim()).filter(Boolean);
+}
 
-  const given = Buffer.from(req.headers.authorization ?? "", "utf8");
-  const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+function authorized(req: IncomingMessage, tokenConfig?: string | string[]): boolean {
+  const tokens = parseTokens(tokenConfig);
+  if (tokens.length === 0) return true;
 
-  return given.length === wanted.length && timingSafeEqual(given, wanted);
+  const header = req.headers.authorization ?? "";
+  const given = Buffer.from(header, "utf8");
+
+  for (const token of tokens) {
+    const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+    if (given.length === wanted.length && timingSafeEqual(given, wanted)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -233,11 +249,45 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 export interface PinServerOptions {
-  /** When set, every request except /health must carry a bearer token. */
-  token?: string;
+  /** When set, every request except /health must carry a bearer token. Supports multiple tokens for rotation. */
+  token?: string | string[];
+  tokens?: string[];
+  /** Maximum total stored bytes across all pins. */
+  maxBytes?: number;
+  /** Maximum requests allowed in `windowMs`. */
+  maxRequestsPerWindow?: number;
+  windowMs?: number;
+}
+
+export class RateLimiter {
+  private requests: number[] = [];
+  private readonly max: number;
+  private readonly windowMs: number;
+
+  constructor(max: number, windowMs = 60_000) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+
+  check(now = Date.now()): boolean {
+    const cutoff = now - this.windowMs;
+    while (this.requests.length > 0 && this.requests[0]! <= cutoff) {
+      this.requests.shift();
+    }
+    if (this.requests.length >= this.max) {
+      return false;
+    }
+    this.requests.push(now);
+    return true;
+  }
 }
 
 export function createPinServer(store: PinStore, options: PinServerOptions = {}) {
+  const tokenConfig = options.tokens ?? options.token;
+  const rateLimiter = options.maxRequestsPerWindow
+    ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
+    : null;
+
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
 
@@ -247,7 +297,12 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
         return;
       }
 
-      if (!authorized(req, options.token)) {
+      if (rateLimiter && !rateLimiter.check()) {
+        send(res, 429, { error: "too many requests: rate limit exceeded" });
+        return;
+      }
+
+      if (!authorized(req, tokenConfig)) {
         send(res, 401, { error: "unauthorized" });
         return;
       }
@@ -273,10 +328,19 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
             return;
           }
 
+          const decoded = Uint8Array.from(Buffer.from(content, "base64"));
+          if (options.maxBytes !== undefined) {
+            const currentBytes = store.list().reduce((sum, pin) => sum + pin.bytes, 0);
+            if (currentBytes + decoded.length > options.maxBytes) {
+              send(res, 507, { error: "insufficient storage: byte quota exceeded" });
+              return;
+            }
+          }
+
           try {
             const record = store.put({
               cid,
-              content: Uint8Array.from(Buffer.from(content, "base64")),
+              content: decoded,
               root: typeof body.root === "string" ? body.root : null,
               publicationIds: Array.isArray(body.publicationIds)
                 ? body.publicationIds.filter((value): value is string => typeof value === "string")
@@ -333,8 +397,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const directory = process.env.RAREXT_PIN_DIR ?? ".data/pins";
   const port = Number(process.env.RAREXT_PIN_PORT ?? "9700");
   const token = process.env.RAREXT_PIN_TOKEN || undefined;
+  const maxBytes = process.env.RAREXT_PIN_MAX_BYTES ? Number(process.env.RAREXT_PIN_MAX_BYTES) : undefined;
+  const maxRequestsPerWindow = process.env.RAREXT_PIN_MAX_REQUESTS ? Number(process.env.RAREXT_PIN_MAX_REQUESTS) : undefined;
   const store = new PinStore(directory);
-  const server = createPinServer(store, { token });
+  const server = createPinServer(store, { token, maxBytes, maxRequestsPerWindow });
 
   server.listen(port, "127.0.0.1", () => {
     console.log(`pinning service on http://127.0.0.1:${port} (${directory})`);

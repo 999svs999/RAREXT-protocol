@@ -18,8 +18,37 @@ const MAX_BODY = 32 * 1024 * 1024;
 export interface HolderServerOptions {
   id: string;
   directory: string;
-  /** When set, every request must carry `Authorization: Bearer <token>`. */
-  token?: string;
+  /** When set, requests must carry `Authorization: Bearer <token>`. Supports multiple tokens for rotation. */
+  token?: string | string[];
+  tokens?: string[];
+  /** Maximum total stored bytes across all shards. */
+  maxBytes?: number;
+  /** Maximum requests allowed in `windowMs`. */
+  maxRequestsPerWindow?: number;
+  windowMs?: number;
+}
+
+export class RateLimiter {
+  private requests: number[] = [];
+  private readonly max: number;
+  private readonly windowMs: number;
+
+  constructor(max: number, windowMs = 60_000) {
+    this.max = max;
+    this.windowMs = windowMs;
+  }
+
+  check(now = Date.now()): boolean {
+    const cutoff = now - this.windowMs;
+    while (this.requests.length > 0 && this.requests[0]! <= cutoff) {
+      this.requests.shift();
+    }
+    if (this.requests.length >= this.max) {
+      return false;
+    }
+    this.requests.push(now);
+    return true;
+  }
 }
 
 const MAX_CACHED_LEAVES = 262_144;
@@ -55,13 +84,29 @@ function saveGcCandidates(directory: string, candidates: Map<string, GcCandidate
   }
 }
 
-function authorized(req: IncomingMessage, token: string | undefined): boolean {
-  if (!token) return true;
+function parseTokens(tokenConfig?: string | string[]): string[] {
+  if (!tokenConfig) return [];
+  if (Array.isArray(tokenConfig)) {
+    return tokenConfig.flatMap((t) => t.split(",")).map((t) => t.trim()).filter(Boolean);
+  }
+  return tokenConfig.split(",").map((t) => t.trim()).filter(Boolean);
+}
 
-  const given = Buffer.from(req.headers.authorization ?? "", "utf8");
-  const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+function authorized(req: IncomingMessage, tokenConfig?: string | string[]): boolean {
+  const tokens = parseTokens(tokenConfig);
+  if (tokens.length === 0) return true;
 
-  return given.length === wanted.length && timingSafeEqual(given, wanted);
+  const header = req.headers.authorization ?? "";
+  const given = Buffer.from(header, "utf8");
+
+  for (const token of tokens) {
+    const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+    if (given.length === wanted.length && timingSafeEqual(given, wanted)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function send(
@@ -118,6 +163,11 @@ export function createHolderServer(options: HolderServerOptions) {
   const store = new BlobStore(options.directory);
   const leafCache = new Map<string, string[]>();
   let cachedLeaves = 0;
+  const tokenConfig = options.tokens ?? options.token;
+
+  const rateLimiter = options.maxRequestsPerWindow
+    ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
+    : null;
 
   function leavesFor(storedAs: string, bytes: Uint8Array): string[] {
     const cached = leafCache.get(storedAs);
@@ -145,8 +195,13 @@ export function createHolderServer(options: HolderServerOptions) {
       const url = new URL(req.url ?? "/", "http://holder");
       const parts = url.pathname.split("/").filter(Boolean);
 
+      if (rateLimiter && !rateLimiter.check()) {
+        send(res, 429, { error: "too many requests: rate limit exceeded" });
+        return;
+      }
+
       if (url.pathname === "/v1/holder/gc/scan" && req.method === "POST") {
-        if (!authorized(req, options.token)) {
+        if (!authorized(req, tokenConfig)) {
           send(res, 401, { error: "unauthorized" });
           return;
         }
@@ -207,7 +262,7 @@ export function createHolderServer(options: HolderServerOptions) {
       }
 
       if (url.pathname === "/v1/holder/gc/candidates" && req.method === "GET") {
-        if (!authorized(req, options.token)) {
+        if (!authorized(req, tokenConfig)) {
           send(res, 401, { error: "unauthorized" });
           return;
         }
@@ -224,7 +279,7 @@ export function createHolderServer(options: HolderServerOptions) {
       }
 
       if (url.pathname === "/v1/holder/gc/reset" && req.method === "POST") {
-        if (!authorized(req, options.token)) {
+        if (!authorized(req, tokenConfig)) {
           send(res, 401, { error: "unauthorized" });
           return;
         }
@@ -233,7 +288,7 @@ export function createHolderServer(options: HolderServerOptions) {
         return;
       }
 
-      if (!authorized(req, options.token)) {
+      if (!authorized(req, tokenConfig)) {
         send(res, 401, { error: "unauthorized" });
         return;
       }
@@ -276,6 +331,14 @@ export function createHolderServer(options: HolderServerOptions) {
           if (bytes.length === 0) {
             send(res, 400, { error: "content decoded to zero bytes" });
             return;
+          }
+
+          if (options.maxBytes !== undefined) {
+            const currentBytes = store.list().reduce((sum, shard) => sum + shard.size, 0);
+            if (currentBytes + bytes.length > options.maxBytes) {
+              send(res, 507, { error: "insufficient storage: byte quota exceeded" });
+              return;
+            }
           }
 
           const record = store.put(bytes);
@@ -408,13 +471,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = Number(process.env.RAREXT_HOLDER_PORT ?? 9600);
   const host = process.env.RAREXT_HOLDER_HOST ?? "127.0.0.1";
   const token = process.env.RAREXT_HOLDER_TOKEN || undefined;
+  const maxBytes = process.env.RAREXT_HOLDER_MAX_BYTES ? Number(process.env.RAREXT_HOLDER_MAX_BYTES) : undefined;
+  const maxRequestsPerWindow = process.env.RAREXT_HOLDER_MAX_REQUESTS ? Number(process.env.RAREXT_HOLDER_MAX_REQUESTS) : undefined;
   const loopback = host === "127.0.0.1" || host === "::1" || host === "localhost";
 
   if (!loopback && !token) {
     throw new Error("refusing to bind a holder beyond loopback without RAREXT_HOLDER_TOKEN");
   }
 
-  createHolderServer({ id, directory, token }).listen(port, host, () => {
+  createHolderServer({ id, directory, token, maxBytes, maxRequestsPerWindow }).listen(port, host, () => {
     console.log(`RAREXT holder ${id} listening on http://${host}:${port}`);
   });
 }
