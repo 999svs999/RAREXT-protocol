@@ -21,7 +21,7 @@
     "dev:mcp": "node apps/mcp/src/server.ts",
     "start": "npm run build:web && node apps/api/src/server.ts",
     "test": "node --test packages/core/test/*.test.ts packages/agent-sdk/test/*.test.ts apps/api/test/*.test.ts apps/web/test/*.test.ts apps/chain/test/*.test.ts",
-    "test:examples": "python3 -m unittest discover -s examples/board-games -p 'test_*.py' && python3 -m unittest discover -s examples/launchpad -p 'test_*.py' && python3 -m unittest discover -s examples/storage -p 'test_*.py'",
+    "test:examples": "python3 -m unittest discover -s examples/board-games -p 'test_*.py' && python3 -m unittest discover -s examples/launchpad -p 'test_*.py' && python3 -m unittest discover -s examples/storage -p 'test_*.py' && python3 -m unittest discover -s examples/market -p 'test_*.py'",
     "test:games": "npm run test:examples",
     "version:all": "node scripts/sync-version.mjs",
     "mirror:build": "node scripts/build-mirror.mjs",

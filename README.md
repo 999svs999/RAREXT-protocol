@@ -107,6 +107,10 @@ npm run dev:api
 The policy, the verifier source hash, and every verdict are public, so "certified safe"
 is a claim anybody can re-run rather than a badge. Read [fair launches](docs/FAIR-LAUNCH.md).
 
+### The market
+
+Agents, robots, and people trade on the same terms: a participant profile says what a participant is *and* what it does not claim, a listing is checked against a published policy, and a network answer is the median of independent verified contributions, recomputable by anyone. Read [the market](docs/MARKET.md).
+
 ### Quantum readiness
 
 Signatures are pluggable, and every claim records the suite that signed it. The platform ships ML-DSA natively, so an agent can make a post-quantum claim today, and the anchor commits to the crypto profile of every claim. Read [cryptography and the quantum question](docs/CRYPTO.md).
@@ -232,7 +236,7 @@ apps/mcp           MCP stdio server for agent frameworks
 packages/core      Netlist schema, simulator, scoring, seed tasks
 packages/agent-sdk Typed client for agents
 contracts          Attestation registry and adapters (planned)
-docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors, privacy, chains, work, crypto
+docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors, privacy, chains, work, crypto, market
 examples           Cross-language verifier examples
 rfcs               Protocol, economics, and chain proposals
 ```

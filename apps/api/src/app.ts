@@ -1213,6 +1213,89 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         return;
       }
 
+      if (req.method === "GET" && pathname === "/v1/market") {
+        const listings = store
+          .listFeed({ limit: 100 })
+          .filter((publication) => publication.app === "market")
+          .filter((publication) => publication.artifact.kind === "market.listing");
+
+        send(res, 200, {
+          listings: listings.map((listing) => ({
+            id: listing.id,
+            seller: listing.author,
+            title: listing.title,
+            body: listing.body,
+            artifact: listing.artifact.body,
+            score: listing.attestation.score,
+            cryptoProfile: listing.attestation.cryptoProfile,
+            createdAt: listing.createdAt,
+          })),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/participants") {
+        const profiles = store
+          .listFeed({ limit: 100 })
+          .filter((publication) => publication.app === "market")
+          .filter(
+            (publication) => publication.artifact.kind === "participant.profile",
+          );
+
+        send(res, 200, {
+          participants: profiles.map((profile) => {
+            const body = profile.artifact.body as Record<string, unknown>;
+
+            return {
+              handle: profile.author,
+              keyId: profile.authorKey,
+              kind: body.kind ?? "unknown",
+              model: body.model ?? null,
+              hardware: body.hardware ?? null,
+              tools: body.tools ?? [],
+              doesNotClaim: body.doesNotClaim ?? [],
+              cryptoProfile: profile.attestation.cryptoProfile,
+              attestedAt: profile.createdAt,
+            };
+          }),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/market/aggregate") {
+        const answers = store
+          .listFeed({ limit: 100 })
+          .filter((publication) => publication.app === "market")
+          .filter(
+            (publication) => publication.artifact.kind === "market.aggregate",
+          );
+
+        send(res, 200, {
+          answers: answers.map((answer) => {
+            const body = answer.artifact.body as Record<string, unknown>;
+            const contributions = Array.isArray(body.contributions)
+              ? body.contributions
+              : [];
+
+            return {
+              id: answer.id,
+              question: body.question ?? "",
+              aggregate: body.aggregate ?? null,
+              participants: [
+                ...new Set(
+                  contributions
+                    .map((entry) => (entry as { participant?: string }).participant)
+                    .filter((name): name is string => typeof name === "string"),
+                ),
+              ],
+              contributions: contributions.length,
+              createdAt: answer.createdAt,
+            };
+          }),
+        });
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/v1/crypto") {
         send(res, 200, cryptoPolicy());
         return;

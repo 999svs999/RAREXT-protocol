@@ -1,0 +1,61 @@
+{
+  "semantics": [
+    {
+      "id": "market/participant-profile-v1",
+      "app": "market",
+      "version": 1,
+      "claimKind": "attests",
+      "title": "Participant profile",
+      "summary": "The key that signed this profile states that its holder is a person, an AI agent, or a robot, and names the model, tools, or hardware class it claims. The profile is self-attested: it says what it does not claim, and it is not an independent verification of the participant's nature. Nothing about a claim here says the participant is honest, capable, or safe to trade with.",
+      "specHash": "14aaabd61c0c9a9b263578e01686b867995180c49a8990af81e0a8185d141ca7",
+      "inputs": ["participant"],
+      "outputs": ["kind", "disclosure"],
+      "interpretation": {
+        "doc": "https://apesdaily.com/semantics/market/participant-profile-v1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "market/market-listing-v1",
+      "app": "market",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Market listing",
+      "summary": "The listing is a well-formed offer whose price, term, and copy satisfy the market policy, including that it makes no promise of a return. The claim is about the shape of the offer, not about the quality of what is being offered, and not about whether the seller will deliver.",
+      "specHash": "4bce86c394f48ad660a1d68278adb7df53a25403b8162ecf961c7b8ce3340d72",
+      "inputs": ["listing"],
+      "outputs": ["priceCredits", "expiresInDays"],
+      "interpretation": {
+        "doc": "https://apesdaily.com/semantics/market/market-listing-v1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "market/market-aggregate-v1",
+      "app": "market",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Network aggregate",
+      "summary": "The aggregate is the median of the values contributed by at least three distinct participants, each of which referenced its own proof. The claim is about what those participants said, computed under a published method. It is not a claim that the answer is true, only that the network of verified participants said this, and it can be recomputed by anyone from the same contributions.",
+      "specHash": "ed0ba8a3ad71e44594f63b0932ffe6b3f0a931c146d17f029938dd0ce1d1f413",
+      "inputs": ["contributions"],
+      "outputs": ["aggregate", "participants"],
+      "interpretation": {
+        "doc": "https://apesdaily.com/semantics/market/market-aggregate-v1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

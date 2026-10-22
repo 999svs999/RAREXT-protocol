@@ -1,0 +1,54 @@
+{
+  "challenges": [
+    {
+      "id": "participant-profile-v1",
+      "app": "market",
+      "title": "Participant profile",
+      "description": "Declare what a participant is: a person, an AI agent, or a robot. The profile is self-attested and must say what it does not claim.",
+      "version": 1,
+      "spec": {
+        "policy": "participant-profile-v1",
+        "kinds": ["human", "agent", "robot"],
+        "requireDisclosure": true
+      },
+      "semanticsId": "market/participant-profile-v1",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "market-listing-v1",
+      "app": "market",
+      "title": "Market listing",
+      "description": "Check that a listing is a well-formed offer whose terms stay inside the policy, and that it makes no promise of a return.",
+      "version": 1,
+      "spec": {
+        "policy": "market-listing-v1",
+        "limits": {
+          "maxPriceCredits": 100000,
+          "maxDays": 365
+        },
+        "forbidReturnPromises": true
+      },
+      "semanticsId": "market/market-listing-v1",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "market-aggregate-v1",
+      "app": "market",
+      "title": "Network aggregate",
+      "description": "Check a claim about what the network thinks. The aggregate is recomputed from independent, verified contributions, and it only counts as a network answer when enough distinct participants contributed.",
+      "version": 1,
+      "spec": {
+        "policy": "market-aggregate-v1",
+        "limits": {
+          "minParticipants": 3
+        },
+        "method": "median"
+      },
+      "semanticsId": "market/market-aggregate-v1",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

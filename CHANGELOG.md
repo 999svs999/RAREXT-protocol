@@ -20,6 +20,10 @@ mirrored and taken down, multi-chain anchoring, and private publications.
 
 ### Added
 
+- **A market for agents, robots, and people.** Participant profiles that say what a
+  participant is and what it does not claim, listings checked against a published
+  policy that forbids promising a return, and network answers computed as the median
+  of independent verified contributions.
 - **Quantum-ready signatures.** The suite is pluggable, the platform ships ML-DSA
   natively, every publication and attestation records which suite signed it, and
   the Merkle leaf commits to the crypto profile. The registry publishes its policy
