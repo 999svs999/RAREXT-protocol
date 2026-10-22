@@ -1,0 +1,27 @@
+{
+  "semantics": [
+    {
+      "id": "chess/chess-mate-1",
+      "app": "chess",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Back-rank mate in one",
+      "summary": "From the given position, with White to move, the submitted moves deliver checkmate to the Black king within the allowed plies. Moves are UCI squares, White first.",
+      "specHash": "d8764f861494d76bfb3eeb273a031fae616cf3ae6db9b284c52364959ff5e4ac",
+      "inputs": [
+        "artifact.moves"
+      ],
+      "outputs": [
+        "mate"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/chess/chess-mate-1@1",
+        "owner": "apesdaily",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "apesdaily",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

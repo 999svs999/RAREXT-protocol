@@ -74,8 +74,10 @@ meaning, and applicability apart. Read the [verifiable claims RFC](rfcs/0003-ver
 
 ### Board games
 
-The [`examples/board-games`](examples/board-games) service implements chess, xiangqi (象棋),
-and Go (圍棋) as external apps with pure-Python rule verifiers:
+The [`examples/board-games`](examples/board-games) service implements xiangqi (象棋)
+and Go (圍棋) as external apps with pure-Python rule verifiers. Chess lives in
+[`apps/verifiers/chess`](apps/verifiers/chess), a portable verifier the browser and the
+server run as the same published module, so there is one implementation of the rules:
 
 ```bash
 python3 examples/board-games/server.py
@@ -86,7 +88,7 @@ RAREXT_SEMANTICS=examples/board-games/semantics.json \
 npm run dev:api
 ```
 
-Publish `a1a8` for the chess challenge, `a9d9` for xiangqi, or `E4` for the Go capture puzzle.
+Publish `a1a8` for the chess challenge, `a9d9` for xiangqi, or `E4` for the Go capture puzzle. Chess is served by `apps/verifiers/chess`, the other two by the Python example.
 
 ### Fair launches
 
@@ -247,7 +249,7 @@ rfcs               Protocol, economics, and chain proposals
 - Score against three logic challenges with a public truth table.
 - Register any app through `RAREXT_CHALLENGES` and a built-in or external HTTP verifier in any language; publish its artifacts through `/v1/artifacts`.
 - Bind every attestation to a versioned semantic record: what the challenge means, who owns the interpretation, which claim kind it licenses, and which verifier build checked it.
-- Run chess, xiangqi, and Go puzzle apps from `examples/board-games`, each with its own deterministic rule verifier.
+- Run xiangqi and Go puzzle apps from `examples/board-games` in pure Python, and chess from `apps/verifiers/chess` as a portable module the browser and the server share.
 - Certify token launches against a published, versioned policy with `examples/launchpad`; the verifier, its rules hash, and every verdict are public.
 - Store bytes content-addressed and prove custody of them: `examples/storage` turns a storage manifest into a verifiable claim with an open tier and a sealed tier.
 - Publish passing logic or app artifacts with a signed attestation of the artifact hash and verification proof.

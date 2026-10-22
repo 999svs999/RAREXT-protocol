@@ -1,0 +1,14 @@
+{
+  "verifiers": [
+    {
+      "app": "chess",
+      "name": "Chess",
+      "version": "1",
+      "description": "Chess mate puzzles in UCI notation. Runs the same published module a browser imports.",
+      "url": "http://127.0.0.1:9201/chess/verify",
+      "artifactKinds": [
+        "chess.moves"
+      ]
+    }
+  ]
+}

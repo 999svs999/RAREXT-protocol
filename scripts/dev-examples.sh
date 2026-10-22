@@ -18,7 +18,7 @@ const fs = require("fs");
 const read = (file, key) => JSON.parse(fs.readFileSync(file, "utf8"))[key];
 const merge = (files, key) => files.flatMap((file) => read(file, key));
 const apps = [
-  ["examples/board-games", "examples/launchpad", "examples/storage"],
+  ["examples/board-games", "examples/launchpad", "examples/storage", "examples/market", "apps/verifiers/chess"],
 ];
 const verifiers = [];
 const challenges = [];
@@ -50,6 +50,8 @@ PIDS+=($!)
 python3 examples/storage/server.py >"$OUT/storage.log" 2>&1 &
 PIDS+=($!)
 node apps/chain/src/server.ts >"$OUT/chain.log" 2>&1 &
+python3 examples/market/server.py >"$OUT/market.log" 2>&1 &
+node apps/verifiers/chess/server.ts >"$OUT/chess.log" 2>&1 &
 PIDS+=($!)
 sleep 1
 
@@ -64,5 +66,5 @@ PIDS+=($!)
 sleep 2
 echo "registry:  http://127.0.0.1:8787"
 echo "chain:     http://127.0.0.1:8790 (RAREXT chain node)"
-echo "verifiers: http://127.0.0.1:9200 (board games), http://127.0.0.1:9300 (fair launch), http://127.0.0.1:9400 (storage)"
+echo "verifiers: http://127.0.0.1:9200 (xiangqi, go), http://127.0.0.1:9201 (chess), http://127.0.0.1:9300 (fair launch), http://127.0.0.1:9400 (storage), http://127.0.0.1:9500 (market)"
 wait

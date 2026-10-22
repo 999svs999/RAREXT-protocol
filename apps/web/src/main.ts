@@ -168,6 +168,9 @@ const rewardsTotal = el("rewards-total");
 const rewardsActions = el("rewards-actions");
 const rewardsOrders = el("rewards-orders");
 const rewardsWork = el<HTMLButtonElement>("rewards-work");
+const marketParticipants = el("market-participants");
+const marketListings = el("market-listings");
+const marketAnswers = el("market-answers");
 const anchorFeedButton = el<HTMLButtonElement>("anchor-feed");
 const chainStatus = el("chain-status");
 const adapterList = el("adapter-list");
@@ -1624,6 +1627,10 @@ function cardHtml(publication: Publication): string {
   const claimTag = attestation.semanticsId
     ? `<span class="tag claim">${escapeHtml(`${attestation.semanticsId}@${attestation.semanticsVersion}`)}</span>`
     : "";
+  const quantumTag =
+    attestation.cryptoProfile === "post-quantum"
+      ? `<span class="tag pq" title="${escapeHtml(t("crypto.pqTitle"))}">${escapeHtml(t("crypto.pq"))}</span>`
+      : "";
   const statusTag = attestation.correct
     ? `<span class="tag good">${escapeHtml(t("dyn.solvedTag"))}</span>`
     : `<span class="tag bad">${escapeHtml(t("dyn.notSolved"))}</span>`;
@@ -1642,7 +1649,7 @@ function cardHtml(publication: Publication): string {
   return `<article class="card">
     <div class="card-top">
       <div>
-        <div class="card-tags">${appTag}${claimTag}${statusTag}${authorTag}${sourceTag}</div>
+        <div class="card-tags">${appTag}${claimTag}${quantumTag}${statusTag}${authorTag}${sourceTag}</div>
         <h3>${escapeHtml(publication.title)}</h3>
         <div class="meta">
           ${escapeHtml(t("dyn.by"))} <b>@${escapeHtml(publication.author)}</b> · ${escapeHtml(taskName(publication.challengeId))}
@@ -1872,13 +1879,14 @@ async function refreshRewards(): Promise<void> {
     rewardsActions.innerHTML = board.actions
       .map((action) => {
         const earned = board.earnings?.byAction?.[action.id];
+        const open = board.orders.filter((order) => order.action === action.id).length;
         return `<div class="reward-card">
           <div class="reward-head">
             <strong>${escapeHtml(t(`action.${action.id}` as Parameters<typeof t>[0]))}</strong>
             <span class="reward-value">${action.base * action.difficulty}</span>
           </div>
           <p class="reward-desc">${escapeHtml(action.description)}</p>
-          <p class="reward-unit">${escapeHtml(action.unit)}</p>
+          <p class="reward-unit">${escapeHtml(action.unit)}${open ? ` · ${escapeHtml(t("rewards.open", { n: open }))}` : ""}</p>
           ${
             earned
               ? `<p class="reward-earned">${earned.jobs} · ${earned.credits}</p>`
@@ -1944,7 +1952,83 @@ async function workNow(): Promise<void> {
   }
 }
 
-function switchView(view: "workbench" | "feed" | "rewards", scroll = true): void {
+async function refreshMarket(): Promise<void> {
+  const [participantsResponse, listingsResponse, answersResponse] = await Promise.all([
+    apiGet("/v1/participants"),
+    apiGet("/v1/market"),
+    apiGet("/v1/market/aggregate"),
+  ]);
+
+  const participants = (participantsResponse as {
+    participants: {
+      handle: string;
+      kind: string;
+      model: string | null;
+      hardware: string | null;
+      doesNotClaim: string[];
+    }[];
+  }).participants;
+
+  const listings = (listingsResponse as {
+    listings: { id: string; seller: string; title: string; priceCredits: number }[];
+  }).listings;
+
+  const answers = (answersResponse as {
+    answers: {
+      id: string;
+      question: string;
+      aggregate: number | null;
+      participants: string[];
+      contributions: number;
+    }[];
+  }).answers;
+
+  marketParticipants.innerHTML = participants.length
+    ? participants
+        .map(
+          (participant) => `<div class="market-row">
+            <div>
+              <strong>${escapeHtml(participant.handle)}</strong>
+              <span class="market-sub">${escapeHtml(participant.model ?? participant.hardware ?? participant.kind)}</span>
+            </div>
+            <span class="tag app">${escapeHtml(participant.kind)}</span>
+          </div>`,
+        )
+        .join("")
+    : `<div class="empty">${escapeHtml(t("market.empty"))}</div>`;
+
+  marketListings.innerHTML = listings.length
+    ? listings
+        .map(
+          (listing) => `<div class="market-row">
+            <div>
+              <strong>${escapeHtml(listing.title)}</strong>
+              <span class="market-sub">${escapeHtml(listing.seller)}</span>
+            </div>
+            <span class="reward-value">${escapeHtml(String(listing.priceCredits))}</span>
+          </div>`,
+        )
+        .join("")
+    : `<div class="empty">${escapeHtml(t("market.empty"))}</div>`;
+
+  marketAnswers.innerHTML = answers.length
+    ? answers
+        .map(
+          (answer) => `<div class="market-row">
+            <div>
+              <strong>${escapeHtml(answer.question)}</strong>
+              <span class="market-sub">${escapeHtml(
+                t("market.contributors", { n: answer.participants.length }),
+              )}</span>
+            </div>
+            <span class="reward-value">${escapeHtml(String(answer.aggregate ?? "-"))}</span>
+          </div>`,
+        )
+        .join("")
+    : `<div class="empty">${escapeHtml(t("market.empty"))}</div>`;
+}
+
+function switchView(view: "workbench" | "feed" | "rewards" | "market", scroll = true): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
@@ -1952,6 +2036,7 @@ function switchView(view: "workbench" | "feed" | "rewards", scroll = true): void
   el("view-workbench").classList.toggle("hidden", view !== "workbench");
   el("view-feed").classList.toggle("hidden", view !== "feed");
   el("view-rewards").classList.toggle("hidden", view !== "rewards");
+  el("view-market").classList.toggle("hidden", view !== "market");
 
   if (scroll && window.matchMedia("(max-width: 1080px)").matches) {
     window.scrollTo(0, 0);
@@ -1959,6 +2044,7 @@ function switchView(view: "workbench" | "feed" | "rewards", scroll = true): void
 
   if (view === "workbench") updateCanvasHelp();
   if (view === "rewards") void refreshRewards();
+  if (view === "market") void refreshMarket();
 }
 
 feedEl.addEventListener("click", (event) => {
@@ -2103,7 +2189,9 @@ document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => 
         ? "feed"
         : button.dataset.view === "rewards"
           ? "rewards"
-          : "workbench";
+          : button.dataset.view === "market"
+            ? "market"
+            : "workbench";
     switchView(view);
     if (view === "feed") {
       void refreshFeed();

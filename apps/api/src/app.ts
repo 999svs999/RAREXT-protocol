@@ -1220,16 +1220,24 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           .filter((publication) => publication.artifact.kind === "market.listing");
 
         send(res, 200, {
-          listings: listings.map((listing) => ({
-            id: listing.id,
-            seller: listing.author,
-            title: listing.title,
-            body: listing.body,
-            artifact: listing.artifact.body,
-            score: listing.attestation.score,
-            cryptoProfile: listing.attestation.cryptoProfile,
-            createdAt: listing.createdAt,
-          })),
+          listings: listings.map((listing) => {
+            const body = listing.artifact.body as Record<string, unknown>;
+
+            return {
+              id: listing.id,
+              seller: listing.author,
+              title: listing.title,
+              body: listing.body,
+              artifact: body,
+              priceCredits:
+                typeof body.priceCredits === "number" ? body.priceCredits : 0,
+              expiresInDays:
+                typeof body.expiresInDays === "number" ? body.expiresInDays : 0,
+              score: listing.attestation.score,
+              cryptoProfile: listing.attestation.cryptoProfile,
+              createdAt: listing.createdAt,
+            };
+          }),
         });
         return;
       }

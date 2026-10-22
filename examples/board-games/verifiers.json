@@ -1,20 +1,14 @@
 {
   "verifiers": [
     {
-      "app": "chess",
-      "name": "Chess",
-      "version": "1",
-      "description": "Chess mate puzzles in UCI notation.",
-      "url": "http://127.0.0.1:9200/chess/verify",
-      "artifactKinds": ["chess.moves"]
-    },
-    {
       "app": "xiangqi",
       "name": "Xiangqi",
       "version": "1",
       "description": "Xiangqi win puzzles in ICCS notation.",
       "url": "http://127.0.0.1:9200/xiangqi/verify",
-      "artifactKinds": ["xiangqi.moves"]
+      "artifactKinds": [
+        "xiangqi.moves"
+      ]
     },
     {
       "app": "go",
@@ -22,7 +16,9 @@
       "version": "1",
       "description": "Go capture puzzles with positional superko.",
       "url": "http://127.0.0.1:9200/go/verify",
-      "artifactKinds": ["go.moves"]
+      "artifactKinds": [
+        "go.moves"
+      ]
     }
   ]
 }

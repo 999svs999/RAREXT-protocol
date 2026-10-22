@@ -1,32 +1,6 @@
 {
   "challenges": [
     {
-      "id": "chess-mate-1",
-      "app": "chess",
-      "title": "Chess: back-rank mate",
-      "description": "White to move. Find a mate in one. Moves use UCI coordinates.",
-      "version": 1,
-      "spec": {
-        "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
-        "objective": "mate",
-        "maxPlies": 3
-      },
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "semanticsId": "chess/chess-mate-1",
-      "semanticsVersion": 1,
-      "sampleArtifact": {
-        "app": "chess",
-        "kind": "chess.moves",
-        "version": 1,
-        "mediaType": "application/json",
-        "body": {
-          "moves": [
-            "a1a8"
-          ]
-        }
-      }
-    },
-    {
       "id": "xiangqi-mate-1",
       "app": "xiangqi",
       "title": "Xiangqi: palace mate",

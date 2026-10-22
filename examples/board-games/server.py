@@ -5,7 +5,6 @@ Run:
     python3 server.py
 
 Endpoints:
-    POST /chess/verify
     POST /xiangqi/verify
     POST /go/verify
     GET  /health
@@ -16,7 +15,6 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import chess_rules
 import go_rules
 import xiangqi_rules
 
@@ -24,7 +22,6 @@ PORT = int(os.environ.get("PORT", "9200"))
 MAX_BODY = 1_000_000
 
 ROUTES = {
-    "/chess/verify": ("chess", "chess.moves", chess_rules),
     "/xiangqi/verify": ("xiangqi", "xiangqi.moves", xiangqi_rules),
     "/go/verify": ("go", "go.moves", go_rules),
 }
@@ -72,7 +69,7 @@ def dispatch(path, request):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            self.send_json(200, {"ok": True, "games": ["chess", "xiangqi", "go"]})
+            self.send_json(200, {"ok": True, "games": ["xiangqi", "go"]})
         else:
             self.send_json(404, {"error": "not found"})
 

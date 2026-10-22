@@ -67,32 +67,3 @@ export function attest(
     createdAt: new Date().toISOString(),
   };
 }
-
-export interface VerificationResult {
-  valid: boolean;
-  attestation: Attestation;
-  recomputed: Attestation;
-}
-
-export function verify(
-  circuit: Circuit,
-  task: Task,
-  attestation: Attestation,
-  binding: AttestationBinding,
-): VerificationResult {
-  const recomputed = attest(circuit, task, binding);
-
-  const valid =
-    recomputed.circuitHash === attestation.circuitHash &&
-    recomputed.traceHash === attestation.traceHash &&
-    recomputed.score === attestation.score &&
-    recomputed.gateCount === attestation.gateCount &&
-    recomputed.correct === attestation.correct &&
-    recomputed.semanticsId === attestation.semanticsId &&
-    recomputed.semanticsVersion === attestation.semanticsVersion &&
-    recomputed.semanticsHash === attestation.semanticsHash &&
-    recomputed.claimKind === attestation.claimKind &&
-    recomputed.verifierHash === attestation.verifierHash;
-
-  return { valid, attestation, recomputed };
-}

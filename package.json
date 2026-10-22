@@ -29,7 +29,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test && npm run build:web",
     "chain:node": "node apps/chain/src/server.ts",
-    "pretest": "npm run build:packages"
+    "pretest": "npm run build:packages && npm run build:verifiers",
+    "build:verifiers": "node scripts/build-verifiers.mjs",
+    "dev:chess": "node apps/verifiers/chess/server.ts"
   },
   "engines": {
     "node": ">=22.18"

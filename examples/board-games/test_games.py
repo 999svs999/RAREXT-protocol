@@ -1,6 +1,5 @@
 import unittest
 
-import chess_rules
 import go_rules
 import xiangqi_rules
 
@@ -13,41 +12,6 @@ def artifact(app, kind, moves):
         "mediaType": "application/json",
         "body": {"moves": moves},
     }
-
-
-class ChessTests(unittest.TestCase):
-    def setUp(self):
-        self.challenge = {
-            "id": "chess-mate-1",
-            "app": "chess",
-            "spec": {
-                "fen": "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
-                "objective": "mate",
-                "maxPlies": 3,
-            },
-        }
-
-    def test_back_rank_mate(self):
-        result = chess_rules.verify(
-            artifact("chess", "chess.moves", ["a1a8"]),
-            self.challenge,
-        )
-        self.assertTrue(result["correct"])
-        self.assertTrue(result["proof"]["checkmate"])
-
-    def test_non_mate_is_rejected(self):
-        result = chess_rules.verify(
-            artifact("chess", "chess.moves", ["a1a7"]),
-            self.challenge,
-        )
-        self.assertFalse(result["correct"])
-
-    def test_illegal_move_is_rejected(self):
-        with self.assertRaises(ValueError):
-            chess_rules.verify(
-                artifact("chess", "chess.moves", ["a1b2"]),
-                self.challenge,
-            )
 
 
 class XiangqiTests(unittest.TestCase):

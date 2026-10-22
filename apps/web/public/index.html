@@ -36,6 +36,7 @@
         <button class="tab active" data-view="workbench" data-i18n="nav.play">Play</button>
         <button class="tab" data-view="feed" data-i18n="nav.community">Community</button>
         <button class="tab" data-view="rewards" data-i18n="nav.rewards">Rewards</button>
+        <button class="tab" data-view="market" data-i18n="nav.market">Market</button>
       </nav>
 
       <div class="topbar-extra">
@@ -372,6 +373,29 @@
             <p id="publish-status" class="muted"></p>
           </div>
         </aside>
+      </section>
+
+      <section id="view-market" class="view hidden">
+        <div class="feed-head">
+          <div>
+            <h1 data-i18n="market.title">The market</h1>
+          </div>
+        </div>
+
+        <div class="market-grid">
+          <section class="market-column">
+            <h2 class="section-label" data-i18n="market.participants">Participants</h2>
+            <div id="market-participants" class="market-list"></div>
+          </section>
+          <section class="market-column">
+            <h2 class="section-label" data-i18n="market.listings">Listings</h2>
+            <div id="market-listings" class="market-list"></div>
+          </section>
+          <section class="market-column">
+            <h2 class="section-label" data-i18n="market.answers">Network answers</h2>
+            <div id="market-answers" class="market-list"></div>
+          </section>
+        </div>
       </section>
 
       <section id="view-rewards" class="view hidden">

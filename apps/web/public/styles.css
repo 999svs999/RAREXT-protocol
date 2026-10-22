@@ -2251,3 +2251,64 @@ td.fail {
   font-family: var(--mono);
   font-size: 10.5px;
 }
+
+.tag.pq {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #9ad4ff;
+  border-color: rgba(154, 212, 255, 0.3);
+  background: rgba(154, 212, 255, 0.08);
+}
+
+/* ---------- market ---------- */
+
+.market-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 26px 20px 60px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+
+.market-column {
+  min-width: 0;
+}
+
+.market-list {
+  display: grid;
+  gap: 8px;
+}
+
+.market-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.market-row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

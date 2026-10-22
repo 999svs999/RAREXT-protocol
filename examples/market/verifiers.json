@@ -1,0 +1,16 @@
+{
+  "verifiers": [
+    {
+      "app": "market",
+      "name": "Market",
+      "version": "1",
+      "description": "Checks participant profiles, market listings, and network aggregates against the market policy.",
+      "url": "http://127.0.0.1:9500/market/verify",
+      "artifactKinds": [
+        "participant.profile",
+        "market.listing",
+        "market.aggregate"
+      ]
+    }
+  ]
+}

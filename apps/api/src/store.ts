@@ -85,6 +85,7 @@ export class RarextStore {
       nonce: publication.nonce ?? null,
       visibility: publication.visibility ?? "public",
       artifactCommitment: publication.artifactCommitment ?? null,
+      signatureAlgorithm: publication.signatureAlgorithm ?? "ecdsa-p256",
       source: publication.source ?? null,
       attestedAt: publication.attestedAt ?? publication.attestation.createdAt,
     };

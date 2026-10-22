@@ -1,8 +1,9 @@
 # Board-game verifiers
 
-Three RAREXT apps with pure-Python verifiers and no third-party packages:
+Two FABRIC apps with pure-Python verifiers and no third-party packages. Chess is a
+[portable verifier](../../apps/verifiers/chess) that runs the same published module in a
+browser and on a server, so there is one implementation of the rules.
 
-- **Chess** — mate puzzles in UCI notation.
 - **Xiangqi (象棋)** — win puzzles in ICCS `a0`-`i9` notation.
 - **Go (圍棋)** — capture puzzles with passes and positional superko.
 

@@ -259,6 +259,18 @@ const en: Record<string, string> = {
   "action.publish": "Publish a build",
   "action.remix": "Remix a build",
   "action.report": "Report a bad claim",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "Signed with a post-quantum key",
+  "nav.market": "Market",
+  "market.title": "The market",
+  "market.participants": "Participants",
+  "market.listings": "Listings",
+  "market.answers": "Network answers",
+  "market.price": "Price",
+  "market.kind": "Kind",
+  "market.empty": "Nothing here yet.",
+  "market.contributors": "{n} contributors",
+  "rewards.open": "{n} open",
 };
 
 const zhHans: Record<string, string> = {
@@ -496,6 +508,18 @@ const zhHans: Record<string, string> = {
   "action.publish": "发布构建",
   "action.remix": "复刻构建",
   "action.report": "举报虚假声明",
+  "crypto.pq": "后量子",
+  "crypto.pqTitle": "使用后量子密钥签名",
+  "nav.market": "市场",
+  "market.title": "市场",
+  "market.participants": "参与者",
+  "market.listings": "商品",
+  "market.answers": "网络共识",
+  "market.price": "价格",
+  "market.kind": "类型",
+  "market.empty": "这里还没有内容。",
+  "market.contributors": "{n} 位贡献者",
+  "rewards.open": "{n} 个进行中",
 };
 
 const zhHant: Record<string, string> = {
@@ -734,6 +758,18 @@ const zhHant: Record<string, string> = {
   "action.publish": "發布建構",
   "action.remix": "複刻建構",
   "action.report": "檢舉虛假聲明",
+  "crypto.pq": "後量子",
+  "crypto.pqTitle": "使用後量子密鑰簽名",
+  "nav.market": "市場",
+  "market.title": "市場",
+  "market.participants": "參與者",
+  "market.listings": "商品",
+  "market.answers": "網路共識",
+  "market.price": "價格",
+  "market.kind": "類型",
+  "market.empty": "這裡還沒有內容。",
+  "market.contributors": "{n} 位貢獻者",
+  "rewards.open": "{n} 個進行中",
 };
 
 const es: Record<string, string> = {
@@ -971,6 +1007,18 @@ const es: Record<string, string> = {
   "action.publish": "Publicar una construcción",
   "action.remix": "Remezclar una construcción",
   "action.report": "Reportar una afirmación falsa",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "Firmado con una clave postcuántica",
+  "nav.market": "Mercado",
+  "market.title": "El mercado",
+  "market.participants": "Participantes",
+  "market.listings": "Anuncios",
+  "market.answers": "Respuestas de la red",
+  "market.price": "Precio",
+  "market.kind": "Tipo",
+  "market.empty": "Aquí no hay nada todavía.",
+  "market.contributors": "{n} colaboradores",
+  "rewards.open": "{n} abiertos",
 };
 
 const fr: Record<string, string> = {
@@ -1208,6 +1256,18 @@ const fr: Record<string, string> = {
   "action.publish": "Publier une construction",
   "action.remix": "Remixer une construction",
   "action.report": "Signaler une affirmation fausse",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "Signé avec une clé post-quantique",
+  "nav.market": "Marché",
+  "market.title": "Le marché",
+  "market.participants": "Participants",
+  "market.listings": "Offres",
+  "market.answers": "Réponses du réseau",
+  "market.price": "Prix",
+  "market.kind": "Type",
+  "market.empty": "Rien pour l'instant.",
+  "market.contributors": "{n} contributeurs",
+  "rewards.open": "{n} ouverts",
 };
 
 const pt: Record<string, string> = {
@@ -1445,6 +1505,18 @@ const pt: Record<string, string> = {
   "action.publish": "Publicar uma construção",
   "action.remix": "Remisturar uma construção",
   "action.report": "Denunciar uma afirmação falsa",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "Assinado com uma chave pós-quântica",
+  "nav.market": "Mercado",
+  "market.title": "O mercado",
+  "market.participants": "Participantes",
+  "market.listings": "Anúncios",
+  "market.answers": "Respostas da rede",
+  "market.price": "Preço",
+  "market.kind": "Tipo",
+  "market.empty": "Ainda não há nada aqui.",
+  "market.contributors": "{n} colaboradores",
+  "rewards.open": "{n} abertos",
 };
 
 const ja: Record<string, string> = {
@@ -1682,6 +1754,18 @@ const ja: Record<string, string> = {
   "action.publish": "ビルドを公開する",
   "action.remix": "ビルドをリミックスする",
   "action.report": "不正な主張を報告する",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "後量子鍵で署名",
+  "nav.market": "マーケット",
+  "market.title": "マーケット",
+  "market.participants": "参加者",
+  "market.listings": "出品",
+  "market.answers": "ネットワークの答え",
+  "market.price": "価格",
+  "market.kind": "種類",
+  "market.empty": "まだ何もありません。",
+  "market.contributors": "{n} 人の貢献者",
+  "rewards.open": "{n} 件進行中",
 };
 
 const ar: Record<string, string> = {
@@ -1919,6 +2003,18 @@ const ar: Record<string, string> = {
   "action.publish": "انشر بناء",
   "action.remix": "أعد مزج بناء",
   "action.report": "أبلغ عن ادعاء خاطئ",
+  "crypto.pq": "PQ",
+  "crypto.pqTitle": "موقّع بمفتاح ما بعد الكم",
+  "nav.market": "السوق",
+  "market.title": "السوق",
+  "market.participants": "المشاركون",
+  "market.listings": "العروض",
+  "market.answers": "إجابات الشبكة",
+  "market.price": "السعر",
+  "market.kind": "النوع",
+  "market.empty": "لا يوجد شيء هنا بعد.",
+  "market.contributors": "{n} مساهم",
+  "rewards.open": "{n} مفتوح",
 };
 
 const dictionaries: Record<Exclude<Locale, "en">, Record<string, string>> = {
