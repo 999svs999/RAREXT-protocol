@@ -13,6 +13,10 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Open Graph image for the landing page.** `site/og.png` (1200×630) carries the
+  brand mark, headline, and one-line promise; `site/index.html` now declares
+  `og:image`, dimensions, alt text, and a large Twitter card. No build step.
+
 - **Runnable erasure-coding example.** `examples/erasure/main.ts` creates 1 MiB,
   encodes `4+2`, stores all six shards through `BlobStore`, deletes one, and rebuilds
   from the five survivors with digest assertions. Linked from the storage contract.
