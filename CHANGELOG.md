@@ -13,6 +13,10 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Runnable erasure-coding example.** `examples/erasure/main.ts` creates 1 MiB,
+  encodes `4+2`, stores all six shards through `BlobStore`, deletes one, and rebuilds
+  from the five survivors with digest assertions. Linked from the storage contract.
+
 - **Verifiable fair-launch trajectories.** `GET /v1/launches/:mint/trajectory?chain=`
   groups public `launch.plan` attestations by mint and chain, orders them by block,
   separates policy segments, flags duplicate blocks, and reports safe/unsafe checks and

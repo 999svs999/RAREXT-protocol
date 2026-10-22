@@ -125,7 +125,9 @@ blob from **any** `k` of the `n` shards. With `k = 4, m = 2` a node holds 1.5× 
 bytes and survives the loss of any one shard — the same durability as three full
 copies for half the storage.
 
-The primitive lives in `apps/api/src/erasure.ts`. Its contract:
+The primitive lives in `apps/api/src/erasure.ts`. A runnable example that stores the
+shards, deletes one, and rebuilds from the rest is in
+[`examples/erasure/`](../examples/erasure/). Its contract:
 
 - `encodeBytes(payload, k, m)` returns `k + m` shards; the first `k` are the data
   blocks, the rest are parity.
