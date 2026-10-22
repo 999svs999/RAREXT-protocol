@@ -334,3 +334,151 @@ test("the app rebuilds the ledger from persisted placement records", async () =>
     cleanup();
   }
 });
+
+test("a scheduled run rebuilds a lost shard on a spare holder", async () => {
+  const { holders, cleanup } = await setup(7);
+
+  try {
+    const clock = fakeClock();
+    const timers = fakeTimers(clock);
+    const ledger = new DurabilityLedger({ now: clock.now });
+    const shards = encodeBytes(randomBytes(8192), 3, 2);
+    const placement = await ledger.place(shards, holders, "durable");
+    const lost = placement.shards[0]!;
+    const original = holders.find((holder) => holder.id === lost.holder)!;
+    const scheduler = new ChallengeScheduler({
+      ledger,
+      holders: () => holders,
+      intervalMs: 60_000,
+      timers,
+      now: clock.now,
+      repair: true,
+    });
+
+    scheduler.start();
+    await timers.advance(60_000);
+    assert.equal(scheduler.state.lastRun!.repairs.length, 0);
+
+    await original.remove(lost.storedAs);
+    await timers.advance(60_000);
+
+    const run = scheduler.state.lastRun!;
+
+    assert.deepEqual(run.underReplicated, [placement.blobHash], "the challenge saw the loss first");
+    assert.equal(run.repairs.length, 1);
+    assert.equal(run.repairs[0]!.blobHash, placement.blobHash);
+    assert.equal(run.repairs[0]!.filled, 1);
+    assert.ok(run.repairs[0]!.readBytes > 0);
+    assert.ok(run.repairs[0]!.writtenBytes > 0);
+    assert.equal(run.repairErrors.length, 0);
+    assert.equal(run.audits[0]!.status, "ok");
+    assert.equal(run.audits[0]!.live, 5);
+
+    const healed = placement.shards[0]!;
+
+    assert.notEqual(healed.holder, original.id, "the rebuilt shard left the failed holder");
+    assert.equal(healed.index, lost.index);
+    assert.ok(await holders.find((holder) => holder.id === healed.holder)!.has(healed.storedAs));
+    assert.equal(ledger.audit(placement.blobHash).status, "ok");
+    scheduler.stop();
+  } finally {
+    cleanup();
+  }
+});
+
+test("a repair that cannot find a spare is reported and does not stop the schedule", async () => {
+  const { holders, cleanup } = await setup(5);
+
+  try {
+    const clock = fakeClock();
+    const timers = fakeTimers(clock);
+    const ledger = new DurabilityLedger({ now: clock.now });
+    const placement = await ledger.place(encodeBytes(randomBytes(4096), 3, 2), holders, "durable");
+    const lost = placement.shards[1]!;
+    const holder = holders.find((candidate) => candidate.id === lost.holder)!;
+    const scheduler = new ChallengeScheduler({
+      ledger,
+      holders: () => holders,
+      intervalMs: 1000,
+      timers,
+      now: clock.now,
+      repair: true,
+    });
+
+    await holder.remove(lost.storedAs);
+    scheduler.start();
+    await timers.advance(1000);
+
+    const run = scheduler.state.lastRun!;
+
+    assert.equal(run.repairs.length, 0);
+    assert.equal(run.repairErrors.length, 1);
+    assert.match(run.repairErrors[0]!.error, /no spare holder/);
+    assert.equal(ledger.audit(placement.blobHash).status, "under-replicated");
+    assert.equal(scheduler.state.running, true);
+    assert.equal(scheduler.state.nextRunAt, new Date(2000).toISOString());
+    scheduler.stop();
+  } finally {
+    cleanup();
+  }
+});
+
+test("an on-demand run repairs through the API and reports what it healed", async () => {
+  const { root, holders, cleanup } = await setup(7);
+
+  try {
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.place(
+      encodeBytes(randomBytes(4096), 3, 2),
+      holders,
+      "durable",
+    );
+    const signer = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const registry = new PlacementRegistry(join(root, "records"));
+    const scheduler = new ChallengeScheduler({
+      ledger,
+      holders: () => holders,
+      repair: true,
+    });
+
+    registry.put(signPlacement(placement, signer));
+
+    const { server, base } = await start(new RarextStore(), {
+      placements: registry,
+      durability: ledger,
+      holders,
+      scheduler,
+    });
+
+    try {
+      const lost = placement.shards[2]!;
+      await holders.find((holder) => holder.id === lost.holder)!.remove(lost.storedAs);
+
+      const run = (await (await post(base, "/v1/durability/challenge", {})).json()) as {
+        underReplicated: string[];
+        repairs: { blobHash: string; filled: number; writtenBytes: number }[];
+        repairErrors: unknown[];
+        audits: { live: number; status: string }[];
+      };
+
+      assert.deepEqual(run.underReplicated, [placement.blobHash]);
+      assert.equal(run.repairs.length, 1);
+      assert.equal(run.repairs[0]!.filled, 1);
+      assert.ok(run.repairs[0]!.writtenBytes > 0);
+      assert.equal(run.repairErrors.length, 0);
+      assert.equal(run.audits[0]!.status, "ok");
+      assert.equal(run.audits[0]!.live, 5);
+
+      const after = (await (await fetch(`${base}/v1/durability`)).json()) as {
+        audits: { status: string; live: number }[];
+      };
+
+      assert.equal(after.audits[0]!.status, "ok");
+      assert.equal(after.audits[0]!.live, 5);
+    } finally {
+      await stop(server);
+    }
+  } finally {
+    cleanup();
+  }
+});

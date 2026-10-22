@@ -9,6 +9,13 @@ export interface SchedulerTimers {
   clearTimeout(handle: unknown): void;
 }
 
+export interface ChallengeRunRepair {
+  blobHash: string;
+  filled: number;
+  readBytes: number;
+  writtenBytes: number;
+}
+
 export interface ChallengeRun {
   /** When the run started, as an ISO timestamp. */
   startedAt: string;
@@ -16,7 +23,11 @@ export interface ChallengeRun {
   intervalMs: number;
   blobs: string[];
   audits: DurabilityReport[];
+  /** Blobs the challenges found under-replicated, before any repair. */
   underReplicated: string[];
+  /** Shards rebuilt and re-placed during this run. */
+  repairs: ChallengeRunRepair[];
+  repairErrors: { blobHash: string; error: string }[];
   errors: { blobHash: string; error: string }[];
 }
 
@@ -37,6 +48,8 @@ export interface ChallengeScheduleOptions {
   historyLimit?: number;
   timers?: SchedulerTimers;
   now?: () => number;
+  /** Rebuild and re-place shards that a challenge found missing. Off by default. */
+  repair?: boolean;
   onRun?: (run: ChallengeRun) => void;
 }
 
@@ -67,6 +80,7 @@ export class ChallengeScheduler {
   private readonly timers: SchedulerTimers;
   private readonly clock: () => number;
   private readonly historyLimit: number;
+  private readonly repair: boolean;
   private readonly onRun: ChallengeScheduleOptions["onRun"];
   private readonly runs: ChallengeRun[] = [];
   private startedAt: number | null = null;
@@ -81,6 +95,7 @@ export class ChallengeScheduler {
     this.timers = options.timers ?? systemTimers;
     this.clock = options.now ?? Date.now;
     this.historyLimit = options.historyLimit ?? DEFAULT_HISTORY;
+    this.repair = options.repair ?? false;
     this.onRun = options.onRun;
 
     if (!Number.isFinite(this.intervalMs) || this.intervalMs <= 0) {
@@ -168,15 +183,49 @@ export class ChallengeScheduler {
       }
     }
 
+    const underReplicated = audits
+      .filter((audit) => audit.status === "under-replicated")
+      .map((audit) => audit.blobHash);
+    const repairs: ChallengeRunRepair[] = [];
+    const repairErrors: { blobHash: string; error: string }[] = [];
+
+    if (this.repair) {
+      for (const blobHash of underReplicated) {
+        try {
+          const outcome = await this.ledger.repair(blobHash, holders);
+
+          if (outcome.filled > 0) {
+            repairs.push({
+              blobHash,
+              filled: outcome.filled,
+              readBytes: outcome.readBytes,
+              writtenBytes: outcome.writtenBytes,
+            });
+
+            // A rebuilt shard is unproven until someone asks for a proof.
+            await this.ledger.challenge(blobHash, holders);
+
+            const index = audits.findIndex((audit) => audit.blobHash === blobHash);
+            audits[index] = this.ledger.audit(blobHash);
+          }
+        } catch (error) {
+          repairErrors.push({
+            blobHash,
+            error: error instanceof Error ? error.message : "repair failed",
+          });
+        }
+      }
+    }
+
     const run: ChallengeRun = {
       startedAt: new Date(startedAt).toISOString(),
       finishedAt: new Date(this.clock()).toISOString(),
       intervalMs: this.intervalMs,
       blobs,
       audits,
-      underReplicated: audits
-        .filter((audit) => audit.status === "under-replicated")
-        .map((audit) => audit.blobHash),
+      underReplicated,
+      repairs,
+      repairErrors,
       errors,
     };
 

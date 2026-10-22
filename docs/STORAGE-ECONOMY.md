@@ -202,7 +202,11 @@ whenever the node starts with holders configured
 blob, records the audits, the under-replicated blobs, and any errors, then schedules the
 next run after it finishes; runs never overlap, and concurrent callers share one run.
 `GET /v1/durability` returns the schedule state and the current audits, and
-`POST /v1/durability/challenge` runs the same pass on demand.
+`POST /v1/durability/challenge` runs the same pass on demand. The node also repairs
+what a run finds: a failed shard is rebuilt from any `k` survivors onto a spare holder,
+challenged again, and only then reported `ok`. The run lists `repairs` (filled shards,
+bytes read and written) and `repairErrors` (for example, no free holder), so healing is
+as auditable as the loss that triggered it.
 
 A shard lost between runs therefore shows up as `under-replicated` on the next run with
 nobody asking. Two limits are worth saying out loud: the schedule is per-process state and

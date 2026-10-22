@@ -166,6 +166,27 @@ and the current audits; `POST /v1/durability/challenge` runs the same pass on
 demand. Holders come from `RAREXT_HOLDERS` (`id=url`, comma-separated), which keeps
 the holder set configuration rather than protocol.
 
+### Repair on the schedule
+
+A schedule that only records a loss leaves the blob lost. With `repair: true`
+(the node's default; the class default is off so a caller opts in), a run does the
+whole loop for each blob whose challenge came back `under-replicated`:
+
+1. rebuild the failed shard from any `k` survivors and write it to a spare holder
+   (the existing `ledger.repair`, which never reuses a holder of the same blob);
+2. challenge the repaired blob again, because a rebuilt shard is unproven until
+   someone asks for a proof;
+3. replace the audit with the fresh one, so `GET /v1/durability` shows `ok` only
+   after the new holder answered.
+
+The run reports both sides: `repairs` lists the blobs healed with `filled`,
+`readBytes`, and `writtenBytes`; `repairErrors` lists the blobs that could not be
+healed, with the reason (`no spare holder`, too few survivors, a holder losing a
+shard mid-copy). A failed repair does not end the run or stop the schedule; it is
+recorded and the next tick tries again. `underReplicated` stays the pre-repair
+observation, so a run that healed everything still says what was wrong when it
+started.
+
 ### Duty of an observation
 
 A placement record says who *should* hold a shard. It says nothing about whether
@@ -222,8 +243,9 @@ shard at or above `required` is visible in the report but still `ok`.
   the supplied set, which gives deterministic assignment and no co-location, not
   geographic or administrative diversity.
 - No fork resolution between registries; no federation.
-- No automatic repair. A scheduled run records `under-replicated`; it does not spend
-  another operator's bandwidth rebuilding shards by itself.
+- No repair authority beyond the configured holder set. A run heals onto a spare
+  holder the steward supplied; it will not discover, authorize, or pay a new holder
+  on its own, and it records a failed repair rather than escalating.
 - No authentication of holders. A holder id is a label, not a verified identity.
 
 ## Open questions
@@ -238,8 +260,8 @@ shard at or above `required` is visible in the report but still `ok`.
    deposit, or both?
 5. When a registry sees a fork, should it keep both branches rather than refuse
    the second?
-6. Should a scheduled run repair what it finds, and if so who authorises the write
-   to a holder the steward did not choose?
+6. Who pays for the bandwidth a repair spends, and should a repair above a size
+   threshold wait for the steward's approval even when a spare exists?
 
 ## Implementation status
 
@@ -248,7 +270,9 @@ server, the HTTP holder client, signed placement records with a file-backed
 registry, the `/v1/placements` API, the publication-level durability observation
 (tier, required, live, status, and the digest of the record it used), the scheduled
 challenge pass with
-`GET /v1/durability` and `POST /v1/durability/challenge`, and a transport test that
+`GET /v1/durability` and `POST /v1/durability/challenge`, repair-and-rechallenge on
+scheduled and on-demand runs (with `repairs`/`repairErrors` in the report), and a
+transport test that
 places across eight real HTTP holders, stops one, watches the audit degrade, repairs
 onto a reachable spare, and decodes the payload from the new placement. The schedule
 is covered by a fake-timer test that advances the clock and observes challenges fire

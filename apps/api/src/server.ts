@@ -16,6 +16,7 @@ const intervalMs = Number(process.env.RAREXT_CHALLENGE_INTERVAL_MS ?? 6 * 60 * 6
 const scheduler = new ChallengeScheduler({
   ledger: durability,
   holders: () => holders,
+  repair: true,
   intervalMs,
 });
 

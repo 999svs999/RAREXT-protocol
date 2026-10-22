@@ -43,6 +43,12 @@ break a client or invalidate stored data.
   `unverified` / `ok` / `under-replicated`, and the `placementDigest` that pins the signed
   record used. It is computed on read, not signed by the author, and reports the weakest
   tier across a manifest. 7 new tests.
+- **Automatic repair on the schedule.** A scheduled or on-demand challenge run now
+  heals `under-replicated` blobs: rebuild from any `k` survivors, place on a spare
+  holder, challenge the rebuilt shard again, and report `repairs` (filled, bytes read,
+  written) and `repairErrors` (for example, no spare holder). A failed repair is
+  recorded and the next tick retries; it never stops the schedule. The node enables
+  repair by default; the scheduler class does not. 3 new tests.
 - **Independent verifier operators.** A verifier can register a self-signed operator
   record (`POST /v1/verifier-operators`) for one app or `*`, and a publisher can attach
   that operator's signed attestation. The registry accepts it without a local verifier,
