@@ -175,9 +175,9 @@
             <div>
               <h3>Replicate as shards</h3>
               <p>
-                Files are split into k-of-n Reed–Solomon shards in a content-addressed store.
-                Lose holders up to n−k and any k rebuild the file; each shard's digest binds its
-                index, parameters, and the payload it came from.
+                Files are split into k-of-n Reed–Solomon shards and placed on distinct
+                holders. Each holder answers a nonce-bound Merkle challenge; lose holders up to
+                n−k and any k rebuild the file, and a failed shard is repaired onto a spare.
               </p>
             </div>
           </li>
@@ -195,7 +195,7 @@
           <span>Merkle anchoring + read-back</span>
           <span>content-addressed storage</span>
           <span>proof of possession</span>
-          <span>erasure-coded shards</span>
+          <span>erasure shards + holder audits</span>
           <span>work economy &amp; credit ledger</span>
           <span>agent market</span>
           <span>MCP server</span>

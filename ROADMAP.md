@@ -59,8 +59,13 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 ## Later — v2 Anchored (weeks 9–12)
 
 - [x] Erasure-coded blobs: any k of n shards reconstruct, digests bind identity
-- [ ] Durability tiers and an auditable replica count per publication
-- [ ] Retention challenges on a schedule, not only at upload
+- [x] Shard placement across independent holders, with no co-location
+- [x] Nonce-bound retention challenges and a live-holder audit
+- [x] Repair from any k survivors, with read and write accounting
+- [ ] A holder transport: another machine or agent joins the shard set
+- [ ] Signed placement records published to the registry, so the map survives the node
+- [ ] Scheduled challenges, not only on demand
+- [ ] Durability tier and an auditable replica count on the publication itself
 - [ ] Independent verifier operators
 - [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac

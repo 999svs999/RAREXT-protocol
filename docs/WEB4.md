@@ -28,7 +28,7 @@ protocol does not depend on it, and neither should you.
 | Primitive | What it means | Status in this repo |
 | --- | --- | --- |
 | **Identity** | A keypair, not an account. ECDSA-P256 or ML-DSA, suite recorded with every signature. | Shipped |
-| **Storage** | Content-addressed bytes, k-of-n erasure shards, proofs of possession. | Blobs, PoP, and shards shipped; placement and retention challenges are open work |
+| **Storage** | Content-addressed bytes, k-of-n erasure shards, placement across holders, challenges, repair. | Blobs, shards, placement, nonce-bound challenges, and repair shipped locally; a holder transport and published replica counts are open work |
 | **Verification** | Deterministic recompute; one verifier running unchanged in a browser and on a server. | Shipped |
 | **Settlement** | Work and byte-months paid from demand, not from an emission schedule. No protocol token. | Work economy shipped; byte-month pricing designed, not shipped |
 
@@ -62,10 +62,12 @@ protocol does not depend on it, and neither should you.
 
 ## Honest status
 
-This is pre-alpha. The primitive that is missing is durability at scale: shards exist
-and rebuild, but placement across independent holders, scheduled retention challenges,
-and a published replica count are not built. Until they are, "the network has it"
-means "at least one machine has it".
+This is pre-alpha. The mechanics of durability — placement, challenges, and repair —
+exist and are tested against local holders. What is missing is the network around
+them: a transport so a holder can be another machine or agent, signed placement
+records so the map survives the node that made it, scheduled challenges, and a
+replica count on the publication itself. Until those exist, "the network has it"
+still means "this process has it".
 
 That is the gap between a protocol that can describe web4 and a network that is web4.
 The roadmap says so, and the benchmark harness in

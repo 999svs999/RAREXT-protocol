@@ -109,10 +109,11 @@ directory. With the anchor root committed to the bytes:
 - The operator can delete and the record of the commitment stays.
 
 What is still centralised, and honestly so: the front door (a domain and a host),
-and the write path (who may publish). The first is fixed by decentralized naming
-over a content hash; the second is fixed by many registries accepting the same
-signed publications and gossiping between them — the publications are already
-portable, they are signed envelopes.
+the write path (who may publish), and the transport between holders — the durability
+ledger runs in-process today, with directories standing in for machines. The first is
+fixed by decentralized naming over a content hash; the second is fixed by many
+registries accepting the same signed publications and gossiping between them. The
+third is the next build: a holder API any machine or agent can join.
 
 ## Erasure coding: replication becomes reconstruction
 
@@ -150,6 +151,40 @@ against them, or price them. Those are the rest of the durability contract:
 
 Until a publication carries a durability tier and a replica count, its permanence is
 a claim the operator makes, not one a reader can check.
+
+## Durability: holders, challenges, repair
+
+Erasure coding says a blob *can* be rebuilt. Durability is the claim that enough
+independent holders still have the shards to do it. `apps/api/src/durability.ts` is
+that contract, and `npm run demo:durability` runs it end to end.
+
+**Placement.** `place(shards, holders, tier)` refuses duplicate holders, refuses
+fewer holders than shards, and never puts two shards of one blob on one holder. The
+assignment is deterministic from the payload digest, so two independent nodes compute
+the same placement for the same holder set.
+
+**Challenge.** Each shard is committed as a Merkle root over 4 KiB leaves. A
+challenge picks a random leaf and a nonce; the holder answers with the leaf, its
+path, and `sha256(nonce:leaf)`. The verifier checks the path against the committed
+root (possession) and the nonce binding (freshness). The auditor never needs the
+shard itself.
+
+**Audit.** A success is live for a window (24 hours by default). `audit()` reports
+`live` and `required`, and returns `under-replicated` rather than rounding up. The
+tier decides `required`: `ephemeral` 1, `pinned` k+1, `durable` k+m.
+
+**Repair.** `repair()` rebuilds every failed shard from any k survivors, verifies
+the payload digest, and places the new shard on a holder that does not already hold
+one for that blob. It reports both directions: reading k shards is about one
+payload, writing one shard is about `1/k` of it. A spare holder is required by
+design — repair never co-locates.
+
+What this does **not** prove: a holder could keep every leaf, discard the bytes, and
+still answer challenges. That is the gap between proof of possession and proof of
+retrievability, and it is a research step, not a solved problem. Nor is the placement
+record published yet: the ledger is in-process, so a restart loses the map.
+Publishing signed placement records to the registry is the next change, and it is
+what makes the map survive the node.
 
 ## The chain path
 
