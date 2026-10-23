@@ -33,6 +33,12 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Read-only TapeOut circuit/component indexer.** `GET /v1/tapeout/circuits`
+  reads bounded ERC-721 `Transfer` and ERC-1155 `TransferSingle`/`TransferBatch`
+  logs, reports the latest circuit owners and component movements, and returns
+  `configured:false` without `TAPEOUT_CIRCUIT_CONTRACT` or
+  `TAPEOUT_COMPONENT_CONTRACT`. It never signs or writes.
+
 - **MCP storage tools and a runnable network example.** The MCP server now exposes
   `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`,
   `rarext_storage_audit`, and `rarext_storage_pin`. Put encodes and places shards on the

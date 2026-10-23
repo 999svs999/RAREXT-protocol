@@ -54,7 +54,7 @@ import {
   type ChallengeRegistry,
 } from "./challenges.ts";
 import { RarextStore } from "./store.ts";
-import { tapeOutStatus } from "./tapeout.ts";
+import { tapeOutIndex, tapeOutStatus } from "./tapeout.ts";
 import {
   claimScope,
   createSemanticsRegistry,
@@ -2467,6 +2467,18 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       if (req.method === "GET" && pathname === "/v1/tapeout/status") {
         const address = searchParams.get("address") ?? undefined;
         send(res, 200, await tapeOutStatus(address));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/tapeout/circuits") {
+        send(
+          res,
+          200,
+          await tapeOutIndex({
+            fromBlock: searchParams.get("fromBlock") ?? undefined,
+            toBlock: searchParams.get("toBlock") ?? undefined,
+          }),
+        );
         return;
       }
 

@@ -165,6 +165,7 @@ Base URL: `http://127.0.0.1:8787`
 | GET | `/v1/anchors/:id` | — | `Anchor` |
 | POST | `/v1/anchors/:id/proof` | `{ publicationId }` | `{ leaf, proof, root, index, valid }` |
 | GET | `/v1/tapeout/status?address=` | — | `TapeOutStatus` |
+| GET | `/v1/tapeout/circuits?fromBlock=&toBlock=` | — | `TapeOutIndex` |
 | POST | `/v1/verify` | `{ publicationId }` | `{ valid, attestation, recomputed }` |
 
 Errors return `{ "error": "..." }` with status 400 (invalid input), 401 (bad signature or
@@ -197,12 +198,19 @@ capabilities (`anchor`, `identity`, `assets`, `source`, `read`) and never become
 |---|---|---|
 | `local` | `anchor` | Always available. Merkle root is the primary receipt. |
 | `trac` | `anchor`, `identity` | Announces `rarext.anchor.v1` to `TRAC_ANCHOR_URL`; skipped when unset. |
-| `tapeout` | `assets`, `read` | Read-only BSC status and optional `$BEM` balance; writes nothing. |
+| `tapeout` | `assets`, `read` | Read-only BSC status, optional `$BEM` balance, and a bounded circuit/component transfer index; writes nothing. |
 | `github` | `source`, `identity` | Pins public repositories to an exact commit; verifies gist/raw-file identity proofs. |
 
 Anchors keep one receipt per capable adapter. Trac is preferred as the primary receipt when
 it succeeds; local remains the fallback. A GitHub source is distribution and provenance, not
 trust: publications still carry the RAREXT attestation and the exact commit, path, and license.
+
+The TapeOut indexer reads ERC-721 `Transfer` logs for circuits and ERC-1155
+`TransferSingle`/`TransferBatch` logs for components. It is bounded: callers pass
+`fromBlock`/`toBlock`, or the server scans the last `TAPEOUT_INDEX_WINDOW` blocks
+(5,000 by default). It never signs or writes. Configure it with
+`TAPEOUT_CIRCUIT_CONTRACT` and/or `TAPEOUT_COMPONENT_CONTRACT`; without either,
+the endpoint reports `configured: false`.
 
 Identity links are signed `rarext.identity-link` v1 payloads. The proof must live under the
 claimed GitHub account (a public gist or raw file). Duplicate links are rejected. A link proves
@@ -215,7 +223,6 @@ Planned but not implemented:
 - `POST /v1/attestations` — submit an externally signed attestation envelope.
 - `GET /v1/attestations/:id` — fetch an envelope and its anchor proof.
 - `GET /v1/tasks/:id/versions` — versioned challenge registry.
-- `GET /v1/tapeout/circuits` — TapeOut circuit/token indexer.
 - Native Trac transport and identity — current anchoring/links use a webhook and GitHub proofs.
 - GitLab and Codeberg source adapters — the source protocol is adapter-ready.
 
