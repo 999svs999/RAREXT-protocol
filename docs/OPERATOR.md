@@ -19,9 +19,11 @@ production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md
 
 ## One command: `npm run net`
 
-This starts three holders and a pin service on ephemeral loopback ports, stores a
-64 KiB payload at `k=2, m=1`, challenges it, kills one holder, repairs onto a spare,
-verifies the bytes, then removes the temporary directory:
+This runs two scenarios against three holders and a pin service on ephemeral loopback
+ports. The open scenario stores a 64 KiB payload at `k=2, m=1`. The sealed scenario
+encrypts before erasure coding (AES-256-GCM, HKDF-SHA256), scans every holder directory
+for a plaintext marker, kills one holder, repairs onto a spare, and decrypts the
+retrieved bytes back to the original. Each scenario removes its temporary directory:
 
 ```bash
 npm run net
@@ -30,13 +32,13 @@ npm run net
 Real output from this checkout (ports and blob hash vary per run):
 
 ```
-[RAREXT Net] Starting storage network in /var/folders/.../rarext-net-4LyQJQ...
-[RAREXT Net] Holder 0 listening on http://127.0.0.1:52558
-[RAREXT Net] Holder 1 listening on http://127.0.0.1:52559
-[RAREXT Net] Holder 2 listening on http://127.0.0.1:52560
-[RAREXT Net] Pin service listening on http://127.0.0.1:52561
+[RAREXT Net] Open scenario in /var/folders/.../rarext-net-y5i9ca...
+[RAREXT Net] Holder 0 listening on http://127.0.0.1:53603
+[RAREXT Net] Holder 1 listening on http://127.0.0.1:53604
+[RAREXT Net] Holder 2 listening on http://127.0.0.1:53605
+[RAREXT Net] Pin service listening on http://127.0.0.1:53606
 [RAREXT Net] Storing 64 KiB test payload across holders (k=2, m=1)...
-[RAREXT Net] Placed blob cbe46b56e9830971e82c50ee0efb732645f5463b3486f60574ea068380bcd460 across 3 shards.
+[RAREXT Net] Placed blob 7a20ba1a032a70470c516f573decf5c92ff1f2df59ba7553fd882bc8f27fd053 across 3 shards.
 [RAREXT Net] Running challenge and audit...
 [RAREXT Net] Audit status: ok (live: 3/3)
 [RAREXT Net] Simulating failure: shutting down Holder 1...
@@ -46,12 +48,33 @@ Real output from this checkout (ports and blob hash vary per run):
 [RAREXT Net] Audit status after repair: ok
 [RAREXT Net] Retrieving and verifying byte-exact payload reconstruction...
 [RAREXT Net] SUCCESS: Decoded payload matches original byte-for-byte!
-[RAREXT Net] Network stopped and cleaned up.
+[RAREXT Net] Open scenario stopped and cleaned up.
+[RAREXT Net] Sealed scenario in /var/folders/.../rarext-net-sealed-jaPgnF...
+[RAREXT Net] Holder 0 listening on http://127.0.0.1:53618
+[RAREXT Net] Holder 1 listening on http://127.0.0.1:53619
+[RAREXT Net] Holder 2 listening on http://127.0.0.1:53620
+[RAREXT Net] Pin service listening on http://127.0.0.1:53621
+[RAREXT Net] Encrypted 65536 plaintext bytes to 65536 ciphertext bytes (aes-256-gcm, hkdf-sha256) before erasure coding.
+[RAREXT Net] Placed blob c3d97ebcd9c4ffd8ce873d57b6d66de44381b08dff078a84e8c356723f976d4d across 3 shards.
+[RAREXT Net] holder-0 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
+[RAREXT Net] holder-1 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
+[RAREXT Net] holder-2 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
+[RAREXT Net] Running challenge and audit...
+[RAREXT Net] Audit status: ok (live: 3/3)
+[RAREXT Net] Simulating failure: shutting down Holder 1...
+[RAREXT Net] Audit status after failure: under-replicated
+[RAREXT Net] Provisioning spare Holder 3 and triggering repair...
+[RAREXT Net] Repair complete. Filled 1 shard(s).
+[RAREXT Net] holder-3 directory after repair: 1 shard file(s), 0 plaintext-marker hits, 0 hash mismatches
+[RAREXT Net] Audit status after repair: ok
+[RAREXT Net] Retrieving and verifying byte-exact payload reconstruction...
+[RAREXT Net] SUCCESS: decrypted 65536 bytes match the original plaintext byte-for-byte!
+[RAREXT Net] Sealed scenario stopped and cleaned up.
 ```
 
-If you see `SUCCESS` and `Network stopped and cleaned up`, the code path works on your
-machine. The demo is ephemeral; for a network that survives a terminal, use the
-commands below.
+If you see both `SUCCESS` lines and both cleanup lines, the open and sealed paths work
+on your machine, and no holder directory contained the plaintext marker. The demo is
+ephemeral; for a network that survives a terminal, use the commands below.
 
 ## Run a persistent network
 

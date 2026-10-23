@@ -55,6 +55,13 @@ break a client or invalidate stored data.
   isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw caller-held secret.
   Do not upload real secrets or describe sealed storage as audited encryption yet.
 
+- **`npm run net` now proves the sealed tier end to end.** After the open scenario, it
+  encrypts a 64 KiB payload with AES-256-GCM/HKDF-SHA256 before erasure coding, places
+  it on three HTTP holders, scans every holder directory for a plaintext marker (zero
+  hits, all shard hashes match), kills a holder, repairs onto a spare, then retrieves
+  and decrypts back to the original bytes. The documented output is a real run. This is
+  still a demo of the envelope, not a key-management or confidentiality claim.
+
 - **Bounded-memory erasure for large payloads.** `apps/api/src/erasure-stream.ts`
   stripes a file into fixed chunks, encodes one chunk at a time, and appends shard
   blocks to disk, so peak memory follows the chunk size rather than the payload size.
