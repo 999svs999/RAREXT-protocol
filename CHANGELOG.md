@@ -42,6 +42,18 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **EVM anchor audit trail and guarded funded-testnet deployment.** `contracts/AUDIT.md`
+  records the pinned source and toolchain, the external-audit-not-performed status,
+  an internal finding and disposition register, a manual auditor checklist, and the
+  blocked live-deployment gate. The contract now rejects a zero owner at
+  initialization. The deploy script verifies proxy and implementation code, the
+  ERC-1967 implementation slot, and publisher read-back. `npm run deploy:anchor:testnet`
+  refuses known mainnet chain ids, requires explicit testnet acknowledgement, runs
+  the existing deploy script, and writes a record whose audit flags keep live
+  deployment blocked. Tests cover zero-owner initialization, the 512-byte metadata
+  boundary, the 14-publication compatibility cap, publisher revocation, and the
+  deployment guard. No external audit was performed and no contract was deployed.
+
 - **Game-native state migration skeleton.** `npm run plan:game-state` reads a
   registry snapshot and writes a deferred, no-op preservation plan with collection
   counts, field inventories, canonical digests, unmanaged top-level fields, and

@@ -157,6 +157,35 @@ describe("RarextAnchor", () => {
     assert.equal(count, 0n);
   });
 
+  it("refuses a zero owner during initialization", async () => {
+    const { vm, accounts } = await createNode();
+    const implementation = await create(
+      vm,
+      accounts.deployer,
+      artifacts.anchor.abi,
+      artifacts.anchor.evm.bytecode.object,
+    );
+    const proxy = await create(
+      vm,
+      accounts.deployer,
+      artifacts.proxy.abi,
+      artifacts.proxy.evm.bytecode.object,
+      ["address", "bytes"],
+      [implementation.toString(), "0x"],
+    );
+
+    const result = await call(
+      vm,
+      accounts.other,
+      proxy,
+      anchorInterface,
+      "initialize",
+      ["0x0000000000000000000000000000000000000000"],
+    );
+
+    assert.equal(revert(result, anchorInterface), "ZeroAddress");
+  });
+
   it("publishes a root and metadata, emits the event, and exposes the adapter read", async () => {
     const { vm, accounts, proxy } = await deployFixture();
 
@@ -213,8 +242,18 @@ describe("RarextAnchor", () => {
       "metadataOf",
       [1n],
     );
+    const [missingRoot, missingTimestamp] = await read(
+      vm,
+      accounts.other,
+      proxy,
+      anchorInterface,
+      "anchors",
+      [99n],
+    );
 
     assert.equal(count, 1n);
+    assert.equal(missingRoot, `0x${"0".repeat(64)}`);
+    assert.equal(missingTimestamp, 0n);
     assert.equal(id, 1n);
     assert.equal(anchored, true);
     assert.equal(storedRoot, root);
@@ -261,14 +300,58 @@ describe("RarextAnchor", () => {
     assert.equal(count, 1n);
   });
 
-  it("bounds the metadata size", async () => {
+  it("authorizes and revokes publishers, and rejects the zero address", async () => {
     const { vm, accounts, proxy } = await deployFixture();
-    const root = keccak256(toUtf8Bytes("too-large"));
-    const metadata = new Uint8Array(513);
+    const zero = await call(
+      vm,
+      accounts.owner,
+      proxy,
+      anchorInterface,
+      "setPublisher",
+      ["0x0000000000000000000000000000000000000000", true],
+    );
+    assert.equal(revert(zero, anchorInterface), "ZeroAddress");
+
+    await call(vm, accounts.owner, proxy, anchorInterface, "setPublisher", [
+      accounts.publisher.toString(),
+      true,
+    ]);
+    const allowed = await call(
+      vm,
+      accounts.publisher,
+      proxy,
+      anchorInterface,
+      "publish",
+      [keccak256(toUtf8Bytes("publisher-allowed")), toUtf8Bytes("allowed")],
+    );
+    assert.equal(allowed.execResult.exceptionError, undefined);
+
+    await call(vm, accounts.owner, proxy, anchorInterface, "setPublisher", [
+      accounts.publisher.toString(),
+      false,
+    ]);
+    const revoked = await call(
+      vm,
+      accounts.publisher,
+      proxy,
+      anchorInterface,
+      "publish",
+      [keccak256(toUtf8Bytes("publisher-revoked")), toUtf8Bytes("revoked")],
+    );
+    assert.equal(revert(revoked, anchorInterface), "NotPublisher");
+  });
+
+  it("bounds metadata at 512 bytes", async () => {
+    const { vm, accounts, proxy } = await deployFixture();
+    const atLimit = await call(vm, accounts.owner, proxy, anchorInterface, "publish", [
+      keccak256(toUtf8Bytes("metadata-512")),
+      new Uint8Array(512),
+    ]);
+    assert.equal(atLimit.execResult.exceptionError, undefined);
 
     const result = await call(vm, accounts.owner, proxy, anchorInterface, "publish", [
-      root,
-      metadata,
+      keccak256(toUtf8Bytes("too-large")),
+      new Uint8Array(513),
     ]);
 
     assert.equal(revert(result, anchorInterface), "MetadataTooLarge");
@@ -437,6 +520,26 @@ describe("RarextAnchor", () => {
       storedMetadata,
       hexlify(AbiCoder.defaultAbiCoder().encode(["bytes32[]"], [ids])),
     );
+  });
+
+  it("fits 14 publication ids in the compatibility wrapper and rejects 15", async () => {
+    const { vm, accounts, proxy } = await deployFixture();
+    const ids = (count) =>
+      Array.from({ length: count }, (_, index) =>
+        keccak256(toUtf8Bytes(`publication-${index}`)),
+      );
+
+    const atLimit = await call(vm, accounts.owner, proxy, anchorInterface, "anchor", [
+      keccak256(toUtf8Bytes("fourteen-ids")),
+      ids(14),
+    ]);
+    assert.equal(atLimit.execResult.exceptionError, undefined);
+
+    const tooMany = await call(vm, accounts.owner, proxy, anchorInterface, "anchor", [
+      keccak256(toUtf8Bytes("fifteen-ids")),
+      ids(15),
+    ]);
+    assert.equal(revert(tooMany, anchorInterface), "MetadataTooLarge");
   });
 
   it("cannot initialize or upgrade the implementation directly", async () => {

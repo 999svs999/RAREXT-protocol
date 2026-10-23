@@ -66,6 +66,7 @@ contract RarextAnchor is
     }
 
     function initialize(address initialOwner) external initializer {
+        if (initialOwner == address(0)) revert ZeroAddress();
         __Ownable2Step_init();
         __Pausable_init();
         _transferOwnership(initialOwner);

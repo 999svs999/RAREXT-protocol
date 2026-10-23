@@ -106,7 +106,9 @@ root can be confirmed on any chain that has it.
 
 `contracts/RarextAnchor.sol` is the anchor contract the EVM adapter expects. It
 is source-complete and tested against a local EVM, but **not deployed and not
-audited**.
+audited**. The audit trail, manual checklist, and blocked-live-deployment status
+are in [`contracts/AUDIT.md`](../contracts/AUDIT.md); the funded-testnet wrapper is
+`npm run deploy:anchor:testnet`.
 
 It stores each root with `keccak256(metadata)`, the publisher, and the block
 timestamp, and emits `AnchorPublished` with the full metadata (capped at 512
@@ -118,7 +120,8 @@ anchor(bytes32 root, bytes32[] publicationIds) returns (uint256 id)
 ```
 
 `anchor` ABI-encodes the publication ids as the metadata blob, so the shape in
-the table above keeps working. The read shape is:
+the table above keeps working. The 512-byte bound leaves room for 14 ids; a 15th
+id reverts. Keep EVM anchor batches at 14 publications or fewer. The read shape is:
 
 ```solidity
 anchors(uint256 id) returns (bytes32 root, uint64 timestamp)
@@ -150,9 +153,10 @@ Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
 
 ## What is still missing
 
-- **A deployed and audited EVM anchor contract.** The implementation, tests, and
-  deploy path are in `contracts/`. A live testnet deployment and an external
-  audit are still open.
+- **A deployed and audited EVM anchor contract.** The implementation, tests,
+  audit trail, and guarded funded-testnet path are in `contracts/`; no external
+  audit has been performed and no contract is live. Mainnet deployment remains
+  blocked until the audit completes.
 - **Real relays.** The relay protocol is documented by the request shape
   (`rarext.anchor.v1`), but each chain's signer has to be operated.
 - **A native Trac anchor transport.** RESET/trac-peer 0.4.11 has no anchor move or transfer
