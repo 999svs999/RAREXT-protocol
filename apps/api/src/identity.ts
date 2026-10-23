@@ -18,6 +18,10 @@ export function keyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicKey)).digest("hex");
 }
 
+export function identityLinkBinding(payload: unknown): string {
+  return createHash("sha256").update(canonicalize(payload)).digest("hex");
+}
+
 /**
  * Which suite a key belongs to.
  *

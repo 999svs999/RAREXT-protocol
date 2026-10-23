@@ -4,7 +4,7 @@
 - **Author(s):** RAREXT maintainers
 - **Created:** 2026-10-21
 - **Requires:** none
-- **Implementation:** partial. The v0 API ships signed publication envelopes (RFC 0002), local Merkle anchors, and an optional `TRAC_ANCHOR_URL` webhook. There is no native Trac transport or Trac identity yet.
+- **Implementation:** partial. The v0 API ships signed publication envelopes (RFC 0002), local Merkle anchors, an optional `TRAC_ANCHOR_URL` webhook, and a Trac identity-link prototype that verifies a [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge. There is no native Intercom transport yet.
 
 ## Summary
 
@@ -66,6 +66,13 @@ Rules:
 - The v0 API continues to accept handles. When a key is present, the server records `authorKey` alongside `author`.
 
 **Open choice:** ed25519 for simplicity and broad library support, or secp256k1 for compatibility with existing EVM tooling. Recommendation: ed25519 for identity, with an optional EVM link proof for users who want one wallet.
+
+**Prototype (shipped).** A RAREXT handle can link to a RESET Trac address through
+`POST /v1/identity-links`. The client signs the RAREXT `rarext.identity-link` v1 payload with its
+RAREXT key and obtains a RESET login challenge signed by the Trac signer, with the challenge
+`nonce` set to `sha256(canonicalize(payload))` and the challenge `audience` set to the RAREXT
+origin. The adapter verifies the Ed25519 signature offline. This proves key control without an
+Intercom round trip; it does not yet move the canonical identity to Trac.
 
 ### 2. Attestation envelope v1
 

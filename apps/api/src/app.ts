@@ -39,10 +39,12 @@ import type {
 } from "../../../packages/core/src/index.ts";
 
 import { AdapterRegistry, createDefaultRegistry } from "./adapters/registry.ts";
+import type { TracIdentityProof } from "./adapters/types.ts";
 import { anchorPending, anchorThreshold, publicationLeaf } from "./anchorer.ts";
 import {
   asPublicKey,
   cryptoPolicy,
+  identityLinkBinding,
   keyId,
   profileFor,
   suiteFor,
@@ -655,6 +657,42 @@ function asLinkPayload(value: Record<string, unknown>): IdentityLinkPayload {
     createdAt: value.createdAt,
     nonce: value.nonce,
   };
+}
+
+function asExternalProof(value: unknown): TracIdentityProof | undefined {
+  if (value === undefined || value === null) return undefined;
+
+  const record = asRecord(value);
+
+  if (record.kind !== "trac") {
+    throw new Error("externalProof.kind must be trac");
+  }
+
+  if (typeof record.signature !== "string") {
+    throw new Error("externalProof.signature must be a string");
+  }
+
+  return {
+    kind: "trac",
+    challenge: asRecord(record.challenge),
+    signature: record.signature,
+  };
+}
+
+function requestOrigin(req: IncomingMessage): string {
+  const configured = process.env.RAREXT_ORIGIN;
+  if (configured) return configured;
+
+  const forwarded = req.headers["x-forwarded-proto"];
+  const header = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const protocol = header?.split(",")[0]?.trim() || "http";
+  const host = req.headers.host;
+
+  if (!host) {
+    throw new Error("Host header is required to verify a Trac identity link");
+  }
+
+  return `${protocol}://${host}`;
 }
 
 async function serveStatic(
@@ -2276,6 +2314,12 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         const rawPayload = asRecord(body.payload);
         const payload = asLinkPayload(rawPayload);
+        const externalProof = asExternalProof(body.externalProof);
+
+        if (externalProof && payload.network !== "trac") {
+          throw new Error("externalProof is only supported for trac identity links");
+        }
+
         const identity = store.getIdentity(payload.handle);
 
         if (!identity) {
@@ -2305,6 +2349,9 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
             externalId: payload.externalId,
             proofUrl: payload.proofUrl,
             nonce: payload.nonce,
+            audience: externalProof ? requestOrigin(req) : undefined,
+            binding: externalProof ? identityLinkBinding(rawPayload) : undefined,
+            externalProof,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "proof verification failed";

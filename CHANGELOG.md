@@ -33,6 +33,13 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Trac identity-link prototype.** `POST /v1/identity-links` accepts an optional
+  `externalProof` for `network: "trac"`. The proof is a
+  [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge
+  whose `nonce` is `sha256(canonicalize(payload))` and whose `audience` must match the
+  RAREXT origin. The adapter verifies the signature offline; no Intercom round trip
+  and no canonical-identity migration yet.
+
 - **Read-only TapeOut circuit/component indexer.** `GET /v1/tapeout/circuits`
   reads bounded ERC-721 `Transfer` and ERC-1155 `TransferSingle`/`TransferBatch`
   logs, reports the latest circuit owners and component movements, and returns

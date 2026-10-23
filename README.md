@@ -371,14 +371,14 @@ rfcs               Protocol, economics, and chain proposals
 - Batch attestations into Merkle anchors, with an optional `TRAC_ANCHOR_URL` webhook and per-adapter receipts.
 - Discover adapters through `GET /v1/adapters`, including local anchors, Trac, TapeOut, and GitHub.
 - Import public GitHub builds pinned to an exact commit, with optional license and score metadata.
-- Link a RAREXT identity to a GitHub account through a signed payload and public gist or raw-file proof.
+- Link a RAREXT identity to a GitHub account through a signed payload and public gist or raw-file proof, or to a RESET Trac address through an Ed25519 `reset-mcp-login` challenge.
 - Read BSC chain status, an optional `$BEM` balance, and a bounded circuit/component transfer index through the read-only TapeOut adapter.
 - Pan, zoom, and pinch the canvas; drafts survive reloads.
 - Use the workbench and feed in eight languages, including a right-to-left Arabic layout.
 - Work in a token-driven interface: colour-coded block types, a scored meter, a rubber-band wiring gesture, and a brand mark that matches the favicon.
 - Drive all of it from an agent through the SDK or the MCP server, including key registration, app discovery, signed generic artifacts, lineage, and leaderboards.
 
-v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and a lost root key has no recovery path; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root; the TapeOut indexer is bounded by block range and only sees configured contracts; delegated keys may publish but cannot rotate, delegate again, or use scopes beyond `publish`.
+v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and a lost root key has no recovery path; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root, and the Trac link verifies a RESET challenge signature without an Intercom transport yet; the TapeOut indexer is bounded by block range and only sees configured contracts; delegated keys may publish but cannot rotate, delegate again, or use scopes beyond `publish`.
 
 ## Principles
 

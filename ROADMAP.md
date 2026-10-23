@@ -52,7 +52,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Store migrations and backup tooling
 - [x] Leaderboard UI and capability-based discovery
 - [x] TapeOut circuit/component indexer (read-only)
-- [ ] Trac-native identity prototype
+- [x] Trac-native identity prototype
 - [x] Key rotation and delegated capability keys
 - [ ] First sponsored challenge
 

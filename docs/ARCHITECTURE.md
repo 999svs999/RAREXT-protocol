@@ -197,7 +197,7 @@ capabilities (`anchor`, `identity`, `assets`, `source`, `read`) and never become
 | Adapter | Capabilities | Behavior |
 |---|---|---|
 | `local` | `anchor` | Always available. Merkle root is the primary receipt. |
-| `trac` | `anchor`, `identity` | Announces `rarext.anchor.v1` to `TRAC_ANCHOR_URL`; skipped when unset. |
+| `trac` | `anchor`, `identity` | Announces `rarext.anchor.v1` to `TRAC_ANCHOR_URL`; verifies RESET Ed25519 identity challenges offline; anchoring is skipped when unset. |
 | `tapeout` | `assets`, `read` | Read-only BSC status, optional `$BEM` balance, and a bounded circuit/component transfer index; writes nothing. |
 | `github` | `source`, `identity` | Pins public repositories to an exact commit; verifies gist/raw-file identity proofs. |
 
@@ -212,9 +212,13 @@ The TapeOut indexer reads ERC-721 `Transfer` logs for circuits and ERC-1155
 `TAPEOUT_CIRCUIT_CONTRACT` and/or `TAPEOUT_COMPONENT_CONTRACT`; without either,
 the endpoint reports `configured: false`.
 
-Identity links are signed `rarext.identity-link` v1 payloads. The proof must live under the
-claimed GitHub account (a public gist or raw file). Duplicate links are rejected. A link proves
-control of an external account, not membership or reputation.
+Identity links are signed `rarext.identity-link` v1 payloads. GitHub proofs must live under the
+claimed account (a public gist or raw file). A `trac` proof is a signed RESET
+(`Trac-Systems/reset`) `reset-mcp-login` challenge: `externalId` is the 64-hex Ed25519 Trac
+address, the challenge `nonce` is `sha256(canonicalize(payload))`, and the challenge `audience`
+must equal the RAREXT origin (`RAREXT_ORIGIN`, or the request host). The adapter verifies the
+Ed25519 signature offline. Duplicate links are rejected. A link proves control of an external
+account, not membership or reputation.
 
 Static files are served from `apps/web/public` after `npm run build:web`. `/` serves the workbench.
 

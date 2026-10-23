@@ -6,12 +6,21 @@ import type {
   SourceResolution,
 } from "../../../../packages/core/src/index.ts";
 
+export interface TracIdentityProof {
+  kind: "trac";
+  challenge: Record<string, unknown>;
+  signature: string;
+}
+
 export interface IdentityLinkProof {
   handle: string;
   network: string;
   externalId: string;
   proofUrl: string;
   nonce: string;
+  audience?: string;
+  binding?: string;
+  externalProof?: TracIdentityProof;
 }
 
 export interface RarextAdapter {
