@@ -42,6 +42,17 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Sponsored challenges.** A configured community member can sign a
+  `rarext.challenge-sponsorship.v1` payload and POST it to
+  `/v1/challenges/sponsored`. The registry verifies the member's P-256 or ML-DSA key,
+  binds a timestamp and nonce, stores the challenge as `status: "sponsored"`, exposes it
+  through the existing challenge API, and emits `rarext.challenge.v1` to an optional
+  webhook. The workbench lists sponsored challenges and badges matching feed items. The
+  member roster is supplied through `RAREXT_SPONSOR_MEMBERS`; no live community directory
+  ships with this repository, and the running registry does not yet persist sponsored
+  challenges across restarts. Four tests cover the signed flow, webhook delivery, replay
+  and signature rejection, and the unconfigured state.
+
 - **EVM anchor contract and local deployment path.** `contracts/RarextAnchor.sol` is a
   UUPS-upgradeable, two-step-owned, pausable append-only anchor log. It stores a unique
   root, the metadata hash, the publisher, and the timestamp; emits `AnchorPublished` with

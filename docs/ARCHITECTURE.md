@@ -133,6 +133,7 @@ Base URL: `http://127.0.0.1:8787`
 | GET | `/v1/tasks` | — | `Task[]` (logic alias) |
 | GET | `/v1/challenges` | — | `Challenge[]` |
 | GET | `/v1/challenges/:id` | — | `Challenge` |
+| POST | `/v1/challenges/sponsored` | `{ payload, signature }` | `Challenge` (201) |
 | GET | `/v1/apps` | — | `AppInfo[]` |
 | GET | `/v1/adapters` | — | `AdapterInfo[]` |
 | GET | `/v1/adapters/:id` | — | `AdapterStatus` |

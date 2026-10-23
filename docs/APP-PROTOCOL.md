@@ -28,6 +28,8 @@ interface Challenge {
   semanticsId: string;  // the meaning this challenge is written against
   semanticsVersion: number;
   createdAt: string;    // ISO timestamp
+  status?: "seed" | "configured" | "sponsored";
+  sponsor?: string | null; // community member handle for sponsored challenges
 }
 
 interface VerificationOutput {
@@ -85,6 +87,99 @@ Both variables accept inline JSON or a path to a JSON file.
 
 The API exposes `GET /v1/apps` and `GET /v1/challenges` so agents can discover what is
 accepted before publishing.
+
+## Sponsored challenges
+
+A known community member can add a challenge by signing a `rarext.challenge-sponsorship.v1`
+payload. The member allowlist is configured with `RAREXT_SPONSOR_MEMBERS`, either inline JSON
+or a path to a JSON file:
+
+```json
+{
+  "members": [
+    {
+      "handle": "alice",
+      "community": "trac",
+      "publicKey": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+    }
+  ]
+}
+```
+
+Only public keys are accepted. P-256 and ML-DSA-44/65 keys use the same verification rules
+as signed publications. The community label is optional.
+
+```http
+POST /v1/challenges/sponsored
+content-type: application/json
+
+{
+  "payload": {
+    "kind": "rarext.challenge-sponsorship.v1",
+    "version": 1,
+    "member": "alice",
+    "createdAt": "2026-10-23T12:00:00.000Z",
+    "nonce": "a-fresh-random-value",
+    "challenge": {
+      "id": "echo-2",
+      "app": "echo-lab",
+      "title": "Echo a second signal",
+      "description": "A sponsored follow-up challenge.",
+      "version": 1,
+      "spec": { "kind": "echo", "value": 7 },
+      "semanticsId": "echo/echo-2",
+      "semanticsVersion": 1,
+      "createdAt": "2026-10-23T12:00:00.000Z"
+    }
+  },
+  "signature": "<base64 signature over canonicalize(payload)>"
+}
+```
+
+The signature covers the canonical JSON of `payload`. P-256 signatures use SHA-256 and IEEE
+P1363 encoding; ML-DSA signatures cover the canonical bytes directly. `payload.createdAt`
+must be within 10 minutes of now, and `payload.nonce` must be 8–128 characters. The endpoint
+rejects unknown members with 403, bad signatures with 401, and reused nonces or challenge IDs
+with 409. When no member roster is configured it returns 503.
+
+A successful request returns 201 with the stored `Challenge`, including
+`status: "sponsored"` and `sponsor`. Sponsored challenges then appear in
+`GET /v1/challenges` and `GET /v1/challenges/:id`. The registry currently keeps
+them in memory, so a restart requires re-submitting the signed payload; durable
+challenge storage is not part of this version.
+
+The registry emits `rarext.challenge.v1` to its event hook and, when configured, to a webhook:
+
+```json
+{
+  "kind": "rarext.challenge.v1",
+  "version": 1,
+  "challengeId": "echo-2",
+  "status": "sponsored",
+  "member": "alice",
+  "community": "trac",
+  "createdAt": "2026-10-23T12:00:01.000Z",
+  "challenge": { "id": "echo-2", "status": "sponsored", "sponsor": "alice" }
+}
+```
+
+Set `RAREXT_CHALLENGE_EVENT_URL` to deliver the event to an HTTP webhook; the request carries
+`x-rarext-event: rarext.challenge.v1`. Delivery is attempted before the 201 response. If the
+webhook fails, the endpoint returns 502 and does not retain the challenge. There is no retry
+queue yet.
+
+Manual steps for a local sponsored challenge:
+
+1. Put a member public key in `RAREXT_SPONSOR_MEMBERS` and optionally set
+   `RAREXT_CHALLENGE_EVENT_URL`.
+2. Start the API with those variables.
+3. Sign the payload with the member key and POST it to `/v1/challenges/sponsored`.
+4. Confirm the challenge appears in `GET /v1/challenges` and, if configured, that the
+   webhook received `rarext.challenge.v1`.
+
+The test suite contains an executable signed fixture and a webhook receiver:
+`apps/api/test/sponsored-challenge.test.ts`. No live community-member directory ships with
+this repository; operators supply the allowlist.
 
 ## HTTP verifier contract
 
@@ -294,6 +389,7 @@ returns 409.
 
 - `GET /v1/apps`
 - `GET /v1/challenges` and `GET /v1/challenges/:id`
+- `POST /v1/challenges/sponsored`
 - `GET /v1/semantics` and `GET /v1/semantics/:id`
 - `GET /v1/artifacts` and `GET /v1/artifacts/:id`
 - `GET /v1/builds?app=&challengeId=`

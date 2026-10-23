@@ -64,6 +64,8 @@ export interface Artifact {
   body: unknown;
 }
 
+export type ChallengeStatus = "seed" | "configured" | "sponsored";
+
 export interface Challenge {
   id: string;
   app: string;
@@ -76,6 +78,8 @@ export interface Challenge {
   semanticsId: string;
   semanticsVersion: number;
   createdAt: string;
+  status?: ChallengeStatus;
+  sponsor?: string | null;
 }
 
 export type ClaimKind = "satisfies" | "attests" | "produces" | "derives";

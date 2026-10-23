@@ -532,6 +532,59 @@ main {
   line-height: 1.6;
 }
 
+.sponsored-list {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sponsored-list .section-label {
+  margin: 0 0 8px;
+}
+
+.sponsored-list ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sponsored-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.sponsored-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sponsored-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sponsored-meta {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+.sponsored-list .tag {
+  flex: 0 0 auto;
+}
+
 /* ---------- block palette ---------- */
 
 .palette {
@@ -1509,6 +1562,16 @@ td.fail {
   color: var(--violet);
   border-color: rgba(183, 156, 240, 0.28);
   background: rgba(183, 156, 240, 0.07);
+}
+
+.tag.sponsored {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
 
 .tag.source {

@@ -56,6 +56,12 @@ import {
   createChallengeRegistry,
   type ChallengeRegistry,
 } from "./challenges.ts";
+import {
+  createSponsorRegistry,
+  verifyChallengeSponsorship,
+  type ChallengeEvent,
+  type SponsorRegistry,
+} from "./sponsorship.ts";
 import { RarextStore } from "./store.ts";
 import { tapeOutIndex, tapeOutStatus } from "./tapeout.ts";
 import {
@@ -136,6 +142,9 @@ export interface AppOptions {
   publicDir?: string;
   registry?: AdapterRegistry;
   challenges?: ChallengeRegistry;
+  sponsors?: SponsorRegistry;
+  onChallengeEvent?: (event: ChallengeEvent) => void | Promise<void>;
+  challengeEventUrl?: string | null;
   verifiers?: VerifierRegistry;
   operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
@@ -751,8 +760,18 @@ type PublishResult =
 
 export function createApp(options: AppOptions = {}): ReturnType<typeof createServer> {
   const store = options.store ?? new RarextStore();
-  const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;  const registry = options.registry ?? createDefaultRegistry(options.fetch);
-  const challenges = options.challenges ?? createChallengeRegistry();
+  const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
+  const registry = options.registry ?? createDefaultRegistry(options.fetch);
+  const baseChallenges = options.challenges ?? createChallengeRegistry();
+  const sponsoredChallenges = new Map<string, Challenge>();
+  const challenges: ChallengeRegistry = {
+    list: () => [...baseChallenges.list(), ...sponsoredChallenges.values()],
+    get: (id) => sponsoredChallenges.get(id) ?? baseChallenges.get(id),
+  };
+  const sponsors = options.sponsors ?? createSponsorRegistry();
+  const sponsoredNonces = new Set<string>();
+  const challengeEventUrl =
+    options.challengeEventUrl ?? process.env.RAREXT_CHALLENGE_EVENT_URL?.trim() ?? null;
   const semantics = options.semantics ?? createSemanticsRegistry(() => challenges.list());
   const verifiers =
     options.verifiers ?? createVerifierRegistry(options.fetch, semantics);
@@ -1033,6 +1052,28 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     };
   }
 
+  async function emitChallengeEvent(event: ChallengeEvent): Promise<void> {
+    if (options.onChallengeEvent) {
+      await options.onChallengeEvent(event);
+    }
+
+    if (!challengeEventUrl) return;
+
+    const response = await (options.fetch ?? fetch)(challengeEventUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-rarext-event": event.kind,
+      },
+      body: JSON.stringify(event),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`challenge event webhook returned ${response.status}`);
+    }
+  }
+
   function listApps(): AppInfo[] {
     const allChallenges = challenges.list();
 
@@ -1079,6 +1120,41 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
       if (req.method === "GET" && pathname === "/v1/tasks") {
         send(res, 200, tasks);
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/challenges/sponsored") {
+        const result = verifyChallengeSponsorship(await readJson(req), sponsors);
+
+        if ("error" in result) {
+          send(res, result.status, { error: result.error });
+          return;
+        }
+
+        if (sponsoredNonces.has(result.nonce)) {
+          send(res, 409, { error: "sponsorship nonce has already been used" });
+          return;
+        }
+
+        if (challenges.get(result.challenge.id)) {
+          send(res, 409, { error: `challenge already exists: ${result.challenge.id}` });
+          return;
+        }
+
+        sponsoredNonces.add(result.nonce);
+        sponsoredChallenges.set(result.challenge.id, result.challenge);
+
+        try {
+          await emitChallengeEvent(result.event);
+        } catch (error) {
+          sponsoredNonces.delete(result.nonce);
+          sponsoredChallenges.delete(result.challenge.id);
+          const message = error instanceof Error ? error.message : "unknown error";
+          send(res, 502, { error: `challenge event delivery failed: ${message}` });
+          return;
+        }
+
+        send(res, 201, result.challenge);
         return;
       }
 

@@ -130,6 +130,8 @@ const taskSelect = el<HTMLSelectElement>("task-select");
 const taskDescription = el("task-description");
 const taskProgress = el("task-progress");
 const challengeDots = el("challenge-dots");
+const sponsoredChallengesEl = el("sponsored-challenges");
+const sponsoredChallengeItems = el<HTMLUListElement>("sponsored-challenge-items");
 const truthTable = el("truth-table");
 const testSummary = el("test-summary");
 const scoreStatus = el("score-status");
@@ -199,6 +201,8 @@ let pinch: PinchState | null = null;
 let feedItems: Publication[] = [];
 let appNames: Record<string, string> = {};
 let challengeTitles: Record<string, string> = {};
+let sponsoredChallenges: Challenge[] = [];
+let sponsoredChallengeIds = new Set<string>();
 let feedOffset = 0;
 let feedHasMore = false;
 let toastTimer: number | undefined;
@@ -1598,12 +1602,45 @@ async function refreshRegistry(): Promise<void> {
       challengeTitles = Object.fromEntries(
         challenges.map((challenge) => [challenge.id, challenge.title]),
       );
+      sponsoredChallenges = challenges.filter(
+        (challenge) => challenge.status === "sponsored",
+      );
+      sponsoredChallengeIds = new Set(
+        sponsoredChallenges.map((challenge) => challenge.id),
+      );
+      renderSponsoredChallenges();
     }
 
     if (feedItems.length) renderFeed();
   } catch {
     return;
   }
+}
+
+function renderSponsoredChallenges(): void {
+  if (!sponsoredChallenges.length) {
+    sponsoredChallengeItems.innerHTML = "";
+    sponsoredChallengesEl.classList.add("hidden");
+    return;
+  }
+
+  sponsoredChallengeItems.innerHTML = sponsoredChallenges
+    .map((challenge) => {
+      const sponsor = challenge.sponsor
+        ? `<span class="sponsored-meta">@${escapeHtml(challenge.sponsor)}</span>`
+        : "";
+
+      return `<li>
+        <div class="sponsored-copy">
+          <span class="sponsored-title">${escapeHtml(challenge.title)}</span>
+          <span class="sponsored-meta">${escapeHtml(challenge.app)}</span>
+          ${sponsor}
+        </div>
+        <span class="tag sponsored">${escapeHtml(t("dyn.sponsored"))}</span>
+      </li>`;
+    })
+    .join("");
+  sponsoredChallengesEl.classList.remove("hidden");
 }
 
 function timeAgo(iso: string): string {
@@ -1630,6 +1667,9 @@ function cardHtml(publication: Publication): string {
     : t("dyn.firstBuild");
   const fullDate = new Date(publication.createdAt).toLocaleString(localeTag());
   const appTag = `<span class="tag app">${escapeHtml(appNames[publication.app] ?? publication.app)}</span>`;
+  const sponsoredTag = sponsoredChallengeIds.has(publication.challengeId)
+    ? `<span class="tag sponsored">${escapeHtml(t("dyn.sponsored"))}</span>`
+    : "";
   const claimTag = attestation.semanticsId
     ? `<span class="tag claim">${escapeHtml(`${attestation.semanticsId}@${attestation.semanticsVersion}`)}</span>`
     : "";
@@ -1655,7 +1695,7 @@ function cardHtml(publication: Publication): string {
   return `<article class="card">
     <div class="card-top">
       <div>
-        <div class="card-tags">${appTag}${claimTag}${quantumTag}${statusTag}${authorTag}${sourceTag}</div>
+        <div class="card-tags">${appTag}${sponsoredTag}${claimTag}${quantumTag}${statusTag}${authorTag}${sourceTag}</div>
         <h3>${escapeHtml(publication.title)}</h3>
         <div class="meta">
           ${escapeHtml(t("dyn.by"))} <b>@${escapeHtml(publication.author)}</b> · ${escapeHtml(taskName(publication.challengeId))}

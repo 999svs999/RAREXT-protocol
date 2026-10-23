@@ -43,6 +43,8 @@ export function challengeFromTask(task: Task): Challenge {
     semanticsId: `logic/${task.id}`,
     semanticsVersion: 1,
     createdAt: SEED_CREATED_AT,
+    status: "seed",
+    sponsor: null,
   };
 }
 
@@ -71,7 +73,7 @@ function asSampleArtifact(value: unknown): SampleArtifact | undefined {
   };
 }
 
-function asChallenge(value: unknown): Challenge {
+export function asChallenge(value: unknown): Challenge {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("challenge must be a JSON object");
   }
@@ -94,6 +96,23 @@ function asChallenge(value: unknown): Challenge {
     throw new Error(`challenge ${challenge.id} is missing a description`);
   }
 
+  if (
+    challenge.status !== undefined &&
+    challenge.status !== "seed" &&
+    challenge.status !== "configured" &&
+    challenge.status !== "sponsored"
+  ) {
+    throw new Error(`challenge ${challenge.id} has an invalid status`);
+  }
+
+  if (
+    challenge.sponsor !== undefined &&
+    challenge.sponsor !== null &&
+    typeof challenge.sponsor !== "string"
+  ) {
+    throw new Error(`challenge ${challenge.id} has an invalid sponsor`);
+  }
+
   return {
     id: challenge.id,
     app: challenge.app,
@@ -112,6 +131,8 @@ function asChallenge(value: unknown): Challenge {
       typeof challenge.createdAt === "string"
         ? challenge.createdAt
         : new Date().toISOString(),
+    status: challenge.status ?? "configured",
+    sponsor: typeof challenge.sponsor === "string" ? challenge.sponsor : null,
   };
 }
 

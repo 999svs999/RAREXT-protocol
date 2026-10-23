@@ -15,6 +15,7 @@ export type {
   BuildSort,
   BuildSummary,
   Challenge,
+  ChallengeStatus,
   Circuit,
   Claim,
   ClaimKind,
