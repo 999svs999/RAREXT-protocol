@@ -166,6 +166,27 @@ function isHash(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
+/**
+ * A failed write is a server problem (disk full, read-only directory, or a
+ * quota the holder cannot enforce), not a client problem. It is reported as a
+ * 5xx so a caller retries or repairs instead of resending the same bytes.
+ */
+function writeFailure(error: unknown): { status: number; message: string } {
+  const message = error instanceof Error ? error.message : "write failed";
+  const code =
+    error instanceof Error && typeof (error as NodeJS.ErrnoException).code === "string"
+      ? ((error as NodeJS.ErrnoException).code as string)
+      : "";
+
+  if (code === "ENOSPC" || /no space left/.test(message)) {
+    return { status: 507, message: "insufficient storage: disk full" };
+  }
+  if (code === "EACCES" || code === "EPERM" || /read-only|permission/.test(message)) {
+    return { status: 500, message: `holder directory is not writable: ${message}` };
+  }
+  return { status: 500, message };
+}
+
 async function fileLeaves(path: string): Promise<string[]> {
   const leaves: string[] = [];
   let carry = Buffer.alloc(0);
@@ -231,6 +252,13 @@ export function createHolderServer(options: HolderServerOptions) {
   async function leavesForFile(storedAs: string): Promise<string[] | null> {
     const cached = leafCache.get(storedAs);
     if (cached) return cached;
+
+    // The leaves are computed over the on-disk bytes, but only after proving
+    // those bytes still hash to `storedAs`. A corrupted or truncated file would
+    // otherwise produce a valid-looking Merkle proof over the wrong bytes, and
+    // the ledger's audit would record the shard as live when it is not.
+    const found = store.get(storedAs);
+    if (!found) return null;
 
     const path = store.filePath(storedAs);
     if (!path) return null;
@@ -389,8 +417,13 @@ export function createHolderServer(options: HolderServerOptions) {
             }
           }
 
-          const record = store.put(bytes);
-          send(res, 201, { storedAs: record.hash, size: record.size });
+          try {
+            const record = store.put(bytes);
+            send(res, 201, { storedAs: record.hash, size: record.size });
+          } catch (error) {
+            const failure = writeFailure(error);
+            send(res, failure.status, { error: failure.message });
+          }
           return;
         }
       }
@@ -475,14 +508,27 @@ export function createHolderServer(options: HolderServerOptions) {
             const digest = hasher.digest("hex");
             if (digest !== hash) throw new Error("upload hash does not match storedAs");
 
-            const record = store.putFile(temporary, hash, length);
-            send(res, 201, { storedAs: record.hash, size: record.size });
+            try {
+              const record = store.putFile(temporary, hash, length);
+              send(res, 201, { storedAs: record.hash, size: record.size });
+            } catch (error) {
+              const failure = writeFailure(error);
+              send(res, failure.status, { error: failure.message });
+            }
           } catch (error) {
             rmSync(temporary, { force: true });
             if (!res.headersSent) {
-              send(res, 400, {
-                error: error instanceof Error ? error.message : "raw upload failed",
-              });
+              // A length or hash mismatch is the caller's bytes being wrong, a
+              // 400. An I/O failure landing the rename is a holder problem.
+              if (
+                error instanceof Error &&
+                /upload length does not match|upload hash does not match/.test(error.message)
+              ) {
+                send(res, 400, { error: error.message });
+              } else {
+                const failure = writeFailure(error);
+                send(res, failure.status, { error: failure.message });
+              }
             }
           }
           return;

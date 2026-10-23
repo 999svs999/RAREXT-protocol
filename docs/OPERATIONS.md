@@ -41,6 +41,22 @@ services over HTTP, and its measured limits are pinned by the regression tests i
 | A holder token that is wrong or expired | the holder answers 401/403 to every challenge | the challenge records a `rejected` outcome per shard and `rarext_storage_challenge` rejects with `every holder rejected the challenge; check RAREXT_HOLDER_TOKEN` instead of silently reporting every shard lost |
 | `rarext_storage_audit` with a holder not in the placement | the read-only audit sees a configured holder set that is a subset of the placement | the audit degrades to `under-replicated` (shards on the absent holder report not live) instead of failing; `challenge: true` routes through `rarext_storage_challenge` and still requires the full set |
 
+## Holder process fault limits
+
+The holder process stores shard bytes for other machines and answers nonce-bound
+challenges. Its failure modes are bounded by the regression tests in
+`apps/api/test/holder-fault.test.ts` and the token/quota tests in
+`apps/api/test/quotas-limits.test.ts` and `holder-gc.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| Shard write on a read-only or full disk | a 5xx, not a 400: `ENOSPC` is `507 insufficient storage: disk full`; `EACCES`/`EPERM` is `500 holder directory is not writable`. A failed write is a holder problem, so a caller retries or repairs instead of resending bytes |
+| Per-holder byte quota (`RAREXT_HOLDER_MAX_BYTES` / `maxBytes`) | both the JSON and raw upload paths answer `507 insufficient storage: byte quota exceeded` before any bytes are stored |
+| A request naming a shard the holder does not have | a clean `404 unknown shard` on GET, HEAD, raw, leaves, and challenge |
+| A challenge answered after the retention window closed (GC deleted the shard) | the holder no longer has the bytes, so the challenge answers `404 unknown shard`; the ledger records the shard as not live and repairs it |
+| A corrupted or truncated shard on the holder disk | the challenge refuses to serve a proof over the wrong bytes: it re-hashes the on-disk file against the shard name and falls back to `404 unknown shard` instead of a valid-looking Merkle proof |
+| A holder restart mid-challenge | shard bytes reload from disk, so the restarted holder still answers challenges; a holder that is not running surfaces a clean `fetch failed` / connection error to the caller, which the ledger records as a `holder-missing` outcome rather than hanging |
+
 ## Tournament and Trac task registry limits
 
 The newest session-scoped endpoints are bounded by construction, and the limits are
