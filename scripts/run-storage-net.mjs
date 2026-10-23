@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { once } from "node:events";
+import { pathToFileURL } from "node:url";
 
 import { createHolderServer } from "../apps/api/src/holder-server.ts";
 import { createPinServer, PinStore } from "../apps/api/src/pin-server.ts";
@@ -127,7 +128,9 @@ async function runLocalNetwork() {
   }
 }
 
-runLocalNetwork().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runLocalNetwork().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
