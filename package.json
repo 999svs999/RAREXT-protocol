@@ -20,7 +20,7 @@
     "dev:examples": "bash scripts/dev-examples.sh",
     "dev:mcp": "node apps/mcp/src/server.ts",
     "start": "npm run build:web && node apps/api/src/server.ts",
-    "test": "node --test packages/core/test/*.test.ts packages/agent-sdk/test/*.test.ts apps/api/test/*.test.ts apps/web/test/*.test.ts apps/chain/test/*.test.ts bench/storage/test/*.test.mjs bench/repair/test/*.test.mjs",
+    "test": "node --test packages/core/test/*.test.ts packages/agent-sdk/test/*.test.ts apps/api/test/*.test.ts apps/web/test/*.test.ts apps/chain/test/*.test.ts bench/storage/test/*.test.mjs bench/repair/test/*.test.mjs contracts/test/*.test.mjs",
     "test:examples": "python3 -m unittest discover -s examples/board-games -p 'test_*.py' && python3 -m unittest discover -s examples/launchpad -p 'test_*.py' && python3 -m unittest discover -s examples/storage -p 'test_*.py' && python3 -m unittest discover -s examples/market -p 'test_*.py'",
     "test:games": "npm run test:examples",
     "version:all": "node scripts/sync-version.mjs",
@@ -46,14 +46,24 @@
     "dev:chess": "node apps/verifiers/chess/server.ts",
     "pin": "node apps/api/src/pin-server.ts",
     "net": "node scripts/run-storage-net.mjs",
-    "example:trac-identity": "node --experimental-strip-types examples/trac-identity/main.ts"
+    "example:trac-identity": "node --experimental-strip-types examples/trac-identity/main.ts",
+    "test:contracts": "node --test contracts/test/*.test.mjs",
+    "deploy:anchor": "node contracts/scripts/deploy-anchor.mjs"
   },
   "engines": {
     "node": ">=22.18"
   },
   "devDependencies": {
+    "@ethereumjs/vm": "10.1.3",
+    "@openzeppelin/contracts": "5.0.2",
+    "@openzeppelin/contracts-upgradeable": "5.0.2",
     "@types/node": "^22.10.0",
     "esbuild": "^0.28.2",
+    "ethers": "6.17.0",
+    "solc": "0.8.38",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
   }
 }

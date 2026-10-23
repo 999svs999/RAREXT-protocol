@@ -102,12 +102,45 @@ unilaterally rewrite.
 The mirror story depends on this: a mirror is checked against a root, and the
 root can be confirmed on any chain that has it.
 
+## EVM anchor contract
+
+`contracts/RarextAnchor.sol` is the anchor contract the EVM adapter expects. It
+is source-complete and tested against a local EVM, but **not deployed and not
+audited**.
+
+It stores each root with `keccak256(metadata)`, the publisher, and the block
+timestamp, and emits `AnchorPublished` with the full metadata (capped at 512
+bytes). The two write shapes are:
+
+```solidity
+publish(bytes32 root, bytes metadata) returns (uint256 id)
+anchor(bytes32 root, bytes32[] publicationIds) returns (uint256 id)
+```
+
+`anchor` ABI-encodes the publication ids as the metadata blob, so the shape in
+the table above keeps working. The read shape is:
+
+```solidity
+anchors(uint256 id) returns (bytes32 root, uint64 timestamp)
+```
+
+`anchorAt(uint256)`, `metadataOf(uint256)`, `idOf(bytes32)`, `isAnchored(bytes32)`,
+and `anchorCount()` expose the rest. Roots are unique; the owner and authorized
+publishers may write; the owner can pause writes and is the only account that can
+authorize a UUPS upgrade.
+
+Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
+[`contracts/README.md`](../contracts/README.md).
+
 ## What is still missing
 
-- **A deployed EVM anchor contract.** The adapter expects a contract with
-  `anchors(uint256) returns (bytes32 root, uint64 timestamp)` and an
-  `anchor(bytes32,bytes32[])` entry point. The Solidity is small; the deployment
-  and the audit are not.
+- **A deployed and audited EVM anchor contract.** The implementation, tests, and
+  deploy path are in `contracts/`. A live testnet deployment and an external
+  audit are still open.
+- **A working EVM adapter read-back.** `apps/api/src/chains/relay.ts` currently
+  builds the `anchors(uint256)` call with SHA-256 instead of the Keccak selector,
+  and hex-encodes the ASCII calldata. The contract exposes the right ABI; the
+  adapter needs its own fix and test before a live read-back can confirm it.
 - **Real relays.** The relay protocol is documented by the request shape
   (`rarext.anchor.v1`), but each chain's signer has to be operated.
 - **A native Trac anchor transport.** RESET/trac-peer 0.4.11 has no anchor move or transfer

@@ -345,7 +345,7 @@ apps/web           Browser workbench and feed
 apps/mcp           MCP stdio server for agent frameworks
 packages/core      Netlist schema, simulator, scoring, seed tasks
 packages/agent-sdk Typed client for agents
-contracts          Attestation registry and adapters (planned)
+contracts          EVM anchor contract, compiler, local-EVM tests, deploy runbook (not deployed)
 docs               Litepaper, architecture, app protocol, semantics, branding, storage economy, mirrors, privacy, chains, work, crypto, market
 examples           Cross-language verifier examples
 rfcs               Protocol, economics, and chain proposals

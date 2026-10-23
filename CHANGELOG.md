@@ -33,6 +33,17 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **EVM anchor contract and local deployment path.** `contracts/RarextAnchor.sol` is a
+  UUPS-upgradeable, two-step-owned, pausable append-only anchor log. It stores a unique
+  root, the metadata hash, the publisher, and the timestamp; emits `AnchorPublished` with
+  the bounded metadata; and exposes `anchors(uint256)` plus `anchor(bytes32,bytes32[])` for
+  the registry's existing EVM adapter. Ten local-EVM tests cover publication, duplicate
+  roots, authorization, metadata bounds, pausing, ownership, state-preserving upgrades, and
+  direct implementation safety. `npm run deploy:anchor` deploys an implementation and an
+  ERC-1967 proxy only when the RPC chain id matches an explicit expected value. The
+  contract is **not deployed or audited**; the runbook in `contracts/README.md` records
+  what remains.
+
 - **RFC 0016: appchain evaluation.** Evaluates a RAREXT appchain against staying on
   anchored transports. It uses the pinned RESET/trac-peer wire format as primary
   evidence for why native anchor moves are a protocol change, and recommends deferring

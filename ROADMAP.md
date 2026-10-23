@@ -39,7 +39,8 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Content-addressing adapter: CIDv1 pointers, with an optional pinning service
 - [x] Retention proofs: a time-locked commitment instead of a declared term
 - [x] Sealed private artifacts: salted proofs and capability-gated retrieval
-- [ ] A deployed EVM anchor contract, audited
+- [ ] A deployed EVM anchor contract, audited — the implementation, local-EVM tests, and
+  deploy path are in `contracts/`; live deployment and the external audit are pending
 - [x] A pinning service for the content adapter
 - [x] Continuous fair-launch attestations as a verifiable trajectory
 - [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume
