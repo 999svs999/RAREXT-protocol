@@ -129,6 +129,22 @@ and `anchorCount()` expose the rest. Roots are unique; the owner and authorized
 publishers may write; the owner can pause writes and is the only account that can
 authorize a UUPS upgrade.
 
+The EVM relay wire format is:
+
+1. the registry POSTs `rarext.anchor.v1` with
+   `{ protocol, chain, root, publicationIds, address }`;
+2. the relay submits `publish(bytes32 root, bytes metadata)` with
+   `metadata = abi.encode(publicationIds)`, or calls the compatibility
+   `anchor(bytes32 root, bytes32[] publicationIds)` wrapper, which performs the
+   same encoding;
+3. the relay returns the anchor id as either `<transactionHash>:<id>` or a bare
+   numeric id;
+4. the registry `eth_call`s `anchors(id)` with the 32-byte id and confirms that
+   the first return word is the root. The adapter's calldata is the selector
+   `0x368b733e` followed by the 32-byte id, never an ASCII or SHA-256 encoding.
+
+`anchors(id)` is the read-back; `publish` and `anchor` are the write paths.
+
 Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
 [`contracts/README.md`](../contracts/README.md).
 
@@ -137,10 +153,6 @@ Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
 - **A deployed and audited EVM anchor contract.** The implementation, tests, and
   deploy path are in `contracts/`. A live testnet deployment and an external
   audit are still open.
-- **A working EVM adapter read-back.** `apps/api/src/chains/relay.ts` currently
-  builds the `anchors(uint256)` call with SHA-256 instead of the Keccak selector,
-  and hex-encodes the ASCII calldata. The contract exposes the right ABI; the
-  adapter needs its own fix and test before a live read-back can confirm it.
 - **Real relays.** The relay protocol is documented by the request shape
   (`rarext.anchor.v1`), but each chain's signer has to be operated.
 - **A native Trac anchor transport.** RESET/trac-peer 0.4.11 has no anchor move or transfer

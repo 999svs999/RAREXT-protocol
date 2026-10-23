@@ -41,6 +41,12 @@ export interface ChainReceipt extends AdapterReceipt {
 
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+// keccak256("anchors(uint256)")[0..4]. The API has no runtime Ethereum
+// dependency, so the selector is pinned here. `apps/api/test/evm-relay.test.ts`
+// checks it against ethers' `id("anchors(uint256)")`, so a signature change
+// cannot silently drift.
+const ANCHORS_UINT256_SELECTOR = "0x368b733e";
+
 export function base58Decode(value: string): Uint8Array | null {
   if (value.length === 0) return null;
 
@@ -77,6 +83,20 @@ function toHex(bytes: Uint8Array): string {
 
 function containsHex(text: string, hex: string): boolean {
   return text.toLowerCase().includes(hex.toLowerCase());
+}
+
+/**
+ * The relay returns either `<reference>:<index>` or a bare numeric index.
+ * Without an id there is no `anchors(uint256)` key to read, so refuse to guess
+ * index 0.
+ */
+function anchorIndex(reference: string): number | null {
+  const separator = reference.lastIndexOf(":");
+  const candidate = separator === -1 ? reference : reference.slice(separator + 1);
+  if (!/^\d+$/.test(candidate)) return null;
+
+  const index = Number(candidate);
+  return Number.isSafeInteger(index) && index >= 0 ? index : null;
 }
 
 /**
@@ -196,13 +216,15 @@ export class RelayChainAdapter implements RarextAdapter {
           return { confirmed: false, height: null, hash: null };
         }
 
-        const index = Number(reference.split(":")[1] ?? "");
-        const data =
-          "0x" +
-          Buffer.from(
-            `${await this.selector("anchors(uint256)")}${index.toString(16).padStart(64, "0")}`,
-            "utf8",
-          ).toString("hex");
+        const index = anchorIndex(reference);
+        if (index === null) {
+          return { confirmed: false, height: null, hash: reference };
+        }
+
+        // The contract writes through `publish(bytes32,bytes)` (or the
+        // compatibility `anchor(bytes32,bytes32[])` wrapper) and exposes the
+        // stored record through the `anchors(uint256)` view.
+        const data = `${ANCHORS_UINT256_SELECTOR}${index.toString(16).padStart(64, "0")}`;
 
         const response = await this.requestFetch(this.config.rpc!, {
           method: "POST",
@@ -278,11 +300,6 @@ export class RelayChainAdapter implements RarextAdapter {
       default:
         return { confirmed: false, height: null, hash: null };
     }
-  }
-
-  private async selector(signature: string): Promise<string> {
-    const { createHash } = await import("node:crypto");
-    return createHash("sha256").update(signature).digest("hex").slice(0, 8);
   }
 
   async anchor(root: string, publicationIds: string[]): Promise<ChainReceipt> {

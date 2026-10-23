@@ -31,6 +31,15 @@ break a client or invalidate stored data.
   still-open findings (confidentiality, retrievability, quotas/TLS/identity, lying
   verifiers, orphan GC). Eight security tests.
 
+### Fixed
+
+- **EVM anchor read-back calldata.** `apps/api/src/chains/relay.ts` now calls
+  `anchors(uint256)` with the Keccak selector and a directly ABI-encoded id, instead of
+  SHA-256 hashing the signature and hex-encoding the ASCII calldata. It also accepts a
+  bare numeric relay reference and refuses to guess index 0 when no id is present. Three
+  tests pin the calldata against ethers, cover both reference shapes, and cover the
+  no-id skip.
+
 ### Added
 
 - **EVM anchor contract and local deployment path.** `contracts/RarextAnchor.sol` is a
