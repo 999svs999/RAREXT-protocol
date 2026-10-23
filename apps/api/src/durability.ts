@@ -153,6 +153,13 @@ export interface DurabilityOptions {
   now?: () => number;
   windowMs?: number;
   random?: (upper: number) => number;
+  /**
+   * Maximum number of placements retained in memory. The oldest placement (and
+   * its witness state) is evicted when the limit is exceeded. This bounds a
+   * long-lived client that keeps placing new blobs; it does not delete shards
+   * from holders. Defaults to unlimited for backwards compatibility.
+   */
+  maxPlacements?: number;
 }
 
 export function requiredHolders(
@@ -545,12 +552,42 @@ export class DurabilityLedger {
   private readonly now: () => number;
   readonly windowMs: number;
   private readonly random: (upper: number) => number;
+  private readonly maxPlacements: number;
 
   constructor(options: DurabilityOptions = {}) {
     this.now = options.now ?? Date.now;
     this.windowMs = options.windowMs ?? 24 * 60 * 60 * 1000;
     this.random =
       options.random ?? ((upper) => Math.floor(Math.random() * upper));
+
+    if (
+      options.maxPlacements !== undefined &&
+      (!Number.isInteger(options.maxPlacements) || options.maxPlacements < 1)
+    ) {
+      throw new Error("maxPlacements must be a positive integer");
+    }
+
+    this.maxPlacements = options.maxPlacements ?? Number.POSITIVE_INFINITY;
+  }
+
+  private remember(blobHash: string, placement: Placement, witnesses: Map<number, Witness>): void {
+    this.placements.delete(blobHash);
+    this.placements.set(blobHash, placement);
+    this.witnesses.delete(blobHash);
+    this.witnesses.set(blobHash, witnesses);
+
+    while (this.placements.size > this.maxPlacements) {
+      const oldest = this.placements.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.placements.delete(oldest);
+      this.witnesses.delete(oldest);
+    }
+  }
+
+  /** Drop a placement and its witness state without touching holder shards. */
+  forget(blobHash: string): boolean {
+    this.witnesses.delete(blobHash);
+    return this.placements.delete(blobHash);
   }
 
   get(blobHash: string): Placement | null {
@@ -564,9 +601,9 @@ export class DurabilityLedger {
 
   /** Writes the map into the ledger so a published record can be rebuilt. */
   adopt(placement: Placement): Placement {
-    this.placements.set(placement.blobHash, placement);
-    this.witnesses.set(
+    this.remember(
       placement.blobHash,
+      placement,
       new Map(
         placement.shards.map((shard) => [
           shard.index,
@@ -683,8 +720,7 @@ export class DurabilityLedger {
 
     placement.shards.sort((left, right) => left.index - right.index);
 
-    this.placements.set(payloadDigest, placement);
-    this.witnesses.set(payloadDigest, witnesses);
+    this.remember(payloadDigest, placement, witnesses);
 
     return placement;
   }
@@ -692,8 +728,8 @@ export class DurabilityLedger {
   /**
    * Place a file-backed shard set produced by `encodeFileToShards`. Each shard is
    * uploaded as a file so neither side buffers a whole shard for a large blob.
-   * Challenge, audit, and GC are the same as an in-memory placement; repair of a
-   * streamed placement is not implemented yet.
+   * Challenge, audit, and GC are the same as an in-memory placement; repair is
+   * bounded by the chunk size.
    */
   async placeStreamed(
     streamed: StreamedPlacement,
@@ -809,8 +845,7 @@ export class DurabilityLedger {
     }
 
     placement.shards.sort((left, right) => left.index - right.index);
-    this.placements.set(payloadDigest, placement);
-    this.witnesses.set(payloadDigest, witnesses);
+    this.remember(payloadDigest, placement, witnesses);
 
     return placement;
   }

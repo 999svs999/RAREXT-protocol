@@ -12,6 +12,7 @@ import {
   respondToChallenge,
   verifyChallengeResponse,
   type DurabilityHolder,
+  type Placement,
 } from "../src/durability.ts";
 import { decodeBytes, encodeBytes } from "../src/erasure.ts";
 
@@ -303,6 +304,30 @@ test("repair refuses before writing when there are not enough spares", async () 
       before,
       "a refused repair changes nothing",
     );
+  } finally {
+    cleanup();
+  }
+});
+
+test("maxPlacements evicts the oldest placement and its witnesses", async () => {
+  const { holders, cleanup } = setup(6);
+
+  try {
+    const ledger = new DurabilityLedger({ maxPlacements: 2 });
+    const placements: Placement[] = [];
+
+    for (let index = 0; index < 3; index += 1) {
+      placements.push(await ledger.place(encodeBytes(randomBytes(1024 + index), 4, 2), holders, "durable"));
+    }
+
+    assert.equal(ledger.list().length, 2);
+    assert.equal(ledger.get(placements[0]!.blobHash), null);
+    assert.equal(ledger.get(placements[1]!.blobHash)?.blobHash, placements[1]!.blobHash);
+    assert.equal(ledger.get(placements[2]!.blobHash)?.blobHash, placements[2]!.blobHash);
+    await assert.rejects(() => ledger.challenge(placements[0]!.blobHash, holders), /unknown blob/);
+    await ledger.challenge(placements[2]!.blobHash, holders);
+    assert.equal(ledger.forget(placements[2]!.blobHash), true);
+    assert.equal(ledger.list().length, 1);
   } finally {
     cleanup();
   }

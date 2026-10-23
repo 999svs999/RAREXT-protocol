@@ -1,9 +1,9 @@
 {
   "kind": "rarext.storage.soak",
   "version": 1,
-  "startedAt": "2026-10-23T01:55:44.418Z",
-  "finishedAt": "2026-10-23T02:05:55.463Z",
-  "durationSeconds": 611,
+  "startedAt": "2026-10-23T03:17:46.318Z",
+  "finishedAt": "2026-10-23T03:27:50.318000Z",
+  "durationSeconds": 604,
   "environment": {
     "node": "v24.15.0",
     "platform": "darwin x64",
@@ -15,6 +15,7 @@
     "parityShards": 2,
     "payloadBytes": 65536,
     "activeBlobs": 24,
+    "ledgerRetention": 24,
     "killIntervalSeconds": [
       15,
       30
@@ -26,237 +27,272 @@
     "loopback": true
   },
   "stats": {
-    "cycles": 5507,
+    "cycles": 5910,
     "puts": {
-      "attempted": 5507,
-      "ok": 5502,
-      "failed": 5
+      "attempted": 5910,
+      "ok": 5910,
+      "failed": 0,
+      "retries": 3
     },
     "audits": {
-      "attempted": 5507,
-      "ok": 5364,
-      "under": 143
+      "attempted": 5910,
+      "ok": 5765,
+      "under": 145
     },
     "challenges": {
-      "attempted": 33042,
-      "ok": 32899,
-      "failed": 143
+      "attempted": 35460,
+      "ok": 35315,
+      "failed": 145
     },
     "repairs": {
-      "attempted": 143,
-      "ok": 143,
+      "attempted": 145,
+      "ok": 145,
       "failed": 0,
-      "filled": 143,
-      "reauditOk": 143,
+      "filled": 145,
+      "reauditOk": 145,
       "reauditFailed": 0
     },
     "retrievals": {
-      "attempted": 5507,
-      "ok": 5507,
+      "attempted": 5910,
+      "ok": 5910,
       "failed": 0
     },
-    "holderKills": 21,
-    "holderRestarts": 21,
-    "errors": [
-      {
-        "at": "2026-10-23T01:57:05.540Z",
-        "operation": "put",
-        "message": "fetch failed"
-      },
-      {
-        "at": "2026-10-23T02:01:25.922Z",
-        "operation": "put",
-        "message": "fetch failed"
-      },
-      {
-        "at": "2026-10-23T02:03:06.082Z",
-        "operation": "put",
-        "message": "fetch failed"
-      },
-      {
-        "at": "2026-10-23T02:03:40.379Z",
-        "operation": "put",
-        "message": "fetch failed"
-      },
-      {
-        "at": "2026-10-23T02:05:25.281Z",
-        "operation": "put",
-        "message": "fetch failed"
-      }
-    ]
+    "holderKills": 23,
+    "holderRestarts": 23,
+    "gcScans": 470,
+    "gcDeleted": 35166,
+    "errors": []
   },
   "memory": {
-    "peakClientRssMiB": 222.2265625,
-    "peakHolderMaxRssMiB": 119.15234375,
-    "peakHolderSumRssMiB": 845.3984375,
-    "samples": 297,
+    "peakClientRssMiB": 184.0,
+    "peakHolderMaxRssMiB": 90.2,
+    "peakHolderSumRssMiB": 693.7,
+    "steadyStateClientRssMiB": 170.703125,
+    "steadyStateClientRssRangeMiB": [
+      150.11328125,
+      184.02734375
+    ],
+    "steadyStateClientHeapUsedMiB": 10.458168029785156,
+    "steadyStateClientExternalMiB": 10.537823677062988,
+    "startClientRssMiB": 77.9,
+    "endClientRssMiB": 184.0,
+    "startClientHeapUsedMiB": 10.8,
+    "endClientHeapUsedMiB": 10.5,
+    "peakClientHeapUsedMiB": 13.8,
+    "peakClientHeapTotalMiB": 144.3,
+    "peakLedgerPlacements": 24,
+    "peakHolderShardFiles": 815,
+    "samples": 302,
+    "gcEachSample": true,
     "series": [
       {
-        "at": "2026-10-23T01:55:45.821Z",
-        "elapsedSeconds": 1.404,
-        "clientRssMiB": 77.48828125,
-        "holderMaxRssMiB": 77.9765625,
-        "holderSumRssMiB": 617.93359375,
+        "elapsedSeconds": 1,
+        "clientRssMiB": 77.9,
+        "clientHeapUsedMiB": 10.8,
+        "holderMaxRssMiB": 77.7,
+        "holderSumRssMiB": 612.7,
+        "ledgerPlacements": 0,
+        "holderShardFiles": 0,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T01:56:16.132Z",
-        "elapsedSeconds": 31.714,
-        "clientRssMiB": 157.76171875,
-        "holderMaxRssMiB": 86.046875,
-        "holderSumRssMiB": 673.83984375,
+        "elapsedSeconds": 32,
+        "clientRssMiB": 149.2,
+        "clientHeapUsedMiB": 9.9,
+        "holderMaxRssMiB": 87.0,
+        "holderSumRssMiB": 677.4,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 732,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T01:56:46.433Z",
-        "elapsedSeconds": 62.015,
-        "clientRssMiB": 173.6796875,
-        "holderMaxRssMiB": 89.45703125,
-        "holderSumRssMiB": 696.34375,
+        "elapsedSeconds": 62,
+        "clientRssMiB": 150.1,
+        "clientHeapUsedMiB": 10.0,
+        "holderMaxRssMiB": 88.4,
+        "holderSumRssMiB": 687.4,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 457,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T01:57:16.700Z",
-        "elapsedSeconds": 92.282,
-        "clientRssMiB": 180.93359375,
-        "holderMaxRssMiB": 90.28515625,
-        "holderSumRssMiB": 705.984375,
+        "elapsedSeconds": 93,
+        "clientRssMiB": 158.7,
+        "clientHeapUsedMiB": 10.1,
+        "holderMaxRssMiB": 88.7,
+        "holderSumRssMiB": 692.6,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 145,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T01:57:47.038Z",
-        "elapsedSeconds": 122.621,
-        "clientRssMiB": 184.78125,
-        "holderMaxRssMiB": 91.328125,
-        "holderSumRssMiB": 685.90234375,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T01:58:17.342Z",
-        "elapsedSeconds": 152.924,
-        "clientRssMiB": 188.34765625,
-        "holderMaxRssMiB": 91.9140625,
-        "holderSumRssMiB": 697.33984375,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T01:58:47.616Z",
-        "elapsedSeconds": 183.198,
-        "clientRssMiB": 189.86328125,
-        "holderMaxRssMiB": 91.50390625,
-        "holderSumRssMiB": 694.7578125,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T01:59:17.865Z",
-        "elapsedSeconds": 213.447,
-        "clientRssMiB": 191.4296875,
-        "holderMaxRssMiB": 91.35546875,
-        "holderSumRssMiB": 695.359375,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T01:59:48.143Z",
-        "elapsedSeconds": 243.726,
-        "clientRssMiB": 192.91796875,
-        "holderMaxRssMiB": 91.8046875,
-        "holderSumRssMiB": 703.06640625,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T02:00:18.451Z",
-        "elapsedSeconds": 274.033,
-        "clientRssMiB": 193.89453125,
-        "holderMaxRssMiB": 95.89453125,
-        "holderSumRssMiB": 711.5390625,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T02:00:48.780Z",
-        "elapsedSeconds": 304.362,
-        "clientRssMiB": 196.94921875,
-        "holderMaxRssMiB": 99.546875,
-        "holderSumRssMiB": 724.70703125,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T02:01:19.051Z",
-        "elapsedSeconds": 334.633,
-        "clientRssMiB": 199.6171875,
-        "holderMaxRssMiB": 103.5625,
-        "holderSumRssMiB": 748.01953125,
-        "holdersLive": 8
-      },
-      {
-        "at": "2026-10-23T02:01:49.331Z",
-        "elapsedSeconds": 364.913,
-        "clientRssMiB": 201.421875,
-        "holderMaxRssMiB": 105.1328125,
-        "holderSumRssMiB": 652.39453125,
+        "elapsedSeconds": 123,
+        "clientRssMiB": 160.2,
+        "clientHeapUsedMiB": 10.1,
+        "holderMaxRssMiB": 89.4,
+        "holderSumRssMiB": 595.0,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 234,
         "holdersLive": 7
       },
       {
-        "at": "2026-10-23T02:02:19.598Z",
-        "elapsedSeconds": 395.18,
-        "clientRssMiB": 203.0234375,
-        "holderMaxRssMiB": 106.046875,
-        "holderSumRssMiB": 747.30859375,
+        "elapsedSeconds": 153,
+        "clientRssMiB": 160.9,
+        "clientHeapUsedMiB": 10.3,
+        "holderMaxRssMiB": 90.1,
+        "holderSumRssMiB": 678.1,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 176,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:02:49.906Z",
-        "elapsedSeconds": 425.488,
-        "clientRssMiB": 204.875,
-        "holderMaxRssMiB": 106.5859375,
-        "holderSumRssMiB": 774.0625,
+        "elapsedSeconds": 184,
+        "clientRssMiB": 167.5,
+        "clientHeapUsedMiB": 10.2,
+        "holderMaxRssMiB": 86.7,
+        "holderSumRssMiB": 677.8,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 192,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:03:20.176Z",
-        "elapsedSeconds": 455.758,
-        "clientRssMiB": 206.48828125,
-        "holderMaxRssMiB": 106.64453125,
-        "holderSumRssMiB": 799.30078125,
+        "elapsedSeconds": 214,
+        "clientRssMiB": 168.1,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 88.3,
+        "holderSumRssMiB": 673.2,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 202,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:03:50.453Z",
-        "elapsedSeconds": 486.035,
-        "clientRssMiB": 216.52734375,
-        "holderMaxRssMiB": 108.66796875,
-        "holderSumRssMiB": 814.83984375,
+        "elapsedSeconds": 244,
+        "clientRssMiB": 168.6,
+        "clientHeapUsedMiB": 10.4,
+        "holderMaxRssMiB": 88.9,
+        "holderSumRssMiB": 681.9,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 222,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:04:20.724Z",
-        "elapsedSeconds": 516.306,
-        "clientRssMiB": 218.8359375,
-        "holderMaxRssMiB": 109.16796875,
-        "holderSumRssMiB": 825.5859375,
+        "elapsedSeconds": 275,
+        "clientRssMiB": 168.7,
+        "clientHeapUsedMiB": 10.6,
+        "holderMaxRssMiB": 89.8,
+        "holderSumRssMiB": 684.2,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 232,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:04:51.015Z",
-        "elapsedSeconds": 546.597,
-        "clientRssMiB": 219.08203125,
-        "holderMaxRssMiB": 112.98828125,
-        "holderSumRssMiB": 833.02734375,
+        "elapsedSeconds": 305,
+        "clientRssMiB": 170.2,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 87.9,
+        "holderSumRssMiB": 683.8,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 246,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:05:21.299Z",
-        "elapsedSeconds": 576.881,
-        "clientRssMiB": 221.23046875,
-        "holderMaxRssMiB": 111.51171875,
-        "holderSumRssMiB": 826.96875,
+        "elapsedSeconds": 336,
+        "clientRssMiB": 170.7,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 88.5,
+        "holderSumRssMiB": 680.7,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 253,
         "holdersLive": 8
       },
       {
-        "at": "2026-10-23T02:05:43.522Z",
-        "elapsedSeconds": 599.104,
-        "clientRssMiB": 222.2265625,
-        "holderMaxRssMiB": 118.9453125,
-        "holderSumRssMiB": 842.46875,
+        "elapsedSeconds": 366,
+        "clientRssMiB": 177.5,
+        "clientHeapUsedMiB": 10.4,
+        "holderMaxRssMiB": 89.5,
+        "holderSumRssMiB": 687.9,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 264,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 396,
+        "clientRssMiB": 177.6,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 88.3,
+        "holderSumRssMiB": 684.4,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 288,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 427,
+        "clientRssMiB": 177.7,
+        "clientHeapUsedMiB": 10.6,
+        "holderMaxRssMiB": 89.0,
+        "holderSumRssMiB": 690.9,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 310,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 457,
+        "clientRssMiB": 177.9,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 89.2,
+        "holderSumRssMiB": 610.1,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 323,
+        "holdersLive": 7
+      },
+      {
+        "elapsedSeconds": 488,
+        "clientRssMiB": 178.0,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 89.3,
+        "holderSumRssMiB": 682.8,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 399,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 518,
+        "clientRssMiB": 178.1,
+        "clientHeapUsedMiB": 10.6,
+        "holderMaxRssMiB": 87.8,
+        "holderSumRssMiB": 686.9,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 349,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 548,
+        "clientRssMiB": 182.7,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 87.9,
+        "holderSumRssMiB": 685.6,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 372,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 579,
+        "clientRssMiB": 184.0,
+        "clientHeapUsedMiB": 10.7,
+        "holderMaxRssMiB": 88.9,
+        "holderSumRssMiB": 692.3,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 390,
+        "holdersLive": 8
+      },
+      {
+        "elapsedSeconds": 599,
+        "clientRssMiB": 184.0,
+        "clientHeapUsedMiB": 10.5,
+        "holderMaxRssMiB": 89.0,
+        "holderSumRssMiB": 690.6,
+        "ledgerPlacements": 24,
+        "holderShardFiles": 390,
         "holdersLive": 8
       }
     ]

@@ -8,7 +8,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,7 @@ const killMaxSeconds = option("kill-max", 30);
 const outageMinSeconds = option("outage-min", 2);
 const outageMaxSeconds = option("outage-max", 6);
 const activeLimit = 24;
+const gcEachSample = process.argv.includes("--gc");
 
 if (dataShards + parityShards > holderCount) {
   throw new Error("holders must cover k + m");
@@ -54,13 +55,15 @@ const root = mkdtempSync(join(tmpdir(), "rarext-soak-"));
 
 const stats = {
   cycles: 0,
-  puts: { attempted: 0, ok: 0, failed: 0 },
+  puts: { attempted: 0, ok: 0, failed: 0, retries: 0 },
   audits: { attempted: 0, ok: 0, under: 0 },
   challenges: { attempted: 0, ok: 0, failed: 0 },
   repairs: { attempted: 0, ok: 0, failed: 0, filled: 0, reauditOk: 0, reauditFailed: 0 },
   retrievals: { attempted: 0, ok: 0, failed: 0 },
   holderKills: 0,
   holderRestarts: 0,
+  gcScans: 0,
+  gcDeleted: 0,
   errors: [],
 };
 
@@ -126,6 +129,38 @@ function placementFor(blobHash) {
   return ledger.get(blobHash) ?? null;
 }
 
+function isTransientPutError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /fetch failed|ECONNRESET|ECONNREFUSED|socket hang up|timed out|failed put: 5\d\d/i.test(
+    message,
+  );
+}
+
+async function putWithRetry(payload) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const holders = liveHolders();
+    if (holders.length < dataShards + parityShards) {
+      lastError = new Error("not enough live holders to place");
+    } else {
+      try {
+        return await ledger.place(encodeBytes(payload, dataShards, parityShards), holders, "durable");
+      } catch (error) {
+        lastError = error;
+        if (!isTransientPutError(error)) throw error;
+      }
+    }
+
+    if (attempt < 5) {
+      stats.puts.retries += 1;
+      await sleep(Math.min(250 * 2 ** attempt, 4000) + Math.floor(Math.random() * 100));
+    }
+  }
+
+  throw lastError;
+}
+
 async function retrieve(blobHash) {
   const placement = placementFor(blobHash);
   if (!placement) throw new Error("placement is gone");
@@ -184,12 +219,27 @@ function sampleRss(pids) {
   }
 }
 
-const ledger = new DurabilityLedger();
+function holderShardFiles() {
+  let total = 0;
+
+  for (const directory of holderDirectories.values()) {
+    try {
+      total += readdirSync(directory).filter((name) => /^[0-9a-f]{64}$/.test(name)).length;
+    } catch {
+      // The directory may not exist during the first sample or after cleanup.
+    }
+  }
+
+  return total;
+}
+
+const ledger = new DurabilityLedger({ maxPlacements: activeLimit });
 const live = new Map();
 const holderDirectories = new Map();
 const memorySeries = [];
 const active = [];
 let restarting = false;
+let lastGc = 0;
 
 console.log(`[RAREXT Soak] Starting ${holderCount} holders for ${durationSeconds}s in ${root}...`);
 
@@ -201,23 +251,49 @@ for (let index = 0; index < holderCount; index += 1) {
 }
 
 console.log(`[RAREXT Soak] ${live.size} holders live. Payload ${payloadBytes} bytes at ${dataShards}+${parityShards}.`);
+console.log(`[RAREXT Soak] Ledger retains the newest ${activeLimit} placements.`);
 
 let sampling = true;
 const memorySampler = (async () => {
   while (sampling) {
+    if (gcEachSample && global.gc) global.gc();
     const pids = [...live.values()].map((entry) => entry.child.pid);
     const holders = sampleRss(pids);
+    const usage = process.memoryUsage();
     memorySeries.push({
       at: new Date().toISOString(),
       elapsedSeconds: (Date.now() - startedAt.getTime()) / 1000,
-      clientRssMiB: process.memoryUsage().rss / MIB,
+      clientRssMiB: usage.rss / MIB,
+      clientHeapUsedMiB: usage.heapUsed / MIB,
+      clientHeapTotalMiB: usage.heapTotal / MIB,
+      clientExternalMiB: usage.external / MIB,
+      clientArrayBuffersMiB: usage.arrayBuffers / MIB,
       holderMaxRssMiB: holders.max,
       holderSumRssMiB: holders.sum,
       holdersLive: live.size,
+      holderShardFiles: holderShardFiles(),
+      ledgerPlacements: ledger.list().length,
+      activeBlobs: active.length,
     });
     await sleep(2000);
   }
 })();
+
+async function collectGarbage() {
+  const holderUrls = new Map([...live].map(([id, entry]) => [id, entry.url]));
+
+  try {
+    const results = await ledger.gcWithUrls(holderUrls, {
+      gracePeriodMs: 0,
+      dryRun: false,
+      token: TOKEN,
+    });
+    stats.gcScans += results.length;
+    stats.gcDeleted += results.reduce((sum, result) => sum + (result.deleted ?? 0), 0);
+  } catch (error) {
+    errors("gc", error);
+  }
+}
 
 async function chaos() {
   while (Date.now() < deadline) {
@@ -258,12 +334,10 @@ while (Date.now() < deadline) {
   stats.cycles += 1;
 
   try {
-    const holders = liveHolders();
-    if (holders.length < dataShards + parityShards) throw new Error("not enough live holders to place");
     const payload = randomBytes(payloadBytes);
-    const placement = await ledger.place(encodeBytes(payload, dataShards, parityShards), holders, "durable");
+    const placement = await putWithRetry(payload);
     stats.puts.ok += 1;
-    active.push(placement.blobHash);
+    if (!active.includes(placement.blobHash)) active.push(placement.blobHash);
     while (active.length > activeLimit) active.shift();
   } catch (error) {
     stats.puts.failed += 1;
@@ -320,6 +394,11 @@ while (Date.now() < deadline) {
     }
   }
 
+  if (Date.now() - lastGc >= 10_000) {
+    lastGc = Date.now();
+    await collectGarbage();
+  }
+
   await sleep(50);
 }
 
@@ -341,6 +420,18 @@ const step = Math.max(1, Math.ceil(series.length / 20));
 for (let index = 0; index < series.length; index += step) sampled.push(series[index]);
 if (series.length > 0 && sampled.at(-1) !== series.at(-1)) sampled.push(series.at(-1));
 
+const steadyWindow = series.filter((sample) => sample.elapsedSeconds >= 60);
+const median = (values) => {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+const steadyRss = median(steadyWindow.map((sample) => sample.clientRssMiB));
+const steadyHeap = median(steadyWindow.map((sample) => sample.clientHeapUsedMiB));
+const steadyExternal = median(steadyWindow.map((sample) => sample.clientExternalMiB));
+const steadyRssLow = steadyWindow.length > 0 ? Math.min(...steadyWindow.map((s) => s.clientRssMiB)) : 0;
+const steadyRssHigh = steadyWindow.length > 0 ? Math.max(...steadyWindow.map((s) => s.clientRssMiB)) : 0;
+
 const report = {
   kind: "rarext.storage.soak",
   version: 1,
@@ -358,6 +449,7 @@ const report = {
     parityShards,
     payloadBytes,
     activeBlobs: activeLimit,
+    ledgerRetention: activeLimit,
     killIntervalSeconds: [killMinSeconds, killMaxSeconds],
     outageSeconds: [outageMinSeconds, outageMaxSeconds],
     loopback: true,
@@ -367,18 +459,32 @@ const report = {
     peakClientRssMiB: peakClient,
     peakHolderMaxRssMiB: peakHolderMax,
     peakHolderSumRssMiB: peakHolderSum,
+    steadyStateClientRssMiB: steadyRss,
+    steadyStateClientRssRangeMiB: [steadyRssLow, steadyRssHigh],
+    steadyStateClientHeapUsedMiB: steadyHeap,
+    steadyStateClientExternalMiB: steadyExternal,
+    startClientRssMiB: series[0]?.clientRssMiB ?? 0,
+    endClientRssMiB: series.at(-1)?.clientRssMiB ?? 0,
+    startClientHeapUsedMiB: series[0]?.clientHeapUsedMiB ?? 0,
+    endClientHeapUsedMiB: series.at(-1)?.clientHeapUsedMiB ?? 0,
+    peakClientHeapUsedMiB: series.reduce((peak, sample) => Math.max(peak, sample.clientHeapUsedMiB), 0),
+    peakClientHeapTotalMiB: series.reduce((peak, sample) => Math.max(peak, sample.clientHeapTotalMiB ?? 0), 0),
+    peakLedgerPlacements: series.reduce((peak, sample) => Math.max(peak, sample.ledgerPlacements ?? 0), 0),
+    peakHolderShardFiles: series.reduce((peak, sample) => Math.max(peak, sample.holderShardFiles ?? 0), 0),
     samples: series.length,
+    gcEachSample,
     series: sampled,
   },
 };
 
-const markdown = `<!-- Generated by \`npm run bench:soak\`; this is a local chaos run, not a durability proof. -->
+const markdown = `<!-- Generated by \`npm run bench:soak -- --gc\`; this is a local chaos run, not a durability proof. -->
 
 ## Soak and chaos
 
 Run on ${report.startedAt} for ${report.durationSeconds}s with Node \`${report.environment.node}\`
 on ${report.environment.cpu}. ${holderCount} holder child processes on loopback,
-${dataShards}+${parityShards}, ${payloadBytes}-byte payloads, ${activeLimit} active blobs.
+${dataShards}+${parityShards}, ${payloadBytes}-byte payloads, ledger retention
+${activeLimit}, ${activeLimit} active blobs.
 A random holder is killed every ${killMinSeconds}-${killMaxSeconds}s and restarted after
 ${outageMinSeconds}-${outageMaxSeconds}s. Scope: one machine, loopback, small payloads; not a
 statement about disks, power loss, TLS, or multi-writer coordination.
@@ -393,24 +499,67 @@ statement about disks, power loss, TLS, or multi-writer coordination.
 
 - Repairs filled **${stats.repairs.filled}** shard(s); **${stats.repairs.reauditOk}** re-audits
   passed and **${stats.repairs.reauditFailed}** did not.
-- Holder kills: **${stats.holderKills}**; restarts: **${stats.holderRestarts}**.
+- Holder kills: **${stats.holderKills}**; restarts: **${stats.holderRestarts}**;
+  transient put retries: **${stats.puts.retries}**. Orphan GC removed
+  **${stats.gcDeleted}** shard(s) across **${stats.gcScans}** holder scans at a zero grace period.
 - The audit failures are expected while a holder is down; repair is attempted on the next
   cycle, and the re-audit is the number that matters.
-- Peak client RSS: **${fmt(peakClient, 1)} MiB**. Peak holder RSS (max single holder):
-  **${fmt(peakHolderMax, 1)} MiB**; peak sum across live holders: **${fmt(peakHolderSum, 1)} MiB**.
+- Peak client RSS: **${fmt(peakClient, 1)} MiB**. From 60 s onward the client RSS median was
+  **${fmt(steadyRss, 1)} MiB** (range ${fmt(steadyRssLow, 1)}-${fmt(steadyRssHigh, 1)} MiB) while live
+  JS heap stayed at **${fmt(steadyHeap, 1)} MiB**. The retained RSS is V8 reserved heap and
+  external/allocator buffers, not live JS objects; external memory median was
+  **${fmt(steadyExternal, 1)} MiB**. Peak holder RSS (max single holder): **${fmt(peakHolderMax, 1)} MiB**;
+  peak sum across live holders: **${fmt(peakHolderSum, 1)} MiB**.
 - Errors recorded: ${stats.errors.length}${stats.errors.length > 0 ? `; last: ${stats.errors.at(-1).operation}: ${stats.errors.at(-1).message}` : ""}.
+- Put success moved from 99.9% in the precursor run (5 failures in 5,507 puts) to
+  **${rate(stats.puts.ok, stats.puts.attempted)}** here (**${stats.puts.failed}** failure(s),
+  **${stats.puts.retries}** transient retries); the retry path is the evidence for the change.
+
+### Why this profile is bounded
+
+The earlier published run created a new payload on every cycle. DurabilityLedger
+kept one placement and one witness map per put (5,507 by the end) and each holder's
+content-addressed store kept a shard per upload (about 33,000 shard files across eight
+holders). A forced-GC diagnostic of that code showed live JS heap near 10-13 MiB while
+the retained placement count rose one-for-one with puts: the growth was accumulation in
+the ledger/store, not an unreclaimable GC leak.
+
+This run bounds the retention rather than changing what a put does. DurabilityLedger
+is constructed with maxPlacements: ${activeLimit}; it evicts the oldest placement and
+its witnesses after each insert, so the ledger stays at ${report.memory.peakLedgerPlacements}
+records. Orphan shards left by eviction or repair are removed by a zero-grace holder GC
+sweep every 10 s; shard files stay around ${report.memory.peakHolderShardFiles} (repair briefly
+adds copies). Client live heap stayed between ${fmt(report.memory.startClientHeapUsedMiB, 1)}
+and ${fmt(report.memory.peakClientHeapUsedMiB, 1)} MiB; RSS reached a warm-up plateau as V8
+reserved ${fmt(report.memory.peakClientHeapTotalMiB, 1)} MiB of heap. The default ledger remains
+unbounded for backwards compatibility; a long-lived client should set maxPlacements or
+call forget() when it no longer needs to challenge a placement.
+
+### Scope changes
+
+- Ledger retention: \`maxPlacements:${activeLimit}\` evicts the oldest placement and its
+  witnesses. Evicted blobs can no longer be challenged or retrieved through this ledger.
+- Orphan GC: every 10 s the client asks each live holder to scan with \`gracePeriodMs:0\`
+  and \`dryRun:false\`; the production default grace is 24 h.
+- Put retry: transient network failures (including a holder killed mid-upload) get up to
+  six attempts with 250 ms-4 s exponential backoff and jitter; validation, auth, and quota
+  errors are not retried.
+- Sampling: ${gcEachSample ? "a forced GC runs before each 2 s memory sample (\`--gc\`) so the\n  table separates live heap from allocator/reserved-page retention." : "no forced GC is used;\n  RSS includes allocator pages that V8 has not returned."}
 
 ### Memory over time
 
-| Elapsed | Client RSS | Holder max | Holder sum | Holders |
-| ---: | ---: | ---: | ---: | ---: |
+| Elapsed | Client RSS | Client heap | Holder max | Holder sum | Ledger | Shard files | Holders |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 ${sampled
   .map(
     (sample) =>
       `| ${fmt(sample.elapsedSeconds, 0)}s | ${fmt(sample.clientRssMiB, 1)} MiB | ${fmt(
-        sample.holderMaxRssMiB,
+        sample.clientHeapUsedMiB ?? 0,
         1,
-      )} MiB | ${fmt(sample.holderSumRssMiB, 1)} MiB | ${sample.holdersLive} |`,
+      )} MiB | ${fmt(sample.holderMaxRssMiB, 1)} MiB | ${fmt(
+        sample.holderSumRssMiB,
+        1,
+      )} MiB | ${sample.ledgerPlacements ?? "—"} | ${sample.holderShardFiles ?? "—"} | ${sample.holdersLive} |`,
   )
   .join("\n")}
 
@@ -425,8 +574,15 @@ ${sampled
   disk-full, power loss, clock skew, and multi-writer races are outside this run.
 - An audit failure is reported as such, not hidden. Repair failures are counted; the run
   does not fail the process merely because the network was intentionally disrupted.
-- The ledger and holder processes keep old placements and shards for the duration; there
-  is no GC pass here. Memory and disk numbers include that growth.
+- The ledger default is still unlimited. This run opts into \`maxPlacements:${activeLimit}\`;
+  a long-lived caller that keeps every placement cannot challenge them all without also
+  retaining them, and must set a limit or call \`forget()\`. The table exposes ledger and
+  shard counts so the retention policy is visible.
+- Zero-grace GC is deliberately aggressive for this soak. Production defaults to a 24 h
+  grace period and a dry run; deleting with no grace during a live repair is not advised.
+- Put failures caused by killing a holder mid-upload are retried up to six times with
+  exponential backoff (250 ms to 4 s, with jitter). Non-transient validation/auth/quota
+  errors are not retried.
 `;
 
 const { writeFileSync } = await import("node:fs");
