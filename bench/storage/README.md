@@ -13,6 +13,21 @@ On the reference laptop (Intel i5-8257U, ffmpeg 8.1.1, zstd 1.5.7) a full run ta
 about 85 seconds over a 99.96 MiB corpus, well inside the 15-minute budget. The
 budget is enforced: the command exits non-zero if `--max-minutes` is exceeded.
 
+### 1 GiB throughput and memory
+
+```bash
+npm run bench:throughput            # 1 GiB, 4+2, writes THROUGHPUT.md/JSON
+npm run bench:throughput -- --mb 256 --k 2 --m 1
+```
+
+This measures the shipped `encodeBytes`/`decodeBytes` path at 1 GiB — the compute
+cost inside a put and a get — and reports peak RSS from
+`process.resourceUsage().maxRSS`. It deliberately excludes HTTP and JSON framing:
+the holder endpoints base64-encode bodies, so at this size the wire format, not the
+codec, dominates. The numbers are written to `bench/storage/THROUGHPUT.md` and
+copied into the "1 GiB throughput and memory" section of `RESULTS.md`; the main
+`bench:storage` run does not regenerate that section.
+
 ## What is measured
 
 | Column | Meaning |

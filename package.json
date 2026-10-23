@@ -32,6 +32,7 @@
     "demo:durability": "node scripts/durability-demo.mjs",
     "example:mcp-storage": "node --experimental-strip-types examples/mcp-storage/main.ts",
     "bench:storage": "node bench/storage/cli.mjs",
+    "bench:throughput": "node --expose-gc bench/storage/throughput.mjs",
     "bench:repair": "node bench/repair/repair-bandwidth.mjs",
     "holder": "node apps/api/src/holder-server.ts",
     "typecheck": "tsc -p tsconfig.json",
