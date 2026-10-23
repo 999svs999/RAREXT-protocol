@@ -78,13 +78,31 @@ amount of protocol language changes that.
 - **The bytes of a sealed blob.** A mirror holds ciphertext it cannot read, which
   is the point.
 
+## The published copy
+
+A static copy of the latest anchored bundle and its seed list is published with the
+project site:
+
+- <https://999svs999.github.io/RAREXT-protocol/registry/bundle.json>
+- <https://999svs999.github.io/RAREXT-protocol/registry/seed.json>
+
+The seed names the reference registry and the GitHub Pages mirror, and records the
+bundle root. It is a copy, not a live registry: it carries the bundle that was
+anchored when it was built and does not learn about later publications. The committed
+test reads both files back over HTTP and runs `verifyBundle` against them:
+
+```bash
+node --test apps/api/test/published-bundle.test.ts
+```
+
 ## The next step
 
 A mirror is a copy of one registry. Making the copy findable and keeping copies
 consistent is the federation problem, and it has two parts:
 
 - a **seed list** of registries, published in the protocol repository and
-  optionally anchored, so a client can find mirrors;
+  optionally anchored, so a client can find mirrors — the static seed above is a
+  first step, not a live federation protocol;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — that is the IPFS or Arweave pinning adapter, which the
   existing anchor adapter interface already has a slot for.
