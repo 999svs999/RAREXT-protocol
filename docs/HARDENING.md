@@ -41,13 +41,19 @@ For large payloads, `apps/api/src/erasure-stream.ts` encodes fixed-size chunks t
 files, and holders accept raw `PUT`/`GET` of those files. `DurabilityLedger.placeStreamed`
 and `retrieveStreamed` use that transport, so a 1 GiB blob moves without either side
 buffering it whole. Measured at 1 GiB and 4+2 on the reference laptop: client peak
-249 MiB and holder peak 79 MiB, flat between 64 MiB and 1 GiB. The old whole-shard JSON
-path needed a 671 MiB client peak for 64 MiB and cannot store 1 GiB at all, because a
+242 MiB and holder peak 94 MiB (the 64 MiB run peaked at 250 MiB client, 236 MiB holder). The old whole-shard JSON
+path needed a 676 MiB client peak for 64 MiB and cannot store 1 GiB at all, because a
 256 MiB shard becomes 341 MiB of base64 JSON against the 32 MiB cap. See
 `bench/storage/RESULTS.md`.
 
-Repair of a streamed placement is refused: it would re-encode the whole payload in
-memory. Treat 100 GiB as unmeasured until streaming repair exists.
+Streamed repair rebuilds each degraded shard independently: it downloads k survivor
+files, regenerates one shard per chunk from k blocks, and uploads only that shard through
+raw PUT. Peak memory follows the chunk size, not the payload size. `npm run net` proves
+this end to end (signed placement, fresh registry load, kill, repair, re-audit, exact
+retrieval at 8 MiB). A separate 10-minute local chaos run (611 s) completed 5,507
+puts (99.9%), 5,507 retrievals (100%), 143 repairs (100%), and 143 post-repair
+re-audits (100%) with 21 random holder kills and restarts; peak client RSS was 222 MiB.
+Repair throughput at 100 GiB and concurrent repairs are unmeasured.
 
 ## Disk-full and crash limits
 
@@ -102,8 +108,8 @@ memory. Treat 100 GiB as unmeasured until streaming repair exists.
 
 - A local-reconstruction or regenerating code would lower the repair floor, at the cost
   of storage overhead and a new RFC.
-- Streaming repair for streamed placements would remove the last whole-payload
-  buffer in the large-blob path.
+- A concurrent repair scheduler with backoff would make repairs under many failures
+  less serial; today repair is one placement at a time.
 - An orphan-shard garbage collector and a corrupt-index repair command would make
   crash recovery operationally complete.
 - A retrievability proof, not just possession, needs a new challenge format and is a

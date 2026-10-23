@@ -419,8 +419,10 @@ ${rows
   ${fmt(chunkMb, 0)} MiB chunk size, not the payload size.
 - A streamed placement records \`chunkBytes\`, \`chunks\`, and \`chunkDigests\` beside the
   normal shard records, so retrieval verifies each chunk and the whole-payload digest.
-  Repair of a streamed placement is not implemented (it still re-encodes a payload in
-  memory); the net demo's sealed repair uses the small in-memory placement.
+  Streamed repair rebuilds one lost shard at a time from k survivor files through
+  \`reencodeStreamedShard\`, so its memory follows the chunk size. This benchmark measures
+  upload/download, not repair; \`npm run net\` exercises the signed repair path at 8 MiB,
+  and \`SOAK.md\` reports control-plane behaviour under random holder kills.
 `;
 
     writeFileSync("bench/storage/NETWORK.md", markdown);

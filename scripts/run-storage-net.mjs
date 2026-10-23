@@ -1,9 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { once } from "node:events";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { AgentSigner, generateAgentKeypair } from "../packages/agent-sdk/src/index.ts";
+import { PlacementRegistry, signPlacement, verifyPlacement } from "../apps/api/src/placements.ts";
+import { encodeFileToShards } from "../apps/api/src/erasure-stream.ts";
 
 import { createHolderServer } from "../apps/api/src/holder-server.ts";
 import { createPinServer, PinStore } from "../apps/api/src/pin-server.ts";
@@ -238,9 +242,127 @@ async function runScenario({ sealed }) {
   }
 }
 
+async function runStreamedScenario() {
+  const root = mkdtempSync(join(tmpdir(), "rarext-net-streamed-"));
+  console.log(`[RAREXT Net] Streamed scenario in ${root}...`);
+
+  const directories = new Map([
+    ["holder-0", join(root, "h0")],
+    ["holder-1", join(root, "h1")],
+    ["holder-2", join(root, "h2")],
+  ]);
+  const servers = [...directories].map(([id, directory]) => createHolderServer({ id, directory }));
+
+  for (const server of servers) server.listen(0, "127.0.0.1");
+  await Promise.all(servers.map((server) => once(server, "listening")));
+
+  const urls = servers.map((server) => `http://127.0.0.1:${server.address().port}`);
+  const holders = urls.map((url, index) => httpHolder(`holder-${index}`, url));
+
+  for (const [index, url] of urls.entries()) {
+    console.log(`[RAREXT Net] holder-${index} listening on ${url}`);
+  }
+
+  try {
+    const payload = Buffer.concat([
+      PLAINTEXT_MARKER,
+      randomBytes(8 * 1024 * 1024 - PLAINTEXT_MARKER.length),
+    ]);
+    const inputPath = join(root, "payload.bin");
+    writeFileSync(inputPath, payload);
+
+    const streamed = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 1024 * 1024,
+    });
+    console.log(
+      `[RAREXT Net] Encoded ${payload.length} bytes into ${streamed.shards.length} shard files ` +
+        `of ${streamed.shards[0].bytes} bytes each (${streamed.chunks} chunk(s), 2+1).`,
+    );
+
+    const ledger = new DurabilityLedger();
+    const placed = await ledger.placeStreamed(streamed, holders, "durable");
+    const signer = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const signed = signPlacement(placed, signer);
+    const registry = new PlacementRegistry(join(root, "placements"));
+    const registration = registry.put(signed);
+    console.log(
+      `[RAREXT Net] Signed streamed placement registered: status ${registration.status}, ` +
+        `sequence ${signed.record.sequence}, verified=${verifyPlacement(signed).ok}.`,
+    );
+
+    const restored = new PlacementRegistry(join(root, "placements")).get(placed.blobHash);
+    if (!restored) throw new Error("the signed streamed placement was not reloaded from disk");
+    const reloaded = new DurabilityLedger();
+    reloaded.adopt(structuredClone(restored.record.placement));
+    console.log("[RAREXT Net] Reloaded the signed placement from a fresh registry and ledger.");
+
+    console.log("[RAREXT Net] Running challenge and audit...");
+    await reloaded.challenge(placed.blobHash, holders);
+    const audit1 = reloaded.audit(placed.blobHash);
+    console.log(`[RAREXT Net] Audit status: ${audit1.status} (live: ${audit1.live}/${audit1.required})`);
+
+    console.log("[RAREXT Net] Simulating failure: shutting down Holder 1...");
+    servers[1].closeAllConnections();
+    await new Promise((resolve) => servers[1].close(resolve));
+
+    await reloaded.challenge(placed.blobHash, holders);
+    const audit2 = reloaded.audit(placed.blobHash);
+    console.log(`[RAREXT Net] Audit status after failure: ${audit2.status}`);
+
+    console.log("[RAREXT Net] Provisioning spare Holder 3 and repairing the streamed shard...");
+    directories.set("holder-3", join(root, "h3"));
+    const s3 = createHolderServer({ id: "holder-3", directory: directories.get("holder-3") });
+    s3.listen(0, "127.0.0.1");
+    await once(s3, "listening");
+    const h3 = httpHolder("holder-3", `http://127.0.0.1:${s3.address().port}`);
+    const repairHolders = [holders[0], holders[2], h3];
+
+    try {
+      const repaired = await reloaded.repair(placed.blobHash, repairHolders);
+      console.log(
+        `[RAREXT Net] Streamed repair filled ${repaired.filled} shard(s), ` +
+          `read ${repaired.readBytes} bytes, wrote ${repaired.writtenBytes} bytes.`,
+      );
+
+      await reloaded.challenge(placed.blobHash, repairHolders);
+      const audit3 = reloaded.audit(placed.blobHash);
+      console.log(`[RAREXT Net] Audit status after repair: ${audit3.status}`);
+
+      console.log("[RAREXT Net] Retrieving any k streamed shards over raw HTTP...");
+      const outputPath = join(root, "retrieved.bin");
+      const result = await reloaded.retrieveStreamed(repaired.placement, outputPath, repairHolders);
+      const bytes = readFileSync(outputPath);
+
+      if (result.sha256 === streamed.payloadDigest && bytes.equals(payload)) {
+        console.log(
+          `[RAREXT Net] SUCCESS: ${result.downloaded} streamed shards reconstructed ` +
+            `${bytes.length} bytes byte-for-byte.`,
+        );
+      } else {
+        throw new Error("streamed payload mismatch");
+      }
+    } finally {
+      s3.closeAllConnections();
+      await new Promise((resolve) => s3.close(resolve));
+    }
+  } finally {
+    for (const server of servers) {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+    rmSync(root, { recursive: true, force: true });
+    console.log("[RAREXT Net] Streamed scenario stopped and cleaned up.");
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runScenario({ sealed: false })
     .then(() => runScenario({ sealed: true }))
+    .then(() => runStreamedScenario())
     .catch((err) => {
       console.error(err);
       process.exit(1);

@@ -2,7 +2,7 @@
 
 ## 1 GiB throughput and memory
 
-Measured by `npm run bench:throughput` on 2026-10-23T00:43:18.622Z with Node `v24.15.0`
+Measured by `npm run bench:throughput` on 2026-10-23T01:52:55.838Z with Node `v24.15.0`
 on Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz. Both rows use the shipped erasure code at 4+2
 and the same 1024 MiB payload. Each row runs in its own process, so peak
 RSS is attributable to that path. Scope: encode/decode compute only, not HTTP or JSON
@@ -10,8 +10,8 @@ framing.
 
 | Path | Payload | Shards | Stored | Encode | Encode throughput | Decode | Decode throughput | Peak RSS | Exact |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| in-memory `encodeBytes` | 1024 MiB | 6 | 1536.0 MiB | 91.75 s | 11.2 MiB/s | 21.46 s | 47.7 MiB/s | 3234.1 MiB | yes |
-| streaming `encodeFileToShards` | 1024 MiB | 6 | 1536.0 MiB | 121.35 s | 8.4 MiB/s | 44.93 s | 22.8 MiB/s | 394.5 MiB | yes |
+| in-memory `encodeBytes` | 1024 MiB | 6 | 1536.0 MiB | 91.29 s | 11.2 MiB/s | 21.07 s | 48.6 MiB/s | 3242.8 MiB | yes |
+| streaming `encodeFileToShards` | 1024 MiB | 6 | 1536.0 MiB | 118.47 s | 8.6 MiB/s | 44.19 s | 23.2 MiB/s | 392.6 MiB | yes |
 
 - **In-memory** holds the payload, every data block, and every shard at once. It is the
   API used by the MCP put/get path, which caps input at `RAREXT_STORAGE_MAX_BYTES`
@@ -20,6 +20,6 @@ framing.
   4 of 6 shard files. Peak RSS is a function of the chunk size, not
   the payload size.
 - Peak RSS comes from `process.resourceUsage().maxRSS`; peak fell from
-  3234.1 MiB to 394.5 MiB (8.2x lower) at this payload size.
-- HTTP and JSON framing are excluded. The holder protocol still speaks whole-shard
-  JSON, so a streamed shard is not yet placeable over HTTP; see `erasure-stream.ts`.
+  3242.8 MiB to 392.6 MiB (8.3x lower) at this payload size.
+- HTTP and JSON framing are excluded from the codec rows. The raw holder transport
+  and its 1 GiB measurement are covered in `NETWORK.md`.

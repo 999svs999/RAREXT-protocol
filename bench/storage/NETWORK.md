@@ -2,7 +2,7 @@
 
 ## HTTP holder path: whole shards vs raw streaming
 
-Measured by `npm run bench:network` on 2026-10-23T01:15:08.087Z with Node `v24.15.0`
+Measured by `npm run bench:network` on 2026-10-23T01:46:12.122Z with Node `v24.15.0`
 on Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz, using 4+2 shards and real holder child
 processes on loopback. Client peak is `process.resourceUsage().maxRSS`; holder peak is
 sampled with `ps` every 200 ms and is the maximum per-holder RSS. Scope: holder HTTP
@@ -11,9 +11,9 @@ rows because it is reported separately in the 1 GiB codec section.
 
 | Path | Payload | HTTP body | Upload | Download | Client peak RSS | Holder peak RSS | Exact |
 | --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| whole-shard JSON | 64 MiB | base64 JSON | 2.96 s (21.6 MiB/s) | 3.18 s (20.1 MiB/s) | 671.1 MiB | 286.7 MiB | yes |
-| raw streaming | 64 MiB | raw PUT/GET | 0.78 s (82.6 MiB/s) | 3.20 s (20.0 MiB/s) | 249.9 MiB | 248.0 MiB | yes |
-| raw streaming | 1024 MiB | raw PUT/GET | 9.96 s (102.8 MiB/s) | 50.33 s (20.3 MiB/s) | 249.1 MiB | 78.5 MiB | yes |
+| whole-shard JSON | 64 MiB | base64 JSON | 2.93 s (21.8 MiB/s) | 3.14 s (20.4 MiB/s) | 675.7 MiB | 203.6 MiB | yes |
+| raw streaming | 64 MiB | raw PUT/GET | 0.76 s (84.1 MiB/s) | 3.16 s (20.2 MiB/s) | 250.1 MiB | 235.6 MiB | yes |
+| raw streaming | 1024 MiB | raw PUT/GET | 9.92 s (103.2 MiB/s) | 50.52 s (20.3 MiB/s) | 242.1 MiB | 93.6 MiB | yes |
 
 - The whole-shard JSON row stops at 64 MiB because the holder rejects request
   bodies over 32 MiB. A 1024 MiB blob at 4+2 needs
@@ -27,5 +27,7 @@ rows because it is reported separately in the 1 GiB codec section.
   8 MiB chunk size, not the payload size.
 - A streamed placement records `chunkBytes`, `chunks`, and `chunkDigests` beside the
   normal shard records, so retrieval verifies each chunk and the whole-payload digest.
-  Repair of a streamed placement is not implemented (it still re-encodes a payload in
-  memory); the net demo's sealed repair uses the small in-memory placement.
+  Streamed repair rebuilds one lost shard at a time from k survivor files through
+  `reencodeStreamedShard`, so its memory follows the chunk size. This benchmark measures
+  upload/download, not repair; `npm run net` exercises the signed repair path at 8 MiB,
+  and `SOAK.md` reports control-plane behaviour under random holder kills.

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T01:17:01.932Z",
+  "generatedAt": "2026-10-23T01:54:21.377Z",
   "environment": {
     "node": "v24.15.0",
     "platform": "darwin 24.6.0",
@@ -69,7 +69,7 @@
   },
   "budget": {
     "maxMinutes": 15,
-    "elapsedMs": 86911.097855,
+    "elapsedMs": 84972.293628,
     "passed": true
   },
   "rows": [
@@ -86,9 +86,9 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 67.40239500000007,
-      "decodeMs": 427.70074999999974,
-      "encodeMs": 1359.802513,
+      "verifyMs": 67.46666200000004,
+      "decodeMs": 426.15834299999983,
+      "encodeMs": 1415.897504,
       "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "reconstructedDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "notes": "lossless libx265; system ffmpeg decoder not counted"
@@ -106,9 +106,9 @@
       "exact": false,
       "errorRatio": 0.956921582075903,
       "psnr": 28.9083992280508,
-      "verifyMs": 4.444840999999997,
-      "decodeMs": 116.29216499999984,
-      "encodeMs": 531.8373689999999,
+      "verifyMs": 4.515220999999656,
+      "decodeMs": 114.33981600000016,
+      "encodeMs": 546.5525629999997,
       "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "reconstructedDigest": "30bc8ce24101cf8c4538f716fd2858ce3743d3166066f38b3cd543f68aca8c5d",
       "notes": "lossy libx265; system ffmpeg decoder not counted; PSNR 28.91 dB; 95.69% bytes differ"
@@ -126,9 +126,9 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 59.956569999999374,
-      "decodeMs": 1373.05764,
-      "encodeMs": 2733.800404,
+      "verifyMs": 65.03578800000014,
+      "decodeMs": 1436.763933000001,
+      "encodeMs": 2734.652527,
       "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "reconstructedDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "notes": "lossless libsvtav1; system ffmpeg decoder not counted"
@@ -146,9 +146,9 @@
       "exact": false,
       "errorRatio": 0.9410387802926383,
       "psnr": 31.17648370757277,
-      "verifyMs": 8.857253000000128,
-      "decodeMs": 321.5893520000009,
-      "encodeMs": 581.8034719999996,
+      "verifyMs": 8.581137999999555,
+      "decodeMs": 324.7017849999993,
+      "encodeMs": 599.9316780000008,
       "referenceDigest": "4aae344e94f63176b4dbf3a72402aa328ff040a490beb6063d7b68a8a9265f37",
       "reconstructedDigest": "594ce9960295ee9ad5799d8ea32cdb674378ab698110c396138443054f9a0961",
       "notes": "lossy libsvtav1; system ffmpeg decoder not counted; PSNR 31.18 dB; 94.10% bytes differ"
@@ -166,9 +166,9 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 175.0962969999964,
-      "decodeMs": 684.0038570000033,
-      "encodeMs": 43555.115848,
+      "verifyMs": 175.04723400000512,
+      "decodeMs": 677.7580369999996,
+      "encodeMs": 41191.612242999996,
       "referenceDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
       "reconstructedDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
       "notes": "per-file level 19; system zstd decoder not counted"
@@ -186,9 +186,9 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 372.73959599999944,
-      "decodeMs": 3907.0793570000023,
-      "encodeMs": 10790.409936000004,
+      "verifyMs": 373.4816769999961,
+      "decodeMs": 3873.9140770000085,
+      "encodeMs": 10921.949388,
       "referenceDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
       "reconstructedDigest": "99771e5ed43bc35276ebc5900bc56a0816a174a7f9f1244ed657263ee0008652",
       "notes": "4 data + 2 parity; no compression, 1.50x durability overhead; system decoder not counted"
@@ -206,12 +206,12 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 19.42059500000323,
-      "decodeMs": 1259.4167739999975,
-      "encodeMs": 864.7947039999999,
+      "verifyMs": 20.134221999993315,
+      "decodeMs": 1277.6083409999992,
+      "encodeMs": 873.4343590000208,
       "referenceDigest": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240",
       "reconstructedDigest": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240",
-      "notes": "order-1 model trained on the evaluated file; model cost 65793 bytes is stored and counted, so this is an adaptive result, not a generalization claim; training 361 ms"
+      "notes": "order-1 model trained on the evaluated file; model cost 65793 bytes is stored and counted, so this is an adaptive result, not a generalization claim; training 357 ms"
     },
     {
       "method": "learned order-1 Huffman (adaptive)",
@@ -226,12 +226,12 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 16.213285999998334,
-      "decodeMs": 1032.9882300000027,
-      "encodeMs": 719.860858,
+      "verifyMs": 16.15400199999567,
+      "decodeMs": 1071.5694999999978,
+      "encodeMs": 720.5637100000167,
       "referenceDigest": "51284da2e2467316cf94d639ce3ed97faa84eaba9d65d9701ce58f06e06ea0d4",
       "reconstructedDigest": "51284da2e2467316cf94d639ce3ed97faa84eaba9d65d9701ce58f06e06ea0d4",
-      "notes": "order-1 model trained on the evaluated file; model cost 65793 bytes is stored and counted, so this is an adaptive result, not a generalization claim; training 292 ms"
+      "notes": "order-1 model trained on the evaluated file; model cost 65793 bytes is stored and counted, so this is an adaptive result, not a generalization claim; training 298 ms"
     },
     {
       "method": "learned order-1 Huffman (train source.js)",
@@ -246,12 +246,12 @@
       "exact": true,
       "errorRatio": 0,
       "psnr": null,
-      "verifyMs": 68.55992600000172,
-      "decodeMs": 4020.742406000005,
-      "encodeMs": 1183.6969039999967,
+      "verifyMs": 69.97416100000555,
+      "decodeMs": 4061.4149739999993,
+      "encodeMs": 1183.3155099999858,
       "referenceDigest": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240",
       "reconstructedDigest": "fad9d967dc4a3a9873ffb813d71b4ace69f28174bbe6b95072093b44c3ce2240",
-      "notes": "order-1 model trained on source.js; eval slice held out; decoder table 65793 bytes counted; training 290 ms"
+      "notes": "order-1 model trained on source.js; eval slice held out; decoder table 65793 bytes counted; training 293 ms"
     },
     {
       "method": "parametric 2D Legendre degree 10",
@@ -266,9 +266,9 @@
       "exact": false,
       "errorRatio": 0.9884055190616183,
       "psnr": 19.78856641946479,
-      "verifyMs": 0.49430999999458436,
-      "decodeMs": 7882.590752999997,
-      "encodeMs": 599.6911200000031,
+      "verifyMs": 0.5064969999948516,
+      "decodeMs": 7903.495566999991,
+      "encodeMs": 598.6204919999873,
       "referenceDigest": "2205aae279055d75ba39661ae684f6b0e97791769b0a9d29ddca268f9735e049",
       "reconstructedDigest": "d5d53b0c9439d7b982234aa65799be80bfd3002a70ffbe73c5f6e94fa7cbfe76",
       "notes": "degree 10 Legendre tensor basis, 66 coefficients/channel; coefficients are the decoder and the stored artifact (counted once); no residual; 17060 byte model; PSNR 19.79 dB; 98.84% bytes differ"

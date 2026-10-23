@@ -274,8 +274,8 @@ framing.
   the payload size.
 - Peak RSS comes from \`process.resourceUsage().maxRSS\`; peak fell from
   ${fmt(memory.peakRssMiB, 1)} MiB to ${fmt(stream.peakRssMiB, 1)} MiB (${fmt(peakDrop, 1)}x lower) at this payload size.
-- HTTP and JSON framing are excluded. The holder protocol still speaks whole-shard
-  JSON, so a streamed shard is not yet placeable over HTTP; see \`erasure-stream.ts\`.
+- HTTP and JSON framing are excluded from the codec rows. The raw holder transport
+  and its 1 GiB measurement are covered in \`NETWORK.md\`.
 `;
 
   writeFileSync("bench/storage/THROUGHPUT.md", markdown);

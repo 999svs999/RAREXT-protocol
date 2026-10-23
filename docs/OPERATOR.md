@@ -19,11 +19,14 @@ production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md
 
 ## One command: `npm run net`
 
-This runs two scenarios against three holders and a pin service on ephemeral loopback
+This runs three scenarios against holders and a pin service on ephemeral loopback
 ports. The open scenario stores a 64 KiB payload at `k=2, m=1`. The sealed scenario
 encrypts before erasure coding (AES-256-GCM, HKDF-SHA256), scans every holder directory
 for a plaintext marker, kills one holder, repairs onto a spare, and decrypts the
-retrieved bytes back to the original. Each scenario removes its temporary directory:
+retrieved bytes back to the original. The streamed scenario writes 8 MiB into chunked
+shard files over raw HTTP, registers a signed streamed placement, reloads it from a
+fresh registry, audits, kills, repairs, re-audits, and retrieves any k shards exactly.
+Each scenario removes its temporary directory:
 
 ```bash
 npm run net
@@ -32,13 +35,13 @@ npm run net
 Real output from this checkout (ports and blob hash vary per run):
 
 ```
-[RAREXT Net] Open scenario in /var/folders/.../rarext-net-y5i9ca...
-[RAREXT Net] Holder 0 listening on http://127.0.0.1:53603
-[RAREXT Net] Holder 1 listening on http://127.0.0.1:53604
-[RAREXT Net] Holder 2 listening on http://127.0.0.1:53605
-[RAREXT Net] Pin service listening on http://127.0.0.1:53606
+[RAREXT Net] Open scenario in /var/folders/nm/_h14dgzj3w702_87z438zp7m0000gn/T/rarext-net-ZCOgXz...
+[RAREXT Net] Holder 0 listening on http://127.0.0.1:55800
+[RAREXT Net] Holder 1 listening on http://127.0.0.1:55801
+[RAREXT Net] Holder 2 listening on http://127.0.0.1:55802
+[RAREXT Net] Pin service listening on http://127.0.0.1:55803
 [RAREXT Net] Storing 64 KiB test payload across holders (k=2, m=1)...
-[RAREXT Net] Placed blob 7a20ba1a032a70470c516f573decf5c92ff1f2df59ba7553fd882bc8f27fd053 across 3 shards.
+[RAREXT Net] Placed blob 2456fe62d126b7d441917251e19a6c0922c3a7152e216879ebc8d33a15161ffa across 3 shards.
 [RAREXT Net] Running challenge and audit...
 [RAREXT Net] Audit status: ok (live: 3/3)
 [RAREXT Net] Simulating failure: shutting down Holder 1...
@@ -49,13 +52,13 @@ Real output from this checkout (ports and blob hash vary per run):
 [RAREXT Net] Retrieving and verifying byte-exact payload reconstruction...
 [RAREXT Net] SUCCESS: Decoded payload matches original byte-for-byte!
 [RAREXT Net] Open scenario stopped and cleaned up.
-[RAREXT Net] Sealed scenario in /var/folders/.../rarext-net-sealed-jaPgnF...
-[RAREXT Net] Holder 0 listening on http://127.0.0.1:53618
-[RAREXT Net] Holder 1 listening on http://127.0.0.1:53619
-[RAREXT Net] Holder 2 listening on http://127.0.0.1:53620
-[RAREXT Net] Pin service listening on http://127.0.0.1:53621
+[RAREXT Net] Sealed scenario in /var/folders/nm/_h14dgzj3w702_87z438zp7m0000gn/T/rarext-net-sealed-l360jk...
+[RAREXT Net] Holder 0 listening on http://127.0.0.1:55816
+[RAREXT Net] Holder 1 listening on http://127.0.0.1:55817
+[RAREXT Net] Holder 2 listening on http://127.0.0.1:55818
+[RAREXT Net] Pin service listening on http://127.0.0.1:55819
 [RAREXT Net] Encrypted 65536 plaintext bytes to 65536 ciphertext bytes (aes-256-gcm, hkdf-sha256) before erasure coding.
-[RAREXT Net] Placed blob c3d97ebcd9c4ffd8ce873d57b6d66de44381b08dff078a84e8c356723f976d4d across 3 shards.
+[RAREXT Net] Placed blob 2ce02543f9acd1c53c31e1fccefa83fe9bf53509e405a970a37b70a730dc0044 across 3 shards.
 [RAREXT Net] holder-0 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
 [RAREXT Net] holder-1 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
 [RAREXT Net] holder-2 directory: 1 shard file(s), 32768 bytes, 0 plaintext-marker hits, 0 hash mismatches
@@ -70,11 +73,29 @@ Real output from this checkout (ports and blob hash vary per run):
 [RAREXT Net] Retrieving and verifying byte-exact payload reconstruction...
 [RAREXT Net] SUCCESS: decrypted 65536 bytes match the original plaintext byte-for-byte!
 [RAREXT Net] Sealed scenario stopped and cleaned up.
+[RAREXT Net] Streamed scenario in /var/folders/nm/_h14dgzj3w702_87z438zp7m0000gn/T/rarext-net-streamed-FA0u1t...
+[RAREXT Net] holder-0 listening on http://127.0.0.1:55831
+[RAREXT Net] holder-1 listening on http://127.0.0.1:55832
+[RAREXT Net] holder-2 listening on http://127.0.0.1:55833
+[RAREXT Net] Encoded 8388608 bytes into 3 shard files of 4194304 bytes each (8 chunk(s), 2+1).
+[RAREXT Net] Signed streamed placement registered: status 201, sequence 0, verified=true.
+[RAREXT Net] Reloaded the signed placement from a fresh registry and ledger.
+[RAREXT Net] Running challenge and audit...
+[RAREXT Net] Audit status: ok (live: 3/3)
+[RAREXT Net] Simulating failure: shutting down Holder 1...
+[RAREXT Net] Audit status after failure: under-replicated
+[RAREXT Net] Provisioning spare Holder 3 and repairing the streamed shard...
+[RAREXT Net] Streamed repair filled 1 shard(s), read 8388608 bytes, wrote 4194304 bytes.
+[RAREXT Net] Audit status after repair: ok
+[RAREXT Net] Retrieving any k streamed shards over raw HTTP...
+[RAREXT Net] SUCCESS: 2 streamed shards reconstructed 8388608 bytes byte-for-byte.
+[RAREXT Net] Streamed scenario stopped and cleaned up.
 ```
 
-If you see both `SUCCESS` lines and both cleanup lines, the open and sealed paths work
-on your machine, and no holder directory contained the plaintext marker. The demo is
-ephemeral; for a network that survives a terminal, use the commands below.
+If you see all three `SUCCESS` lines and all three cleanup lines, the open, sealed, and
+streamed paths work on your machine, no holder directory contained the plaintext marker,
+and the signed streamed placement survived a fresh registry load plus a holder loss. The
+demo is ephemeral; for a network that survives a terminal, use the commands below.
 
 ## Run a persistent network
 
@@ -250,18 +271,19 @@ directory is wiped.
 - **Key management for the sealed tier.** `RAREXT_SEALED_SECRET` is a raw secret with
   no wrapping, rotation, per-tenant isolation, or AAD binding; the envelope is
   unreviewed. Treat sealed storage as a prototype.
-- **Streaming repair.** Holders accept raw file upload/download, and
+- **Large file input at the MCP boundary.** Holders accept raw file upload/download,
   `placeStreamed`/`retrieveStreamed` move a 1 GiB blob with a flat client peak (about
-  249 MiB on the reference laptop). Repair of a streamed placement is refused because it
-  would re-encode the whole payload in memory. The MCP put path still caps input at
-  `RAREXT_STORAGE_MAX_BYTES` (8 MiB default, 32 MiB hard cap).
+  242 MiB on the reference laptop), and streamed repair rebuilds one shard at a time
+  from k survivors. The MCP put path still caps input at `RAREXT_STORAGE_MAX_BYTES`
+  (8 MiB default, 32 MiB hard cap); use the HTTP/raw path for large files.
 - **`fsync`/power-loss durability.** Writes are temp-and-rename atomic against a
   process crash, not a power cut.
 - **Bad-holder quarantine and writer identity.** A token authorizes traffic, not a
   person. There is no automatic ban list, and no proof that a writer owned the bytes.
-- **Scale.** 1 GiB is the largest measured network placement. Repair and GC are
-  per-holder loops with no sharding of the control plane, and a 1 GiB streamed
-  placement cannot be repaired yet.
+- **Scale.** 1 GiB is the largest measured network placement, and the 10-minute chaos
+  run uses 64 KiB payloads (5,507 puts, 143 repairs, 21 kills; see
+  `bench/storage/SOAK.md`). Repair and GC are per-holder loops with no sharding of the
+  control plane; streamed repair is bounded but not load-tested at 100 GiB.
 
 If any of those are load-bearing for you, the honest answer is that this is not ready
 for that deployment yet.

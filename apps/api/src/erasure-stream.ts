@@ -22,8 +22,9 @@ import { merkleRoot } from "./merkle.ts";
  * Scope: this is the large-blob path. `DurabilityLedger.placeStreamed` uploads
  * the shard files through the holder's raw PUT endpoint and `retrieveStreamed`
  * downloads any k of them through raw GET, so the HTTP path stays bounded too.
- * Repair of a streamed placement is not implemented; the MCP put path still
- * buffers its (8 MiB-capped) input.
+ * Repair rebuilds one lost shard at a time from k survivor files and uploads it
+ * through raw PUT, so it follows the chunk size rather than the payload size. The
+ * MCP put path still buffers its (8 MiB-capped) input.
  */
 
 export const STREAM_CHUNK_BYTES = 8 * 1024 * 1024;
@@ -194,6 +195,109 @@ export function encodeFileToShards(options: EncodeFileOptions): StreamedPlacemen
         sha256: hashers[index]!.digest("hex"),
       };
     }),
+  };
+}
+
+/**
+ * Regenerate one shard file from any k survivors, one chunk at a time. Repair
+ * uses this instead of rebuilding the whole payload: peak memory is still the
+ * chunk size, and only the missing shard is written.
+ */
+export function reencodeStreamedShard(options: {
+  placement: StreamedPlacement;
+  targetIndex: number;
+  available: { index: number; path: string }[];
+  outputPath: string;
+}): { bytes: number; sha256: string; leaves: number; root: string } {
+  const { placement, targetIndex, outputPath } = options;
+  const { dataShards, parityShards, chunkBytes, chunks, paddedLength, chunkDigests } = placement;
+
+  assertParameters(dataShards, parityShards, chunkBytes);
+
+  if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= dataShards + parityShards) {
+    throw new Error("targetIndex is out of range");
+  }
+  if (!Number.isInteger(chunks) || chunks < 1) throw new Error("chunks must be a positive integer");
+  if (!Number.isInteger(paddedLength) || paddedLength < 0) throw new Error("paddedLength is invalid");
+  if (!Array.isArray(chunkDigests) || chunkDigests.length !== chunks) {
+    throw new Error("chunkDigests does not match the chunk count");
+  }
+
+  const unique = new Map<number, string>();
+  for (const shard of options.available) {
+    if (!Number.isInteger(shard.index) || shard.index < 0 || shard.index >= dataShards + parityShards) {
+      throw new Error("available shard index is out of range");
+    }
+    if (shard.index === targetIndex) throw new Error("the target shard cannot be a survivor");
+    unique.set(shard.index, shard.path);
+  }
+
+  const chosen = [...unique.entries()].sort((left, right) => left[0] - right[0]).slice(0, dataShards);
+  if (chosen.length < dataShards) throw new Error(`need ${dataShards} survivor shards, have ${chosen.length}`);
+
+  const fullBlock = chunkBytes / dataShards;
+  const lastBlock = (paddedLength - (chunks - 1) * chunkBytes) / dataShards;
+
+  if (!Number.isInteger(lastBlock) || lastBlock < 0) throw new Error("the last chunk is misaligned");
+
+  const handles = chosen.map(([, path]) => openSync(path, "r"));
+  const output = openSync(outputPath, "w");
+
+  try {
+    for (let index = 0; index < chunks; index += 1) {
+      const blockLength = index === chunks - 1 ? lastBlock : fullBlock;
+      const offset = index * fullBlock;
+      const shards: ErasureShard[] = [];
+
+      for (const [position, [shardIndex]] of chosen.entries()) {
+        const bytes = Buffer.alloc(blockLength);
+        if (blockLength > 0) readFully(handles[position]!, bytes, offset);
+        const partial = {
+          index: shardIndex,
+          dataShards,
+          parityShards,
+          length: blockLength * dataShards,
+          payloadDigest: chunkDigests[index]!,
+          bytes,
+        };
+        shards.push({ ...partial, digest: shardDigest(partial) });
+      }
+
+      const chunk = decodeBytes(shards);
+      const encoded = encodeBytes(chunk, dataShards, parityShards);
+      writeFully(output, encoded[targetIndex]!.bytes);
+    }
+  } finally {
+    closeSync(output);
+    for (const fd of handles) closeSync(fd);
+  }
+
+  const bytes = paddedLength / dataShards;
+  const hash = createHash("sha256");
+  const leaves: string[] = [];
+  const reader = openSync(outputPath, "r");
+
+  try {
+    const buffer = Buffer.alloc(SHARD_CHUNK_BYTES);
+    let position = 0;
+
+    for (;;) {
+      const read = readSync(reader, buffer, 0, SHARD_CHUNK_BYTES, position);
+      if (read === 0) break;
+      const slice = buffer.subarray(0, read);
+      hash.update(slice);
+      leaves.push(sha256Hex(slice));
+      position += read;
+    }
+  } finally {
+    closeSync(reader);
+  }
+
+  return {
+    bytes,
+    sha256: hash.digest("hex"),
+    leaves: leaves.length > 0 ? leaves.length : 1,
+    root: merkleRoot(leaves.length > 0 ? leaves : [sha256Hex(new Uint8Array())]),
   };
 }
 

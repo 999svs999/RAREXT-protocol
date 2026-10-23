@@ -61,9 +61,28 @@ break a client or invalidate stored data.
   computed from the file rather than a whole-shard buffer. `httpHolder.putFile/getFile`,
   `DurabilityLedger.placeStreamed/retrieveStreamed`, and streamed placement metadata
   (`chunkBytes`, `chunks`, `chunkDigests`) make the 1 GiB file path placeable over real
-  holders. `npm run bench:network` measured a 249 MiB client peak and 79 MiB holder peak
+  holders. `npm run bench:network` measured a 242 MiB client peak and 94 MiB holder peak
   at 1 GiB; the whole-shard JSON path cannot accept 1 GiB because of the 32 MiB body cap.
-  Streaming repair and key management for the sealed tier remain open.
+  Key management for the sealed tier remains open.
+
+- **Streamed placements are signed, auditable, repairable, and proven over the network.**
+  `DurabilityLedger.repair` now rebuilds a lost streamed shard from k survivor files with
+  `reencodeStreamedShard`, uploads only that shard through raw PUT, and re-audits it;
+  `BlobStore.has` no longer reads the whole file just to answer a probe. `npm run net`
+  adds a third scenario: an 8 MiB file is chunked at 2+1, placed over raw HTTP, signed
+  with `AgentSigner`, registered in `PlacementRegistry`, reloaded from a fresh registry,
+  challenged, killed, repaired, re-audited, and retrieved byte-for-byte. Still missing:
+  the MCP put path remains 8 MiB in-memory, and streamed repair is not load-tested at
+  100 GiB.
+
+- **Ten-minute soak and chaos run.** `npm run bench:soak` kept eight token-protected
+  holders busy for 611 s with continuous puts, challenges, audits, repairs, and
+  retrievals while killing and restarting a random holder every 15-30 s. It recorded
+  5,507 puts (99.9%), 5,507 retrievals (100%), 143 repairs (100%), 143 successful
+  post-repair re-audits, 21 kills/restarts, and peak client/holder RSS of 222/119 MiB.
+  The script writes `bench/storage/SOAK.md`/`SOAK.json` with rates and memory-over-time.
+  This is loopback on one machine with reused holder identities; it is not a durability
+  proof, and the caveats are printed in the report.
 
 - **`npm run net` now proves the sealed tier end to end.** After the open scenario, it
   encrypts a 64 KiB payload with AES-256-GCM/HKDF-SHA256 before erasure coding, places
@@ -77,14 +96,14 @@ break a client or invalidate stored data.
   blocks to disk, so peak memory follows the chunk size rather than the payload size.
   `decodeShardsToFile` reconstructs any `k` of the shard files and verifies both the
   per-chunk digest and the whole-payload digest. At 1 GiB and 4+2, peak RSS fell from
-  3234 MiB (in-memory `encodeBytes`) to 395 MiB while remaining byte-exact (8.2x lower);
-  encode throughput moved from 11.2 to 8.4 MiB/s and decode from 47.7 to 22.8 MiB/s.
+  3243 MiB (in-memory `encodeBytes`) to 393 MiB while remaining byte-exact (8.3x lower);
+  encode throughput moved from 11.2 to 8.6 MiB/s and decode from 48.6 to 23.2 MiB/s.
   Holders now also accept raw `PUT`/`GET` of shard files, and
   `DurabilityLedger.placeStreamed`/`retrieveStreamed` use that transport. Over real
-  loopback holders the client peak stayed at about 249 MiB for both 64 MiB and 1 GiB,
-  while the whole-shard JSON path needed 671 MiB for 64 MiB and cannot store 1 GiB at
-  all. Repair of a streamed placement is refused because it would re-encode the payload
-  in memory. See `bench/storage/RESULTS.md` and
+  loopback holders the client peak stayed at about 250 MiB for both 64 MiB and 1 GiB,
+  while the whole-shard JSON path needed 676 MiB for 64 MiB and cannot store 1 GiB at
+  all. Streamed repair now rebuilds one shard at a time from k survivors. See
+  `bench/storage/RESULTS.md` and
   `apps/api/test/erasure-stream.test.ts`.
 
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes

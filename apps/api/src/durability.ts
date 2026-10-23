@@ -18,7 +18,7 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { decodeBytes, encodeBytes, verifyShard, type ErasureShard } from "./erasure.ts";
-import { decodeShardsToFile, type StreamedPlacement } from "./erasure-stream.ts";
+import { decodeShardsToFile, reencodeStreamedShard, type StreamedPlacement } from "./erasure-stream.ts";
 import type { SealedMetadata } from "./sealed-encryption.ts";
 import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
@@ -1011,12 +1011,6 @@ export class DurabilityLedger {
 
     if (!placement) throw new Error(`unknown blob ${blobHash}`);
 
-    if (placement.streamed) {
-      throw new Error(
-        "repair of a streamed placement is not implemented yet: it would re-encode the whole payload in memory",
-      );
-    }
-
     const witnesses = this.witnesses.get(blobHash)!;
     const byId = new Map(holders.map((holder) => [holder.id, holder]));
     const used = new Set(placement.shards.map((shard) => shard.holder));
@@ -1053,6 +1047,10 @@ export class DurabilityLedger {
       throw new Error(
         `cannot repair: only ${survivors.length} of ${placement.dataShards} shards survive`,
       );
+    }
+
+    if (placement.streamed) {
+      return await this.repairStreamed(placement, degraded, survivors, holders, byId, used, witnesses);
     }
 
     // An MDS repair needs exactly k shards; reading every survivor is overhead,
@@ -1161,6 +1159,168 @@ export class DurabilityLedger {
     }
 
     return { filled: staged.length, readBytes, writtenBytes, placement };
+  }
+
+  private async repairStreamed(
+    placement: Placement,
+    degraded: Set<number>,
+    survivors: ShardPlacement[],
+    holders: DurabilityHolder[],
+    byId: Map<string, DurabilityHolder>,
+    used: Set<string>,
+    witnesses: Map<number, Witness>,
+  ): Promise<RepairOutcome> {
+    const meta = placement.streamed!;
+    const working = mkdtempSync(join(tmpdir(), "rarext-repair-streamed-"));
+
+    try {
+      const available: { index: number; path: string }[] = [];
+      let readBytes = 0;
+
+      for (const shard of survivors) {
+        if (available.length >= placement.dataShards) break;
+
+        const holder = byId.get(shard.holder);
+        if (!holder) continue;
+
+        const path = join(working, `${shard.index}-${shard.storedAs}`);
+
+        try {
+          const ok = holder.getFile
+            ? await holder.getFile(shard.storedAs, path)
+            : await (async () => {
+              const bytes = await holder.get(shard.storedAs);
+              if (!bytes) return false;
+              writeFileSync(path, bytes);
+              return true;
+            })();
+
+          if (ok) {
+            available.push({ index: shard.index, path });
+            readBytes += statSync(path).size;
+          }
+        } catch {
+          rmSync(path, { force: true });
+        }
+      }
+
+      if (available.length < placement.dataShards) {
+        throw new Error(
+          `cannot repair streamed placement: downloaded ${available.length} of ${placement.dataShards} survivor shards`,
+        );
+      }
+
+      const probe = placement.shards[0]!.storedAs;
+      const candidates = holders
+        .filter((candidate) => !used.has(candidate.id))
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const spare: DurabilityHolder[] = [];
+
+      for (const candidate of candidates) {
+        try {
+          await candidate.has(probe);
+          spare.push(candidate);
+        } catch {
+          // Offline or refusing the read; leave it out of this repair.
+        }
+      }
+
+      if (spare.length < degraded.size) {
+        throw new Error(
+          `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`,
+        );
+      }
+
+      const rebuilt: {
+        index: number;
+        holder: DurabilityHolder;
+        storedAs: string;
+        size: number;
+        leaves: number;
+        root: string;
+        digest: string;
+      }[] = [];
+
+      for (const [position, index] of [...degraded].sort((left, right) => left - right).entries()) {
+        const holder = spare[position]!;
+        const target = placement.shards.find((shard) => shard.index === index)!;
+        const path = join(working, `rebuilt-${index}`);
+        const rebuiltShard = reencodeStreamedShard({
+          placement: {
+            version: 1,
+            payloadDigest: placement.blobHash,
+            length: placement.length,
+            paddedLength: meta.paddedLength,
+            chunkBytes: meta.chunkBytes,
+            chunks: meta.chunks,
+            chunkDigests: meta.chunkDigests,
+            dataShards: placement.dataShards,
+            parityShards: placement.parityShards,
+            shards: [],
+          },
+          targetIndex: index,
+          available,
+          outputPath: path,
+        });
+
+        if (rebuiltShard.bytes !== target.size) {
+          throw new Error(`rebuilt shard ${index} has the wrong size`);
+        }
+        if (rebuiltShard.sha256 !== target.digest) {
+          throw new Error(`rebuilt shard ${index} does not match the signed digest`);
+        }
+
+        let storedAs: string;
+
+        try {
+          storedAs = holder.putFile
+            ? await holder.putFile(path, rebuiltShard.sha256)
+            : await holder.put(Uint8Array.from(readFileSync(path)));
+        } catch (error) {
+          throw new Error(
+            `repair write failed for shard ${index} on ${holder.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+
+        rebuilt.push({
+          index,
+          holder,
+          storedAs,
+          size: rebuiltShard.bytes,
+          leaves: rebuiltShard.leaves,
+          root: rebuiltShard.root,
+          digest: rebuiltShard.sha256,
+        });
+      }
+
+      let writtenBytes = 0;
+
+      for (const entry of rebuilt) {
+        const target = placement.shards.find((shard) => shard.index === entry.index)!;
+        target.holder = entry.holder.id;
+        target.storedAs = entry.storedAs;
+        target.size = entry.size;
+        target.leaves = entry.leaves;
+        target.root = entry.root;
+        target.digest = entry.digest;
+
+        witnesses.set(entry.index, {
+          holder: entry.holder.id,
+          lastSuccess: null,
+          lastFailure: null,
+          misses: 0,
+        });
+
+        used.add(entry.holder.id);
+        writtenBytes += entry.size;
+      }
+
+      return { filled: rebuilt.length, readBytes, writtenBytes, placement };
+    } finally {
+      rmSync(working, { recursive: true, force: true });
+    }
   }
 
   /**

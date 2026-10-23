@@ -97,6 +97,51 @@ test("streamed shards upload and download over HTTP, then place and retrieve", a
   }
 });
 
+test("streamed repair rebuilds a lost shard and is auditable again", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rarext-stream-repair-"));
+  const network = await startHolders(4, root);
+
+  try {
+    const payload = randomBytes(180_000);
+    const inputPath = join(root, "payload.bin");
+    writeFileSync(inputPath, payload);
+
+    const streamed = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.placeStreamed(streamed, network.holders.slice(0, 3), "durable");
+    const original = structuredClone(placement.shards.find((shard) => shard.index === 1)!);
+    const lostHolder = network.holders.find((holder) => holder.id === original.holder)!;
+    assert.equal(await lostHolder.remove(original.storedAs), true);
+
+    await ledger.challenge(placement.blobHash, network.holders);
+    assert.equal(ledger.audit(placement.blobHash).status, "under-replicated");
+
+    const outcome = await ledger.repair(placement.blobHash, network.holders);
+    assert.equal(outcome.filled, 1);
+    const rebuilt = placement.shards.find((shard) => shard.index === 1)!;
+    assert.equal(rebuilt.digest, original.digest);
+    assert.notEqual(rebuilt.holder, original.holder);
+
+    await ledger.challenge(placement.blobHash, network.holders);
+    assert.equal(ledger.audit(placement.blobHash).status, "ok");
+
+    const output = join(root, "repaired-output.bin");
+    const result = await ledger.retrieveStreamed(placement, output, network.holders);
+    assert.equal(result.sha256, streamed.payloadDigest);
+    assert.deepEqual(readFileSync(output), payload);
+  } finally {
+    await network.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a corrupt HTTP shard is skipped in favour of k good ones", async () => {
   const root = mkdtempSync(join(tmpdir(), "rarext-stream-http-bad-"));
   const network = await startHolders(3, root);

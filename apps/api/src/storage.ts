@@ -420,7 +420,7 @@ export class BlobStore {
   }
 
   has(hash: string): boolean {
-    return this.get(hash) !== null;
+    return this.filePath(hash) !== null;
   }
 
   list(): BlobRecord[] {
