@@ -70,6 +70,31 @@ the current version is refused. Take a verified backup before upgrading a node t
 the only copy of a key history: retired keys are rebuilt from rotation records, not from
 a separate archive.
 
+## Game-native state migration
+
+There is no appchain cutover. [RFC 0016](../rfcs/0016-appchain-evaluation.md)
+defers the chain, and [RFC 0017](../rfcs/0017-game-native-state-migration.md)
+defines a no-op preservation plan for the game state that exists today.
+
+```bash
+curl -fsS http://127.0.0.1:8787/v1/challenges > challenge-export.json
+npm run plan:game-state -- --source .data/rarext.json \
+  --challenges challenge-export.json \
+  --out migration-plan.json --bundle migration-bundle.json
+```
+
+The plan is always `status: "deferred"` and `mode: "no-op"`; it reads the snapshot
+and writes only the plan or bundle. The bundle copies every durable snapshot
+record and extension field, plus the challenge export, but it is not a target
+schema. The command refuses `--execute` and `--cutover`. Delete the artifacts and
+keep the source registry if no target is approved.
+
+Challenges are not in `rarext.json`, and sponsored challenges are in memory, so
+export `/v1/challenges` before stopping the process. A real cutover is cold, with
+no dual-write; the full preconditions, comparison steps, and rollback boundary are
+in RFC 0017. The remaining gate is an accepted target schema for active builds,
+challenges, reputation, and ratings.
+
 ## Backup
 
 ```bash

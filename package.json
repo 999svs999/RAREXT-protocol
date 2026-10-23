@@ -28,6 +28,7 @@
     "backup:create": "node scripts/backup.mjs create",
     "backup:verify": "node scripts/backup.mjs verify",
     "backup:restore": "node scripts/backup.mjs restore",
+    "plan:game-state": "node scripts/plan-game-state-migration.mjs",
     "test:takedown": "node scripts/takedown-test.mjs",
     "demo:durability": "node scripts/durability-demo.mjs",
     "example:mcp-storage": "node --experimental-strip-types examples/mcp-storage/main.ts",

@@ -82,7 +82,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 
 - [x] RFC: appchain evaluation ([RFC 0016](rfcs/0016-appchain-evaluation.md)) — deferred: stay on anchored transports until the gate holds
 - [ ] Governance approval
-- [ ] Migration plan for game-native state
+- [x] Migration plan for game-native state ([RFC 0017](rfcs/0017-game-native-state-migration.md)) — deferred preservation plan; target schema is the remaining gate
 
 Graduation to v3 requires sustained blockspace demand that anchoring cannot serve, plus a published cost and security analysis. There is no target date.
 

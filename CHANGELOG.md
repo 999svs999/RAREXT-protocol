@@ -42,6 +42,17 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Game-native state migration skeleton.** `npm run plan:game-state` reads a
+  registry snapshot and writes a deferred, no-op preservation plan with collection
+  counts, field inventories, canonical digests, unmanaged top-level fields, and
+  explicit gaps for active builds, challenges, reputation, and ratings. `--bundle`
+  writes every durable record and optional challenge export verbatim for a future
+  target. The command never writes the source and refuses `--execute`/`--cutover`.
+  Seven tests cover field retention, deterministic digests, challenge export,
+  version migration, malformed input, and the deferred gaps. RFC 0017 records the
+  cold-cutover runbook, inherited RESET/trac-peer constraints, rollback boundary,
+  and the remaining target-schema gate.
+
 - **Sponsored challenges.** A configured community member can sign a
   `rarext.challenge-sponsorship.v1` payload and POST it to
   `/v1/challenges/sponsored`. The registry verifies the member's P-256 or ML-DSA key,
