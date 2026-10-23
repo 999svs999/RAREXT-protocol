@@ -73,7 +73,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Independent verifier operators
 - [ ] Native Trac anchoring transport (spike: transport boundary + webhook shipped, native path blocked by the RESET/trac-peer wire format — see [RFC 0001 §4](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac
-- [ ] $BEM read-only balance in the UI
+- [x] $BEM read-only balance in the UI
 - [ ] Community tournament
 - [x] RFC: trust model and Trac anchoring
 

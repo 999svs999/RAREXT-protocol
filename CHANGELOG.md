@@ -33,6 +33,11 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **$BEM balance in the web UI.** The community page accepts a BSC address and shows its
+  read-only `$BEM` balance from `GET /v1/tapeout/status?address=`. The status response now
+  includes `bemDecimals` from `BEM_DECIMALS` (default 18), and the browser bundle formats the
+  base units. No signing and no write path.
+
 - **Trac anchor transport boundary.** `apps/api/src/adapters/trac-transport.ts` defines
   `TracAnchorTransport` and the adapter announces through it; `GET /v1/adapters/trac` reports
   the transport kind. The HTTP webhook (`TRAC_ANCHOR_URL`) is the shipped, tested transport.

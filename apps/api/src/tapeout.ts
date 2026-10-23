@@ -3,6 +3,7 @@ export interface TapeOutStatus {
   chainId: string | null;
   blockNumber: string | null;
   bemContract: string | null;
+  bemDecimals: number;
   address: string | null;
   bemBalance: string | null;
   error?: string;
@@ -72,6 +73,8 @@ const TRANSFER_BATCH_TOPIC =
 const DEFAULT_WINDOW_BLOCKS = 5_000n;
 const DEFAULT_MAX_BLOCKS = 50_000n;
 const MAX_INDEX_ENTRIES = 500;
+const DEFAULT_BEM_DECIMALS = 18;
+const MAX_BEM_DECIMALS = 36;
 
 function rpcUrl(): string | null {
   return process.env.BSC_RPC_URL ?? process.env.TAPEOUT_RPC_URL ?? null;
@@ -79,6 +82,17 @@ function rpcUrl(): string | null {
 
 function bemContract(): string | null {
   return process.env.BEM_CONTRACT ?? null;
+}
+
+function bemDecimals(): number {
+  const value = process.env.BEM_DECIMALS;
+  if (!value) return DEFAULT_BEM_DECIMALS;
+
+  const decimals = Number(value);
+
+  return Number.isInteger(decimals) && decimals >= 0 && decimals <= MAX_BEM_DECIMALS
+    ? decimals
+    : DEFAULT_BEM_DECIMALS;
 }
 
 async function rpc(
@@ -483,6 +497,7 @@ export async function tapeOutIndex(
 export async function tapeOutStatus(address?: string): Promise<TapeOutStatus> {
   const url = rpcUrl();
   const contract = bemContract();
+  const decimals = bemDecimals();
 
   if (!url || !contract) {
     return {
@@ -490,6 +505,7 @@ export async function tapeOutStatus(address?: string): Promise<TapeOutStatus> {
       chainId: null,
       blockNumber: null,
       bemContract: contract,
+      bemDecimals: decimals,
       address: address ?? null,
       bemBalance: null,
     };
@@ -500,6 +516,7 @@ export async function tapeOutStatus(address?: string): Promise<TapeOutStatus> {
     chainId: null,
     blockNumber: null,
     bemContract: contract,
+    bemDecimals: decimals,
     address: address ?? null,
     bemBalance: null,
   };

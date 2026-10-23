@@ -42,6 +42,7 @@ The store persists publications, profiles, identities, and anchors to
 | `RAREXT_ANCHOR_EVERY` | `0` | Auto-anchor after N pending publications |
 | `BSC_RPC_URL` | unset | BSC JSON-RPC endpoint for read-only status |
 | `BEM_CONTRACT` | unset | `$BEM` ERC-20 contract for balance reads |
+| `BEM_DECIMALS` | `18` | `$BEM` base-unit decimals the UI formats with |
 
 ## Signed publications
 
@@ -56,4 +57,6 @@ a batch; `POST /v1/anchors/:id/proof` returns an inclusion proof. If `TRAC_ANCHO
 is set, the root is announced to it; otherwise the anchor is marked `local`.
 
 The TapeOut adapter only reads `eth_chainId`, `eth_blockNumber`, and an optional ERC-20
-`balanceOf`. It never writes to BSC and does not index component or circuit tokens yet.
+`balanceOf`. `GET /v1/tapeout/status?address=` returns the raw `bemBalance` plus
+`bemDecimals` (from `BEM_DECIMALS`, default 18) so the web UI can format it. It never writes
+to BSC and does not index component or circuit tokens yet.

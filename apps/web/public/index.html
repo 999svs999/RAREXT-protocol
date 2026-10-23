@@ -450,6 +450,22 @@
           <div id="adapter-list" class="adapter-list">
             <p class="field-help" data-i18n="feed.loading">Loading networks…</p>
           </div>
+          <div class="bem-balance">
+            <label class="field-help" for="bem-address" data-i18n="bem.address">BSC address</label>
+            <div class="bem-row">
+              <input
+                id="bem-address"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="0x…"
+              />
+              <button id="bem-check" class="ghost" data-i18n="bem.check">Check balance</button>
+            </div>
+            <p id="bem-balance" class="field-help" data-i18n="bem.hint">
+              Enter an EVM address to read its $BEM balance.
+            </p>
+          </div>
         </details>
       </section>
     </main>

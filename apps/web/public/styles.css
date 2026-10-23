@@ -1682,6 +1682,34 @@ td.fail {
   flex: 0 0 auto;
 }
 
+.bem-balance {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.bem-balance > label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bem-row {
+  display: flex;
+  gap: 8px;
+}
+
+.bem-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bem-row button {
+  flex: 0 0 auto;
+}
+
 /* ---------- toast ---------- */
 
 .toast {

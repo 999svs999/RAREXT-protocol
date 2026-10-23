@@ -20,6 +20,8 @@ import type {
   Task,
 } from "../../../packages/core/src/index.ts";
 import { initI18n, localeTag, t } from "./i18n.ts";
+import { bemReadout, parseBemStatus } from "./bem.ts";
+import type { BemStatus } from "./bem.ts";
 import { runWork, type WorkBoard } from "./work.ts";
 
 const NODE_WIDTH = 144;
@@ -33,6 +35,7 @@ const HANDLE_KEY = "rarext:handle";
 const IDENTITY_KEY = "rarext:identity:v1";
 const WELCOME_KEY = "rarext:welcomed:v1";
 const CANVAS_HELP_KEY = "rarext:canvas-help-dismissed:v1";
+const BEM_ADDRESS_KEY = "rarext:bem-address";
 
 const HINTS: Record<string, string[]> = {
   "half-adder": [
@@ -174,6 +177,9 @@ const marketAnswers = el("market-answers");
 const anchorFeedButton = el<HTMLButtonElement>("anchor-feed");
 const chainStatus = el("chain-status");
 const adapterList = el("adapter-list");
+const bemAddressInput = el<HTMLInputElement>("bem-address");
+const bemCheckButton = el<HTMLButtonElement>("bem-check");
+const bemBalance = el("bem-balance");
 const sourceRepoInput = el<HTMLInputElement>("source-repo");
 const sourcePathInput = el<HTMLInputElement>("source-path");
 const importSourceButton = el<HTMLButtonElement>("import-source");
@@ -1789,14 +1795,28 @@ async function refreshAdapters(): Promise<void> {
   }
 }
 
+function renderBemBalance(status: BemStatus, address: string): void {
+  if (address.length === 0) {
+    bemBalance.textContent = t("bem.hint");
+    return;
+  }
+
+  const readout = bemReadout(status);
+
+  bemBalance.textContent =
+    readout.kind === "amount"
+      ? t("bem.balance", { amount: readout.amount })
+      : t("bem.unavailable");
+}
+
 async function refreshChainStatus(): Promise<void> {
+  const address = bemAddressInput.value.trim();
+
   try {
-    const status = (await apiGet("/v1/tapeout/status")) as {
-      configured: boolean;
-      chainId: string | null;
-      blockNumber: string | null;
-      error?: string;
-    };
+    const query = address ? `?address=${encodeURIComponent(address)}` : "";
+    const status = parseBemStatus(await apiGet(`/v1/tapeout/status${query}`));
+
+    renderBemBalance(status, address);
 
     if (!status.configured) {
       chainStatus.textContent = "";
@@ -1815,6 +1835,7 @@ async function refreshChainStatus(): Promise<void> {
     });
     chainStatus.classList.remove("hidden");
   } catch {
+    renderBemBalance(parseBemStatus({}), address);
     chainStatus.textContent = "";
     chainStatus.classList.add("hidden");
   }
@@ -2133,6 +2154,11 @@ el("refresh-feed").addEventListener("click", () => {
   void refreshAdapters();
 });
 anchorFeedButton.addEventListener("click", () => void anchorPendingPublications());
+bemCheckButton.addEventListener("click", () => void refreshChainStatus());
+bemAddressInput.addEventListener("input", () => {
+  localStorage.setItem(BEM_ADDRESS_KEY, bemAddressInput.value.trim());
+});
+bemAddressInput.addEventListener("change", () => void refreshChainStatus());
 loadMoreButton.addEventListener("click", () => void loadMoreFeed());
 el("zoom-in").addEventListener("click", () => zoomBy(1.25));
 el("zoom-out").addEventListener("click", () => zoomBy(0.8));
@@ -2235,6 +2261,9 @@ function init(): void {
 
   const storedHandle = localStorage.getItem(HANDLE_KEY);
   if (storedHandle) authorInput.value = storedHandle;
+
+  const storedBemAddress = localStorage.getItem(BEM_ADDRESS_KEY);
+  if (storedBemAddress) bemAddressInput.value = storedBemAddress;
 
   const identity = loadStoredIdentity();
   if (identity) authorInput.value = identity.handle;

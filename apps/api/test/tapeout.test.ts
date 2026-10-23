@@ -16,6 +16,7 @@ const TRANSFER_BATCH_TOPIC =
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const CIRCUIT_CONTRACT = "0x1111111111111111111111111111111111111111";
 const COMPONENT_CONTRACT = "0x2222222222222222222222222222222222222222";
+const BEM_CONTRACT = "0x5555555555555555555555555555555555555555";
 const ALICE = "0x3333333333333333333333333333333333333333";
 const BOB = "0x4444444444444444444444444444444444444444";
 
@@ -23,6 +24,7 @@ const ENV_KEYS = [
   "BSC_RPC_URL",
   "TAPEOUT_RPC_URL",
   "BEM_CONTRACT",
+  "BEM_DECIMALS",
   "TAPEOUT_CIRCUIT_CONTRACT",
   "TAPEOUT_COMPONENT_CONTRACT",
   "TAPEOUT_INDEX_FROM_BLOCK",
@@ -179,6 +181,7 @@ test("TapeOut status is explicitly unconfigured without env", async () => {
     assert.equal(status.configured, false);
     assert.equal(status.chainId, null);
     assert.equal(status.bemBalance, null);
+    assert.equal(status.bemDecimals, 18);
 
     const index = await tapeOutIndex();
     assert.equal(index.configured, false);
@@ -270,5 +273,78 @@ test("the API exposes the TapeOut indexer", async () => {
     await stop(server);
     restoreEnv(saved);
     await rpc.close();
+  }
+});
+
+test("TapeOut status reads a $BEM balance with configured decimals", async () => {
+  const saved = saveEnv();
+  const balance = 12345n * 10n ** 18n;
+  const calls: { method: string; params: unknown[] }[] = [];
+
+  const server = createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+
+    const request = JSON.parse(body) as {
+      id: number;
+      method: string;
+      params: unknown[];
+    };
+    calls.push({ method: request.method, params: request.params });
+
+    const result =
+      request.method === "eth_chainId"
+        ? "0x38"
+        : request.method === "eth_blockNumber"
+          ? "0x100"
+          : request.method === "eth_call"
+            ? `0x${balance.toString(16)}`
+            : "0x0";
+
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+
+  process.env.BSC_RPC_URL = `http://127.0.0.1:${port}`;
+  delete process.env.TAPEOUT_RPC_URL;
+  process.env.BEM_CONTRACT = BEM_CONTRACT;
+  process.env.BEM_DECIMALS = "18";
+
+  try {
+    const status = await tapeOutStatus(ALICE);
+
+    assert.equal(status.configured, true);
+    assert.equal(status.bemContract, BEM_CONTRACT);
+    assert.equal(status.bemBalance, balance.toString());
+    assert.equal(status.bemDecimals, 18);
+    assert.equal(status.error, undefined);
+
+    const call = calls.find((entry) => entry.method === "eth_call");
+    assert.ok(call, "expected an eth_call for balanceOf");
+    const payload = call.params[0] as { to: string; data: string };
+    assert.equal(payload.to, BEM_CONTRACT);
+    assert.equal(payload.data, `0x70a08231${ALICE.slice(2).padStart(64, "0")}`);
+  } finally {
+    restoreEnv(saved);
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("TapeOut status honors a custom $BEM decimals setting", async () => {
+  const saved = saveEnv();
+
+  process.env.BSC_RPC_URL = "http://127.0.0.1:1";
+  process.env.BEM_CONTRACT = BEM_CONTRACT;
+  process.env.BEM_DECIMALS = "6";
+
+  try {
+    const status = await tapeOutStatus(ALICE);
+    assert.equal(status.bemDecimals, 6);
+  } finally {
+    restoreEnv(saved);
   }
 });

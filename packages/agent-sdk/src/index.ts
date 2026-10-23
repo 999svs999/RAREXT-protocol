@@ -101,6 +101,7 @@ export interface TapeOutStatus {
   chainId: string | null;
   blockNumber: string | null;
   bemContract: string | null;
+  bemDecimals: number;
   address: string | null;
   bemBalance: string | null;
   error?: string;
