@@ -5,9 +5,9 @@ design. It covers the local demo, a persistent multi-holder set, the API, the pi
 service, a client, and the things that will bite you.
 
 Status: holders, placement, challenge/audit, repair, GC, quotas, rate limits, token
-rotation, and the sealed client path are implemented and tested on loopback. There is
-no built-in TLS, no managed key service, no multi-writer coordination, and no
-production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md) and
+rotation, and the sealed client path are implemented and tested on loopback and a
+non-loopback interface. There is no built-in TLS, no managed key service, no multi-writer
+coordination, and no production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md) and
 [`HARDENING.md`](HARDENING.md) before exposing anything.
 
 ## Prerequisites
@@ -150,6 +150,51 @@ curl -s http://127.0.0.1:9600/v1/holder \
 It returns the holder id, shard count, and stored bytes. Without a token it returns
 `401 {"error":"unauthorized"}`.
 
+### Run a holder on another machine
+
+A holder is an HTTP process; it does not have to be on the same host as the API or the
+MCP client. On the holder host, bind an address that host can reach and require a token:
+
+```bash
+RAREXT_HOLDER_ID=alice-1 \
+RAREXT_HOLDER_DIR=/var/lib/rarext/holder-1 \
+RAREXT_HOLDER_HOST=0.0.0.0 \
+RAREXT_HOLDER_PORT=9600 \
+RAREXT_HOLDER_TOKEN='replace-this-token' \
+npm run holder
+```
+
+`0.0.0.0` listens on every interface. To limit exposure, set `RAREXT_HOLDER_HOST` to the
+specific LAN or VPN address instead. Allow only the API/client networks through the
+firewall and terminate TLS in a reverse proxy; the bearer token is sent on every request
+and is visible without TLS. The holder refuses a non-loopback bind without a token, but
+that check is not encryption or authentication of the operator.
+
+From the API or MCP client, use the holder's reachable address in the same id=url list:
+
+```bash
+RAREXT_HOLDERS='alice-1=http://192.0.2.10:9600' \
+RAREXT_HOLDER_TOKEN='replace-this-token' \
+npm run dev:api
+```
+
+The holder id must match the id the client uses. A placement is a signed map from shard
+index to holder id and `storedAs`; changing the id later makes the shard unreachable
+through the old placement. For an agent on another machine, use the same URL and token
+in `RAREXT_STORAGE_HOLDERS` when starting the MCP server.
+
+Check reachability from the client host before placing anything:
+
+```bash
+curl -s http://192.0.2.10:9600/v1/holder \
+  -H 'authorization: Bearer replace-this-token'
+```
+
+The cross-interface test is `node --test apps/api/test/non-loopback-holder.test.ts`; it
+binds child holders to a discovered non-loopback IPv4 address, places a shard on one,
+challenges and audits it, then reconstructs the payload. It skips when the host has no
+non-loopback IPv4 interface.
+
 ### 2. API
 
 The API is the placement registry and the client-facing surface. Point it at the same
@@ -287,9 +332,11 @@ directory is wiped.
   once the grace period passes. The soak uses retention 24 and a zero-grace sweep; the
   production GC default is 24 hours and dry-run.
 - **Scale.** 1 GiB is the largest measured network placement, and the 10-minute chaos
-  run uses 64 KiB payloads (5,507 puts, 143 repairs, 21 kills; see
-  `bench/storage/SOAK.md`). Repair and GC are per-holder loops with no sharding of the
-  control plane; streamed repair is bounded but not load-tested at 100 GiB.
+  run uses 64 KiB payloads (latest: 5,910 puts at 100%, 145 repairs, 23 kills; the
+  earlier 611 s run had 143 repairs at 99.9% puts; see `bench/storage/SOAK.md`). Repair
+  and GC are per-holder loops with no sharding of the control plane; streamed repair is
+  bounded but not load-tested at 100 GiB. The public summary is
+  [`STORAGE.md`](STORAGE.md).
 
 If any of those are load-bearing for you, the honest answer is that this is not ready
 for that deployment yet.
