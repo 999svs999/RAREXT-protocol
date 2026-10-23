@@ -44,6 +44,20 @@ then the raw streaming path at 64 MiB and 1 GiB. It samples each holder's RSS wi
 includes that section as well. Encode is excluded from the streaming rows because it is
 a separate one-time cost, reported in the codec section.
 
+### Soak and chaos
+
+```bash
+npm run bench:soak                  # 10-minute default, writes SOAK.md/JSON
+npm run bench:soak -- --seconds 60  # shorter smoke run
+```
+
+`bench/storage/soak.mjs` starts eight token-protected holder child processes and runs
+continuous puts, challenges/audits, repairs, and retrievals for the requested duration.
+A random holder is killed every 15-30 s and restarted 2-6 s later. It publishes success
+rates, audit/repair/re-audit counts, holder restarts, and client/holder RSS over time.
+`SOAK.md` is a local chaos report, not a durability proof: see its caveats. It is not
+included in `RESULTS.md`, which remains the deterministic corpus benchmark.
+
 ## What is measured
 
 | Column | Meaning |
