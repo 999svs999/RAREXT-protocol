@@ -34,6 +34,9 @@ challenge: 6/6 live, 6 required
 audit: ok (challenged=true)
 pin: pin:<cid>
 OK: an MCP client stored, read, challenged, audited, and pinned content.
+
+The same flow is covered by `apps/api/test/mcp-storage-agent.test.ts`, which runs this
+example as a child process and asserts the put, get, challenge, audit, and pin output.
 ```
 
 ## Configuration for a real agent

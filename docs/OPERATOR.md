@@ -280,6 +280,12 @@ directory is wiped.
   process crash, not a power cut.
 - **Bad-holder quarantine and writer identity.** A token authorizes traffic, not a
   person. There is no automatic ban list, and no proof that a writer owned the bytes.
+- **Ledger retention.** `DurabilityLedger` keeps every placement by default. A
+  long-lived process that puts new blobs continuously must pass `maxPlacements` or call
+  `forget()`; evicted placements and their witnesses can no longer be challenged or
+  retrieved through that ledger. `POST /v1/holder/gc/scan` removes their holder shards
+  once the grace period passes. The soak uses retention 24 and a zero-grace sweep; the
+  production GC default is 24 hours and dry-run.
 - **Scale.** 1 GiB is the largest measured network placement, and the 10-minute chaos
   run uses 64 KiB payloads (5,507 puts, 143 repairs, 21 kills; see
   `bench/storage/SOAK.md`). Repair and GC are per-holder loops with no sharding of the

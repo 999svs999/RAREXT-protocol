@@ -53,10 +53,14 @@ npm run bench:soak -- --seconds 60  # shorter smoke run
 
 `bench/storage/soak.mjs` starts eight token-protected holder child processes and runs
 continuous puts, challenges/audits, repairs, and retrievals for the requested duration.
-A random holder is killed every 15-30 s and restarted 2-6 s later. It publishes success
-rates, audit/repair/re-audit counts, holder restarts, and client/holder RSS over time.
-`SOAK.md` is a local chaos report, not a durability proof: see its caveats. It is not
-included in `RESULTS.md`, which remains the deterministic corpus benchmark.
+A random holder is killed every 15-30 s and restarted 2-6 s later. The ledger retains the
+newest 24 placements, orphan shards are swept with a zero-grace holder GC every 10 s, and
+transient puts retry up to six times with exponential backoff. It publishes success
+rates, audit/repair/re-audit counts, holder restarts, ledger/shard counts, and
+client/holder RSS over time. Pass `--gc` with the exposed-GC npm script to separate live
+heap from allocator residency. `SOAK.md` is a local chaos report, not a durability proof:
+see its caveats. It is not included in `RESULTS.md`, which remains the deterministic
+corpus benchmark.
 
 ## What is measured
 

@@ -11,6 +11,13 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **External-agent MCP storage integration test.** `npm test` now runs
+  `apps/api/test/mcp-storage-agent.test.ts`, which starts six token-protected holders,
+  the API, and a pin service, then drives the real MCP stdio server through put, get,
+  challenge, audit, and pin as an outside client. The test asserts the exact payload,
+  all six live challenges, an `ok` audit, and a stored pin.
+
+
 ### Security
 
 - **Storage challenge, transport, placement, and pin hardening.** Challenge responses
@@ -74,6 +81,15 @@ break a client or invalidate stored data.
   challenged, killed, repaired, re-audited, and retrieved byte-for-byte. Still missing:
   the MCP put path remains 8 MiB in-memory, and streamed repair is not load-tested at
   100 GiB.
+
+- **Bounded placement retention and retry-safe puts.** `DurabilityLedger` accepts a
+  `maxPlacements` limit and evicts the oldest placement and its witnesses; `forget()`
+  releases one explicitly. The soak uses a limit of 24, a zero-grace orphan GC sweep,
+  and up to six put attempts with 250 ms-4 s backoff. Its 604 s rerun completed 5,910
+  puts at 100.0% (the prior run was 99.9%), 145 repairs and 145 re-audits at 100%, with
+  the ledger pinned at 24 and live JS heap near 10.5 MiB. Client RSS reached a bounded
+  median of 170.7 MiB after warm-up; the residual is V8 reserved and external/allocator
+  memory, not live heap. Defaults remain unlimited for compatibility.
 
 - **Ten-minute soak and chaos run.** `npm run bench:soak` kept eight token-protected
   holders busy for 611 s with continuous puts, challenges, audits, repairs, and
