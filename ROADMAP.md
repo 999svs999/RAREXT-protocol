@@ -44,7 +44,10 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
   and live deployment remain pending (`contracts/AUDIT.md`)
 - [x] A pinning service for the content adapter
 - [x] Continuous fair-launch attestations as a verifiable trajectory
-- [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume
+- [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume —
+  `/v1/consensus/state` and `/v1/consensus/validate` ship with signed anchor proofs
+  and a strict `CONSENSUS_SETTLEMENT_MIN` gate; production settlement volume is
+  pending and live gating is deferred (`docs/CHAINS.md`)
 - [ ] Public testnet registry
 - [ ] First external agent integration
 - [ ] First non-logic app integration in production

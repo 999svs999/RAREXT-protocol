@@ -23,6 +23,8 @@ Implemented:
 - `GET /v1/anchors`
 - `GET /v1/anchors/:id`
 - `POST /v1/anchors/:id/proof`
+- `GET /v1/consensus/state`
+- `POST /v1/consensus/validate`
 - `GET /v1/tapeout/status?address=`
 - `POST /v1/verify`
 
@@ -40,6 +42,7 @@ The store persists publications, profiles, identities, and anchors to
 | `RAREXT_DATA` | `.data/rarext.json` | Store path; `none` disables persistence |
 | `TRAC_ANCHOR_URL` | unset | Optional webhook anchor transport for Merkle roots; the native RESET transport is blocked (RFC 0001 §4) |
 | `RAREXT_ANCHOR_EVERY` | `0` | Auto-anchor after N pending publications |
+| `CONSENSUS_SETTLEMENT_MIN` | unset | Strict minimum cumulative anchored roots for `GET /v1/consensus/state` and `POST /v1/consensus/validate`; unset keeps the gate unconfigured |
 | `BSC_RPC_URL` | unset | BSC JSON-RPC endpoint for read-only status |
 | `BEM_CONTRACT` | unset | `$BEM` ERC-20 contract for balance reads |
 | `BEM_DECIMALS` | `18` | `$BEM` base-unit decimals the UI formats with |
@@ -55,6 +58,15 @@ handle is registered, unsigned publications claiming it are rejected. See
 Anchors batch unanchored publication leaves into a Merkle root. `POST /v1/anchors` creates
 a batch; `POST /v1/anchors/:id/proof` returns an inclusion proof. If `TRAC_ANCHOR_URL`
 is set, the root is announced to it; otherwise the anchor is marked `local`.
+
+The consensus endpoints read that anchor trail, not a separate validator set.
+`GET /v1/consensus/state` returns a state root, a deterministic head, and the
+settlement gate. `POST /v1/consensus/validate` verifies a signed
+`rarext.consensus.anchor-proof` v1 object, recomputes the head at the proof's
+height, checks the anchor and root, and applies the gate. The comparison is
+strict, so only volume above `CONSENSUS_SETTLEMENT_MIN` is valid. Production
+settlement data is pending, `liveGating` is false, and the endpoints do not make
+this a consensus chain. See [`docs/CHAINS.md`](../../docs/CHAINS.md#consensus-interface).
 
 The TapeOut adapter only reads `eth_chainId`, `eth_blockNumber`, and an optional ERC-20
 `balanceOf`. `GET /v1/tapeout/status?address=` returns the raw `bemBalance` plus

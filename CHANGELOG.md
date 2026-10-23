@@ -42,6 +42,18 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Consensus interface and settlement gate.** `GET /v1/consensus/state` exposes a
+  state root over the anchor audit trail, a deterministic height-scoped head, and
+  settlement status. `POST /v1/consensus/validate` verifies a P-256 or ML-DSA
+  signature over a canonical `rarext.consensus.anchor-proof` v1 object, recomputes
+  the head and state root at the proof's height, checks the anchor and root against
+  the trail, and applies a strict `CONSENSUS_SETTLEMENT_MIN` gate. Reaching the
+  minimum is `at-threshold` and invalid; only above it is valid. The API never
+  trusts a caller-supplied volume or head. Production settlement volume is pending,
+  so `productionDataPending` is true and `liveGating` is false. A three-scenario
+  fixture covers below/at/above, and an integration test drives the real anchor
+  audit trail and a signed proof through the HTTP endpoints.
+
 - **EVM anchor audit trail and guarded funded-testnet deployment.** `contracts/AUDIT.md`
   records the pinned source and toolchain, the external-audit-not-performed status,
   an internal finding and disposition register, a manual auditor checklist, and the

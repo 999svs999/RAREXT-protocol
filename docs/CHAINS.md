@@ -82,10 +82,115 @@ What a real network adds, and what this does not have:
 - **an incentive** — who pays to write a block, and why.
 
 The gate for moving to a real chain is in
-[RFC 0004](../rfcs/0004-storage-economy.md): volume to settle, a written and narrow
+[RFC 0016](../rfcs/0016-appchain-evaluation.md): volume to settle, a written and narrow
 job for the chain, and a funded validator set. Building a chain before there is
 volume is vanity infrastructure, and the interface above means we can defer it
 without deferring the protocol.
+
+## Consensus interface
+
+`GET /v1/consensus/state` and `POST /v1/consensus/validate` are the seam a
+consensus implementation can serve behind the registry. They do not make the
+registry a consensus chain. They expose the **anchor audit trail** as an ordered
+settlement log:
+
+- the state root is the Merkle root over anchored roots in creation order;
+- the head is a SHA-256 commitment to the chain id, height, state root, and latest
+  anchor, so a proof can name a past height without becoming stale;
+- the height is the cumulative number of anchored roots, not the number of
+  batched publications. Per [RFC 0016](../rfcs/0016-appchain-evaluation.md), one
+  anchor root is one settled action and batched publications are amortized into
+  it.
+
+The source of truth is the append-only anchor trail in the registry
+(`store.listAnchors()`). [RFC 0017](../rfcs/0017-game-native-state-migration.md)
+keeps that snapshot authoritative, and the EVM contract audit trail in
+[`contracts/AUDIT.md`](../contracts/AUDIT.md) (commit `314c10e`) records the
+transport side. The consensus endpoints never take a caller-supplied volume or
+head as truth.
+
+```http
+GET /v1/consensus/state
+```
+
+```json
+{
+  "kind": "rarext.consensus.state",
+  "version": 1,
+  "chainId": "rarext-anchor-audit-v1",
+  "asOf": "2026-10-23T…",
+  "stateRoot": "<merkle root over anchored roots>",
+  "head": {
+    "height": 2,
+    "hash": "<sha256 commitment>",
+    "stateRoot": "<same state root>",
+    "anchorId": "…",
+    "anchorRoot": "…",
+    "createdAt": "2026-10-23T…"
+  },
+  "settlement": {
+    "source": "anchor-audit-trail",
+    "status": "above-threshold",
+    "valid": true,
+    "volume": 2,
+    "minimum": 1,
+    "remainingToExceed": 0,
+    "productionDataPending": true,
+    "liveGating": false,
+    "note": "Volume counts anchored roots…"
+  },
+  "audit": {
+    "source": "anchor-audit-trail",
+    "anchors": 2,
+    "publications": 2,
+    "confirmedAnchors": 0,
+    "references": ["rfcs/0017-game-native-state-migration.md", "contracts/AUDIT.md"]
+  }
+}
+```
+
+`POST /v1/consensus/validate` accepts a signature over a canonical
+`rarext.consensus.anchor-proof` v1 object:
+
+```json
+{
+  "proof": {
+    "kind": "rarext.consensus.anchor-proof",
+    "version": 1,
+    "chainId": "rarext-anchor-audit-v1",
+    "height": 2,
+    "head": "<head at that height>",
+    "stateRoot": "<state root at that height>",
+    "anchorId": "…",
+    "root": "<anchored root>",
+    "issuedAt": "2026-10-23T…"
+  },
+  "publicKey": { "kty": "EC", "crv": "P-256", "x": "…", "y": "…" },
+  "signature": "<base64>"
+}
+```
+
+The server verifies the P-256 or ML-DSA signature, recomputes the head and state
+root at the named height from the audit trail, checks the anchor is in that
+prefix and the root matches, and then applies the settlement gate. A signature
+proves integrity, not a trusted signer: there is no signer allowlist yet. The
+anchor lookup and the volume are always local, so a proof cannot inflate either.
+
+Cumulative settlement volume is gated by `CONSENSUS_SETTLEMENT_MIN`:
+
+- unset means the gate is unconfigured and `valid` is always false;
+- the comparison is strict: volume equal to the minimum is `at-threshold` and
+  invalid; only `above-threshold` is valid;
+- `productionDataPending` is true and `liveGating` is false. The anchor trail is
+  real data, but RAREXT has not published a production settlement series, so this
+  is a computed interface, not a live authorization to run a chain;
+- local anchors count today. `confirmedAnchors` reports how many also have a
+  confirmed external receipt, so an operator can see the difference.
+
+This is deliberately not a consensus implementation: one writer still appends
+anchors, and finality, reorg handling, validator incentives, and a signer
+allowlist remain open. Real settlement volume is the gate for those, not a new
+HTTP shape.
 
 ## Anchoring to several chains at once
 
@@ -162,7 +267,9 @@ Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
 - **A native Trac anchor transport.** RESET/trac-peer 0.4.11 has no anchor move or transfer
   memo, so the shipped Trac transport is the operator webhook. The boundary is
   `apps/api/src/adapters/trac-transport.ts`; the blocker and evidence are in RFC 0001 §4.
-- **A consensus chain for RAREXT itself**, when the gate is met.
+- **A consensus chain for RAREXT itself**, when the gate is met. The
+  `/v1/consensus/*` interface, signed anchor proofs, and strict settlement gate
+  ship now; production settlement volume is pending, so live gating is deferred.
 - **Re-anchoring after a reorganisation.** If a chain reorganises, an anchor
   might disappear. The receipts record the height, so the ambiguity is visible,
   but there is no automatic re-anchoring yet.

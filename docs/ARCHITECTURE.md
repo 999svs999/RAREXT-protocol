@@ -165,6 +165,8 @@ Base URL: `http://127.0.0.1:8787`
 | GET | `/v1/anchors` | — | `Anchor[]` |
 | GET | `/v1/anchors/:id` | — | `Anchor` |
 | POST | `/v1/anchors/:id/proof` | `{ publicationId }` | `{ leaf, proof, root, index, valid }` |
+| GET | `/v1/consensus/state` | — | `ConsensusState` |
+| POST | `/v1/consensus/validate` | `{ proof, publicKey, signature }` | `ConsensusValidation` |
 | GET | `/v1/tapeout/status?address=` | — | `TapeOutStatus` |
 | GET | `/v1/tapeout/circuits?fromBlock=&toBlock=` | — | `TapeOutIndex` |
 | POST | `/v1/verify` | `{ publicationId }` | `{ valid, attestation, recomputed }` |
@@ -246,6 +248,9 @@ Planned but not implemented:
    The anchor is stored locally, or the root is announced to `TRAC_ANCHOR_URL`.
 8. Each adapter that supports anchoring records a receipt. Anyone can re-run the app verifier,
    compare both hashes, and verify Merkle inclusion with `POST /v1/anchors/:id/proof`.
+9. `GET /v1/consensus/state` commits the ordered anchor roots to a state root and head, and
+   `POST /v1/consensus/validate` checks a signed anchor proof against that trail and the
+   strict settlement gate. Live gating is deferred while production settlement data is pending.
 
 Non-determinism is a consensus bug, not a minor issue. Floating-point is banned from scoring paths.
 

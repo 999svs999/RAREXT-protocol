@@ -79,6 +79,10 @@ import {
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
 import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
+import {
+  createConsensusService,
+  type ConsensusOptions,
+} from "./consensus.ts";
 import { VerifierModuleRegistry } from "./verifierModules.ts";
 import { PlacementRegistry, asSignedPlacement } from "./placements.ts";
 import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
@@ -157,6 +161,7 @@ export interface AppOptions {
   challengeIntervalMs?: number;
   fetch?: typeof fetch;
   holderUrls?: Map<string, string>;
+  consensus?: ConsensusOptions;
 }
 
 function send(res: ServerResponse, status: number, body?: unknown): void {
@@ -812,6 +817,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     return observation ? { ...publication, durability: observation } : publication;
   }
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
+  const consensus = createConsensusService(store, options.consensus);
   const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
   async function publish(input: PublishInput): Promise<PublishResult> {
@@ -2513,6 +2519,16 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
         const resolved = await registry.resolveSource("github", query);
         send(res, 200, resolved);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/consensus/state") {
+        send(res, 200, consensus.state());
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/consensus/validate") {
+        send(res, 200, consensus.validate(await readJson(req)));
         return;
       }
 

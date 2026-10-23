@@ -1,0 +1,26 @@
+{
+  "minimum": 10,
+  "scenarios": [
+    {
+      "name": "below threshold",
+      "volume": 9,
+      "status": "below-threshold",
+      "valid": false,
+      "remainingToExceed": 2
+    },
+    {
+      "name": "at threshold",
+      "volume": 10,
+      "status": "at-threshold",
+      "valid": false,
+      "remainingToExceed": 1
+    },
+    {
+      "name": "above threshold",
+      "volume": 11,
+      "status": "above-threshold",
+      "valid": true,
+      "remainingToExceed": 0
+    }
+  ]
+}

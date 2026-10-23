@@ -369,6 +369,7 @@ rfcs               Protocol, economics, and chain proposals
 - Persist publications, profiles, identities, anchors, and key rotation/delegation history to a JSON store across restarts.
 - Rotate an identity key by signing with the retiring key, and delegate publishing to another key with an app scope and expiry ([RFC 0008](rfcs/0008-key-rotation-and-delegation.md)).
 - Batch attestations into Merkle anchors, with an optional `TRAC_ANCHOR_URL` webhook and per-adapter receipts.
+- Read the anchor audit trail through `GET /v1/consensus/state` and validate a signed anchor proof with `POST /v1/consensus/validate`; the strict settlement gate is computed but live gating waits for real volume data.
 - Discover adapters through `GET /v1/adapters`, including local anchors, Trac, TapeOut, and GitHub.
 - Import public GitHub builds pinned to an exact commit, with optional license and score metadata.
 - Link a RAREXT identity to a GitHub account through a signed payload and public gist or raw-file proof, or to a RESET Trac address (`trac1…` or 64-hex) through an Ed25519 `reset-mcp-login` challenge.
@@ -378,7 +379,7 @@ rfcs               Protocol, economics, and chain proposals
 - Work in a token-driven interface: colour-coded block types, a scored meter, a rubber-band wiring gesture, and a brand mark that matches the favicon.
 - Drive all of it from an agent through the SDK or the MCP server, including key registration, app discovery, signed generic artifacts, lineage, and leaderboards.
 
-v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and a lost root key has no recovery path; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root, and the Trac link verifies a RESET challenge signature without an Intercom transport yet; the TapeOut indexer is bounded by block range and only sees configured contracts; delegated keys may publish but cannot rotate, delegate again, or use scopes beyond `publish`.
+v0 caveats: browser signing keys live in `localStorage`; agent keys are local files and a lost root key has no recovery path; handles are first-come, first-served and not yet Trac-native; anchors are local unless a Trac webhook is configured; GitHub imports use the public API unless `GITHUB_TOKEN` is set; identity links are verified claims, not a trust root, and the Trac link verifies a RESET challenge signature without an Intercom transport yet; the TapeOut indexer is bounded by block range and only sees configured contracts; delegated keys may publish but cannot rotate, delegate again, or use scopes beyond `publish`; the consensus endpoints are an interface over the local anchor trail, not a consensus network, and their gate is not live until a production settlement series exists.
 
 ## Principles
 
