@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  MAX_TOURNAMENT_PARTICIPANTS,
   TournamentService,
   type SingleEliminationBracket,
   type RoundRobinTable,
@@ -161,7 +162,7 @@ test("round robin: a 4-player table plays to a known final table", () => {
   ]);
 });
 
-test("service rejects a duplicate name and a one-player field", () => {
+test("service rejects a duplicate name, a one-player field, and an oversized field", () => {
   const service = new TournamentService();
   service.createTournament("duplicate", "round_robin", [
     { id: "a", name: "A" },
@@ -181,6 +182,84 @@ test("service rejects a duplicate name and a one-player field", () => {
     () => service.createTournament("too-small", "round_robin", [{ id: "a", name: "A" }]),
     /at least two participants/,
   );
+
+  const oversized = Array.from(
+    { length: MAX_TOURNAMENT_PARTICIPANTS + 1 },
+    (_, i) => ({ id: `p${i}`, name: `P${i}` }),
+  );
+  assert.throws(
+    () => service.createTournament("too-big", "round_robin", oversized),
+    new RegExp(`at most ${MAX_TOURNAMENT_PARTICIPANTS} participants`),
+  );
+});
+
+test("service rejects a result that names a winner who is not in the match", () => {
+  const fixture = loadFixture("tournament-round-robin-4-player.json");
+  const service = new TournamentService();
+  service.createTournament(fixture.name, fixture.format, fixture.participants);
+
+  const table = service.getTournament(fixture.name)!.state as RoundRobinTable;
+  const match = table.matches[0]; // pA vs pB
+  assert.equal(match.player1.id, "pA");
+  assert.equal(match.player2.id, "pB");
+
+  assert.throws(
+    () =>
+      service.recordMatchResult(fixture.name, {
+        matchId: match.id,
+        winnerParticipantId: "pC",
+        loserParticipantId: "pA",
+      }),
+    /Winner pC is not a participant in match/,
+  );
+});
+
+test("service rejects a result whose loser is not the match's other participant", () => {
+  const fixture = loadFixture("tournament-single-elimination-4-player.json");
+  const service = new TournamentService();
+  service.createTournament(fixture.name, fixture.format, fixture.participants);
+
+  const bracket = service.getTournament(fixture.name)!.state as SingleEliminationBracket;
+  const match = bracket.rounds[0][0];
+  const p1 = match.player1;
+  const p2 = match.player2;
+  assert.ok(p1 && p2, "the first match is fully populated");
+
+  assert.throws(
+    () =>
+      service.recordMatchResult(fixture.name, {
+        matchId: match.id,
+        winnerParticipantId: p1.id,
+        loserParticipantId: "not-in-this-match",
+      }),
+    /Loser not-in-this-match does not match the other participant/,
+  );
+});
+
+test("concurrent submissions of the same result record the match exactly once", () => {
+  const fixture = loadFixture("tournament-round-robin-4-player.json");
+  const service = new TournamentService();
+  service.createTournament(fixture.name, fixture.format, fixture.participants);
+
+  const table = service.getTournament(fixture.name)!.state as RoundRobinTable;
+  const match = table.matches[0];
+
+  const attempt = () =>
+    service.recordMatchResult(fixture.name, {
+      matchId: match.id,
+      winnerParticipantId: match.player1.id,
+      loserParticipantId: match.player2.id,
+    });
+
+  attempt();
+  // Node's event loop serialises synchronous check-and-write, so a second
+  // in-flight submission must be refused, not double-counted.
+  assert.throws(() => attempt(), /already played/);
+
+  const standings = service.getTournament(fixture.name)!.state as RoundRobinTable;
+  const winnerEntry = standings.standings.find((s) => s.participant.id === match.player1.id)!;
+  assert.equal(winnerEntry.wins, 1);
+  assert.equal(winnerEntry.points, 3);
 });
 
 test("API: create, list, read, and record a result over HTTP", async () => {
@@ -237,6 +316,81 @@ test("API: create, list, read, and record a result over HTTP", async () => {
       loserParticipantId: "p2",
     });
     assert.equal(badResultRes.status, 400);
+
+    // Malformed JSON body: readJson rejects it, the app handler's catch-all
+    // turns it into a 400 with a message, not a 500.
+    const malformed = await fetch(`${base}/v1/tournaments`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{ not json",
+    });
+    assert.equal(malformed.status, 400);
+    assert.ok((await malformed.json()).error.includes("invalid JSON body"));
+
+    // A duplicate tournament name over HTTP is a 400, matching the service.
+    const dupRes = await post(base, "/v1/tournaments", {
+      name: "api-elim",
+      format: "single_elimination",
+      participants: [
+        { id: "p1", name: "Player 1" },
+        { id: "p2", name: "Player 2" },
+      ],
+    });
+    assert.equal(dupRes.status, 400);
+    assert.ok((await dupRes.json()).error.includes("already exists"));
+
+    // A result that names an unknown match is a 400.
+    const unknownMatch = await post(base, "/v1/tournaments/api-elim/results", {
+      matchId: "R9M9",
+      winnerParticipantId: "p1",
+      loserParticipantId: "p2",
+    });
+    assert.equal(unknownMatch.status, 400);
+    assert.ok((await unknownMatch.json()).error.includes("not found"));
+
+    // A winner that is not a participant of the match is a 400.
+    const createdAgain = await post(base, "/v1/tournaments", {
+      name: "rr",
+      format: "round_robin",
+      participants: [
+        { id: "p1", name: "Player 1" },
+        { id: "p2", name: "Player 2" },
+        { id: "p3", name: "Player 3" },
+      ],
+    });
+    assert.equal(createdAgain.status, 201);
+    const foreignWinner = await post(base, "/v1/tournaments/rr/results", {
+      matchId: "RR_M_p1_vs_p2",
+      winnerParticipantId: "p3",
+      loserParticipantId: "p1",
+    });
+    assert.equal(foreignWinner.status, 400);
+    assert.ok((await foreignWinner.json()).error.includes("not a participant"));
+  } finally {
+    await stop(server);
+  }
+});
+
+test("POST /v1/tournaments bounds an oversized participant list at 400", async () => {
+  const store = new RarextStore();
+  const tournaments = new TournamentService();
+  const { server, base } = await start(store, { tournaments });
+
+  try {
+    const body = {
+      name: "giant",
+      format: "round_robin",
+      participants: Array.from({ length: MAX_TOURNAMENT_PARTICIPANTS + 1 }, (_, i) => ({
+        id: `p${i}`,
+        name: `P${i}`,
+      })),
+    };
+    const res = await post(base, "/v1/tournaments", body);
+    assert.equal(res.status, 400);
+    assert.ok(
+      (await res.json()).error.includes(String(MAX_TOURNAMENT_PARTICIPANTS)),
+      "the error names the configured cap",
+    );
   } finally {
     await stop(server);
   }

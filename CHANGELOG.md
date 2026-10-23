@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Community tournament hardening.** `TournamentService` now caps a field at
+  `MAX_TOURNAMENT_PARTICIPANTS` (1024) and refuses a participant-count overflow, and a
+  recorded result must name the two participants of the match it settles: a winner that
+  is not in the match, or a loser that is not its counterpart, is refused. A duplicate
+  tournament name and an unknown match id are 400s, not 500s. Concurrent submissions of
+  the same result record the match exactly once (synchronous check-and-write).
+  Regression tests cover every bound, and `docs/OPERATIONS.md` records the measured
+  limits for the next pass.
+
 - **Community tournament (in-memory).** `POST /v1/tournaments` creates a session-scoped
   bracket or round-robin from a participant list, `POST /v1/tournaments/:name/results`
   records a match outcome, and `GET /v1/tournaments[/:name]` reads the bracket or

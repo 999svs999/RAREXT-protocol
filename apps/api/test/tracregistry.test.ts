@@ -97,6 +97,42 @@ test("API integration test for /v1/tracregistry asserts TaskRegistryEntry shape"
 
     const missingPathRes = await fetch(`${base}/v1/tracregistry/trac-task-missing`);
     assert.equal(missingPathRes.status, 404);
+
+    // A query param that is not a valid handle still resolves to 404, not 500.
+    const emptyParamRes = await fetch(`${base}/v1/tracregistry?handle=`);
+    assert.equal(emptyParamRes.status, 200);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("GET /v1/tracregistry is read-only: concurrent and repeated reads are consistent", async () => {
+  const fixturePath = path.resolve("apps/api/test/fixtures/trac-tasks.json");
+  const raw = fs.readFileSync(fixturePath, "utf-8");
+  const entries: TaskRegistryEntry[] = JSON.parse(raw);
+
+  const tracRegistry = new TracRegistryService(entries);
+  const tracAdapter = new TracAnchorAdapter(undefined, tracRegistry);
+  const registry = new AdapterRegistry([tracAdapter]);
+
+  const store = new RarextStore();
+  const { server, base } = await start(store, { registry });
+
+  try {
+    // The endpoint only reads, so racing reads return identical lists.
+    const concurrent = await Promise.all(
+      Array.from({ length: 8 }, () => fetch(`${base}/v1/tracregistry`)),
+    );
+    for (const res of concurrent) {
+      assert.equal(res.status, 200);
+    }
+    const lists = await Promise.all(concurrent.map((res) => res.json()));
+    for (const list of lists) {
+      assert.deepEqual(
+        (list as TaskRegistryEntry[]).map((entry) => entry.handle),
+        ["trac-task-pending", "trac-task-running", "trac-task-completed"],
+      );
+    }
   } finally {
     await stop(server);
   }

@@ -5,6 +5,27 @@ up, how to restore it, and what happens when a snapshot is older or newer than t
 build you are running. The wire protocol is in [`APP-PROTOCOL.md`](APP-PROTOCOL.md);
 the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 
+## Tournament and Trac task registry limits
+
+The newest session-scoped endpoints are bounded by construction, and the limits are
+measured by the regression tests in `apps/api/test/tournament.test.ts` and
+`apps/api/test/tracregistry.test.ts`:
+
+| Endpoint | Limit | What happens at the limit |
+| --- | --- | --- |
+| `POST /v1/tournaments` | up to `MAX_TOURNAMENT_PARTICIPANTS` (1024) participants | `400` naming the cap; round-robin table is O(n²) so the cap bounds the match count at ~524k |
+| `POST /v1/tournaments` | duplicate `name` | `400`; the service refuses to replace a live bracket |
+| `POST /v1/tournaments/.../results` | `matchId` must exist in the tournament's state | `400` for an unknown or not-yet-populated match |
+| `POST /v1/tournaments/.../results` | `winnerParticipantId` / `loserParticipantId` must be the two participants of that match | `400`; the standings stay reachable only from real entries |
+| `POST /v1/tournaments/.../results` | concurrent submissions of the same result | the check-and-write is synchronous, so the second write is refused with `already has a winner` / `already played`; a match records exactly once |
+| `POST` body size (all endpoints) | `MAX_BODY_BYTES` = 1,000,000 bytes | oversized JSON is destroyed mid-stream; malformed JSON is a `400` (`invalid JSON body`), never a 500 |
+| `GET /v1/tracregistry` and `GET /v1/tournaments` | read-only | repeated and concurrent reads return identical state; missing handles and unknown names are `404`, not errors |
+
+The tournament and Trac task registries are in-memory and session-scoped: a
+restart clears them, and there is no durable storage, signing, or external
+service behind either endpoint. An operator who needs persistence must copy
+`GET /v1/tournaments` before stopping the process.
+
 ## Data on disk
 
 By default the API writes to `.data/`. `RAREXT_DATA` moves the store file

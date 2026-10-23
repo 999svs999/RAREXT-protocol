@@ -59,6 +59,8 @@ export interface Tournament {
   createdAt: string;
 }
 
+export const MAX_TOURNAMENT_PARTICIPANTS = 1024;
+
 export class TournamentService {
   private readonly tournaments = new Map<string, Tournament>();
 
@@ -78,6 +80,11 @@ export class TournamentService {
     }
     if (participants.length < 2) {
       throw new Error("A tournament requires at least two participants");
+    }
+    if (participants.length > MAX_TOURNAMENT_PARTICIPANTS) {
+      throw new Error(
+        `A tournament supports at most ${MAX_TOURNAMENT_PARTICIPANTS} participants`,
+      );
     }
 
     let state: TournamentState;
@@ -215,6 +222,11 @@ export class TournamentService {
           if (match.winner) {
             throw new Error(`Match ${match.id} already has a winner`);
           }
+          validateResultForMatch(
+            { id: match.id, player1: match.player1, player2: match.player2 },
+            result,
+            tournament.participants,
+          );
 
           const winner = tournament.participants.find(
             (p) => p.id === result.winnerParticipantId,
@@ -294,6 +306,8 @@ export class TournamentService {
       throw new Error(`Match ${match.id} already played`);
     }
 
+    validateResultForMatch(match, result, tournament.participants);
+
     const winner = tournament.participants.find(
       (p) => p.id === result.winnerParticipantId,
     );
@@ -318,14 +332,10 @@ export class TournamentService {
       player1Entry.wins++;
       player1Entry.points += 3;
       player2Entry.losses++;
-    } else if (winner.id === match.player2.id) {
+    } else {
       player2Entry.wins++;
       player2Entry.points += 3;
       player1Entry.losses++;
-    } else {
-      // This case should not happen if winnerParticipantId is always one of the players
-      // Or handle draws if that's an option (currently winner is TournamentParticipant | null)
-      // For now, assume a winner is always provided
     }
 
     // Sort standings by points (descending), then wins (descending), then losses (ascending)
@@ -341,6 +351,39 @@ export class TournamentService {
       const j = Math.floor(Math.random() * (i + 1));
       [array[i], array[j]] = [array[j], array[i]];
     }
+  }
+}
+
+/**
+ * A recorded result must name the two participants of the match it settles:
+ * the winner must be one of them and the loser the other. Anything else is
+ * a malformed result, and rejecting it keeps the bracket and standings
+ * reachable only from the entries that created them.
+ */
+function validateResultForMatch(
+  match: {
+    id: string;
+    player1: TournamentParticipant;
+    player2: TournamentParticipant;
+  },
+  result: TournamentMatchResult,
+  participants: TournamentParticipant[],
+): void {
+  const ids = [match.player1.id, match.player2.id];
+  const known = participants.some((p) => ids.includes(p.id));
+
+  if (!known) {
+    throw new Error(`Match ${match.id} is not between its declared participants`);
+  }
+  if (!ids.includes(result.winnerParticipantId)) {
+    throw new Error(
+      `Winner ${result.winnerParticipantId} is not a participant in match ${match.id}`,
+    );
+  }
+  if (result.loserParticipantId !== ids.find((id) => id !== result.winnerParticipantId)) {
+    throw new Error(
+      `Loser ${result.loserParticipantId} does not match the other participant of ${match.id}`,
+    );
   }
 }
 
