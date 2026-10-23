@@ -146,8 +146,10 @@ real secrets or describe the tier as audited until those gaps are closed.
 | Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | [#10](https://github.com/999svs999/RAREXT-protocol/issues/10) |
 
 Also unchanged from [`HARDENING.md`](HARDENING.md): no `fsync`/power-loss guarantee, no
-automatic bad-holder quarantine, witnesses reset on restart, and the whole payload is
-held in memory during encode/decode.
+automatic bad-holder quarantine, and witnesses reset on restart. `encodeBytes` still
+holds a whole payload in memory (the MCP put path caps it at 8 MiB); the file-backed
+`erasure-stream.ts` path bounds peak RSS by chunk size, but the holder wire format is
+still whole-shard JSON.
 
 ## Verification
 

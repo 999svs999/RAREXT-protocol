@@ -20,13 +20,19 @@ npm run bench:throughput            # 1 GiB, 4+2, writes THROUGHPUT.md/JSON
 npm run bench:throughput -- --mb 256 --k 2 --m 1
 ```
 
-This measures the shipped `encodeBytes`/`decodeBytes` path at 1 GiB — the compute
-cost inside a put and a get — and reports peak RSS from
-`process.resourceUsage().maxRSS`. It deliberately excludes HTTP and JSON framing:
-the holder endpoints base64-encode bodies, so at this size the wire format, not the
-codec, dominates. The numbers are written to `bench/storage/THROUGHPUT.md` and
-included as the "1 GiB throughput and memory" section when `bench:storage`
-regenerates `RESULTS.md` (it reads `THROUGHPUT.md` if present).
+This runs two measurements in separate processes at 1 GiB — the compute cost inside
+a put and a get — and reports peak RSS from `process.resourceUsage().maxRSS`:
+
+- in-memory `encodeBytes`/`decodeBytes`, the API used by the MCP put path (capped at
+  8 MiB per call);
+- streaming `encodeFileToShards`/`decodeShardsToFile`, which encodes 8 MiB chunks to
+  shard files and decodes from only `k` of them.
+
+It deliberately excludes HTTP and JSON framing: the holder endpoints base64-encode
+whole bodies, so at this size the wire format, not the codec, dominates. The numbers
+are written to `bench/storage/THROUGHPUT.md` and included as the "1 GiB throughput and
+memory" section when `bench:storage` regenerates `RESULTS.md` (it reads
+`THROUGHPUT.md` if present).
 
 ## What is measured
 

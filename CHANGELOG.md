@@ -55,6 +55,16 @@ break a client or invalidate stored data.
   isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw caller-held secret.
   Do not upload real secrets or describe sealed storage as audited encryption yet.
 
+- **Bounded-memory erasure for large payloads.** `apps/api/src/erasure-stream.ts`
+  stripes a file into fixed chunks, encodes one chunk at a time, and appends shard
+  blocks to disk, so peak memory follows the chunk size rather than the payload size.
+  `decodeShardsToFile` reconstructs any `k` of the shard files and verifies both the
+  per-chunk digest and the whole-payload digest. At 1 GiB and 4+2, peak RSS fell from
+  3234 MiB (in-memory `encodeBytes`) to 395 MiB while remaining byte-exact (8.2x lower);
+  encode throughput moved from 11.2 to 8.4 MiB/s and decode from 47.7 to 22.8 MiB/s.
+  The holder wire format is still whole-shard JSON, so this path is file-backed only
+  for now. See `bench/storage/RESULTS.md` and `apps/api/test/erasure-stream.test.ts`.
+
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
   blobs and its index through unique temp files and renames, rolls back a new blob when
   the index write fails, and no longer swallows index errors. Durability repair reads
