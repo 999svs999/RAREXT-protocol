@@ -38,6 +38,7 @@ import type {
   Visibility,
 } from "../../../packages/core/src/index.ts";
 
+import { canonicalTracAddress } from "./adapters/trac-address.ts";
 import { AdapterRegistry, createDefaultRegistry } from "./adapters/registry.ts";
 import type { TracIdentityProof } from "./adapters/types.ts";
 import { anchorPending, anchorThreshold, publicationLeaf } from "./anchorer.ts";
@@ -2320,6 +2321,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           throw new Error("externalProof is only supported for trac identity links");
         }
 
+        const externalId =
+          payload.network === "trac"
+            ? (canonicalTracAddress(payload.externalId) ?? payload.externalId)
+            : payload.externalId;
+
         const identity = store.getIdentity(payload.handle);
 
         if (!identity) {
@@ -2337,7 +2343,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           return;
         }
 
-        if (store.findIdentityLink(payload.handle, payload.network, payload.externalId)) {
+        if (store.findIdentityLink(payload.handle, payload.network, externalId)) {
           send(res, 409, { error: "identity link already exists" });
           return;
         }
@@ -2346,7 +2352,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           await registry.verifyIdentityLink(payload.network, {
             handle: payload.handle,
             network: payload.network,
-            externalId: payload.externalId,
+            externalId,
             proofUrl: payload.proofUrl,
             nonce: payload.nonce,
             audience: externalProof ? requestOrigin(req) : undefined,
@@ -2363,7 +2369,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           id: randomUUID(),
           handle: payload.handle,
           network: payload.network,
-          externalId: payload.externalId,
+          externalId,
           proofUrl: payload.proofUrl,
           verified: true,
           createdAt: new Date().toISOString(),

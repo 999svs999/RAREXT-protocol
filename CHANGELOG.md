@@ -37,8 +37,11 @@ break a client or invalidate stored data.
   `externalProof` for `network: "trac"`. The proof is a
   [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge
   whose `nonce` is `sha256(canonicalize(payload))` and whose `audience` must match the
-  RAREXT origin. The adapter verifies the signature offline; no Intercom round trip
-  and no canonical-identity migration yet.
+  RAREXT origin. Trac addresses may be 64-hex or `trac1…` bech32m and are normalized
+  before verification. `AgentSigner.identityLinkPayload` and `identityLinkBinding`
+  build the payload, and `RarextClient.linkIdentity(payload, signature, externalProof)`
+  submits it. The adapter verifies the signature offline; no Intercom round trip and no
+  canonical-identity migration yet. Run `npm run example:trac-identity` for the full flow.
 
 - **Read-only TapeOut circuit/component indexer.** `GET /v1/tapeout/circuits`
   reads bounded ERC-721 `Transfer` and ERC-1155 `TransferSingle`/`TransferBatch`

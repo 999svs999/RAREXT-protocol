@@ -215,7 +215,8 @@ the endpoint reports `configured: false`.
 Identity links are signed `rarext.identity-link` v1 payloads. GitHub proofs must live under the
 claimed account (a public gist or raw file). A `trac` proof is a signed RESET
 (`Trac-Systems/reset`) `reset-mcp-login` challenge: `externalId` is the 64-hex Ed25519 Trac
-address, the challenge `nonce` is `sha256(canonicalize(payload))`, and the challenge `audience`
+address (or its `trac1…` bech32m spelling, normalized to hex before verification), the
+challenge `nonce` is `sha256(canonicalize(payload))`, and the challenge `audience`
 must equal the RAREXT origin (`RAREXT_ORIGIN`, or the request host). The adapter verifies the
 Ed25519 signature offline. Duplicate links are rejected. A link proves control of an external
 account, not membership or reputation.

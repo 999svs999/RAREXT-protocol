@@ -195,6 +195,32 @@ export interface AgentArtifactPublishInput {
   nonce?: string;
 }
 
+export interface AgentIdentityLinkInput {
+  handle: string;
+  network: string;
+  externalId: string;
+  proofUrl: string;
+  createdAt?: string;
+  nonce?: string;
+}
+
+export interface ResetLoginChallenge {
+  v: 1;
+  domain: "reset-mcp-login";
+  audience: string;
+  address: string;
+  nonce: string;
+  issued_at: number;
+  expires_at: number;
+  [key: string]: unknown;
+}
+
+export interface TracIdentityProof {
+  kind: "trac";
+  challenge: ResetLoginChallenge;
+  signature: string;
+}
+
 type NodeJwk = import("node:crypto").JsonWebKey;
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;
@@ -354,6 +380,28 @@ export class AgentSigner {
       nonce: input.nonce ?? randomUUID(),
     };
   }
+
+  identityLinkPayload(input: AgentIdentityLinkInput): IdentityLinkPayload {
+    return {
+      kind: "rarext.identity-link",
+      version: 1,
+      handle: input.handle,
+      keyId: this.keyId,
+      network: input.network,
+      externalId: input.externalId,
+      proofUrl: input.proofUrl,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+      nonce: input.nonce ?? randomUUID(),
+    };
+  }
+}
+
+/**
+ * The sha256 digest a Trac identity link challenge must sign as its `nonce`.
+ * It binds the RESET login challenge to the exact RAREXT identity payload.
+ */
+export function identityLinkBinding(payload: IdentityLinkPayload): string {
+  return createHash("sha256").update(canonicalize(payload)).digest("hex");
 }
 
 /**
@@ -711,8 +759,9 @@ export class RarextClient {
   linkIdentity(
     payload: IdentityLinkPayload,
     signature: string,
+    externalProof?: TracIdentityProof,
   ): Promise<IdentityLink> {
-    return this.request("/v1/identity-links", { payload, signature });
+    return this.request("/v1/identity-links", { payload, signature, externalProof });
   }
 
 

@@ -45,7 +45,8 @@
     "build:verifiers": "node scripts/build-verifiers.mjs",
     "dev:chess": "node apps/verifiers/chess/server.ts",
     "pin": "node apps/api/src/pin-server.ts",
-    "net": "node scripts/run-storage-net.mjs"
+    "net": "node scripts/run-storage-net.mjs",
+    "example:trac-identity": "node --experimental-strip-types examples/trac-identity/main.ts"
   },
   "engines": {
     "node": ">=22.18"

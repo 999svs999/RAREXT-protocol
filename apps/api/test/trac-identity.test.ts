@@ -9,6 +9,7 @@ import {
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { Identity, IdentityLink, IdentityLinkPayload } from "../../../packages/core/src/index.ts";
+import { hexToTrac } from "../src/adapters/trac-address.ts";
 import { post, start, stop } from "./helpers.ts";
 
 function stableStringify(value: unknown): string {
@@ -226,6 +227,59 @@ test("rejects a Trac challenge from a different address", async () => {
     });
 
     assert.equal(rejected.status, 422);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("links a RAREXT handle to a trac1-encoded address", async () => {
+  const { server, base } = await start();
+
+  try {
+    const { publicKey, privateKey } = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+    });
+    const trac = tracKeypair();
+    const display = hexToTrac(trac.address);
+    assert.ok(display);
+
+    const register = await post(base, "/v1/identities", {
+      handle: "alice",
+      publicKey: publicKey.export({ format: "jwk" }),
+    });
+    const identity = (await register.json()) as Identity;
+
+    const payload: IdentityLinkPayload = {
+      kind: "rarext.identity-link",
+      version: 1,
+      handle: "alice",
+      keyId: identity.keyId,
+      network: "trac",
+      externalId: display,
+      proofUrl: `https://reset.openmayhem.ai/v1/account/${display}`,
+      createdAt: new Date().toISOString(),
+      nonce: randomBytes(12).toString("hex"),
+    };
+    const signature = sign("sha256", Buffer.from(canonicalize(payload)), {
+      key: privateKey,
+      dsaEncoding: "ieee-p1363",
+    }).toString("base64");
+
+    const value = challenge(base, trac.address, binding(payload));
+    const linked = await post(base, "/v1/identity-links", {
+      payload,
+      signature,
+      externalProof: {
+        kind: "trac",
+        challenge: value,
+        signature: signChallenge(value, trac.privateKey),
+      },
+    });
+
+    assert.equal(linked.status, 201);
+    const link = (await linked.json()) as IdentityLink;
+    assert.equal(link.verified, true);
+    assert.equal(link.externalId, trac.address);
   } finally {
     await stop(server);
   }

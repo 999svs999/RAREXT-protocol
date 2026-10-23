@@ -71,8 +71,11 @@ Rules:
 `POST /v1/identity-links`. The client signs the RAREXT `rarext.identity-link` v1 payload with its
 RAREXT key and obtains a RESET login challenge signed by the Trac signer, with the challenge
 `nonce` set to `sha256(canonicalize(payload))` and the challenge `audience` set to the RAREXT
-origin. The adapter verifies the Ed25519 signature offline. This proves key control without an
-Intercom round trip; it does not yet move the canonical identity to Trac.
+origin. The Trac address may be given as 64-hex or `trac1…` bech32m and is normalized to hex
+before verification. The adapter verifies the Ed25519 signature offline. This proves key control
+without an Intercom round trip; it does not yet move the canonical identity to Trac. See
+[`examples/trac-identity/main.ts`](../examples/trac-identity/main.ts) for a runnable end-to-end
+walkthrough.
 
 ### 2. Attestation envelope v1
 
