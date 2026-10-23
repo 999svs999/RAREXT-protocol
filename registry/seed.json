@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-23T04:01:04.688Z",
+  "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
+  "bundleRoot": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+  "registries": [
+    {
+      "id": "apesdaily",
+      "url": "https://registry.apesdaily.com",
+      "operator": "apesdaily",
+      "chains": [
+        "rarex",
+        "base",
+        "solana",
+        "bitcoin",
+        "cosmos"
+      ],
+      "note": "The reference deployment of the RAREXT registry."
+    }
+  ],
+  "mirrors": [
+    {
+      "id": "github-pages",
+      "url": "https://999svs999.github.io/RAREXT-protocol/registry/",
+      "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
+      "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+      "operator": "999svs999",
+      "note": "Static copy of the latest anchored bundle on GitHub Pages; verify the root."
+    }
+  ]
+}

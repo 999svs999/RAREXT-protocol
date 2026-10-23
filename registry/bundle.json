@@ -1,0 +1,682 @@
+{
+  "manifest": {
+    "version": 1,
+    "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+    "leafVersion": 1,
+    "anchorId": "7ccdf4b6-b387-4a9f-98f3-e9af75ae952d",
+    "anchorRoot": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+    "createdAt": "2026-10-21T11:18:04.120Z",
+    "publications": [
+      {
+        "id": "e0093bef-4b68-4431-94e1-d09444aeeb3b",
+        "leaf": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e"
+      }
+    ],
+    "counts": {
+      "publications": 1,
+      "anchors": 2,
+      "challenges": 3,
+      "semantics": 3
+    }
+  },
+  "publications": [
+    {
+      "id": "e0093bef-4b68-4431-94e1-d09444aeeb3b",
+      "author": "e2e_mvi0qapy",
+      "authorKey": "b54f7a8c132dfaa7412e8255325339b65a61a41b8a684c14eb9eac6645ed7676",
+      "title": "A tiny adding machine",
+      "body": "A simple build for people who are new to this.",
+      "taskId": "half-adder",
+      "circuit": {
+        "components": [
+          {
+            "id": "a",
+            "type": "INPUT"
+          },
+          {
+            "id": "b",
+            "type": "INPUT"
+          },
+          {
+            "id": "n1",
+            "type": "NAND",
+            "inputs": [
+              "a",
+              "b"
+            ]
+          },
+          {
+            "id": "n2",
+            "type": "NAND",
+            "inputs": [
+              "a",
+              "n1"
+            ]
+          },
+          {
+            "id": "n3",
+            "type": "NAND",
+            "inputs": [
+              "b",
+              "n1"
+            ]
+          },
+          {
+            "id": "n5",
+            "type": "NAND",
+            "inputs": [
+              "n1",
+              "n1"
+            ]
+          },
+          {
+            "id": "xor",
+            "type": "NAND",
+            "inputs": [
+              "n2",
+              "n3"
+            ]
+          },
+          {
+            "id": "sum",
+            "type": "OUTPUT",
+            "inputs": [
+              "xor"
+            ]
+          },
+          {
+            "id": "carry",
+            "type": "OUTPUT",
+            "inputs": [
+              "n5"
+            ]
+          }
+        ]
+      },
+      "parentId": "c56674e5-6ad0-4b0d-a8f3-1724bb899879",
+      "source": {
+        "kind": "github",
+        "repo": "octocat/Hello-World",
+        "url": "https://github.com/octocat/Hello-World",
+        "ref": "master",
+        "path": null,
+        "commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+        "license": null
+      },
+      "createdAt": "2026-10-21T11:18:03.570Z",
+      "attestedAt": "2026-10-21T11:18:03.574Z",
+      "verified": true,
+      "signature": "o3b2o/1gArxqGZg2RaGpxVtdh8GcD+QOgl7lEnz9yfss0O3wyuK6CWlVJVUtRtr2ID8xrm8RNa4bzDHUCfrPKQ==",
+      "nonce": "f82938f5-0ca4-43e3-8c93-e9a12ce79411",
+      "attestation": {
+        "id": "4652e417-8db3-4168-95e0-ae790556c11e",
+        "verifier": "fabric-v0",
+        "taskId": "half-adder",
+        "circuitHash": "ec1dc8d56981360647158f92618282d158025c3ed7fdf735e95db690475ef348",
+        "traceHash": "f13efb4445a17cb38ab9f5aceba3b0aa436391659e339033623a0b33642c214a",
+        "correct": true,
+        "score": 1000,
+        "gateCount": 5,
+        "createdAt": "2026-10-21T11:18:03.574Z"
+      },
+      "app": "logic",
+      "challengeId": "half-adder",
+      "artifact": {
+        "app": "logic",
+        "kind": "logic.netlist",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "components": [
+            {
+              "id": "a",
+              "type": "INPUT"
+            },
+            {
+              "id": "b",
+              "type": "INPUT"
+            },
+            {
+              "id": "n1",
+              "type": "NAND",
+              "inputs": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "n2",
+              "type": "NAND",
+              "inputs": [
+                "a",
+                "n1"
+              ]
+            },
+            {
+              "id": "n3",
+              "type": "NAND",
+              "inputs": [
+                "b",
+                "n1"
+              ]
+            },
+            {
+              "id": "n5",
+              "type": "NAND",
+              "inputs": [
+                "n1",
+                "n1"
+              ]
+            },
+            {
+              "id": "xor",
+              "type": "NAND",
+              "inputs": [
+                "n2",
+                "n3"
+              ]
+            },
+            {
+              "id": "sum",
+              "type": "OUTPUT",
+              "inputs": [
+                "xor"
+              ]
+            },
+            {
+              "id": "carry",
+              "type": "OUTPUT",
+              "inputs": [
+                "n5"
+              ]
+            }
+          ]
+        }
+      },
+      "visibility": "public",
+      "artifactCommitment": null,
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256"
+    }
+  ],
+  "anchors": [
+    {
+      "id": "7ccdf4b6-b387-4a9f-98f3-e9af75ae952d",
+      "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+      "publicationIds": [
+        "e0093bef-4b68-4431-94e1-d09444aeeb3b"
+      ],
+      "leafCount": 1,
+      "createdAt": "2026-10-21T11:18:04.120Z",
+      "adapter": "local",
+      "reference": "local:7089bdf32272858d",
+      "receipts": [
+        {
+          "adapter": "local",
+          "status": "ok",
+          "reference": "local:7089bdf32272858d"
+        },
+        {
+          "adapter": "trac",
+          "status": "skipped",
+          "reference": null,
+          "error": "Trac Network is not configured"
+        }
+      ]
+    },
+    {
+      "id": "c177c9c6-cff5-4366-bbc3-0766dd1424b8",
+      "root": "fd8535c794670e9e63ad9d481c8eae04329cf6a961e4820f67b33c0a8e663974",
+      "publicationIds": [
+        "7842297c-280d-43f7-a6b6-8e66dd4d76b7",
+        "adabe0e9-66a8-493d-93a5-f4cf4ec2c56b",
+        "bd9dc7c8-dc54-4ec7-a641-1ebc0e5490da",
+        "c56674e5-6ad0-4b0d-a8f3-1724bb899879"
+      ],
+      "leafCount": 4,
+      "createdAt": "2026-10-21T11:17:52.167Z",
+      "adapter": "local",
+      "reference": "local:fd8535c794670e9e",
+      "receipts": [
+        {
+          "adapter": "local",
+          "status": "ok",
+          "reference": "local:fd8535c794670e9e"
+        },
+        {
+          "adapter": "trac",
+          "status": "skipped",
+          "reference": null,
+          "error": "Trac Network is not configured"
+        }
+      ]
+    }
+  ],
+  "challenges": [
+    {
+      "id": "half-adder",
+      "app": "logic",
+      "title": "Add two bits",
+      "description": "Turn the answer on when exactly one start is on. Turn the extra on when both starts are on.",
+      "version": 1,
+      "spec": {
+        "id": "half-adder",
+        "title": "Add two bits",
+        "description": "Turn the answer on when exactly one start is on. Turn the extra on when both starts are on.",
+        "inputs": [
+          "a",
+          "b"
+        ],
+        "outputs": [
+          "sum",
+          "carry"
+        ],
+        "referenceGateCount": 5,
+        "cases": [
+          {
+            "inputs": {
+              "a": 0,
+              "b": 0
+            },
+            "outputs": {
+              "sum": 0,
+              "carry": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 1
+            },
+            "outputs": {
+              "sum": 1,
+              "carry": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 0
+            },
+            "outputs": {
+              "sum": 1,
+              "carry": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 1
+            },
+            "outputs": {
+              "sum": 0,
+              "carry": 1
+            }
+          }
+        ]
+      },
+      "sampleArtifact": {
+        "app": "logic",
+        "kind": "logic.netlist",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "components": [
+            {
+              "id": "a",
+              "type": "INPUT"
+            },
+            {
+              "id": "b",
+              "type": "INPUT"
+            },
+            {
+              "id": "n3",
+              "type": "NAND",
+              "inputs": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "n1",
+              "type": "NAND",
+              "inputs": [
+                "a",
+                "n3"
+              ]
+            },
+            {
+              "id": "n2",
+              "type": "NAND",
+              "inputs": [
+                "b",
+                "n3"
+              ]
+            },
+            {
+              "id": "n4",
+              "type": "NAND",
+              "inputs": [
+                "n1",
+                "n2"
+              ]
+            },
+            {
+              "id": "n5",
+              "type": "NAND",
+              "inputs": [
+                "n3",
+                "n3"
+              ]
+            },
+            {
+              "id": "sum",
+              "type": "OUTPUT",
+              "inputs": [
+                "n4"
+              ]
+            },
+            {
+              "id": "carry",
+              "type": "OUTPUT",
+              "inputs": [
+                "n5"
+              ]
+            }
+          ]
+        }
+      },
+      "semanticsId": "logic/half-adder",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "majority",
+      "app": "logic",
+      "title": "Majority vote",
+      "description": "Turn the answer on when two or more of the three starts are on.",
+      "version": 1,
+      "spec": {
+        "id": "majority",
+        "title": "Majority vote",
+        "description": "Turn the answer on when two or more of the three starts are on.",
+        "inputs": [
+          "a",
+          "b",
+          "c"
+        ],
+        "outputs": [
+          "y"
+        ],
+        "referenceGateCount": 9,
+        "cases": [
+          {
+            "inputs": {
+              "a": 0,
+              "b": 0,
+              "c": 0
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 0,
+              "c": 1
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 1,
+              "c": 0
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 1,
+              "c": 1
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 0,
+              "c": 0
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 0,
+              "c": 1
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 1,
+              "c": 0
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 1,
+              "c": 1
+            },
+            "outputs": {
+              "y": 1
+            }
+          }
+        ]
+      },
+      "semanticsId": "logic/majority",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "mux2",
+      "app": "logic",
+      "title": "Pick a signal",
+      "description": "The chooser picks which start reaches the answer. When the chooser is off, pick A. When it is on, pick B.",
+      "version": 1,
+      "spec": {
+        "id": "mux2",
+        "title": "Pick a signal",
+        "description": "The chooser picks which start reaches the answer. When the chooser is off, pick A. When it is on, pick B.",
+        "inputs": [
+          "a",
+          "b",
+          "sel"
+        ],
+        "outputs": [
+          "y"
+        ],
+        "referenceGateCount": 4,
+        "cases": [
+          {
+            "inputs": {
+              "a": 0,
+              "b": 0,
+              "sel": 0
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 0,
+              "sel": 1
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 1,
+              "sel": 0
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 0,
+              "b": 1,
+              "sel": 1
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 0,
+              "sel": 0
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 0,
+              "sel": 1
+            },
+            "outputs": {
+              "y": 0
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 1,
+              "sel": 0
+            },
+            "outputs": {
+              "y": 1
+            }
+          },
+          {
+            "inputs": {
+              "a": 1,
+              "b": 1,
+              "sel": 1
+            },
+            "outputs": {
+              "y": 1
+            }
+          }
+        ]
+      },
+      "semanticsId": "logic/mux2",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "semantics": [
+    {
+      "id": "logic/half-adder",
+      "app": "logic",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Add two bits",
+      "summary": "The answer turns on when exactly one start is on. The extra turns on when both starts are on.",
+      "specHash": "6ef13888989f389d6a853df6c9d4350932ddc8904be2343719ddf596172b15ba",
+      "verifierHash": "d280af9f3b45e715b60f754f6db08c6c4fb4a50755a16aeccd4a0510ad789f3c",
+      "inputs": [
+        "circuit"
+      ],
+      "outputs": [
+        "sum",
+        "carry"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/logic/half-adder@1",
+        "owner": "rarext",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "rarext",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "logic/majority",
+      "app": "logic",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Majority vote",
+      "summary": "The answer turns on when two or more of the three starts are on.",
+      "specHash": "aa0c1fcc817ecb34338cd7675c3f787da619ca85e4e3dc0a07af095ca1732692",
+      "verifierHash": "d280af9f3b45e715b60f754f6db08c6c4fb4a50755a16aeccd4a0510ad789f3c",
+      "inputs": [
+        "circuit"
+      ],
+      "outputs": [
+        "y"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/logic/majority@1",
+        "owner": "rarext",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "rarext",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "logic/mux2",
+      "app": "logic",
+      "version": 1,
+      "claimKind": "satisfies",
+      "title": "Pick a signal",
+      "summary": "The chooser picks which start reaches the answer. Chooser off picks A, chooser on picks B.",
+      "specHash": "dc0b9a554f1b187e4ff901228715d3acf797f3824e1859661a90205a28fe9ad3",
+      "verifierHash": "d280af9f3b45e715b60f754f6db08c6c4fb4a50755a16aeccd4a0510ad789f3c",
+      "inputs": [
+        "circuit"
+      ],
+      "outputs": [
+        "y"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/logic/mux2@1",
+        "owner": "rarext",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "rarext",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

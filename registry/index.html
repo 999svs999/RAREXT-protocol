@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAREXT registry bundle</title>
+    <meta name="description" content="A static copy of the latest anchored RAREXT registry bundle, with its seed list and Merkle root." />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="band">
+        <p class="eyebrow">Public artifact</p>
+        <h2>Registry bundle</h2>
+        <p class="section-lede">
+          This is a static copy of the latest anchored registry bundle. It is not a live
+          API. A reader can fetch the JSON, recompute the publication leaves, and check
+          that the Merkle root matches the root in the seed list.
+        </p>
+        <div class="facts">
+          <div>
+            <strong>Root</strong>
+            <span><code>7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e</code></span>
+          </div>
+          <div>
+            <strong>Contents</strong>
+            <span>1 anchored publication · 3 challenges · 3 semantics · 1 anchor</span>
+          </div>
+          <div>
+            <strong>Bundle</strong>
+            <span><a href="./bundle.json">bundle.json</a></span>
+          </div>
+          <div>
+            <strong>Seed list</strong>
+            <span><a href="./seed.json">seed.json</a></span>
+          </div>
+        </div>
+        <p class="small">
+          The verifier is the same one used by the registry and the mirror page. The
+          committed test reads these files over HTTP and checks the root:
+          <code>node --test apps/api/test/published-bundle.test.ts</code>.
+        </p>
+        <p class="small">
+          <a href="../">Back to RAREXT</a>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
