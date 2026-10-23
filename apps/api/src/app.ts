@@ -1619,11 +1619,18 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           ? Buffer.from(content, "base64")
           : Buffer.from(content, "utf8");
 
-        const tier = body.tier === "sealed" ? "sealed" : "public";
+        if (body.tier === "sealed" || body.sealed === true) {
+          send(res, 400, {
+            error:
+              "the sealed tier is client-side: encrypt before upload with rarext_storage_put (sealed:true), or store ciphertext as a public blob",
+          });
+          return;
+        }
+
         const record = blobs.put(bytes, {
           mediaType: typeof body.mediaType === "string" ? body.mediaType : undefined,
-          tier,
-          sealed: body.sealed === true || tier === "sealed",
+          tier: "public",
+          sealed: false,
           retentionUntil:
             typeof body.retentionUntil === "string" ? body.retentionUntil : null,
         });

@@ -16,6 +16,12 @@ import {
 } from "../../api/src/placements.ts";
 import { cidV1Raw } from "../../api/src/adapters/content.ts";
 import { AgentSigner, readAgentKeyfile } from "../../../packages/agent-sdk/src/index.ts";
+import {
+  decryptSealedPayload,
+  encryptSealedPayload,
+  sealedEnvelope,
+  sealedMetadata,
+} from "../../api/src/sealed-encryption.ts";
 
 const DEFAULT_API = "http://127.0.0.1:8787";
 const DEFAULT_PIN = "http://127.0.0.1:9700";
@@ -31,6 +37,22 @@ function holderSpec(): string {
 
 function holderToken(): string | undefined {
   return process.env.RAREXT_HOLDER_TOKEN || undefined;
+}
+
+function sealedSecret(required: boolean): string | undefined {
+  const secret = process.env.RAREXT_SEALED_SECRET;
+
+  if (!required) return secret || undefined;
+
+  if (!secret) {
+    throw new Error("this blob is sealed; set RAREXT_SEALED_SECRET to encrypt or decrypt it");
+  }
+
+  if (secret.length < 16) {
+    throw new Error("RAREXT_SEALED_SECRET must be at least 16 characters");
+  }
+
+  return secret;
 }
 
 function storageHolders(): DurabilityHolder[] {
@@ -112,6 +134,7 @@ function samePlacement(left: Placement, right: Placement): boolean {
       tier: placement.tier,
       required: placement.required,
       shards: placement.shards,
+      sealed: placement.sealed ?? null,
     });
 
   return fields(left) === fields(right);
@@ -251,8 +274,19 @@ export async function storagePut(args: Record<string, unknown>): Promise<unknown
     );
   }
 
-  const shards = encodeBytes(encoded, dataShards, parityShards);
-  const placement = await ledger.place(shards, holders, tier);
+  const sealed = args.sealed === true;
+  const secret = sealedSecret(sealed);
+  const encrypted = sealed ? encryptSealedPayload(encoded, secret!) : null;
+  const stored = encrypted ? encrypted.ciphertextBytes : encoded;
+  const metadata = encrypted ? sealedMetadata(encrypted.envelope) : null;
+
+  const shards = encodeBytes(stored, dataShards, parityShards);
+  const placement = await ledger.place(
+    shards,
+    holders,
+    tier,
+    metadata ? { sealed: metadata } : {},
+  );
   const signer = await loadSigner();
   const signed = signPlacement(placement, signer);
   const registration = await recordPlacement(signed);
@@ -260,6 +294,9 @@ export async function storagePut(args: Record<string, unknown>): Promise<unknown
   return {
     blobHash: placement.blobHash,
     bytes: encoded.length,
+    storedBytes: stored.length,
+    sealed,
+    ...(metadata ? { sealedMetadata: metadata } : {}),
     code: `${dataShards}+${parityShards}`,
     tier,
     holders: placement.shards.map((shard) => ({
@@ -329,12 +366,17 @@ export async function storageGet(args: Record<string, unknown>): Promise<unknown
     );
   }
 
-  const payload = decodeBytes(verified.slice(0, placement.dataShards));
+  const stored = decodeBytes(verified.slice(0, placement.dataShards));
+  const content = placement.sealed
+    ? decryptSealedPayload(sealedEnvelope(placement.sealed, stored), sealedSecret(true)!)
+    : stored;
 
   return {
     blobHash,
-    bytes: payload.length,
-    content: Buffer.from(payload).toString("base64"),
+    bytes: content.length,
+    storedBytes: stored.length,
+    sealed: placement.sealed !== undefined,
+    content: Buffer.from(content).toString("base64"),
     shardsRead: placement.dataShards,
     errors,
   };
@@ -434,7 +476,7 @@ export const storageTools = [
   {
     name: "rarext_storage_put",
     description:
-      "Erasure-code base64 content, place the shards on the configured holders, sign the placement with the local agent key, and register it with the API. Returns the signed placement; content is capped by RAREXT_STORAGE_MAX_BYTES.",
+      "Erasure-code base64 content, place the shards on the configured holders, sign the placement with the local agent key, and register it with the API. Set sealed:true to encrypt with HKDF-SHA256 + AES-256-GCM using RAREXT_SEALED_SECRET before erasure coding, so holders receive only ciphertext. Returns the signed placement; content is capped by RAREXT_STORAGE_MAX_BYTES.",
     inputSchema: {
       type: "object",
       properties: {
@@ -442,6 +484,10 @@ export const storageTools = [
         dataShards: { type: "number", description: "k, default 4." },
         parityShards: { type: "number", description: "m, default 2." },
         tier: { type: "string", enum: ["ephemeral", "pinned", "durable"] },
+        sealed: {
+          type: "boolean",
+          description: "Encrypt before erasure coding with RAREXT_SEALED_SECRET (at least 16 characters).",
+        },
       },
       required: ["content"],
     },
@@ -449,7 +495,7 @@ export const storageTools = [
   {
     name: "rarext_storage_get",
     description:
-      "Read a placed blob from the configured holders, verify each shard digest, reconstruct from k shards, and return base64 content plus any holder errors.",
+      "Read a placed blob from the configured holders, verify each shard digest, reconstruct from k shards, and return base64 content plus any holder errors. A sealed blob is decrypted with RAREXT_SEALED_SECRET.",
     inputSchema: {
       type: "object",
       properties: {

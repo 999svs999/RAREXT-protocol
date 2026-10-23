@@ -44,12 +44,16 @@ break a client or invalidate stored data.
   network runner, property/fuzz tests over erasure, placement, and GC, and a 1 GiB
   throughput/memory benchmark.
 
-  The sealed-tier module (`apps/api/src/sealed-encryption.ts`) is AES-256-GCM and its
-  test proves holder directories contain no plaintext. It is **not** a confidentiality
-  claim: it uses PBKDF2-SHA256 where RFC 0015 specifies HKDF-SHA256, it is not wired
-  into the storage verbs or the put path, and its key envelope is unreviewed. Do not
-  upload real secrets or describe sealed storage as encrypted until both the
-  implementation and the envelope are reviewed.
+  The sealed tier is wired into the real MCP put path. `rarext_storage_put` with
+  `sealed:true` encrypts with HKDF-SHA256 + AES-256-GCM (matching RFC 0015) before
+  erasure coding, records the salt/IV/tag in the signed placement, and the shard
+  digests and Merkle roots cover ciphertext; `rarext_storage_get` decrypts client-side.
+  `POST /v1/blobs` rejects `tier:"sealed"` instead of mislabelling plaintext. Covered by
+  `apps/api/test/sealed-path.test.ts` and `examples/sealed-storage`.
+
+  Still not a production confidentiality claim: no key wrapping, rotation, per-tenant
+  isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw caller-held secret.
+  Do not upload real secrets or describe sealed storage as audited encryption yet.
 
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
   blobs and its index through unique temp files and renames, rolls back a new blob when

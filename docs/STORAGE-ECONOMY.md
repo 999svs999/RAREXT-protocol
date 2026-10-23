@@ -76,11 +76,15 @@ ciphertext it cannot read, and the claim covers the fact that the ciphertext is 
 not what it says. That is what would make the enterprise tier possible: the operator
 can prove custody of something it cannot read.
 
-**This build does not yet deliver that.** `apps/api/src/sealed-encryption.ts` is an
-unreviewed AES-256-GCM envelope (PBKDF2-SHA256 where RFC 0015 specifies HKDF) and it
-is not wired into the put path. A `sealed` upload is therefore not encrypted unless the
-caller does it explicitly. Do not sell or treat the sealed tier as confidential until
-the envelope is reviewed and wired.
+This build wires the real erasure path: `rarext_storage_put` with `sealed:true` uses
+HKDF-SHA256 + AES-256-GCM before `encodeBytes`, and holders store ciphertext whose
+digests and Merkle roots are recorded in the signed placement. `rarext_storage_get`
+decrypts client-side. The HTTP `POST /v1/blobs` route rejects `tier:"sealed"` rather than
+mislabelling plaintext.
+
+The remaining gap is key management, not the cipher path: there is no wrapping key,
+rotation, per-tenant isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw
+caller-held secret. Do not sell or treat the tier as audited confidentiality yet.
 
 ## Metering: the unit of the economy
 

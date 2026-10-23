@@ -14,6 +14,7 @@ import {
   SHARD_CHUNK_BYTES,
 } from "./durability.ts";
 import { suiteFor, verifyPayload } from "./identity.ts";
+import { isSealedMetadata } from "./sealed-encryption.ts";
 
 export const PLACEMENT_KIND = "rarext.placement";
 
@@ -131,6 +132,10 @@ export function placementProblem(value: unknown): string | null {
 
   if (placement.required !== requiredHolders(placement.tier, placement)) {
     return "required does not match the tier";
+  }
+
+  if (placement.sealed !== undefined && !isSealedMetadata(placement.sealed)) {
+    return "sealed metadata is malformed";
   }
 
   return null;

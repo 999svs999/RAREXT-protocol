@@ -119,27 +119,27 @@ manager's secret file.
 ## Sealed tier encryption status
 
 `apps/api/src/sealed-encryption.ts` provides AES-256-GCM encryption with a 12-byte IV,
-a 16-byte authentication tag, and a 16-byte salt. `apps/api/test/sealed-storage.test.ts`
-shows that shards written from the resulting ciphertext contain no plaintext.
+a 16-byte authentication tag, and a 32-byte key derived with **HKDF-SHA256** from a
+16-byte per-payload salt, matching [RFC 0015](../rfcs/0015-sealed-tier-encryption.md).
 
-That is not a confidentiality claim:
+The real path is wired: `rarext_storage_put` with `sealed:true` encrypts with
+`RAREXT_SEALED_SECRET` before erasure coding, records the salt/IV/tag in the signed
+placement, and the shard digests and Merkle roots cover ciphertext. `rarext_storage_get`
+decrypts after reconstruction. `apps/api/test/sealed-path.test.ts` and
+`examples/sealed-storage` exercise it; `POST /v1/blobs` rejects `tier:"sealed"` instead
+of mislabelling plaintext.
 
-- the module is not wired into `encodeBytes`, the storage verbs, the MCP tools, or the
-  API put path; a sealed upload must call it explicitly;
-- the key is derived with **PBKDF2-SHA256** (100,000 iterations) while RFC 0015
-  specifies **HKDF-SHA256** — the implementation and the specification disagree;
-- there is no wrapping-key format, rotation, or associated-data binding to the blob
-  identity, and the envelope has not been reviewed.
-
-Do not upload real secrets and do not describe sealed storage as encrypted until the
-implementation matches [RFC 0015](../rfcs/0015-sealed-tier-encryption.md) and the
-envelope is reviewed.
+It is still not a production confidentiality claim: there is no wrapping-key format,
+key rotation, per-tenant isolation, or associated-data binding to the placement
+identity, and the envelope has not been independently reviewed. Losing
+`RAREXT_SEALED_SECRET` loses the data; leaking it loses confidentiality. Do not upload
+real secrets or describe the tier as audited until those gaps are closed.
 
 ## Open findings
 
 | Finding | Issue |
 | --- | --- |
-| Client-side sealed encryption exists but is unwired and uses PBKDF2 where RFC 0015 specifies HKDF; confidentiality is not claimed. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
+| Sealed encryption is wired with HKDF-SHA256 and committed to ciphertext, but has no key wrapping, rotation, per-tenant isolation, or envelope review. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
@@ -156,6 +156,7 @@ npx tsc --noEmit
 node --test --test-reporter=tap apps/api/test/security-storage.test.ts
 node --test --test-reporter=tap apps/api/test/storage-hardening.test.ts
 node --test --test-reporter=tap apps/api/test/sealed-storage.test.ts
+node --test --test-reporter=tap apps/api/test/sealed-path.test.ts
 node --test --test-reporter=tap apps/api/test/storage-properties.test.ts
 ```
 

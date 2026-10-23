@@ -1,6 +1,7 @@
 import { randomBytes as randomBytesNode } from "node:crypto";
 
 import { decodeBytes, encodeBytes, verifyShard, type ErasureShard } from "./erasure.ts";
+import type { SealedMetadata } from "./sealed-encryption.ts";
 import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
 import type { DurabilityTier } from "../../../packages/core/src/index.ts";
@@ -53,12 +54,17 @@ export interface Placement {
   blobHash: string;
   dataShards: number;
   parityShards: number;
-  /** Length of the original payload, in bytes. */
+  /** Length of the stored payload, in bytes. For a sealed placement this is ciphertext. */
   length: number;
   tier: DurabilityTier;
   required: number;
   shards: ShardPlacement[];
   createdAt: string;
+  /**
+   * Present when the payload was encrypted before erasure coding. The blob hash,
+   * shard digests, and Merkle roots all cover ciphertext.
+   */
+  sealed?: SealedMetadata;
 }
 
 export interface ChallengeResponse {
@@ -419,6 +425,7 @@ export class DurabilityLedger {
     shards: ErasureShard[],
     holders: DurabilityHolder[],
     tier: DurabilityTier,
+    options: { sealed?: SealedMetadata } = {},
   ): Promise<Placement> {
     const first = shards[0];
 
@@ -479,6 +486,7 @@ export class DurabilityLedger {
       required,
       shards: [],
       createdAt: new Date(this.now()).toISOString(),
+      ...(options.sealed ? { sealed: options.sealed } : {}),
     };
 
     const witnesses = new Map<number, Witness>();

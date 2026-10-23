@@ -80,7 +80,7 @@ test("usage is metered per tier", async () => {
 
   try {
     await post(base, "/v1/blobs", { content: "public bytes" });
-    await post(base, "/v1/blobs", { content: "sealed bytes", tier: "sealed" });
+    blobs.put(Buffer.from("sealed bytes"), { tier: "sealed", sealed: true });
 
     const usage = (await (await fetch(`${base}/v1/storage/usage`)).json()) as {
       tier: string;
