@@ -65,7 +65,7 @@ export function recordDigest(record: PlacementRecord): string {
   return createHash("sha256").update(canonicalize(record)).digest("hex");
 }
 
-function placementProblem(value: unknown): string | null {
+export function placementProblem(value: unknown): string | null {
   if (!value || typeof value !== "object") return "placement must be an object";
 
   const placement = value as Placement;
