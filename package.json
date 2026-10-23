@@ -34,6 +34,7 @@
     "example:sealed-storage": "node --experimental-strip-types examples/sealed-storage/main.ts",
     "bench:storage": "node bench/storage/cli.mjs",
     "bench:throughput": "node --expose-gc bench/storage/throughput.mjs",
+    "bench:network": "node bench/storage/network.mjs",
     "bench:repair": "node bench/repair/repair-bandwidth.mjs",
     "holder": "node apps/api/src/holder-server.ts",
     "typecheck": "tsc -p tsconfig.json",

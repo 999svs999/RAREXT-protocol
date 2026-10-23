@@ -135,6 +135,7 @@ function samePlacement(left: Placement, right: Placement): boolean {
       required: placement.required,
       shards: placement.shards,
       sealed: placement.sealed ?? null,
+      streamed: placement.streamed ?? null,
     });
 
   return fields(left) === fields(right);

@@ -16,7 +16,8 @@ budget is enforced: the command exits non-zero if `--max-minutes` is exceeded.
 ### 1 GiB throughput and memory
 
 ```bash
-npm run bench:throughput            # 1 GiB, 4+2, writes THROUGHPUT.md/JSON
+npm run bench:throughput            # 1 GiB codec, 4+2, writes THROUGHPUT.md/JSON
+npm run bench:network               # 64 MiB JSON vs 64 MiB/1 GiB raw HTTP, writes NETWORK.md/JSON
 npm run bench:throughput -- --mb 256 --k 2 --m 1
 ```
 
@@ -33,6 +34,15 @@ whole bodies, so at this size the wire format, not the codec, dominates. The num
 are written to `bench/storage/THROUGHPUT.md` and included as the "1 GiB throughput and
 memory" section when `bench:storage` regenerates `RESULTS.md` (it reads
 `THROUGHPUT.md` if present).
+
+### HTTP holder path
+
+`npm run bench:network` starts six holder child processes on loopback and measures the
+whole-shard JSON path at 64 MiB (the largest payload that fits the 32 MiB body cap),
+then the raw streaming path at 64 MiB and 1 GiB. It samples each holder's RSS with
+`ps`, reports the client's `maxRSS`, and writes `NETWORK.md`/`NETWORK.json`; `RESULTS.md`
+includes that section as well. Encode is excluded from the streaming rows because it is
+a separate one-time cost, reported in the codec section.
 
 ## What is measured
 

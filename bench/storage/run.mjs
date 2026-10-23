@@ -156,11 +156,19 @@ function corpusTable(manifest) {
 }
 
 const THROUGHPUT_PATH = fileURLToPath(new URL("./THROUGHPUT.md", import.meta.url));
+const NETWORK_PATH = fileURLToPath(new URL("./NETWORK.md", import.meta.url));
 
 function throughputSection() {
   if (!existsSync(THROUGHPUT_PATH)) return "";
 
   const section = readFileSync(THROUGHPUT_PATH, "utf8").trim();
+  return section ? `\n${section}\n` : "";
+}
+
+function networkSection() {
+  if (!existsSync(NETWORK_PATH)) return "";
+
+  const section = readFileSync(NETWORK_PATH, "utf8").trim();
   return section ? `\n${section}\n` : "";
 }
 
@@ -190,7 +198,7 @@ ${tableLines}
 - **Verify** reads the stored artifact and recomputes its SHA-256; it checks stored
   integrity, not decodability. **Decode** reconstructs the reference bytes.
 - Skipped rows mean the local toolchain lacks that encoder; they are not passes.
-${throughputSection()}
+${throughputSection()}${networkSection()}
 ## Corpus
 
 ${corpusTable(manifest)}

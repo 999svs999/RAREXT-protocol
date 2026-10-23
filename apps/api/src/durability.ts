@@ -1,6 +1,24 @@
-import { randomBytes as randomBytesNode } from "node:crypto";
+import { createHash, randomBytes as randomBytesNode } from "node:crypto";
+import {
+  copyFileSync,
+  createReadStream,
+  createWriteStream,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import { decodeBytes, encodeBytes, verifyShard, type ErasureShard } from "./erasure.ts";
+import { decodeShardsToFile, type StreamedPlacement } from "./erasure-stream.ts";
 import type { SealedMetadata } from "./sealed-encryption.ts";
 import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
@@ -35,6 +53,10 @@ export interface DurabilityHolder {
   remove(storedAs: string): Promise<boolean>;
   has(storedAs: string): Promise<boolean>;
   respond(challenge: HolderChallenge): Promise<ChallengeResponse | null>;
+  /** Upload a shard file without holding it in memory. `storedAs` is its SHA-256. */
+  putFile?(path: string, storedAs: string): Promise<string>;
+  /** Download a shard to a file, verifying `storedAs`, without buffering it whole. */
+  getFile?(storedAs: string, path: string): Promise<boolean>;
 }
 
 export interface ShardPlacement {
@@ -65,6 +87,19 @@ export interface Placement {
    * shard digests, and Merkle roots all cover ciphertext.
    */
   sealed?: SealedMetadata;
+  /**
+   * Present when the payload was encoded as independent fixed-size chunks by
+   * `encodeFileToShards` rather than as one in-memory block set.
+   */
+  streamed?: StreamedMeta;
+}
+
+export interface StreamedMeta {
+  version: 1;
+  paddedLength: number;
+  chunkBytes: number;
+  chunks: number;
+  chunkDigests: string[];
 }
 
 export interface ChallengeResponse {
@@ -145,6 +180,17 @@ export function directoryHolder(id: string, directory: string): DurabilityHolder
   return {
     id,
     put: async (bytes) => store.put(bytes).hash,
+    putFile: async (path, storedAs) => {
+      const temporary = join(directory, `.import.${randomBytesNode(6).toString("hex")}.tmp`);
+      copyFileSync(path, temporary);
+      return store.putFile(temporary, storedAs, statSync(path).size).hash;
+    },
+    getFile: async (storedAs, path) => {
+      const source = store.filePath(storedAs);
+      if (!source) return false;
+      copyFileSync(source, path);
+      return true;
+    },
     get: async (storedAs) => store.get(storedAs)?.bytes ?? null,
     remove: async (storedAs) => store.remove(storedAs),
     has: async (storedAs) => store.has(storedAs),
@@ -187,6 +233,47 @@ export function httpHolder(
     return response;
   }
 
+  function raw(
+    method: string,
+    path: string,
+    options: { bodyPath?: string; bodyLength?: number } = {},
+  ): Promise<import("node:http").IncomingMessage> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(`${base}${path}`);
+      const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+      const outgoing = send(
+        url,
+        {
+          method,
+          headers: {
+            ...headers,
+            ...(options.bodyLength !== undefined
+              ? { "content-length": String(options.bodyLength), "content-type": "application/octet-stream" }
+              : {}),
+          },
+        },
+        resolve,
+      );
+
+      outgoing.setTimeout(timeoutMs, () => {
+        outgoing.destroy(new Error(`holder ${id} ${method} timed out`));
+      });
+      outgoing.on("error", reject);
+
+      if (options.bodyPath) {
+        pipeline(createReadStream(options.bodyPath), outgoing).catch(reject);
+      } else {
+        outgoing.end();
+      }
+    });
+  }
+
+  async function discard(response: import("node:http").IncomingMessage): Promise<void> {
+    for await (const _chunk of response) {
+      // Drain the response so the socket can be reused.
+    }
+  }
+
   async function json(response: Response, what: string, limit: number): Promise<unknown> {
     const declared = Number(response.headers.get("content-length") ?? "0");
 
@@ -209,6 +296,73 @@ export function httpHolder(
 
   return {
     id,
+    async putFile(path, storedAs) {
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) throw new Error(`invalid storedAs for ${id}`);
+      const response = await raw("PUT", `/v1/holder/shards/${storedAs}/raw`, {
+        bodyPath: path,
+        bodyLength: statSync(path).size,
+      });
+
+      if (response.statusCode !== 201) {
+        await discard(response);
+        throw new Error(`holder ${id} failed putFile: ${response.statusCode}`);
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of response) chunks.push(Buffer.from(chunk));
+      const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        typeof (value as { storedAs?: unknown }).storedAs !== "string" ||
+        (value as { storedAs: string }).storedAs !== storedAs
+      ) {
+        throw new Error(`holder ${id} returned an invalid storedAs`);
+      }
+
+      return storedAs;
+    },
+    async getFile(storedAs, path) {
+      if (!/^[0-9a-f]{64}$/.test(storedAs)) return false;
+
+      const response = await raw("GET", `/v1/holder/shards/${storedAs}/raw`);
+
+      if (response.statusCode === 404) {
+        await discard(response);
+        return false;
+      }
+
+      if (response.statusCode !== 200) {
+        await discard(response);
+        throw new Error(`holder ${id} failed getFile: ${response.statusCode}`);
+      }
+
+      const temporary = `${path}.${randomBytesNode(6).toString("hex")}.tmp`;
+      const hasher = createHash("sha256");
+
+      try {
+        await pipeline(
+          response,
+          new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+              hasher.update(chunk);
+              callback(null, chunk);
+            },
+          }),
+          createWriteStream(temporary, { flags: "wx" }),
+        );
+
+        const digest = hasher.digest("hex");
+        if (digest !== storedAs) throw new Error(`holder ${id} returned bytes that do not match ${storedAs}`);
+
+        renameSync(temporary, path);
+        return true;
+      } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+      }
+    },
     async put(bytes) {
       const response = await expect(
         await request(`${base}/v1/holder/shards`, {
@@ -294,6 +448,14 @@ export function httpHolder(
       return value as ChallengeResponse;
     },
   };
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+
+  return hash.digest("hex");
 }
 
 export function chunkLeaves(bytes: Uint8Array): string[] {
@@ -527,6 +689,214 @@ export class DurabilityLedger {
     return placement;
   }
 
+  /**
+   * Place a file-backed shard set produced by `encodeFileToShards`. Each shard is
+   * uploaded as a file so neither side buffers a whole shard for a large blob.
+   * Challenge, audit, and GC are the same as an in-memory placement; repair of a
+   * streamed placement is not implemented yet.
+   */
+  async placeStreamed(
+    streamed: StreamedPlacement,
+    holders: DurabilityHolder[],
+    tier: DurabilityTier,
+    options: { sealed?: SealedMetadata } = {},
+  ): Promise<Placement> {
+    const { dataShards, parityShards, chunkBytes, chunks, paddedLength, length, payloadDigest } = streamed;
+    const total = dataShards + parityShards;
+
+    if (streamed.version !== 1) throw new Error("unsupported streamed placement version");
+    if (!Number.isInteger(dataShards) || dataShards < 1) throw new Error("dataShards must be at least 1");
+    if (!Number.isInteger(parityShards) || parityShards < 0) throw new Error("parityShards must be non-negative");
+    if (!Number.isInteger(chunkBytes) || chunkBytes <= 0 || chunkBytes % (dataShards * SHARD_CHUNK_BYTES) !== 0) {
+      throw new Error("chunkBytes must be a positive multiple of dataShards * 4096");
+    }
+    if (!Number.isInteger(chunks) || chunks < 1) throw new Error("chunks must be a positive integer");
+    if (!Number.isInteger(length) || length < 0 || length > paddedLength) {
+      throw new Error("length does not fit the padded length");
+    }
+    if (!Number.isInteger(paddedLength) || paddedLength < 0) throw new Error("paddedLength is invalid");
+    if (!Array.isArray(streamed.chunkDigests) || streamed.chunkDigests.length !== chunks) {
+      throw new Error("chunkDigests does not match the chunk count");
+    }
+    if (!streamed.chunkDigests.every((digest) => HEX_64.test(digest))) {
+      throw new Error("chunkDigests must be sha256 hex values");
+    }
+    if (!HEX_64.test(payloadDigest)) throw new Error("payloadDigest must be a sha256 hex value");
+    if (!Array.isArray(streamed.shards) || streamed.shards.length !== total) {
+      throw new Error(`expected ${total} shards, got ${streamed.shards?.length}`);
+    }
+
+    const covered = [...streamed.shards.map((shard) => shard.index)].sort((left, right) => left - right);
+
+    if (covered.some((value, position) => value !== position)) {
+      throw new Error("shard indices must cover 0 through n-1");
+    }
+
+    const shardBytes = paddedLength / dataShards;
+
+    if (!Number.isInteger(shardBytes) || shardBytes < 0) throw new Error("paddedLength is not divisible by k");
+
+    for (const shard of streamed.shards) {
+      if (!HEX_64.test(shard.root) || !HEX_64.test(shard.sha256)) {
+        throw new Error(`shard ${shard.index} has a malformed digest`);
+      }
+      if (!Number.isInteger(shard.bytes) || shard.bytes !== shardBytes) {
+        throw new Error(`shard ${shard.index} size does not match the padded length`);
+      }
+      if (!Number.isInteger(shard.leaves) || shard.leaves !== Math.max(1, Math.ceil(shard.bytes / SHARD_CHUNK_BYTES))) {
+        throw new Error(`shard ${shard.index} leaf count is invalid`);
+      }
+      if (!Number.isInteger(statSync(shard.path).size) || statSync(shard.path).size !== shard.bytes) {
+        throw new Error(`shard ${shard.index} file size does not match its record`);
+      }
+      if ((await sha256File(shard.path)) !== shard.sha256) {
+        throw new Error(`shard ${shard.index} file does not match its sha256`);
+      }
+    }
+
+    if (new Set(holders.map((holder) => holder.id)).size !== holders.length) {
+      throw new Error("holder ids must be unique");
+    }
+
+    const required = requiredHolders(tier, { dataShards, parityShards });
+
+    if (required > total) throw new Error(`${tier} needs ${required} shards but the code has ${total}`);
+    if (holders.length < total) throw new Error(`need ${total} distinct holders, have ${holders.length}`);
+
+    const ordered = [...holders].sort((left, right) => left.id.localeCompare(right.id));
+    const offset = Number.parseInt(payloadDigest.slice(0, 8), 16) % ordered.length;
+    const chosen = [...ordered.slice(offset), ...ordered.slice(0, offset)].slice(0, total);
+
+    const placement: Placement = {
+      blobHash: payloadDigest,
+      dataShards,
+      parityShards,
+      length,
+      tier,
+      required,
+      shards: [],
+      createdAt: new Date(this.now()).toISOString(),
+      streamed: { version: 1, paddedLength, chunkBytes, chunks, chunkDigests: [...streamed.chunkDigests] },
+      ...(options.sealed ? { sealed: options.sealed } : {}),
+    };
+
+    const witnesses = new Map<number, Witness>();
+
+    for (const shard of streamed.shards) {
+      const holder = chosen[shard.index]!;
+      const storedAs = holder.putFile
+        ? await holder.putFile(shard.path, shard.sha256)
+        : await holder.put(Uint8Array.from(readFileSync(shard.path)));
+
+      if (!HEX_64.test(storedAs)) throw new Error(`holder ${holder.id} returned an invalid storedAs`);
+
+      placement.shards.push({
+        index: shard.index,
+        holder: holder.id,
+        digest: shard.sha256,
+        storedAs,
+        size: shard.bytes,
+        leaves: shard.leaves,
+        root: shard.root,
+      });
+
+      witnesses.set(shard.index, {
+        holder: holder.id,
+        lastSuccess: null,
+        lastFailure: null,
+        misses: 0,
+      });
+    }
+
+    placement.shards.sort((left, right) => left.index - right.index);
+    this.placements.set(payloadDigest, placement);
+    this.witnesses.set(payloadDigest, witnesses);
+
+    return placement;
+  }
+
+  /**
+   * Download any k shards of a streamed placement to files, then reconstruct the
+   * payload file. Shard downloads stream to disk and the decode reads 8 MiB
+   * chunks, so peak memory follows the chunk size rather than the payload size.
+   */
+  async retrieveStreamed(
+    placement: Placement,
+    outputPath: string,
+    holders: DurabilityHolder[],
+    options: { workDir?: string } = {},
+  ): Promise<{ bytes: number; sha256: string; downloaded: number }> {
+    const meta = placement.streamed;
+    if (!meta) throw new Error("this placement is not streamed");
+    if (!meta.chunkDigests || meta.chunkDigests.length !== meta.chunks) {
+      throw new Error("streamed metadata is incomplete");
+    }
+
+    const byId = new Map(holders.map((holder) => [holder.id, holder]));
+    const working = options.workDir ?? mkdtempSync(join(tmpdir(), "rarext-streamed-"));
+    const created = options.workDir === undefined;
+    const downloaded: { index: number; path: string }[] = [];
+
+    try {
+      for (const shard of [...placement.shards].sort((left, right) => left.index - right.index)) {
+        if (downloaded.length >= placement.dataShards) break;
+
+        const holder = byId.get(shard.holder);
+        if (!holder) continue;
+
+        const path = join(working, `${shard.index}-${shard.storedAs}`);
+
+        try {
+          const ok = holder.getFile
+            ? await holder.getFile(shard.storedAs, path)
+            : await (async () => {
+              const bytes = await holder.get(shard.storedAs);
+              if (!bytes) return false;
+              writeFileSync(path, bytes);
+              return true;
+            })();
+
+          if (ok) downloaded.push({ index: shard.index, path });
+        } catch {
+          rmSync(path, { force: true });
+        }
+      }
+
+      if (downloaded.length < placement.dataShards) {
+        throw new Error(`need ${placement.dataShards} shard files, downloaded ${downloaded.length}`);
+      }
+
+      const streamed: StreamedPlacement = {
+        version: 1,
+        payloadDigest: placement.blobHash,
+        length: placement.length,
+        paddedLength: meta.paddedLength,
+        chunkBytes: meta.chunkBytes,
+        chunks: meta.chunks,
+        chunkDigests: meta.chunkDigests,
+        dataShards: placement.dataShards,
+        parityShards: placement.parityShards,
+        shards: downloaded.map((entry) => {
+          const shard = placement.shards.find((candidate) => candidate.index === entry.index)!;
+          return {
+            index: shard.index,
+            path: entry.path,
+            bytes: shard.size,
+            leaves: shard.leaves,
+            root: shard.root,
+            sha256: shard.digest,
+          };
+        }),
+      };
+
+      const result = decodeShardsToFile({ placement: streamed, outputPath, available: downloaded });
+
+      return { bytes: result.bytes, sha256: result.sha256, downloaded: downloaded.length };
+    } finally {
+      if (created) rmSync(working, { recursive: true, force: true });
+    }
+  }
+
   async challenge(
     blobHash: string,
     holders: DurabilityHolder[],
@@ -640,6 +1010,12 @@ export class DurabilityLedger {
     const placement = this.placements.get(blobHash);
 
     if (!placement) throw new Error(`unknown blob ${blobHash}`);
+
+    if (placement.streamed) {
+      throw new Error(
+        "repair of a streamed placement is not implemented yet: it would re-encode the whole payload in memory",
+      );
+    }
 
     const witnesses = this.witnesses.get(blobHash)!;
     const byId = new Map(holders.map((holder) => [holder.id, holder]));

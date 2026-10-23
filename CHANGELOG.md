@@ -55,6 +55,16 @@ break a client or invalidate stored data.
   isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw caller-held secret.
   Do not upload real secrets or describe sealed storage as audited encryption yet.
 
+- **Raw, bounded shard transport over HTTP.** Holders gained
+  `PUT/GET /v1/holder/shards/:hash/raw`: uploads stream the request body to a temp file
+  while hashing it, downloads stream the file with a length, and challenge leaves are
+  computed from the file rather than a whole-shard buffer. `httpHolder.putFile/getFile`,
+  `DurabilityLedger.placeStreamed/retrieveStreamed`, and streamed placement metadata
+  (`chunkBytes`, `chunks`, `chunkDigests`) make the 1 GiB file path placeable over real
+  holders. `npm run bench:network` measured a 249 MiB client peak and 79 MiB holder peak
+  at 1 GiB; the whole-shard JSON path cannot accept 1 GiB because of the 32 MiB body cap.
+  Streaming repair and key management for the sealed tier remain open.
+
 - **`npm run net` now proves the sealed tier end to end.** After the open scenario, it
   encrypts a 64 KiB payload with AES-256-GCM/HKDF-SHA256 before erasure coding, places
   it on three HTTP holders, scans every holder directory for a plaintext marker (zero
@@ -69,8 +79,13 @@ break a client or invalidate stored data.
   per-chunk digest and the whole-payload digest. At 1 GiB and 4+2, peak RSS fell from
   3234 MiB (in-memory `encodeBytes`) to 395 MiB while remaining byte-exact (8.2x lower);
   encode throughput moved from 11.2 to 8.4 MiB/s and decode from 47.7 to 22.8 MiB/s.
-  The holder wire format is still whole-shard JSON, so this path is file-backed only
-  for now. See `bench/storage/RESULTS.md` and `apps/api/test/erasure-stream.test.ts`.
+  Holders now also accept raw `PUT`/`GET` of shard files, and
+  `DurabilityLedger.placeStreamed`/`retrieveStreamed` use that transport. Over real
+  loopback holders the client peak stayed at about 249 MiB for both 64 MiB and 1 GiB,
+  while the whole-shard JSON path needed 671 MiB for 64 MiB and cannot store 1 GiB at
+  all. Repair of a streamed placement is refused because it would re-encode the payload
+  in memory. See `bench/storage/RESULTS.md` and
+  `apps/api/test/erasure-stream.test.ts`.
 
 - **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
   blobs and its index through unique temp files and renames, rolls back a new blob when

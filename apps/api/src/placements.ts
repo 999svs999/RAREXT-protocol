@@ -122,7 +122,43 @@ export function placementProblem(value: unknown): string | null {
     }
   }
 
-  if (shardSize !== null) {
+  if (placement.streamed !== undefined) {
+    const streamed = placement.streamed;
+
+    if (!streamed || typeof streamed !== "object" || streamed.version !== 1) {
+      return "streamed metadata must be version 1";
+    }
+
+    if (
+      !Number.isInteger(streamed.chunkBytes) ||
+      streamed.chunkBytes <= 0 ||
+      streamed.chunkBytes % (placement.dataShards * SHARD_CHUNK_BYTES) !== 0
+    ) {
+      return "streamed chunkBytes must be a multiple of dataShards * 4096";
+    }
+
+    if (!Number.isInteger(streamed.paddedLength) || streamed.paddedLength < placement.length) {
+      return "streamed paddedLength is invalid";
+    }
+
+    if (!Number.isInteger(streamed.chunks) || streamed.chunks < 1) {
+      return "streamed chunks must be a positive integer";
+    }
+
+    if (
+      !Array.isArray(streamed.chunkDigests) ||
+      streamed.chunkDigests.length !== streamed.chunks ||
+      !streamed.chunkDigests.every((digest) => HASH.test(digest))
+    ) {
+      return "streamed chunkDigests must match the chunk count";
+    }
+
+    const shardBytes = streamed.paddedLength / placement.dataShards;
+
+    if (!Number.isInteger(shardBytes) || (shardSize !== null && shardSize !== shardBytes)) {
+      return "streamed paddedLength does not match the shard size";
+    }
+  } else if (shardSize !== null) {
     const minimumLength = placement.dataShards === 0 ? 0 : (placement.dataShards - 1) * shardSize;
 
     if (placement.length < minimumLength || placement.length > placement.dataShards * shardSize) {

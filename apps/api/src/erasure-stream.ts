@@ -19,10 +19,11 @@ import { merkleRoot } from "./merkle.ts";
  * `chunkLeaves(shardFile)` is the concatenation of the per-chunk leaves, and the
  * recorded root commits to the same bytes the file holds.
  *
- * Scope: this is the large-blob path. The holder HTTP protocol still speaks
- * whole-shard JSON, so placing a streamed shard over HTTP would reintroduce the
- * payload-sized buffer; store the shard files directly or add a chunked wire
- * format first.
+ * Scope: this is the large-blob path. `DurabilityLedger.placeStreamed` uploads
+ * the shard files through the holder's raw PUT endpoint and `retrieveStreamed`
+ * downloads any k of them through raw GET, so the HTTP path stays bounded too.
+ * Repair of a streamed placement is not implemented; the MCP put path still
+ * buffers its (8 MiB-capped) input.
  */
 
 export const STREAM_CHUNK_BYTES = 8 * 1024 * 1024;

@@ -250,16 +250,18 @@ directory is wiped.
 - **Key management for the sealed tier.** `RAREXT_SEALED_SECRET` is a raw secret with
   no wrapping, rotation, per-tenant isolation, or AAD binding; the envelope is
   unreviewed. Treat sealed storage as a prototype.
-- **A chunked holder wire format.** Holders accept whole shards as JSON. Large files
-  can be encoded with `erasure-stream.ts` (peak RSS about 395 MiB at 1 GiB), but those
-  streamed shard files are not placeable over HTTP yet. The MCP put path caps input at
+- **Streaming repair.** Holders accept raw file upload/download, and
+  `placeStreamed`/`retrieveStreamed` move a 1 GiB blob with a flat client peak (about
+  249 MiB on the reference laptop). Repair of a streamed placement is refused because it
+  would re-encode the whole payload in memory. The MCP put path still caps input at
   `RAREXT_STORAGE_MAX_BYTES` (8 MiB default, 32 MiB hard cap).
 - **`fsync`/power-loss durability.** Writes are temp-and-rename atomic against a
   process crash, not a power cut.
 - **Bad-holder quarantine and writer identity.** A token authorizes traffic, not a
   person. There is no automatic ban list, and no proof that a writer owned the bytes.
-- **Scale.** The 1 GiB benchmark is the largest measured placement. Repair and GC are
-  per-holder loops with no sharding of the control plane.
+- **Scale.** 1 GiB is the largest measured network placement. Repair and GC are
+  per-holder loops with no sharding of the control plane, and a 1 GiB streamed
+  placement cannot be repaired yet.
 
 If any of those are load-bearing for you, the honest answer is that this is not ready
 for that deployment yet.

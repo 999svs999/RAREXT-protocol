@@ -235,6 +235,54 @@ export class BlobStore {
     }
   }
 
+  private store(
+    hash: string,
+    size: number,
+    options: {
+      mediaType?: string;
+      tier?: StorageTier;
+      sealed?: boolean;
+      retentionUntil?: string | null;
+    },
+    created: boolean,
+  ): BlobRecord {
+    const existing = this.records.get(hash);
+    const retentionUntil = options.retentionUntil ?? existing?.retentionUntil ?? null;
+
+    let secret = existing?.retentionSecret ?? null;
+    let commitment = existing?.retentionCommitment ?? null;
+
+    if (retentionUntil && !commitment) {
+      secret = randomBytes(32).toString("base64url");
+      commitment = retentionCommitment(secret, hash, retentionUntil);
+    }
+
+    const record: BlobRecord = {
+      hash,
+      size,
+      mediaType: options.mediaType ?? existing?.mediaType ?? "application/octet-stream",
+      tier: options.tier ?? existing?.tier ?? "public",
+      sealed: options.sealed ?? existing?.sealed ?? false,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      retentionUntil,
+      retentionCommitment: commitment,
+      retentionSecret: secret,
+    };
+
+    this.records.set(hash, record);
+
+    try {
+      this.saveIndex();
+    } catch (error) {
+      if (created) rmSync(this.path(hash), { force: true });
+      if (existing) this.records.set(hash, existing);
+      else this.records.delete(hash);
+      throw error;
+    }
+
+    return record;
+  }
+
   put(
     bytes: Uint8Array,
     options: {
@@ -259,41 +307,45 @@ export class BlobStore {
       }
     }
 
-    const existing = this.records.get(hash);
-    const retentionUntil = options.retentionUntil ?? existing?.retentionUntil ?? null;
+    return this.store(hash, bytes.length, options, created);
+  }
 
-    let secret = existing?.retentionSecret ?? null;
-    let commitment = existing?.retentionCommitment ?? null;
+  /**
+   * Adopt a file whose bytes were streamed elsewhere and already hashed.
+   * The caller must have verified that `hash` is the SHA-256 of `sourcePath`.
+   */
+  putFile(
+    sourcePath: string,
+    hash: string,
+    size: number,
+    options: {
+      mediaType?: string;
+      tier?: StorageTier;
+      sealed?: boolean;
+      retentionUntil?: string | null;
+    } = {},
+  ): BlobRecord {
+    if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error("hash must be a sha256 hex digest");
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error("size must be a non-negative integer");
 
-    if (retentionUntil && !commitment) {
-      secret = randomBytes(32).toString("base64url");
-      commitment = retentionCommitment(secret, hash, retentionUntil);
+    const target = this.path(hash);
+    const created = !existsSync(target);
+
+    if (created) {
+      renameSync(sourcePath, target);
+    } else {
+      rmSync(sourcePath, { force: true });
     }
 
-    const record: BlobRecord = {
-      hash,
-      size: bytes.length,
-      mediaType: options.mediaType ?? existing?.mediaType ?? "application/octet-stream",
-      tier: options.tier ?? existing?.tier ?? "public",
-      sealed: options.sealed ?? existing?.sealed ?? false,
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
-      retentionUntil,
-      retentionCommitment: commitment,
-      retentionSecret: secret,
-    };
+    return this.store(hash, size, options, created);
+  }
 
-    this.records.set(hash, record);
+  /** The on-disk path for a shard, without reading its bytes. */
+  filePath(hash: string): string | null {
+    if (!/^[0-9a-f]{64}$/.test(hash)) return null;
 
-    try {
-      this.saveIndex();
-    } catch (error) {
-      if (created) rmSync(target, { force: true });
-      if (existing) this.records.set(hash, existing);
-      else this.records.delete(hash);
-      throw error;
-    }
-
-    return record;
+    const target = this.path(hash);
+    return existsSync(target) ? target : null;
   }
 
   /**

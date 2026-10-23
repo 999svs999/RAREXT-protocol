@@ -1,19 +1,30 @@
-import { randomUUID, timingSafeEqual, randomBytes } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
-import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 
 import {
-  chunkLeaves,
   MAX_CHALLENGE_NONCE,
   responseFromLeaves,
   SHARD_CHUNK_BYTES,
 } from "./durability.ts";
 import { merkleProof } from "./merkle.ts";
-import { BlobStore } from "./storage.ts";
+import { BlobStore, sha256Bytes } from "./storage.ts";
 
 const MAX_BODY = 32 * 1024 * 1024;
+const MAX_RAW_BODY = 8 * 1024 * 1024 * 1024;
 
 export interface HolderServerOptions {
   id: string;
@@ -155,6 +166,37 @@ function isHash(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
+async function fileLeaves(path: string): Promise<string[]> {
+  const leaves: string[] = [];
+  let carry = Buffer.alloc(0);
+
+  for await (const chunk of createReadStream(path, { highWaterMark: SHARD_CHUNK_BYTES })) {
+    const data = carry.length > 0 ? Buffer.concat([carry, chunk]) : chunk;
+    let offset = 0;
+
+    while (data.length - offset >= SHARD_CHUNK_BYTES) {
+      leaves.push(sha256Bytes(data.subarray(offset, offset + SHARD_CHUNK_BYTES)));
+      offset += SHARD_CHUNK_BYTES;
+    }
+
+    carry = data.subarray(offset);
+  }
+
+  if (carry.length > 0) leaves.push(sha256Bytes(carry));
+
+  return leaves.length > 0 ? leaves : [sha256Bytes(new Uint8Array())];
+}
+
+async function readRange(path: string, start: number, end: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of createReadStream(path, { start, end })) {
+    chunks.push(Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
 /**
  * A minimal HTTP holder: it stores shard bytes, answers nonce-bound leaf
  * challenges, and never learns which blob a shard belongs to.
@@ -169,11 +211,7 @@ export function createHolderServer(options: HolderServerOptions) {
     ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
     : null;
 
-  function leavesFor(storedAs: string, bytes: Uint8Array): string[] {
-    const cached = leafCache.get(storedAs);
-    if (cached) return cached;
-
-    const leaves = chunkLeaves(bytes);
+  function cacheLeaves(storedAs: string, leaves: string[]): string[] {
     const cost = leaves.length * 64;
 
     if (leaves.length <= MAX_CACHED_LEAVES && cachedLeaves + cost <= MAX_CACHED_LEAVES * 64) {
@@ -188,6 +226,16 @@ export function createHolderServer(options: HolderServerOptions) {
     }
 
     return leaves;
+  }
+
+  async function leavesForFile(storedAs: string): Promise<string[] | null> {
+    const cached = leafCache.get(storedAs);
+    if (cached) return cached;
+
+    const path = store.filePath(storedAs);
+    if (!path) return null;
+
+    return cacheLeaves(storedAs, await fileLeaves(path));
   }
 
   return createServer(async (req, res) => {
@@ -347,6 +395,100 @@ export function createHolderServer(options: HolderServerOptions) {
         }
       }
 
+      if (
+        parts.length === 5 &&
+        parts[0] === "v1" &&
+        parts[1] === "holder" &&
+        parts[2] === "shards" &&
+        parts[4] === "raw"
+      ) {
+        const hash = parts[3]!;
+
+        if (!isHash(hash)) {
+          send(res, 400, { error: "storedAs must be a sha256 hex digest" });
+          return;
+        }
+
+        const path = store.filePath(hash);
+
+        if (req.method === "HEAD") {
+          if (!path) {
+            res.writeHead(404);
+            res.end();
+            return;
+          }
+
+          res.writeHead(200, { "content-length": String(statSync(path).size) });
+          res.end();
+          return;
+        }
+
+        if (req.method === "GET") {
+          if (!path) {
+            send(res, 404, { error: "unknown shard" });
+            return;
+          }
+
+          res.writeHead(200, {
+            "content-type": "application/octet-stream",
+            "content-length": String(statSync(path).size),
+          });
+          await pipeline(createReadStream(path), res);
+          return;
+        }
+
+        if (req.method === "PUT") {
+          const length = Number(req.headers["content-length"] ?? "0");
+
+          if (!Number.isSafeInteger(length) || length <= 0 || length > MAX_RAW_BODY) {
+            send(res, 400, { error: "raw upload needs a valid content-length" });
+            return;
+          }
+
+          if (options.maxBytes !== undefined) {
+            const currentBytes = store.list().reduce((sum, shard) => sum + shard.size, 0);
+            if (currentBytes + length > options.maxBytes) {
+              send(res, 507, { error: "insufficient storage: byte quota exceeded" });
+              return;
+            }
+          }
+
+          const temporary = join(options.directory, `_upload.${randomUUID()}.tmp`);
+          const hasher = createHash("sha256");
+          let received = 0;
+
+          try {
+            await pipeline(
+              req,
+              new Transform({
+                transform(chunk: Buffer, _encoding, callback) {
+                  received += chunk.length;
+                  hasher.update(chunk);
+                  callback(null, chunk);
+                },
+              }),
+              createWriteStream(temporary, { flags: "wx" }),
+            );
+
+            if (received !== length) throw new Error("upload length does not match content-length");
+
+            const digest = hasher.digest("hex");
+            if (digest !== hash) throw new Error("upload hash does not match storedAs");
+
+            const record = store.putFile(temporary, hash, length);
+            send(res, 201, { storedAs: record.hash, size: record.size });
+          } catch (error) {
+            rmSync(temporary, { force: true });
+            if (!res.headersSent) {
+              send(res, 400, {
+                error: error instanceof Error ? error.message : "raw upload failed",
+              });
+            }
+          }
+          return;
+        }
+      }
+
       if (parts.length === 4 && parts[0] === "v1" && parts[1] === "holder" && parts[2] === "shards") {
         const hash = parts[3]!;
 
@@ -394,14 +536,19 @@ export function createHolderServer(options: HolderServerOptions) {
           return;
         }
 
-        const found = isHash(hash) ? store.get(hash) : null;
+        const path = isHash(hash) ? store.filePath(hash) : null;
 
-        if (!found) {
+        if (!path) {
           send(res, 404, { error: "unknown shard" });
           return;
         }
 
-        const leaves = leavesFor(found.record.hash, found.bytes);
+        const leaves = await leavesForFile(hash);
+
+        if (!leaves) {
+          send(res, 404, { error: "unknown shard" });
+          return;
+        }
 
         if (!Number.isInteger(index) || index < 0 || index >= leaves.length) {
           send(res, 404, { error: "leaf index is out of range" });
@@ -409,9 +556,10 @@ export function createHolderServer(options: HolderServerOptions) {
         }
 
         const start = index * SHARD_CHUNK_BYTES;
+        const bytes = await readRange(path, start, start + SHARD_CHUNK_BYTES - 1);
         send(res, 200, {
           index,
-          bytes: found.bytes.subarray(start, start + SHARD_CHUNK_BYTES).toString("base64"),
+          bytes: bytes.toString("base64"),
           proof: merkleProof(leaves, index),
         });
         return;
@@ -435,17 +583,13 @@ export function createHolderServer(options: HolderServerOptions) {
           return;
         }
 
-        const found = store.get(storedAs);
-        if (!found) {
+        const leaves = await leavesForFile(storedAs);
+        if (!leaves) {
           send(res, 404, { error: "unknown shard" });
           return;
         }
 
-        const response = responseFromLeaves(
-          leavesFor(found.record.hash, found.bytes),
-          leafIndex as number,
-          nonce,
-        );
+        const response = responseFromLeaves(leaves, leafIndex as number, nonce);
 
         if (!response) {
           send(res, 404, { error: "leaf index is out of range" });

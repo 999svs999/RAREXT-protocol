@@ -32,18 +32,22 @@ matching the MDS floor `1 + m/k`; 127 s on the reference laptop. One-loss runs h
 by streaming large shards into SHA-256 with a distinct domain, and the 1 GiB run
 exercises that path.
 
-The placement path (`place`/`repair`) still passes whole shards through memory, and
-the holder HTTP protocol speaks whole-shard JSON. `encodeBytes` therefore holds the
-payload, blocks, and shards at once, and the MCP put path caps input at
-`RAREXT_STORAGE_MAX_BYTES` (8 MiB by default).
+The in-memory placement path (`place`/`repair`) still passes whole shards through
+memory, and `encodeBytes` holds the payload, blocks, and shards at once; the MCP put
+path caps input at `RAREXT_STORAGE_MAX_BYTES` (8 MiB by default). Holders still keep a
+whole-shard JSON endpoint for small shards, with a 32 MiB request-body limit.
 
-For large payloads, `apps/api/src/erasure-stream.ts` provides a file-backed path:
-`encodeFileToShards` encodes fixed-size chunks and appends each shard block to a file;
-`decodeShardsToFile` reconstructs from any `k` shard files. At 1 GiB and 4+2 it keeps
-peak RSS at about 395 MiB instead of the in-memory path's 3.2 GiB (see
-`bench/storage/RESULTS.md`). That path is not yet placeable over the holder protocol,
-because the wire format is still whole-shard JSON. Treat 100 GiB numbers as unmeasured
-until the wire format is chunked too.
+For large payloads, `apps/api/src/erasure-stream.ts` encodes fixed-size chunks to shard
+files, and holders accept raw `PUT`/`GET` of those files. `DurabilityLedger.placeStreamed`
+and `retrieveStreamed` use that transport, so a 1 GiB blob moves without either side
+buffering it whole. Measured at 1 GiB and 4+2 on the reference laptop: client peak
+249 MiB and holder peak 79 MiB, flat between 64 MiB and 1 GiB. The old whole-shard JSON
+path needed a 671 MiB client peak for 64 MiB and cannot store 1 GiB at all, because a
+256 MiB shard becomes 341 MiB of base64 JSON against the 32 MiB cap. See
+`bench/storage/RESULTS.md`.
+
+Repair of a streamed placement is refused: it would re-encode the whole payload in
+memory. Treat 100 GiB as unmeasured until streaming repair exists.
 
 ## Disk-full and crash limits
 
@@ -98,8 +102,8 @@ until the wire format is chunked too.
 
 - A local-reconstruction or regenerating code would lower the repair floor, at the cost
   of storage overhead and a new RFC.
-- A chunked holder wire format would let the streaming encoder place large shards
-  without buffering them whole.
+- Streaming repair for streamed placements would remove the last whole-payload
+  buffer in the large-blob path.
 - An orphan-shard garbage collector and a corrupt-index repair command would make
   crash recovery operationally complete.
 - A retrievability proof, not just possession, needs a new challenge format and is a

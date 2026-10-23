@@ -147,9 +147,10 @@ real secrets or describe the tier as audited until those gaps are closed.
 
 Also unchanged from [`HARDENING.md`](HARDENING.md): no `fsync`/power-loss guarantee, no
 automatic bad-holder quarantine, and witnesses reset on restart. `encodeBytes` still
-holds a whole payload in memory (the MCP put path caps it at 8 MiB); the file-backed
-`erasure-stream.ts` path bounds peak RSS by chunk size, but the holder wire format is
-still whole-shard JSON.
+holds a whole payload in memory (the MCP put path caps it at 8 MiB). The file-backed
+`erasure-stream.ts` path bounds peak RSS by chunk size, and `placeStreamed`/`retrieveStreamed`
+move shards over raw HTTP; repair of a streamed placement is refused because it would
+re-encode the payload in memory.
 
 ## Verification
 
