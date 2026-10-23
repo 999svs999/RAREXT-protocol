@@ -16,6 +16,14 @@ import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 
 export const STORAGE_TIERS: StorageTier[] = ["public", "sealed"];
 
+/**
+ * The hard cap on a single blob. Larger payloads must be split across
+ * multiple blobs. The MCP put path uses its own smaller default
+ * (`RAREXT_STORAGE_MAX_BYTES`, 8 MiB) for the base64 JSON encoding, but
+ * this cap bounds the underlying store in every code path.
+ */
+export const MAX_BLOB_BYTES = 32 * 1024 * 1024;
+
 export function sha256Bytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -170,10 +178,17 @@ export function manifestEntry(
 
 export class BlobStore {
   readonly directory: string;
+  /**
+   * Hard cap on the size of one blob. The JSON `POST /v1/blobs` path cannot
+   * carry a base64 body larger than `MAX_BODY_BYTES` anyway, but callers that
+   * use `put()` directly can. The cap bounds per-blob memory and disk.
+   */
+  readonly maxBytes: number;
   private readonly records = new Map<string, BlobRecord>();
 
-  constructor(directory: string) {
+  constructor(directory: string, options: { maxBytes?: number } = {}) {
     this.directory = directory;
+    this.maxBytes = options.maxBytes ?? MAX_BLOB_BYTES;
     mkdirSync(this.directory, { recursive: true });
     this.load();
   }
@@ -292,6 +307,9 @@ export class BlobStore {
       retentionUntil?: string | null;
     } = {},
   ): BlobRecord {
+    if (bytes.length > this.maxBytes) {
+      throw new Error(`blob is ${bytes.length} bytes, above the ${this.maxBytes} byte cap`);
+    }
     const hash = blobHash(bytes);
     const target = this.path(hash);
     const created = !existsSync(target);

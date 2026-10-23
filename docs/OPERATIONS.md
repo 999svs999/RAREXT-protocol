@@ -5,6 +5,25 @@ up, how to restore it, and what happens when a snapshot is older or newer than t
 build you are running. The wire protocol is in [`APP-PROTOCOL.md`](APP-PROTOCOL.md);
 the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 
+## Storage hardening limits
+
+The storage endpoints (`PUT`/`GET /v1/blobs`, the durability challenge, audit, and
+repair paths) are bounded by construction, and the limits are measured by the
+regression tests in `apps/api/test/storage-hardening.test.ts`:
+
+| Check | Limit / behaviour | What happens at the limit |
+| --- | --- | --- |
+| Shard digest / root / storedAs | must be 64-char lowercase SHA-256 hex | `placementProblem` / `signPlacement` / `verifyPlacement` refuse the placement; a truncated or non-hex digest is never written |
+| Blob size | `MAX_BLOB_BYTES` = 32 MiB per blob (`BlobStore`) | `store.put()` throws `blob is N bytes, above the 33554432 byte cap`; the JSON path is additionally capped by `MAX_BODY_BYTES` = 1 MiB |
+| Custom blob cap | `new BlobStore(dir, { maxBytes })` | same rejection, cap is per-store |
+| Chosen survivor holder missing | a survivor's holder is not in the caller's holder list | `repair()` rejects with `cannot repair: holder <id> for shard <i> is not configured` before any write; the placement is untouched |
+| Fewer than k live shards | `survivors < dataShards` | `repair()` rejects with `cannot repair: only <n> of <k> data shards survive` before any write |
+| Concurrent repair | two `repair()` calls for the same blob | the second caller joins the in-flight repair (`inFlightRepairs`) instead of writing the same shard twice |
+| Duplicate challenge nonce | replayed nonce with a different binding | `verifyChallengeResponse` rejects (`bad-proof`); the holder also caps nonce length at `MAX_CHALLENGE_NONCE` (200) |
+
+A failed or refused repair never moves the signed placement: the staging is
+atomic, so a retry is idempotent and the holder store stays content-addressed.
+
 ## Tournament and Trac task registry limits
 
 The newest session-scoped endpoints are bounded by construction, and the limits are

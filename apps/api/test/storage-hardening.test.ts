@@ -24,8 +24,8 @@ import {
   type Placement,
 } from "../src/durability.ts";
 import { decodeBytes, encodeBytes } from "../src/erasure.ts";
-import { PlacementRegistry, signPlacement } from "../src/placements.ts";
-import { BlobStore, blobHash } from "../src/storage.ts";
+import { PlacementRegistry, placementProblem, signPlacement } from "../src/placements.ts";
+import { BlobStore, blobHash, MAX_BLOB_BYTES } from "../src/storage.ts";
 
 function setup(count: number) {
   const root = mkdtempSync(join(tmpdir(), "rarext-hardening-"));
@@ -293,3 +293,192 @@ test("a read-only blob directory and a failed index write do not leave half-blob
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a placement with a malformed or truncated shard digest is refused", async () => {
+  const { holders, cleanup } = setup(8);
+
+  try {
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.place(encodeBytes(randomBytes(2048), 3, 2), holders, "durable");
+    const signer = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+
+    const badDigest = structuredClone(placement);
+    badDigest.shards[0]!.digest = "zz".padEnd(64, "0");
+    assert.equal(placementProblem(badDigest), "shard digests must be sha256 hex values");
+
+    const truncatedRoot = structuredClone(placement);
+    truncatedRoot.shards[0]!.root = truncatedRoot.shards[0]!.root!.slice(0, 8);
+    assert.equal(placementProblem(truncatedRoot), "shard digests must be sha256 hex values");
+
+    assert.throws(
+      () => signPlacement(badDigest, signer),
+      /sha256 hex/,
+    );
+
+    const good = signPlacement(placement, signer);
+    assert.equal(good.record.placement.blobHash, placement.blobHash);
+  } finally {
+    cleanup();
+  }
+});
+
+test("BlobStore enforces the MAX_BLOB_BYTES cap and reports the exact size", () => {
+  const root = mkdtempSync(join(tmpdir(), "rarext-blob-cap-"));
+
+  try {
+    const store = new BlobStore(join(root, "blobs"));
+    assert.equal(store.maxBytes, MAX_BLOB_BYTES);
+
+    const justBelow = Buffer.alloc(MAX_BLOB_BYTES - 1);
+    assert.equal(store.put(justBelow).size, MAX_BLOB_BYTES - 1);
+
+    const atCap = Buffer.alloc(MAX_BLOB_BYTES);
+    assert.equal(store.put(atCap).size, MAX_BLOB_BYTES);
+
+    const above = Buffer.alloc(MAX_BLOB_BYTES + 1);
+    assert.throws(
+      () => store.put(above),
+      /above the .* byte cap/,
+    );
+
+    const custom = new BlobStore(join(root, "custom"), { maxBytes: 8 });
+    assert.throws(() => custom.put(Buffer.alloc(9)), /byte cap/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("POST /v1/blobs returns 201 and GET returns the exact bytes", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rarext-blobs-http-"));
+  const store = new BlobStore(join(root, "blobs"));
+  const { RarextStore } = await import("../src/store.ts");
+  const { start, stop, post } = await import("./helpers.ts");
+  const { server, base } = await start(new RarextStore(), { blobs: store });
+
+  try {
+    const ok = await post(base, "/v1/blobs", {
+      content: Buffer.from("hello storage").toString("base64"),
+      encoding: "base64",
+    });
+    assert.equal(ok.status, 201);
+    const record = (await ok.json()) as { hash: string; size: number };
+    assert.equal(record.size, 13);
+
+    const fetched = await fetch(`${base}/v1/blobs/${record.hash}`);
+    assert.equal(fetched.status, 200);
+    const body = (await fetched.json()) as { content: string; encoding: string };
+    assert.equal(body.encoding, "base64");
+    assert.equal(Buffer.from(body.content, "base64").toString("utf8"), "hello storage");
+
+    const missing = await fetch(`${base}/v1/blobs/${"0".repeat(64)}`);
+    assert.equal(missing.status, 404);
+  } finally {
+    await stop(server);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("repair with fewer than k shards live is refused before any write", async () => {
+  const { holders, cleanup } = setup(8);
+
+  try {
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.place(
+      encodeBytes(randomBytes(2048), 3, 1),
+      holders,
+      "durable",
+    );
+
+    // Remove 2 of 3 data shards: only 1 survivor, but k=3 is required.
+    for (const index of [0, 1]) {
+      const shard = placement.shards[index]!;
+      await holders.find((holder) => holder.id === shard.holder)!.remove(shard.storedAs);
+    }
+
+    await ledger.challenge(placement.blobHash, holders);
+    assert.equal(ledger.audit(placement.blobHash).status, "under-replicated");
+
+    const before = JSON.stringify(ledger.get(placement.blobHash));
+    await assert.rejects(
+      () => ledger.repair(placement.blobHash, holders),
+      /only 1 of 3 data shards survive/,
+    );
+    assert.equal(
+      JSON.stringify(ledger.get(placement.blobHash)),
+      before,
+      "a refused repair must not move the placement",
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test("repair reports a missing holder for a surviving shard instead of a crash", async () => {
+  const { holders, cleanup } = setup(8);
+
+  try {
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.place(
+      encodeBytes(randomBytes(2048), 3, 2),
+      holders,
+      "durable",
+    );
+
+    // A survivor's holder is no longer configured, and 2 of k=3 shards are gone.
+    const survivor = placement.shards[3]!;
+    const victim = placement.shards[0]!;
+    await holders.find((holder) => holder.id === victim.holder)!.remove(victim.storedAs);
+    const withoutSurvivor = holders.filter((holder) => holder.id !== survivor.holder);
+
+    await ledger.challenge(placement.blobHash, holders);
+
+    await assert.rejects(
+      () => ledger.repair(placement.blobHash, withoutSurvivor),
+      /is not configured/,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test("concurrent repairs of the same shard share one in-flight write", async () => {
+  const { holders, cleanup } = setup(8);
+
+  try {
+    const payload = randomBytes(2048);
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.place(
+      encodeBytes(payload, 4, 2),
+      holders,
+      "durable",
+    );
+
+    const lost = placement.shards[0]!;
+    await holders.find((holder) => holder.id === lost.holder)!.remove(lost.storedAs);
+    await ledger.challenge(placement.blobHash, holders);
+
+    const [first, second] = await Promise.all([
+      ledger.repair(placement.blobHash, holders),
+      ledger.repair(placement.blobHash, holders),
+    ]);
+
+    assert.equal(first, second, "the second caller joins the in-flight repair");
+    assert.equal(first.filled, 1);
+
+    const after = ledger.get(placement.blobHash)!;
+    assert.equal(new Set(after.shards.map((shard) => shard.holder)).size, after.shards.length);
+    assert.deepEqual(
+      Buffer.from(await reconstruct(after, holders)),
+      payload,
+      "the repaired placement still reconstructs the original payload",
+    );
+
+    // A sequential re-repair after a fresh challenge is a no-op.
+    await ledger.challenge(placement.blobHash, holders);
+    const noop = await ledger.repair(placement.blobHash, holders);
+    assert.equal(noop.filled, 0);
+  } finally {
+    cleanup();
+  }
+});
+

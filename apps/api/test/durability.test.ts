@@ -261,7 +261,10 @@ test("repair refuses when fewer than k shards survive", async () => {
     }
 
     await ledger.challenge(placement.blobHash, holders);
-    await assert.rejects(() => ledger.repair(placement.blobHash, holders), /only 2 of 3/);
+    await assert.rejects(
+      () => ledger.repair(placement.blobHash, holders),
+      /only 1 of 3 data shards survive/,
+    );
   } finally {
     cleanup();
   }

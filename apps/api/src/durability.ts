@@ -549,6 +549,8 @@ export function verifyChallengeResponse(
 export class DurabilityLedger {
   private readonly placements = new Map<string, Placement>();
   private readonly witnesses = new Map<string, Map<number, Witness>>();
+  /** One in-flight repair at a time: a second caller joins the first instead of double-writing. */
+  private readonly inFlightRepairs = new Map<string, Promise<RepairOutcome>>();
   private readonly now: () => number;
   readonly windowMs: number;
   private readonly random: (upper: number) => number;
@@ -877,7 +879,12 @@ export class DurabilityLedger {
         if (downloaded.length >= placement.dataShards) break;
 
         const holder = byId.get(shard.holder);
-        if (!holder) continue;
+
+        if (!holder) {
+          throw new Error(
+            `cannot retrieve: holder ${shard.holder} for shard ${shard.index} is not configured`,
+          );
+        }
 
         const path = join(working, `${shard.index}-${shard.storedAs}`);
 
@@ -1040,8 +1047,23 @@ export class DurabilityLedger {
    * Rebuilds every shard that failed or is missing, from any k survivors, and
    * places it on a holder that does not already hold a shard of this blob. The
    * returned placement is the same object, updated.
+   *
+   * Only one repair runs at a time per blob: a concurrent caller joins the
+   * in-flight repair instead of writing the same shard twice.
    */
   async repair(blobHash: string, holders: DurabilityHolder[]): Promise<RepairOutcome> {
+    const inFlight = this.inFlightRepairs.get(blobHash);
+    if (inFlight) return inFlight;
+
+    const promise = this.repairNow(blobHash, holders).finally(() => {
+      this.inFlightRepairs.delete(blobHash);
+    });
+
+    this.inFlightRepairs.set(blobHash, promise);
+    return promise;
+  }
+
+  private async repairNow(blobHash: string, holders: DurabilityHolder[]): Promise<RepairOutcome> {
     const placement = this.placements.get(blobHash);
 
     if (!placement) throw new Error(`unknown blob ${blobHash}`);
@@ -1051,6 +1073,7 @@ export class DurabilityLedger {
     const used = new Set(placement.shards.map((shard) => shard.holder));
 
     const degraded = new Set<number>();
+    let missingHolder: { shard: ShardPlacement; holderId: string } | null = null;
 
     for (const shard of placement.shards) {
       const witness = witnesses.get(shard.index)!;
@@ -1069,18 +1092,33 @@ export class DurabilityLedger {
         }
       }
 
-      if (!holder || failed || !present) degraded.add(shard.index);
+      if (!holder || failed || !present) {
+        degraded.add(shard.index);
+        // A shard whose bytes are intact on a holder that is not in the caller's
+        // list is a configuration problem, not just a loss. The operator has to
+        // add the holder back, not wait for a spare to absorb the shard.
+        if (!holder && !failed) {
+          missingHolder ??= { shard, holderId: shard.holder };
+        }
+      }
     }
 
     if (degraded.size === 0) {
       return { filled: 0, readBytes: 0, writtenBytes: 0, placement };
     }
 
+    if (missingHolder) {
+      throw new Error(
+        `cannot repair: holder ${missingHolder.holderId} for shard ${missingHolder.shard.index} is not configured`,
+      );
+    }
+
     const survivors = placement.shards.filter((shard) => !degraded.has(shard.index));
 
     if (survivors.length < placement.dataShards) {
+      const survivingData = survivors.filter((shard) => shard.index < placement.dataShards).length;
       throw new Error(
-        `cannot repair: only ${survivors.length} of ${placement.dataShards} shards survive`,
+        `cannot repair: only ${survivingData} of ${placement.dataShards} data shards survive`,
       );
     }
 
@@ -1095,7 +1133,14 @@ export class DurabilityLedger {
     const survivorShards: ErasureShard[] = [];
 
     for (const shard of chosen) {
-      const holder = byId.get(shard.holder)!;
+      const holder = byId.get(shard.holder);
+
+      if (!holder) {
+        throw new Error(
+          `cannot repair: holder ${shard.holder} for shard ${shard.index} is not configured`,
+        );
+      }
+
       const bytes = await holder.get(shard.storedAs);
 
       if (!bytes) {
@@ -1139,9 +1184,11 @@ export class DurabilityLedger {
     for (const shard of survivorShards) readBytes += shard.bytes.length;
 
     if (spare.length < degraded.size) {
-      throw new Error(
-        `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`,
-      );
+      const reason =
+        survivors.length < placement.dataShards
+          ? `cannot repair: only ${survivors.length} of ${placement.dataShards} shards survive`
+          : `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`;
+      throw new Error(reason);
     }
 
     // Stage every write before touching the placement. A failed write, a full
@@ -1216,7 +1263,12 @@ export class DurabilityLedger {
         if (available.length >= placement.dataShards) break;
 
         const holder = byId.get(shard.holder);
-        if (!holder) continue;
+
+        if (!holder) {
+          throw new Error(
+            `cannot repair streamed placement: holder ${shard.holder} for shard ${shard.index} is not configured`,
+          );
+        }
 
         const path = join(working, `${shard.index}-${shard.storedAs}`);
 
@@ -1261,9 +1313,11 @@ export class DurabilityLedger {
       }
 
       if (spare.length < degraded.size) {
-        throw new Error(
-          `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`,
-        );
+        const reason =
+          available.length < placement.dataShards
+            ? `cannot repair streamed placement: only ${available.length} of ${placement.dataShards} shards survive`
+            : `no spare holder: ${degraded.size} shard(s) need repair and ${spare.length} holder(s) are free`;
+        throw new Error(reason);
       }
 
       const rebuilt: {
