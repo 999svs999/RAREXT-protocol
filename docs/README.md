@@ -39,6 +39,7 @@ Those are names, not links, so every document is linked once in the reference be
 | [MARKET.md](MARKET.md) | How can agents, robots, and people trade on the same terms without the protocol knowing what they are? |
 | [MIRRORS.md](MIRRORS.md) | Can the registry survive its operator, and what exactly does a mirror prove? |
 | [OPERATIONS.md](OPERATIONS.md) | What must an operator back up, restore, migrate, and monitor? |
+| [OPERATOR.md](OPERATOR.md) | How do I run holders, the API, pinning, and GC, and what is still missing? |
 | [PRIOR-ART.md](PRIOR-ART.md) | What already exists, what does it not do, and what narrow composition is actually new? |
 | [PRIVACY.md](PRIVACY.md) | How do unlisted and sealed artifacts stay out of the feed while remaining addressable? |
 | [SEMANTICS.md](SEMANTICS.md) | What does a passing verifier result mean, who owns that meaning, and how is drift detected? |

@@ -180,6 +180,36 @@ The proof chains from a blob digest to a manifest root to an anchor root, so a h
 the bytes can check custody without trusting the operator. Read the
 [storage economy](docs/STORAGE-ECONOMY.md) and [RFC 0004](rfcs/0004-storage-economy.md).
 
+#### Run a storage network
+
+`npm run net` starts three holders and a pin service on ephemeral loopback ports,
+places a 64 KiB payload at `k=2, m=1`, challenges it, kills one holder, repairs onto a
+spare, and verifies the bytes. It removes its temporary directory on exit. Real output
+from this checkout (ports and blob hash vary):
+
+```
+[RAREXT Net] Starting storage network in /var/folders/.../rarext-net-4LyQJQ...
+[RAREXT Net] Holder 0 listening on http://127.0.0.1:52558
+[RAREXT Net] Holder 1 listening on http://127.0.0.1:52559
+[RAREXT Net] Holder 2 listening on http://127.0.0.1:52560
+[RAREXT Net] Pin service listening on http://127.0.0.1:52561
+[RAREXT Net] Storing 64 KiB test payload across holders (k=2, m=1)...
+[RAREXT Net] Placed blob cbe46b56e9830971e82c50ee0efb732645f5463b3486f60574ea068380bcd460 across 3 shards.
+[RAREXT Net] Running challenge and audit...
+[RAREXT Net] Audit status: ok (live: 3/3)
+[RAREXT Net] Simulating failure: shutting down Holder 1...
+[RAREXT Net] Audit status after failure: under-replicated
+[RAREXT Net] Provisioning spare Holder 3 and triggering repair...
+[RAREXT Net] Repair complete. Filled 1 shard(s).
+[RAREXT Net] Audit status after repair: ok
+[RAREXT Net] Retrieving and verifying byte-exact payload reconstruction...
+[RAREXT Net] SUCCESS: Decoded payload matches original byte-for-byte!
+[RAREXT Net] Network stopped and cleaned up.
+```
+
+For persistent holders, the API, pinning, tokens, GC, and what is still missing, see
+the [operator guide](docs/OPERATOR.md).
+
 Simulate an inverter over HTTP:
 
 ```bash
@@ -276,6 +306,7 @@ rfcs               Protocol, economics, and chain proposals
 - Run xiangqi and Go puzzle apps from `examples/board-games` in pure Python, and chess from `apps/verifiers/chess` as a portable module the browser and the server share.
 - Certify token launches against a published, versioned policy with `examples/launchpad`; the verifier, its rules hash, and every verdict are public.
 - Store bytes content-addressed and prove custody of them: `examples/storage` turns a storage manifest into a verifiable claim with an open tier and a sealed tier.
+- Run three holders, erasure-code at `k+m`, challenge custody, kill a holder, repair onto a spare, and prove byte-exact reconstruction with `npm run net`; run persistent holders with `npm run holder` (see the [operator guide](docs/OPERATOR.md)).
 - Publish passing logic or app artifacts with a signed attestation of the artifact hash and verification proof.
 - Register an ECDSA P-256 identity in the browser or generate a local agent key and publish signed envelopes (see [RFC 0002](rfcs/0002-signed-publications.md)).
 - Search verified artifacts by app, challenge, author, source, score, gate count, or reuse, inspect lineage, and rank them on a leaderboard.

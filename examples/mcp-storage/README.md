@@ -53,5 +53,8 @@ identities, and plain HTTP exposes them: terminate TLS before exposing a holder 
 service. See [`docs/STORAGE-SECURITY.md`](../../docs/STORAGE-SECURITY.md).
 
 `rarext_storage_put` reads base64 from the tool call and caps decoded content at
-`RAREXT_STORAGE_MAX_BYTES` (default 8 MiB, hard cap 32 MiB). The whole payload is held
-in memory; there is no streaming codec yet.
+`RAREXT_STORAGE_MAX_BYTES` (default 8 MiB, hard cap 32 MiB). This path still holds the
+payload in memory. A file-backed streaming codec exists in
+`apps/api/src/erasure-stream.ts` and is measured in
+[`bench/storage/RESULTS.md`](../../bench/storage/RESULTS.md), but the MCP path does not
+use it and the holder wire format is still whole-shard JSON.
