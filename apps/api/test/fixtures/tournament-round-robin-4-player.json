@@ -1,0 +1,10 @@
+{
+  "name": "4-Player Round Robin",
+  "format": "round_robin",
+  "participants": [
+    { "id": "pA", "name": "Player A" },
+    { "id": "pB", "name": "Player B" },
+    { "id": "pC", "name": "Player C" },
+    { "id": "pD", "name": "Player D" }
+  ]
+}

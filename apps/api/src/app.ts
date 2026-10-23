@@ -83,6 +83,13 @@ import {
   createConsensusService,
   type ConsensusOptions,
 } from "./consensus.ts";
+import {
+  TournamentService,
+  type Tournament,
+  type TournamentFormat,
+  type TournamentMatchResult,
+  type TournamentParticipant,
+} from "./tournament.ts";
 import { VerifierModuleRegistry } from "./verifierModules.ts";
 import { PlacementRegistry, asSignedPlacement } from "./placements.ts";
 import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
@@ -162,6 +169,7 @@ export interface AppOptions {
   fetch?: typeof fetch;
   holderUrls?: Map<string, string>;
   consensus?: ConsensusOptions;
+  tournaments?: TournamentService;
 }
 
 function send(res: ServerResponse, status: number, body?: unknown): void {
@@ -818,6 +826,7 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
   }
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const consensus = createConsensusService(store, options.consensus);
+  const tournaments = options.tournaments ?? new TournamentService();
   const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
   async function publish(input: PublishInput): Promise<PublishResult> {
@@ -2552,6 +2561,51 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
           return;
         }
         send(res, 200, task);
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/v1/tournaments") {
+        const { name, format, participants } = (await readJson(req)) as {
+          name: string;
+          format: TournamentFormat;
+          participants: TournamentParticipant[];
+        };
+        try {
+          const tournament = tournaments.createTournament(name, format, participants);
+          send(res, 201, tournament);
+          return;
+        } catch (error) {
+          send(res, 400, { error: error instanceof Error ? error.message : String(error) });
+          return;
+        }
+      }
+
+      if (req.method === "POST" && pathname.startsWith("/v1/tournaments/") && pathname.endsWith("/results")) {
+        const name = pathname.slice("/v1/tournaments/".length, -"/results".length);
+        const result = (await readJson(req)) as TournamentMatchResult;
+        try {
+          const tournament = tournaments.recordMatchResult(name, result);
+          send(res, 200, tournament);
+          return;
+        } catch (error) {
+          send(res, 400, { error: error instanceof Error ? error.message : String(error) });
+          return;
+        }
+      }
+
+      if (req.method === "GET" && pathname === "/v1/tournaments") {
+        send(res, 200, tournaments.listTournaments());
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/tournaments/")) {
+        const name = pathname.slice("/v1/tournaments/".length);
+        const tournament = tournaments.getTournament(name);
+        if (!tournament) {
+          send(res, 404, { error: "tournament not found" });
+          return;
+        }
+        send(res, 200, tournament);
         return;
       }
 

@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Community tournament (in-memory).** `POST /v1/tournaments` creates a session-scoped
+  bracket or round-robin from a participant list, `POST /v1/tournaments/:name/results`
+  records a match outcome, and `GET /v1/tournaments[/:name]` reads the bracket or
+  standings. Winners advance through single-elimination rounds; round-robin standings
+  are ordered by points, then wins, then fewest losses. Nothing is signed or persisted,
+  so a restart clears the field. Tests drive a 4-player bracket and a 4-player table to
+  known outcomes and exercise the HTTP surface end to end.
+
 - **Task registry on Trac (read-only).** `GET /v1/tracregistry` lists registered task
   handles with status (`pending`/`running`/`completed`/`failed`) and metadata, or a
   single handle by id via `?handle=`. It reads through the Trac adapter and never signs
