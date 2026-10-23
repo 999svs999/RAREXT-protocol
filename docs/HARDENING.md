@@ -41,19 +41,22 @@ For large payloads, `apps/api/src/erasure-stream.ts` encodes fixed-size chunks t
 files, and holders accept raw `PUT`/`GET` of those files. `DurabilityLedger.placeStreamed`
 and `retrieveStreamed` use that transport, so a 1 GiB blob moves without either side
 buffering it whole. Measured at 1 GiB and 4+2 on the reference laptop: client peak
-242 MiB and holder peak 94 MiB (the 64 MiB run peaked at 250 MiB client, 236 MiB holder). The old whole-shard JSON
+242 MiB (249 MiB in the first run) and holder peak 94 MiB (the 64 MiB run peaked at 250 MiB
+client, 236 MiB holder). The old whole-shard JSON
 path needed a 676 MiB client peak for 64 MiB and cannot store 1 GiB at all, because a
 256 MiB shard becomes 341 MiB of base64 JSON against the 32 MiB cap. See
-`bench/storage/RESULTS.md`.
+`bench/storage/RESULTS.md` and the public [`STORAGE.md`](STORAGE.md) summary.
 
 Streamed repair rebuilds each degraded shard independently: it downloads k survivor
 files, regenerates one shard per chunk from k blocks, and uploads only that shard through
 raw PUT. Peak memory follows the chunk size, not the payload size. `npm run net` proves
 this end to end (signed placement, fresh registry load, kill, repair, re-audit, exact
-retrieval at 8 MiB). A separate 10-minute local chaos run (611 s) completed 5,507
-puts (99.9%), 5,507 retrievals (100%), 143 repairs (100%), and 143 post-repair
-re-audits (100%) with 21 random holder kills and restarts; peak client RSS was 222 MiB.
-Repair throughput at 100 GiB and concurrent repairs are unmeasured.
+retrieval at 8 MiB). A retry-enabled 10-minute local chaos run (604 s) completed 5,910
+puts (100%), 5,910 retrievals (100%), 145 repairs (100%), and 145 post-repair
+re-audits (100%) with 23 random holder kills and restarts; median client RSS after
+warm-up was 170.7 MiB and live heap was about 10.5 MiB. The earlier 611 s run completed
+143 repairs at 99.9% puts, which motivated the retry change. Repair throughput at 100 GiB
+and concurrent repairs are unmeasured.
 
 ## Disk-full and crash limits
 

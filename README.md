@@ -178,7 +178,18 @@ curl -s http://127.0.0.1:8787/v1/storage/usage
 
 The proof chains from a blob digest to a manifest root to an anchor root, so a holder of
 the bytes can check custody without trusting the operator. Read the
-[storage economy](docs/STORAGE-ECONOMY.md) and [RFC 0004](rfcs/0004-storage-economy.md).
+[storage economy](docs/STORAGE-ECONOMY.md), [RFC 0004](rfcs/0004-storage-economy.md), and
+the one-page [storage status and limits](docs/STORAGE.md).
+
+The public figures are measured, not projected: a 1 GiB file-backed encode/decode peaked
+at **394 MiB RSS** (latest rerun 393 MiB), and 1 GiB over raw holder HTTP peaked at
+**249 MiB client RSS** (latest 242 MiB). A 604 s churn soak completed **5,910/5,910 puts
+and retrievals (100%)**, 145/145 repairs, and 145/145 re-audits with 23 holder
+kills; the earlier 611 s run did **143 repairs** but only 99.9% of puts, which is why
+retry was added. **44** random 4 KiB samples detect 10% withholding at 99% confidence.
+These are one-machine, mostly loopback measurements. The sealed tier is not confidential
+until its envelope is reviewed, and disks, power loss, TLS, and multi-writer coordination
+are not covered. See [docs/STORAGE.md](docs/STORAGE.md) before quoting any of it.
 
 #### Run a storage network
 

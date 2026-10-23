@@ -43,6 +43,7 @@ Those are names, not links, so every document is linked once in the reference be
 | [PRIOR-ART.md](PRIOR-ART.md) | What already exists, what does it not do, and what narrow composition is actually new? |
 | [PRIVACY.md](PRIVACY.md) | How do unlisted and sealed artifacts stay out of the feed while remaining addressable? |
 | [SEMANTICS.md](SEMANTICS.md) | What does a passing verifier result mean, who owns that meaning, and how is drift detected? |
+| [STORAGE.md](STORAGE.md) | What storage runs today, what was measured, and what the measurements do not prove? |
 | [STORAGE-ECONOMY.md](STORAGE-ECONOMY.md) | How do erasure coding, placement, retention proofs, repair, and metering fit together? |
 | [STORAGE-FRONTIER.md](STORAGE-FRONTIER.md) | Which compression and representation questions are open, and what would count as an honest answer? |
 | [STORAGE-SECURITY.md](STORAGE-SECURITY.md) | What storage attacks are handled, what do tokens mean, and which security findings are still open? |

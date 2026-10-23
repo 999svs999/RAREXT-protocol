@@ -40,6 +40,7 @@
       <nav aria-label="Primary">
         <a href="#web4">web4</a>
         <a href="#how">How it works</a>
+        <a href="#storage">Storage</a>
         <a href="#free">What free means</a>
         <a href="#truth">Truth</a>
         <a href="#build">Contribute</a>
@@ -193,6 +194,56 @@
             </div>
           </li>
         </ol>
+      </section>
+
+      <section id="storage" class="band">
+        <p class="eyebrow">Measured, not promised</p>
+        <h2>Storage is real, inside stated limits.</h2>
+        <p class="section-lede">
+          Erasure-coded shards, signed placements, nonce-bound holder challenges, repair,
+          and availability sampling run today. These are the measurements, including where
+          they stop.
+        </p>
+
+        <div class="facts">
+          <div>
+            <strong>1 GiB · 394 MiB peak</strong>
+            <span>File-backed encode/decode. The latest rerun was 393 MiB; the in-memory path was 3,243 MiB.</span>
+          </div>
+          <div>
+            <strong>1 GiB · 249 MiB peak</strong>
+            <span>Streamed over raw holder HTTP. The latest rerun was 242 MiB; holder peak was 94 MiB.</span>
+          </div>
+          <div>
+            <strong>5,910 · 100%</strong>
+            <span>Puts and retrievals in a 604 s churn soak, with 145 repairs, zero failed re-audits, and 23 holder kills.</span>
+          </div>
+          <div>
+            <strong>44 · 4 KiB</strong>
+            <span>Random samples detect 10% withholding at 99% confidence, for 176 KiB read.</span>
+          </div>
+        </div>
+
+        <aside class="callout">
+          <p>
+            <strong>What this does not prove.</strong>
+            The sealed tier is not confidential until its envelope is reviewed. The soak is
+            one machine on loopback with small payloads: it is not evidence about disks,
+            power loss, TLS, or multi-writer coordination. Possession challenges are not
+            retrievability proofs, and 100 GiB repair is unmeasured.
+          </p>
+          <p class="small">
+            <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/STORAGE.md">
+              Read the one-page storage status and limits →
+            </a>
+          </p>
+        </aside>
+
+        <p class="small">
+          The earlier 611 s soak did 143 repairs and 100% retrievals, but only 99.9% of
+          puts; retry is what moved the next run to 100%. Do not combine the two runs into
+          a single claim.
+        </p>
       </section>
 
       <section class="band">
