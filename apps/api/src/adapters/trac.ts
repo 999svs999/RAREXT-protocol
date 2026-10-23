@@ -13,6 +13,7 @@ import {
   createTracAnchorTransport,
 } from "./trac-transport.ts";
 import type { TracAnchorTransport } from "./trac-transport.ts";
+import { TracRegistryService, type TaskRegistryEntry, defaultTracRegistry } from "../tracregistry.ts";
 
 const ED25519_SPKI_PREFIX = "302a300506032b6570032100";
 const HEX32 = /^[0-9a-f]{64}$/;
@@ -152,9 +153,19 @@ function verifyChallenge(proof: IdentityLinkProof): void {
 
 export class TracAnchorAdapter implements RarextAdapter {
   private readonly injectedTransport?: TracAnchorTransport;
+  private readonly registryService: TracRegistryService;
 
-  constructor(transport?: TracAnchorTransport) {
+  constructor(transport?: TracAnchorTransport, registry?: TracRegistryService) {
     this.injectedTransport = transport;
+    this.registryService = registry ?? defaultTracRegistry;
+  }
+
+  getTask(handle: string): TaskRegistryEntry | null {
+    return this.registryService.get(handle);
+  }
+
+  listTasks(): TaskRegistryEntry[] {
+    return this.registryService.list();
   }
 
   private transport(): TracAnchorTransport {

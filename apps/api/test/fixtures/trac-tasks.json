@@ -1,0 +1,23 @@
+[
+  {
+    "handle": "trac-task-pending",
+    "status": "pending",
+    "app": "chess",
+    "challengeId": "half-adder",
+    "createdAt": "2026-10-23T00:00:00.000Z"
+  },
+  {
+    "handle": "trac-task-running",
+    "status": "running",
+    "app": "chess",
+    "challengeId": "half-adder",
+    "createdAt": "2026-10-23T00:01:00.000Z"
+  },
+  {
+    "handle": "trac-task-completed",
+    "status": "completed",
+    "app": "chess",
+    "challengeId": "half-adder",
+    "createdAt": "2026-10-23T00:02:00.000Z"
+  }
+]

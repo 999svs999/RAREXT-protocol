@@ -77,7 +77,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Durability tier and an auditable replica count on the publication itself
 - [x] Independent verifier operators
 - [ ] Native Trac anchoring transport (spike: transport boundary + webhook shipped, native path blocked by the RESET/trac-peer wire format — see [RFC 0001 §4](rfcs/0001-trac-integration.md))
-- [ ] Task registry on Trac
+- [x] Task registry on Trac — read-only `GET /v1/tracregistry` over the Trac adapter: lists task handles with status and metadata, or one handle by id
 - [x] $BEM read-only balance in the UI
 - [ ] Community tournament
 - [x] RFC: trust model and Trac anchoring

@@ -11,6 +11,12 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Task registry on Trac (read-only).** `GET /v1/tracregistry` lists registered task
+  handles with status (`pending`/`running`/`completed`/`failed`) and metadata, or a
+  single handle by id via `?handle=`. It reads through the Trac adapter and never signs
+  or writes. Fixture-backed unit tests cover all four states plus a missing handle, and
+  an API-route test pins the returned shape.
+
 - **External-agent MCP storage integration test.** `npm test` now runs
   `apps/api/test/mcp-storage-agent.test.ts`, which starts six token-protected holders,
   the API, and a pin service, then drives the real MCP stdio server through put, get,

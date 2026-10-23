@@ -2527,6 +2527,34 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         return;
       }
 
+      if (req.method === "GET" && pathname === "/v1/tracregistry") {
+        const handle = url.searchParams.get("handle");
+        const tracAdapter = registry.get("trac") as { getTask?: (h: string) => unknown; listTasks?: () => unknown } | null;
+        if (handle) {
+          const task = tracAdapter?.getTask?.(handle) ?? null;
+          if (!task) {
+            send(res, 404, { error: "task not found" });
+            return;
+          }
+          send(res, 200, task);
+          return;
+        }
+        send(res, 200, tracAdapter?.listTasks?.() ?? []);
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/tracregistry/")) {
+        const handle = pathname.slice("/v1/tracregistry/".length);
+        const tracAdapter = registry.get("trac") as { getTask?: (h: string) => unknown } | null;
+        const task = tracAdapter?.getTask?.(handle) ?? null;
+        if (!task) {
+          send(res, 404, { error: "task not found" });
+          return;
+        }
+        send(res, 200, task);
+        return;
+      }
+
       if (req.method === "POST" && pathname === "/v1/consensus/validate") {
         send(res, 200, consensus.validate(await readJson(req)));
         return;
