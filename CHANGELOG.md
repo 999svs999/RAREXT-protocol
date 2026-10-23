@@ -33,6 +33,11 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **RFC 0016: appchain evaluation.** Evaluates a RAREXT appchain against staying on
+  anchored transports. It uses the pinned RESET/trac-peer wire format as primary
+  evidence for why native anchor moves are a protocol change, and recommends deferring
+  a chain behind a measurable demand, economics, and validator-supply gate.
+
 - **$BEM balance in the web UI.** The community page accepts a BSC address and shows its
   read-only `$BEM` balance from `GET /v1/tapeout/status?address=`. The status response now
   includes `bemDecimals` from `BEM_DECIMALS` (default 18), and the browser bundle formats the

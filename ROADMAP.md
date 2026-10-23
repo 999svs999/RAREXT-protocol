@@ -79,7 +79,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 
 ## v3 — Network (not scheduled)
 
-- [ ] RFC: appchain evaluation
+- [x] RFC: appchain evaluation ([RFC 0016](rfcs/0016-appchain-evaluation.md)) — deferred: stay on anchored transports until the gate holds
 - [ ] Governance approval
 - [ ] Migration plan for game-native state
 
