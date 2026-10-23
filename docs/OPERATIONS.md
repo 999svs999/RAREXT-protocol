@@ -24,6 +24,23 @@ regression tests in `apps/api/test/storage-hardening.test.ts`:
 A failed or refused repair never moves the signed placement: the staging is
 atomic, so a retry is idempotent and the holder store stays content-addressed.
 
+## External agent (MCP) storage limits
+
+The external-agent path in `apps/mcp` drives the same holder, placement, and pin
+services over HTTP, and its measured limits are pinned by the regression tests in
+`apps/api/test/mcp-storage.test.ts` and `apps/api/test/mcp-storage-agent.test.ts`:
+
+| Check | Limit / behaviour | What happens at the limit |
+| --- | --- | --- |
+| `rarext_storage_challenge` / `rarext_storage_audit` on an unknown blob | the blob has no signed placement | the verb rejects with `no placement for <hash>; pass the signed placement or put it first`; a bare read-only audit never contacts holders |
+| `rarext_storage_pin` `root` field | when a root is claimed it must be a 64-char lowercase SHA-256 hex digest | `root must be a sha256 hex digest when provided`; a well-formed root with no placement is a broken link the operator must reconcile, not a hard error |
+| `rarext_storage_pin` `cid` field | the claimed CID must match the bytes' computed CIDv1 | `cid does not match the content` |
+| Pin response integrity | the pin service record must name the same CID and `pin:<cid>` reference | a corrupted or wrong-service response is refused with `pin service returned a record for a different cid` |
+| A holder that drops mid-`put` | the holder answers 5xx on the shard upload | `rarext_storage_put` rejects with `holder <id> failed put: 500` and no placement is registered; a retry is safe |
+| A holder that returns a wrong digest | the shard's bytes do not hash to its `storedAs` | `rarext_storage_get` records the shard as an error entry and reconstructs from the remaining shards; fewer than k usable shards rejects with `only <n> of <k> data shards are usable` |
+| A holder token that is wrong or expired | the holder answers 401/403 to every challenge | the challenge records a `rejected` outcome per shard and `rarext_storage_challenge` rejects with `every holder rejected the challenge; check RAREXT_HOLDER_TOKEN` instead of silently reporting every shard lost |
+| `rarext_storage_audit` with a holder not in the placement | the read-only audit sees a configured holder set that is a subset of the placement | the audit degrades to `under-replicated` (shards on the absent holder report not live) instead of failing; `challenge: true` routes through `rarext_storage_challenge` and still requires the full set |
+
 ## Tournament and Trac task registry limits
 
 The newest session-scoped endpoints are bounded by construction, and the limits are

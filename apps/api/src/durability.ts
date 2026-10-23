@@ -114,7 +114,23 @@ export interface ChallengeOutcome {
   index: number;
   holder: string;
   ok: boolean;
-  reason: "ok" | "holder-missing" | "shard-missing" | "bad-proof";
+  reason: "ok" | "holder-missing" | "shard-missing" | "bad-proof" | "rejected";
+}
+
+/**
+ * A holder refused the request because the bearer token was missing, wrong, or
+ * expired. The ledger can distinguish this from a genuinely absent holder, so
+ * an operator sees a token typo instead of every shard reading as lost.
+ */
+export class HolderRejectedError extends Error {
+  readonly holder: string;
+  readonly status: number;
+
+  constructor(holder: string, status: number, what: string) {
+    super(`holder ${holder} rejected ${what}: ${status}`);
+    this.holder = holder;
+    this.status = status;
+  }
 }
 
 export interface DurabilityReport {
@@ -234,6 +250,9 @@ export function httpHolder(
 
   async function expect(response: Response, what: string): Promise<Response> {
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new HolderRejectedError(id, response.status, what);
+      }
       throw new Error(`holder ${id} failed ${what}: ${response.status}`);
     }
 
@@ -980,8 +999,10 @@ export class DurabilityLedger {
           this.miss(witness, now);
           continue;
         }
-      } catch {
-        outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason: "holder-missing" });
+      } catch (error) {
+        const reason =
+          error instanceof HolderRejectedError ? "rejected" : "holder-missing";
+        outcomes.push({ index: shard.index, holder: shard.holder, ok: false, reason });
         this.miss(witness, now);
         continue;
       }

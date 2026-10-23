@@ -400,9 +400,25 @@ export async function storageChallenge(args: Record<string, unknown>): Promise<u
 
   const outcomes = await ledger.challenge(blobHash, holders);
 
+  const rejected = outcomes.filter((outcome) => outcome.reason === "rejected");
+
+  // A wrong or expired holder token makes every challenge answer 401. Surfacing
+  // that as a distinct outcome keeps the operator from misreading a token typo
+  // as total data loss.
+  if (outcomes.length > 0 && rejected.length === outcomes.length) {
+    throw new Error(
+      `every holder rejected the challenge; check RAREXT_HOLDER_TOKEN`,
+    );
+  }
+
   return { blobHash, outcomes, audit: ledger.audit(blobHash) };
 }
-
+/**
+ * The audit is a read-only view of witness state, so it does not require the
+ * full holder set; a holder that is not in the placement simply reports its
+ * shards as not live instead of failing the call. `challenge` is the verb
+ * that requires every holder to be configured.
+ */
 export async function storageAudit(args: Record<string, unknown>): Promise<unknown> {
   const blobHash = String(args.blobHash ?? "");
   if (!/^[0-9a-f]{64}$/.test(blobHash)) throw new Error("blobHash must be a sha256 hex digest");
@@ -410,8 +426,7 @@ export async function storageAudit(args: Record<string, unknown>): Promise<unkno
   await placementFor(ledger, blobHash, args.placement);
 
   if (args.challenge === true) {
-    const holders = storageHolders();
-    await ledger.challenge(blobHash, holders);
+    await storageChallenge({ blobHash, placement: args.placement });
   }
 
   return {
@@ -438,6 +453,19 @@ export async function storagePin(args: Record<string, unknown>): Promise<unknown
 
   if (args.cid !== undefined && args.cid !== cid) {
     throw new Error("cid does not match the content");
+  }
+
+  // The root is a link to a placement, not content the pin service can check.
+  // A garbage root would pin content under an identity that never existed, so
+  // require a well-formed digest when one is claimed. The pin is intentionally
+  // decoupled from the placement (it pins content such as a registry bundle,
+  // not necessarily an erasure-placed blob), so a well-formed root that has no
+  // placement is allowed but is a broken link the operator must reconcile.
+  if (args.root !== undefined && args.root !== null && typeof args.root !== "string") {
+    throw new Error("root must be a string or null");
+  }
+  if (typeof args.root === "string" && !/^[0-9a-f]{64}$/.test(args.root)) {
+    throw new Error("root must be a sha256 hex digest when provided");
   }
 
   const raw = process.env.RAREXT_PIN_URL ?? DEFAULT_PIN;
@@ -468,6 +496,18 @@ export async function storagePin(args: Record<string, unknown>): Promise<unknown
         ? (value as { error: string }).error
         : `pin service returned ${response.status}`;
     throw new Error(message);
+  }
+
+  const record = value as { cid?: unknown; reference?: unknown };
+
+  // The pin service names its CID in the record. A mismatch means the response
+  // was corrupted or came from the wrong service, so refuse to treat it as the
+  // pin for this blob.
+  if (typeof record.cid !== "string" || record.cid !== cid) {
+    throw new Error("pin service returned a record for a different cid");
+  }
+  if (typeof record.reference !== "string" || record.reference !== `pin:${cid}`) {
+    throw new Error("pin service returned an unexpected reference");
   }
 
   return value;
