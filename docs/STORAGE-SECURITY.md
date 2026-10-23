@@ -7,8 +7,10 @@ code, and what remains open. It is the security companion to
 
 The short version: challenges are bound to the request, HTTP peers are bounded and
 hash-checked, the pin store is tamper-evident, and signed placements are validated
-before they are adopted. Payloads are **not encrypted**, challenges prove possession
-rather than retrievability, and bearer tokens are shared secrets rather than identities.
+before they are adopted. Payloads are **not encrypted by default**, and the unreviewed
+sealed-tier encryptor still derives its key with PBKDF2 where RFC 0015 specifies HKDF,
+so confidentiality is **not claimed**. Challenges prove possession rather than
+retrievability, and bearer tokens are shared secrets rather than identities.
 
 ## Threat model
 
@@ -30,8 +32,9 @@ Out of scope, and not claimed:
   [#7](https://github.com/999svs999/RAREXT-protocol/issues/7));
 - a reporter or verifier that lies about its own audit (see issue
   [#9](https://github.com/999svs999/RAREXT-protocol/issues/9));
-- confidentiality of stored bytes (see issue
-  [#6](https://github.com/999svs999/RAREXT-protocol/issues/6)).
+- confidentiality of stored bytes. The sealed-tier module is not wired into the put
+  path and its key envelope is unreviewed; see [RFC 0015](../rfcs/0015-sealed-tier-encryption.md)
+  and issue [#6](https://github.com/999svs999/RAREXT-protocol/issues/6).
 
 ## Controls enforced in code
 
@@ -113,11 +116,30 @@ with the new token and update every client; there is no overlap window or key id
 Do not put tokens in command lines or commit them. Use the environment or a process
 manager's secret file.
 
+## Sealed tier encryption status
+
+`apps/api/src/sealed-encryption.ts` provides AES-256-GCM encryption with a 12-byte IV,
+a 16-byte authentication tag, and a 16-byte salt. `apps/api/test/sealed-storage.test.ts`
+shows that shards written from the resulting ciphertext contain no plaintext.
+
+That is not a confidentiality claim:
+
+- the module is not wired into `encodeBytes`, the storage verbs, the MCP tools, or the
+  API put path; a sealed upload must call it explicitly;
+- the key is derived with **PBKDF2-SHA256** (100,000 iterations) while RFC 0015
+  specifies **HKDF-SHA256** — the implementation and the specification disagree;
+- there is no wrapping-key format, rotation, or associated-data binding to the blob
+  identity, and the envelope has not been reviewed.
+
+Do not upload real secrets and do not describe sealed storage as encrypted until the
+implementation matches [RFC 0015](../rfcs/0015-sealed-tier-encryption.md) and the
+envelope is reviewed.
+
 ## Open findings
 
 | Finding | Issue |
 | --- | --- |
-| Shards and pins are stored in plaintext; the `sealed` tier is not encryption. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
+| Client-side sealed encryption exists but is unwired and uses PBKDF2 where RFC 0015 specifies HKDF; confidentiality is not claimed. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
@@ -133,6 +155,8 @@ held in memory during encode/decode.
 npx tsc --noEmit
 node --test --test-reporter=tap apps/api/test/security-storage.test.ts
 node --test --test-reporter=tap apps/api/test/storage-hardening.test.ts
+node --test --test-reporter=tap apps/api/test/sealed-storage.test.ts
+node --test --test-reporter=tap apps/api/test/storage-properties.test.ts
 ```
 
 The security tests cover replay and wrong-leaf answers, a lying HTTP holder, holder

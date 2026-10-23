@@ -15,7 +15,6 @@ import { encryptSealedPayload, decryptSealedPayload } from "../src/sealed-encryp
 
 test("sealed storage tier encrypts payloads client-side so holder directories never contain plaintext", async () => {
   const root = mkdtempSync(join(tmpdir(), "rarext-sealed-"));
-  const holderDir = join(root, "holder-0");
   const holders = [
     directoryHolder("h-0", join(root, "h-0")),
     directoryHolder("h-1", join(root, "h-1")),
@@ -33,8 +32,10 @@ test("sealed storage tier encrypts payloads client-side so holder directories ne
     const ledger = new DurabilityLedger();
     const placement = await ledger.place(encoded, holders, "pinned");
 
-    // 3. Inspect holder storage files on disk
-    const files = readdirNamesRecursive(holderDir);
+    // 3. Inspect both holder directories on disk
+    const files = [join(root, "h-0"), join(root, "h-1")].flatMap(readdirNamesRecursive);
+    assert.ok(files.length > 0, "the holder directories must actually contain shard files");
+
     let foundPlaintext = false;
 
     for (const file of files) {

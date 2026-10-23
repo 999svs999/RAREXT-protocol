@@ -27,13 +27,22 @@ This extension introduces authenticated client-side encryption (AES-256-GCM with
 ### Key Derivation
 - Given a master secret or agent wrapping key, a per-blob symmetric data encryption key (DEK) is derived using HKDF-SHA256 with a unique per-blob salt.
 
+> **Implementation deviation (2026-10-23).** The shipped
+> `apps/api/src/sealed-encryption.ts` derives the key with **PBKDF2-SHA256**
+> (100,000 iterations, 32-byte key) over the same 16-byte random salt, not HKDF.
+> The envelope shape matches this RFC, but the construction does not. PBKDF2 is a
+> password-stretching KDF; HKDF is extract-and-expand for high-entropy input.
+> Either the implementation must move to HKDF or this RFC must be amended and the
+> envelope reviewed. Until then the sealed tier is **not** a confidentiality
+> claim.
+
 ### Ciphertext Structure
 ```ts
 export interface SealedEnvelope {
   ciphertext: string; // base64 encoded
   iv: string;         // base64 encoded 12-byte IV
   authTag: string;    // base64 encoded 16-byte GCM tag
-  salt: string;       // base64 encoded salt for HKDF
+  salt: string;       // base64 encoded salt for the key derivation
 }
 ```
 
@@ -49,3 +58,19 @@ export interface SealedEnvelope {
 
 - **Sealed Storage Test (`apps/api/test/sealed-storage.test.ts`):** Verifies that when a payload is stored under the `sealed` tier with client-side encryption enabled, inspecting the underlying files on the holder directory reveals only AES ciphertext and zero plaintext bytes of the original payload.
 - **Key Loss Behavior:** Documented that without the corresponding key, decryption throws an AEAD auth failure or decryption error.
+
+## 4. Implementation status and confidentiality caveat
+
+- The encryption module exists at `apps/api/src/sealed-encryption.ts` and is
+  covered by `apps/api/test/sealed-storage.test.ts`.
+- It is **not wired into** the storage verbs, the MCP tools, or the API put path.
+  Callers must encrypt explicitly before calling `encodeBytes`. Nothing in the
+  default upload path selects the sealed tier and applies this envelope.
+- Key derivation differs from this specification: PBKDF2-SHA256 (100,000
+  iterations) is used where the RFC says HKDF-SHA256 (see the note in §2).
+- The key envelope has not been reviewed. There is no wrapping-key format, no
+  rotation story, no associated-data binding to the blob identity, and no test
+  that a swapped envelope or a cross-tier substitution fails.
+- Therefore: **the sealed tier is not confidential in this build.** Do not upload
+  real secrets and do not describe sealed storage as end-to-end encrypted until
+  the implementation matches the RFC and that envelope is reviewed.

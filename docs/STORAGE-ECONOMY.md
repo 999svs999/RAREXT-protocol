@@ -71,11 +71,16 @@ and a pinned spec hash, so the meaning of a tier cannot drift silently.
 | `public` | Yes | Everyone | Possession, digest, terms |
 | `sealed` | No | Only the key holder | Possession and terms, never content |
 
-A sealed blob is encrypted by the client before upload. The node stores ciphertext
-it cannot read, and the claim covers the fact that the ciphertext is held, not what
-it says. This is the same envelope design as the private-artifact work, applied to
-bytes, and it is what makes the enterprise tier possible: the operator can prove
-custody of something it cannot read.
+The `sealed` tier is *designed* so the client encrypts before upload, the node stores
+ciphertext it cannot read, and the claim covers the fact that the ciphertext is held,
+not what it says. That is what would make the enterprise tier possible: the operator
+can prove custody of something it cannot read.
+
+**This build does not yet deliver that.** `apps/api/src/sealed-encryption.ts` is an
+unreviewed AES-256-GCM envelope (PBKDF2-SHA256 where RFC 0015 specifies HKDF) and it
+is not wired into the put path. A `sealed` upload is therefore not encrypted unless the
+caller does it explicitly. Do not sell or treat the sealed tier as confidential until
+the envelope is reviewed and wired.
 
 ## Metering: the unit of the economy
 

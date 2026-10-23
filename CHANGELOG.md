@@ -37,7 +37,21 @@ break a client or invalidate stored data.
   token-protected holders, an API, and a pin service. One integration test covers the
   same verbs directly.
 
-- **Storage roadmap completion (Issues #6–10 closed).** Client-side AES-256-GCM envelope encryption for sealed payloads (`apps/api/src/sealed-encryption.ts`), Proof of Retrievability specification (RFC 0013), byte and request quotas with rate limiting for holders and pins, signed independent audit attestations (RFC 0014), and orphan shard garbage collection with grace period and dry run. Added `npm run net` local storage network runner and throughput/memory benchmarks.
+- **Storage roadmap completion (Issues #6–10 closed).** Proof of Retrievability
+  specification (RFC 0013), byte and request quotas with rate limiting for holders and
+  pins, signed independent audit attestations (RFC 0014), and orphan shard garbage
+  collection with grace period and dry run. Added `npm run net`, a local storage
+  network runner, property/fuzz tests over erasure, placement, and GC, and a 1 GiB
+  throughput/memory benchmark.
+
+  The sealed-tier module (`apps/api/src/sealed-encryption.ts`) is AES-256-GCM and its
+  test proves holder directories contain no plaintext. It is **not** a confidentiality
+  claim: it uses PBKDF2-SHA256 where RFC 0015 specifies HKDF-SHA256, it is not wired
+  into the storage verbs or the put path, and its key envelope is unreviewed. Do not
+  upload real secrets or describe sealed storage as encrypted until both the
+  implementation and the envelope are reviewed.
+
+- **Storage failure hardening and multi-loss repair accounting.** `BlobStore` writes
   blobs and its index through unique temp files and renames, rolls back a new blob when
   the index write fails, and no longer swallows index errors. Durability repair reads
   exactly `k` survivors, stages every replacement before moving the signed placement,
