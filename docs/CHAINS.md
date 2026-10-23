@@ -32,7 +32,7 @@ never `ok`.
 | **Solana** | `solana` | a memo transaction | the transaction's log messages, base58-decoded |
 | **Bitcoin** | `bitcoin` | an `OP_RETURN` output | the raw transaction, searched for the root |
 | **Cosmos** | `cosmos` | a memo in a transaction | the transaction's memo |
-| **Trac** | `trac` | an anchor announcement | the announcement response |
+| **Trac** | `trac` | an anchor announcement over the operator webhook (`TRAC_ANCHOR_URL`) | the announcement response |
 | **Content addressing** | `content` | a CIDv1 over the bundle | the CID, computed locally and pinned through `RAREXT_PIN_URL`; `npm run pin` serves that contract |
 | **Local** | `local` | a durable record in the store | the record itself |
 
@@ -110,6 +110,9 @@ root can be confirmed on any chain that has it.
   and the audit are not.
 - **Real relays.** The relay protocol is documented by the request shape
   (`rarext.anchor.v1`), but each chain's signer has to be operated.
+- **A native Trac anchor transport.** RESET/trac-peer 0.4.11 has no anchor move or transfer
+  memo, so the shipped Trac transport is the operator webhook. The boundary is
+  `apps/api/src/adapters/trac-transport.ts`; the blocker and evidence are in RFC 0001 §4.
 - **A consensus chain for RAREXT itself**, when the gate is met.
 - **Re-anchoring after a reorganisation.** If a chain reorganises, an anchor
   might disappear. The receipts record the height, so the ambiguity is visible,

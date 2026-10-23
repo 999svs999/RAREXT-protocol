@@ -71,7 +71,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] MCP storage verbs: put, get, challenge, audit, and pin, with a runnable example
 - [x] Durability tier and an auditable replica count on the publication itself
 - [x] Independent verifier operators
-- [ ] Native Trac anchoring transport (see [RFC 0001](rfcs/0001-trac-integration.md))
+- [ ] Native Trac anchoring transport (spike: transport boundary + webhook shipped, native path blocked by the RESET/trac-peer wire format — see [RFC 0001 §4](rfcs/0001-trac-integration.md))
 - [ ] Task registry on Trac
 - [ ] $BEM read-only balance in the UI
 - [ ] Community tournament

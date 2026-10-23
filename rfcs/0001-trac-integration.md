@@ -4,7 +4,7 @@
 - **Author(s):** RAREXT maintainers
 - **Created:** 2026-10-21
 - **Requires:** none
-- **Implementation:** partial. The v0 API ships signed publication envelopes (RFC 0002), local Merkle anchors, an optional `TRAC_ANCHOR_URL` webhook, and a Trac identity-link prototype that verifies a [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge. There is no native Intercom transport yet.
+- **Implementation:** partial. The v0 API ships signed publication envelopes (RFC 0002), local Merkle anchors, a `TracAnchorTransport` boundary with an HTTP webhook transport (`TRAC_ANCHOR_URL`), and a Trac identity-link prototype that verifies a [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge. The native Intercom/MSB transport is blocked by the current RESET wire format (see §4).
 
 ## Summary
 
@@ -152,6 +152,27 @@ The exact Trac transaction format is to be confirmed with the Trac team. The des
 5. Anyone can prove inclusion of an envelope hash in the root.
 
 If Trac cannot support this payload cheaply, fall back to a public append-only log with periodic checkpoint signing, and add Trac later. The envelope format does not change.
+
+**Spike outcome (2026-10).** The transport boundary is
+`apps/api/src/adapters/trac-transport.ts` (`TracAnchorTransport`). It emits one
+`rarext.anchor.v1` announcement per root and returns a reference. The shipped transport is an
+HTTP webhook (`TRAC_ANCHOR_URL`); `GET /v1/adapters/trac` reports its kind and records the
+native path as blocked. The native RESET/trac-peer path cannot carry an anchor root offline,
+researched against the pinned stack (RESET, trac-peer 0.4.11):
+
+- Message moves are exact-key `{v,t,b,h,p,w}` envelopes. `t` is one of
+  `header/lock/unlock/withdraw/gw_beat/guess/claim`, each with a fixed `p` shape
+  (`contract/rules/index.js`, `contract/rules/json.js`), so there is no slot for a root.
+- MSB contract transactions only accept `transfer`, `gw_set`, and `params_set`. `transfer` is a
+  strict `{op,to,amount}` command and the transaction commits to
+  `blake3(JSON.stringify(command))` (`contract/protocol.js`, `signer/lib/wire.mjs`), so a root
+  is neither carried nor committed.
+- The only free-form channel is the optional `reset-chat` sidechannel, which is off-chain and
+  in memory (`docs/SPEC.md` §6), so it cannot back an inclusion proof.
+
+A native transport needs an anchor move type, a transfer memo, or a durable
+content-addressed sidechannel. Until then the webhook is the smallest real transport and this
+is the recorded blocker.
 
 ### 5. API migration
 

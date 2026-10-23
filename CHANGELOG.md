@@ -33,6 +33,13 @@ break a client or invalidate stored data.
 
 ### Added
 
+- **Trac anchor transport boundary.** `apps/api/src/adapters/trac-transport.ts` defines
+  `TracAnchorTransport` and the adapter announces through it; `GET /v1/adapters/trac` reports
+  the transport kind. The HTTP webhook (`TRAC_ANCHOR_URL`) is the shipped, tested transport.
+  The native RESET/trac-peer transport is recorded as blocked: message moves are fixed
+  `{v,t,b,h,p,w}` types and MSB transactions only carry a strict `{op,to,amount}` transfer
+  command, so there is no anchor move or memo to carry a root. Evidence is in RFC 0001 §4.
+
 - **Trac identity-link prototype.** `POST /v1/identity-links` accepts an optional
   `externalProof` for `network: "trac"`. The proof is a
   [RESET](https://github.com/Trac-Systems/reset) `reset-mcp-login` Ed25519 challenge

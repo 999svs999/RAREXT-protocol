@@ -8,6 +8,11 @@ import type {
 
 import { statusFor } from "./types.ts";
 import type { IdentityLinkProof, RarextAdapter } from "./types.ts";
+import {
+  NATIVE_TRANSPORT_SHORT_BLOCKER,
+  createTracAnchorTransport,
+} from "./trac-transport.ts";
+import type { TracAnchorTransport } from "./trac-transport.ts";
 
 const ED25519_SPKI_PREFIX = "302a300506032b6570032100";
 const HEX32 = /^[0-9a-f]{64}$/;
@@ -146,25 +151,39 @@ function verifyChallenge(proof: IdentityLinkProof): void {
 }
 
 export class TracAnchorAdapter implements RarextAdapter {
+  private readonly injectedTransport?: TracAnchorTransport;
+
+  constructor(transport?: TracAnchorTransport) {
+    this.injectedTransport = transport;
+  }
+
+  private transport(): TracAnchorTransport {
+    return this.injectedTransport ?? createTracAnchorTransport(endpoint());
+  }
+
   info(): AdapterInfo {
-    const url = endpoint();
+    const transport = this.transport();
 
     return {
       id: "trac",
       name: "Trac Network",
       kind: "network",
       capabilities: ["anchor", "identity"],
-      configured: Boolean(url),
-      status: url ? "ready" : "unconfigured",
+      configured: transport.configured,
+      status: transport.configured ? "ready" : "unconfigured",
       description:
         "Agent-first coordination and portable anchor announcements. Native identity verifies a RESET Ed25519 challenge.",
-      url,
+      url: transport.endpoint,
     };
   }
 
   async status(): Promise<AdapterStatus> {
+    const transport = this.transport();
+
     return statusFor(this.info(), {
-      transport: endpoint() ? "webhook" : null,
+      transport: transport.kind,
+      nativeTransport: "blocked",
+      nativeBlocker: NATIVE_TRANSPORT_SHORT_BLOCKER,
       nativeIdentity: true,
       identityProof: "reset-mcp-login",
     });
@@ -179,9 +198,9 @@ export class TracAnchorAdapter implements RarextAdapter {
   }
 
   async anchor(root: string, publicationIds: string[]): Promise<AdapterReceipt> {
-    const url = endpoint();
+    const transport = this.transport();
 
-    if (!url) {
+    if (!transport.configured) {
       return {
         adapter: "trac",
         status: "skipped",
@@ -191,32 +210,16 @@ export class TracAnchorAdapter implements RarextAdapter {
     }
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          protocol: "rarext.anchor.v1",
-          root,
-          publicationIds,
-        }),
-        signal: AbortSignal.timeout(5000),
+      const { reference } = await transport.announce({
+        protocol: "rarext.anchor.v1",
+        root,
+        publicationIds,
       });
-
-      if (!response.ok) {
-        return {
-          adapter: "trac",
-          status: "error",
-          reference: null,
-          error: `Trac returned ${response.status}`,
-        };
-      }
-
-      const reference = (await response.text()).slice(0, 500);
 
       return {
         adapter: "trac",
         status: "ok",
-        reference: reference || `trac:${response.status}`,
+        reference,
       };
     } catch (error) {
       return {

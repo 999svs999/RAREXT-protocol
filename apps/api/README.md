@@ -38,7 +38,7 @@ The store persists publications, profiles, identities, and anchors to
 | `PORT` | `8787` | Listen port |
 | `HOST` | `127.0.0.1` | Bind address |
 | `RAREXT_DATA` | `.data/rarext.json` | Store path; `none` disables persistence |
-| `TRAC_ANCHOR_URL` | unset | Optional webhook for Merkle roots |
+| `TRAC_ANCHOR_URL` | unset | Optional webhook anchor transport for Merkle roots; the native RESET transport is blocked (RFC 0001 §4) |
 | `RAREXT_ANCHOR_EVERY` | `0` | Auto-anchor after N pending publications |
 | `BSC_RPC_URL` | unset | BSC JSON-RPC endpoint for read-only status |
 | `BEM_CONTRACT` | unset | `$BEM` ERC-20 contract for balance reads |
