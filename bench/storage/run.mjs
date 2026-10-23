@@ -5,9 +5,10 @@
 // `generative`, never `exact`.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, platform, release, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { allRunners } from "./methods.mjs";
 import { corpusStats } from "./corpus.mjs";
@@ -154,6 +155,15 @@ function corpusTable(manifest) {
   return lines.join("\n");
 }
 
+const THROUGHPUT_PATH = fileURLToPath(new URL("./THROUGHPUT.md", import.meta.url));
+
+function throughputSection() {
+  if (!existsSync(THROUGHPUT_PATH)) return "";
+
+  const section = readFileSync(THROUGHPUT_PATH, "utf8").trim();
+  return section ? `\n${section}\n` : "";
+}
+
 function markdown({ rows, manifest, env, elapsedMs, budget, stats }) {
   const skipped = rows.filter((row) => row.skipped);
   const tableLines = table(rows);
@@ -180,7 +190,7 @@ ${tableLines}
 - **Verify** reads the stored artifact and recomputes its SHA-256; it checks stored
   integrity, not decodability. **Decode** reconstructs the reference bytes.
 - Skipped rows mean the local toolchain lacks that encoder; they are not passes.
-
+${throughputSection()}
 ## Corpus
 
 ${corpusTable(manifest)}

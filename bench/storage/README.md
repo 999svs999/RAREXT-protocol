@@ -25,8 +25,8 @@ cost inside a put and a get — and reports peak RSS from
 `process.resourceUsage().maxRSS`. It deliberately excludes HTTP and JSON framing:
 the holder endpoints base64-encode bodies, so at this size the wire format, not the
 codec, dominates. The numbers are written to `bench/storage/THROUGHPUT.md` and
-copied into the "1 GiB throughput and memory" section of `RESULTS.md`; the main
-`bench:storage` run does not regenerate that section.
+included as the "1 GiB throughput and memory" section when `bench:storage`
+regenerates `RESULTS.md` (it reads `THROUGHPUT.md` if present).
 
 ## What is measured
 
