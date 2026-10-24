@@ -111,7 +111,11 @@ function collect(
       continue;
     }
 
-    if (!entry.isFile() || entry.name.endsWith(".tmp")) {
+    if (
+      !entry.isFile() ||
+      entry.name.endsWith(".tmp") ||
+      entry.name === RESTORE_LOCK
+    ) {
       continue;
     }
 
@@ -285,6 +289,7 @@ export function restoreBackup(
   }
 
   mkdirSync(root, { recursive: true });
+  const realRoot = realpathSync(root);
 
   // Two restores into one target would interleave their per-file renames. The
   // lock makes the second one refuse instead of leaving a mixed tree. A crashed
@@ -299,7 +304,6 @@ export function restoreBackup(
     throw error;
   }
 
-  const realRoot = realpathSync(root);
   const staged: { temporary: string; destination: string; existed: boolean }[] = [];
   let total = 0;
 
