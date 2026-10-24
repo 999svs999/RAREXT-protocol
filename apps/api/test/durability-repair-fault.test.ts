@@ -254,12 +254,17 @@ test("a repair refuses to commit after the placement is forgotten mid-read", asy
         await gate;
         return original.get(storedAs);
       },
-      async put(bytes) {
-        writes += 1;
-        return original.put(bytes);
-      },
     };
-    const withSlow = holders.map((holder) => (holder.id === slow.id ? slow : holder));
+    const withSlow = holders.map((holder) => {
+      const wrapped: DurabilityHolder = {
+        ...holder,
+        async put(bytes) {
+          writes += 1;
+          return holder.put(bytes);
+        },
+      };
+      return holder.id === slow.id ? { ...wrapped, get: slow.get } : wrapped;
+    });
     const repairing = ledger.repair(placement.blobHash, withSlow);
 
     await started;
@@ -296,6 +301,7 @@ test("a repair refuses after its repair lease expires", async () => {
     const started = new Promise<void>((resolve) => (entered = resolve));
     const survivor = placement.shards[1]!;
     const original = holders.find((holder) => holder.id === survivor.holder)!;
+    let writes = 0;
     const slow: DurabilityHolder = {
       ...original,
       async get(storedAs) {
@@ -304,7 +310,16 @@ test("a repair refuses after its repair lease expires", async () => {
         return original.get(storedAs);
       },
     };
-    const withSlow = holders.map((holder) => (holder.id === slow.id ? slow : holder));
+    const withSlow = holders.map((holder) => {
+      const wrapped: DurabilityHolder = {
+        ...holder,
+        async put(bytes) {
+          writes += 1;
+          return holder.put(bytes);
+        },
+      };
+      return holder.id === slow.id ? { ...wrapped, get: slow.get } : wrapped;
+    });
     const repairing = ledger.repair(placement.blobHash, withSlow);
 
     await started;
@@ -312,6 +327,7 @@ test("a repair refuses after its repair lease expires", async () => {
     release();
 
     await assert.rejects(repairing, /repair lease expired/);
+    assert.equal(writes, 0, "an expired repair stages nothing");
     assert.equal(JSON.stringify(ledger.get(placement.blobHash)), before);
     assert.equal(ledger.audit(placement.blobHash).status, "under-replicated");
     assert.deepEqual(

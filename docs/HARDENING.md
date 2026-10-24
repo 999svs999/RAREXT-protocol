@@ -6,7 +6,10 @@ ready”: the stack is pre-alpha, and a limit that is written down here is a lim
 will not quietly claim away.
 
 The failure tests are in
-[`apps/api/test/storage-hardening.test.ts`](../apps/api/test/storage-hardening.test.ts).
+[`apps/api/test/storage-hardening.test.ts`](../apps/api/test/storage-hardening.test.ts),
+[`apps/api/test/durability-repair-fault.test.ts`](../apps/api/test/durability-repair-fault.test.ts),
+and the streamed cases in
+[`apps/api/test/erasure-stream-http.test.ts`](../apps/api/test/erasure-stream-http.test.ts).
 The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 
 ## What was injected
