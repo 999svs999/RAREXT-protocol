@@ -29,7 +29,7 @@ protocol does not depend on it, and neither should you.
 | --- | --- | --- |
 | **Identity** | A keypair, not an account. ECDSA-P256 or ML-DSA, suite recorded with every signature. | Shipped |
 | **Storage** | Content-addressed bytes, k-of-n erasure shards, placement across holders, challenges, repair. | Blobs, shards, placement, a holder HTTP transport, scheduled nonce-bound challenges, repair, and advertised durability shipped; payment for retention is open work |
-| **Verification** | Deterministic recompute; one verifier running unchanged in a browser and on a server, plus independent operator attestations that name who signed. | Recomputed and operator modes shipped |
+| **Verification** | Deterministic recompute; one verifier running unchanged in a browser and on a server, plus independent operator attestations that name who signed. AI claims carry an explicit representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and every surface recomputes them from the same core math. | Recomputed and operator modes shipped; AI representation kinds with local re-verification shipped ([AI-VERIFICATION.md](AI-VERIFICATION.md)) |
 | **Settlement** | Work and byte-months paid from demand, not from an emission schedule. No protocol token. | Work economy shipped; byte-month pricing designed, not shipped |
 
 ## What has to be true

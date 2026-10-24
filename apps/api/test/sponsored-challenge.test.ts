@@ -8,7 +8,9 @@ import type { AddressInfo } from "node:net";
 import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { Challenge, JsonWebKey } from "../../../packages/core/src/index.ts";
 import { post, start, stop } from "./helpers.ts";
-import { createSponsorRegistry } from "../src/sponsorship.ts";
+import { createVerifierRegistry } from "../src/verifiers.ts";
+import { generate } from "../src/generative.ts";
+import { createSponsorRegistry, verifyChallengeSponsorship } from "../src/sponsorship.ts";
 
 const halfAdder = {
   components: [
@@ -239,4 +241,56 @@ test("reports sponsorship unavailable when no member roster is configured", asyn
   } finally {
     await stop(server);
   }
+});
+
+test("a community member can sponsor an AI challenge and it verifies with the built-in verifier", async () => {
+  const { publicKey, privateKey } = memberKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "trac", publicKey },
+  ]);
+
+  const createdAt = new Date().toISOString();
+  const payload = sponsorshipPayload("alice", {
+    challenge: {
+      id: "sponsored-gen",
+      app: "ai-generative",
+      title: "Community generative challenge",
+      description: "A member-sponsored replay challenge for a committed model.",
+      version: 1,
+      spec: { steps: 16 },
+      semanticsId: "sponsored-gen",
+      semanticsVersion: 1,
+      createdAt,
+    },
+  });
+
+  const result = verifyChallengeSponsorship(signedRequest(payload, privateKey), sponsors);
+  assert.ok(!("error" in result));
+  assert.equal(result.challenge.id, "sponsored-gen");
+  assert.equal(result.challenge.app, "ai-generative");
+  assert.equal(result.challenge.status, "sponsored");
+  assert.equal(result.challenge.sponsor, "alice");
+
+  // The built-in AI verifier accepts publications against the sponsored
+  // challenge with no extra configuration: the spec is the contract.
+  const model = {
+    kind: "xorshift32" as const,
+    params: { a: 13, b: 17, c: 5 },
+    vocab: ["a", "b", "c", "d"],
+  };
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    {
+      app: "ai-generative",
+      kind: "ai.generative",
+      version: 1,
+      mediaType: "application/json",
+      body: { model, seed: 42, output: generate(model, 42, 16) },
+    },
+    result.challenge,
+  );
+
+  assert.equal(attestation.correct, true);
+  assert.equal(attestation.representation, "generative");
+  assert.equal(attestation.challengeId, "sponsored-gen");
 });

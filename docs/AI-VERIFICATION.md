@@ -7,6 +7,10 @@ for a neural reconstruction regenerated on other hardware. The protocol
 therefore gives every claim an explicit **representation kind**, and each kind
 has its own definition of "correct".
 
+This is the verification primitive of [web4](WEB4.md) applied to models: you do
+not ask a platform whether an AI output is what its publisher says; you replay
+or recompute it yourself, in a browser tab if that is all you have.
+
 ## The three representation kinds
 
 | Kind | Question answered | How it is checked | Built-in verifier |
