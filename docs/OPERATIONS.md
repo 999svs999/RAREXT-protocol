@@ -24,6 +24,24 @@ regression tests in `apps/api/test/storage-hardening.test.ts`:
 A failed or refused repair never moves the signed placement: the staging is
 atomic, so a retry is idempotent and the holder store stays content-addressed.
 
+## Node blob-store garbage-collection limits
+
+`POST /v1/storage/gc` collects blobs the caller does not reference. The body is
+`{ referenced: [sha256, ...], gracePeriodMs?, dryRun? }`; `dryRun` defaults to
+`true` and an explicit `referenced` array is required, so an unconfigured sweep
+cannot delete anything. The scan/candidate-save/delete section is synchronous,
+so two calls in one process cannot interleave. Limits are measured by
+`apps/api/test/storage-gc-fault.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| A blob is unreferenced | it becomes a candidate, not a deletion, and is only collected after `gracePeriodMs` (default 24h) |
+| A blob with a live retention term | held even when unreferenced: `held` is reported and the blob is not a candidate; the commitment cannot be broken by cleanup. Once the term matures it is collectable |
+| A referenced blob | never deleted, and its candidate entry is cleared |
+| Interrupted write or index save | `*.tmp` leftovers are swept (`purgedTemp`); only 64-hex names are blobs, so a temp file is never one |
+| Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second pass sees no orphans and reports zero |
+| A missing or malformed `referenced` list | `400 referenced must be an array of sha256 hashes`; nothing is scanned or deleted |
+
 ## External agent (MCP) storage limits
 
 The external-agent path in `apps/mcp` drives the same holder, placement, and pin

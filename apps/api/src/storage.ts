@@ -457,10 +457,164 @@ export class BlobStore {
       return false;
     }
 
-    rmSync(this.path(hash), { force: true });
-    this.records.delete(hash);
+    this.deleteFile(hash);
     this.saveIndex();
     return true;
+  }
+
+  private deleteFile(hash: string): void {
+    rmSync(this.path(hash), { force: true });
+    this.records.delete(hash);
+  }
+
+  /**
+   * Collect blobs the caller does not reference. A blob whose retention term
+   * has not matured is held even when unreferenced: the node promised to keep
+   * it. Collection is opt-in (`dryRun` defaults to true) and honours a grace
+   * period so an operator can inspect candidates first.
+   *
+   * The scan, candidate save, and delete section is synchronous, so two calls
+   * from the same process cannot interleave.
+   */
+  gc(options: {
+    referenced: Iterable<string>;
+    gracePeriodMs?: number;
+    dryRun?: boolean;
+    now?: number;
+  }): {
+    scanned: number;
+    referenced: number;
+    held: number;
+    candidates: number;
+    deleted: number;
+    purgedTemp: number;
+    wouldDelete: string[];
+    dryRun: boolean;
+    gracePeriodMs: number;
+  } {
+    const referenced = new Set(
+      [...options.referenced].filter((hash) => /^[0-9a-f]{64}$/.test(hash)),
+    );
+    const gracePeriodMs = options.gracePeriodMs ?? 24 * 60 * 60 * 1000;
+    const dryRun = options.dryRun !== false;
+    const now = options.now ?? Date.now();
+    const candidates = this.loadGcCandidates();
+    const wouldDelete: string[] = [];
+    const scanned = this.records.size;
+    let held = 0;
+    let referencedCount = 0;
+
+    for (const record of this.records.values()) {
+      if (referenced.has(record.hash)) {
+        referencedCount += 1;
+        candidates.delete(record.hash);
+        continue;
+      }
+
+      if (record.retentionUntil && now < Date.parse(record.retentionUntil)) {
+        held += 1;
+        candidates.delete(record.hash);
+        continue;
+      }
+
+      const existing = candidates.get(record.hash);
+      if (!existing) {
+        candidates.set(record.hash, { hash: record.hash, firstSeen: now });
+        if (gracePeriodMs === 0) wouldDelete.push(record.hash);
+      } else if (now - existing.firstSeen >= gracePeriodMs) {
+        wouldDelete.push(record.hash);
+      }
+    }
+
+    let deleted = 0;
+    if (!dryRun) {
+      for (const hash of wouldDelete) {
+        if (!this.records.has(hash)) continue;
+        this.deleteFile(hash);
+        candidates.delete(hash);
+        deleted += 1;
+      }
+      if (deleted > 0) this.saveIndex();
+    }
+
+    this.saveGcCandidates(candidates);
+
+    return {
+      scanned,
+      referenced: referencedCount,
+      held,
+      candidates: candidates.size,
+      deleted,
+      purgedTemp: this.purgeTempFiles(),
+      wouldDelete,
+      dryRun,
+      gracePeriodMs,
+    };
+  }
+
+  private gcCandidatesPath(): string {
+    return join(this.directory, "_blob-gc-candidates.json");
+  }
+
+  private loadGcCandidates(): Map<string, { hash: string; firstSeen: number }> {
+    const path = this.gcCandidatesPath();
+    if (!existsSync(path)) return new Map();
+
+    try {
+      const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+        hash?: unknown;
+        firstSeen?: unknown;
+      }[];
+      const candidates = new Map<string, { hash: string; firstSeen: number }>();
+
+      for (const entry of parsed) {
+        if (
+          typeof entry.hash === "string" &&
+          /^[0-9a-f]{64}$/.test(entry.hash) &&
+          typeof entry.firstSeen === "number" &&
+          Number.isFinite(entry.firstSeen)
+        ) {
+          candidates.set(entry.hash, { hash: entry.hash, firstSeen: entry.firstSeen });
+        }
+      }
+
+      return candidates;
+    } catch {
+      return new Map();
+    }
+  }
+
+  private saveGcCandidates(candidates: Map<string, { hash: string; firstSeen: number }>): void {
+    const path = this.gcCandidatesPath();
+    const temporary = `${path}.${randomBytes(6).toString("hex")}.tmp`;
+
+    try {
+      writeFileSync(temporary, JSON.stringify([...candidates.values()], null, 2));
+      renameSync(temporary, path);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  }
+
+  /**
+   * Remove `*.tmp` leftovers from an interrupted write or index save. A blob
+   * file is named only by its 64-hex hash, so a temp file is never a blob.
+   */
+  private purgeTempFiles(): number {
+    let removed = 0;
+
+    for (const name of readdirSync(this.directory)) {
+      if (!name.endsWith(".tmp")) continue;
+
+      try {
+        rmSync(join(this.directory, name), { force: true });
+        removed += 1;
+      } catch {
+        // Another handle still holds it; leave it for the next sweep.
+      }
+    }
+
+    return removed;
   }
 
   /**

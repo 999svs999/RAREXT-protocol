@@ -1640,6 +1640,34 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
         return;
       }
 
+      if (req.method === "POST" && pathname === "/v1/storage/gc") {
+        const body = asRecord(await readJson(req));
+        const referenced = body.referenced;
+
+        if (
+          !Array.isArray(referenced) ||
+          !referenced.every((hash) => typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash))
+        ) {
+          throw new Error("referenced must be an array of sha256 hashes");
+        }
+
+        const gracePeriodMs =
+          typeof body.gracePeriodMs === "number" && body.gracePeriodMs >= 0
+            ? body.gracePeriodMs
+            : undefined;
+
+        send(
+          res,
+          200,
+          blobs.gc({
+            referenced,
+            gracePeriodMs,
+            dryRun: body.dryRun !== false,
+          }),
+        );
+        return;
+      }
+
       if (pathname === "/v1/placements") {
         if (req.method === "GET") {
           send(res, 200, placements.list());
