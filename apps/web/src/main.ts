@@ -4,6 +4,7 @@ import {
   score,
   simulate,
   tasks,
+  verifyAiArtifact,
 } from "../../../packages/core/src/index.ts";
 import type {
   Anchor,
@@ -201,6 +202,7 @@ let pinch: PinchState | null = null;
 let feedItems: Publication[] = [];
 let appNames: Record<string, string> = {};
 let challengeTitles: Record<string, string> = {};
+let challengeSpecs: Record<string, Record<string, unknown>> = {};
 let sponsoredChallenges: Challenge[] = [];
 let sponsoredChallengeIds = new Set<string>();
 let feedOffset = 0;
@@ -1602,6 +1604,12 @@ async function refreshRegistry(): Promise<void> {
       challengeTitles = Object.fromEntries(
         challenges.map((challenge) => [challenge.id, challenge.title]),
       );
+      challengeSpecs = Object.fromEntries(
+        challenges.map((challenge) => [
+          challenge.id,
+          (challenge.spec ?? {}) as Record<string, unknown>,
+        ]),
+      );
       sponsoredChallenges = challenges.filter(
         (challenge) => challenge.status === "sponsored",
       );
@@ -1924,8 +1932,46 @@ function openPublication(publication: Publication, mode: "load" | "remix"): void
   toast(mode === "remix" ? t("toast.buildCopied") : t("toast.opened"));
 }
 
+/**
+ * Local AI check before the server round-trip: when the publication is an AI
+ * artifact and the registry's challenge spec supports it, this browser
+ * replays the generative model or recomputes the bounded metric itself.
+ * The suffix is protocol literals, not prose, so it needs no translation.
+ */
+function localAiEvidence(publication: Publication): string | null {
+  const representation = publication.attestation.representation;
+  if (representation !== "generative" && representation !== "bounded") return null;
+
+  const spec = challengeSpecs[publication.challengeId];
+  if (!spec) return null;
+
+  const result = verifyAiArtifact(publication.artifact, {
+    id: publication.challengeId,
+    app: publication.app,
+    title: "",
+    description: "",
+    version: 1,
+    spec: spec as Challenge["spec"],
+    semanticsId: publication.attestation.semanticsId,
+    semanticsVersion: publication.attestation.semanticsVersion,
+    createdAt: publication.createdAt,
+  });
+
+  if ("error" in result) return null;
+
+  if (result.representation === "generative") {
+    return `replay ${result.correct ? "ok" : "fail"} · steps ${result.steps ?? "?"}`;
+  }
+
+  const value = typeof result.metricValue === "number" ? result.metricValue : "?";
+  const bound = typeof result.bound === "number" ? result.bound : "?";
+  return `metric ${value} ${result.correct ? "≤" : ">"} ${bound}`;
+}
+
 async function verifyPublication(publication: Publication): Promise<void> {
   try {
+    const local = localAiEvidence(publication);
+
     const response = await fetch("/v1/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1935,7 +1981,8 @@ async function verifyPublication(publication: Publication): Promise<void> {
     const payload = (await response.json()) as { valid?: boolean; error?: string };
 
     if (!response.ok) throw new Error(payload.error ?? t("err.check"));
-    toast(payload.valid ? t("toast.verified") : t("toast.mismatch"), !payload.valid);
+    const verdict = payload.valid ? t("toast.verified") : t("toast.mismatch");
+    toast(local ? `${verdict} · ${local}` : verdict, !payload.valid);
   } catch (error) {
     toast(error instanceof Error ? error.message : t("err.check"), true);
   }
