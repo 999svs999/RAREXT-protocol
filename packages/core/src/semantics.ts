@@ -88,6 +88,37 @@ export const LOGIC_SEMANTICS: Semantics[] = [
   },
 ];
 
+/**
+ * The declared AI semantics. Where the logic records license "satisfies"
+ * claims about circuits, `ai-generative/gen-starter@1` licenses "generative"
+ * claims: the output is attested as *coming from* the digest-bound starter
+ * model and seed, not as being good. The verifier hash is pinned to the
+ * generative verifier manifest; the app-side test suite enforces the match.
+ */
+export const AI_SEMANTICS: Semantics[] = [
+  {
+    id: "ai-generative/gen-starter",
+    app: "ai-generative",
+    version: 1,
+    claimKind: "generative",
+    title: "Output of the committed starter model",
+    summary:
+      "The attested output is exactly what the digest-bound xorshift32 starter model generates from the committed seed.",
+    specHash: "bf2f754113f0c32835ea5b1e6f88f7d694d3a00a9a0ca772c12a7c796de1b6a3",
+    verifierHash: "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
+    inputs: ["model", "seed"],
+    outputs: ["output"],
+    interpretation: {
+      doc: "https://rarext.build/semantics/ai-generative/gen-starter@1",
+      owner: "rarext",
+      reviewedAt: SEMANTICS_CREATED_AT,
+    },
+    owner: "rarext",
+    origin: "declared",
+    createdAt: SEMANTICS_CREATED_AT,
+  },
+];
+
 export function semanticsForApp(app: string): Semantics[] {
   return LOGIC_SEMANTICS.filter((semantics) => semantics.app === app);
 }
@@ -151,7 +182,7 @@ export function claimFromAttestation(
     predicate: claimPredicate(semantics, challengeId),
     scope: attestation.scope,
     proofKind:
-      attestation.claimKind === "satisfies"
+      attestation.claimKind === "satisfies" || attestation.claimKind === "generative"
         ? "recomputable"
         : attestation.claimKind === "attests"
           ? "attested"

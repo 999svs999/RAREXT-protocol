@@ -6,6 +6,7 @@ import {
   findSemantics,
   LOGIC_SEMANTICS,
   semanticsRecord,
+  AI_SEMANTICS,
 } from "../../../packages/core/src/index.ts";
 import type {
   Attestation,
@@ -128,6 +129,10 @@ export function createSemanticsRegistry(challenges: () => Challenge[]): Semantic
   const registry = new Map<string, Semantics>();
 
   for (const semantics of LOGIC_SEMANTICS) {
+    registry.set(`${semantics.id}@${semantics.version}`, semantics);
+  }
+
+  for (const semantics of AI_SEMANTICS) {
     registry.set(`${semantics.id}@${semantics.version}`, semantics);
   }
 

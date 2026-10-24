@@ -75,6 +75,7 @@ export { countGates, score } from "./scoring.ts";
 export { findTask, tasks } from "./tasks.ts";
 export {
   LOGIC_SEMANTICS,
+  AI_SEMANTICS,
   claimFromAttestation,
   claimKindAllowed,
   claimPredicate,
