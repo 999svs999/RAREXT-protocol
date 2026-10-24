@@ -387,8 +387,8 @@ It does not contact a chain and is not an audit. The checks are covered by
 
 `npm run audit:baseline` pins the reviewed bytecode, and
 `contracts/test/audit-baseline.test.mjs` fails if the source, compiler, or
-dependency change without the table above being updated. CI (`.github/workflows/ci.yml`)
-runs both.
+dependency change without the table above being updated. CI (`scripts/ci.sh`; the
+GitHub Actions template is `scripts/ci-github-actions.yml`) runs both.
 
 ## Deployment gate
 
