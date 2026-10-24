@@ -97,7 +97,7 @@ try {
     placement: {
       record: {
         placement: {
-          sealed?: { algorithm: string; kdf: string };
+          sealed?: { algorithm: string; kdf: string; keyId?: string };
           shards: { holder: string }[];
         };
       };
@@ -107,8 +107,10 @@ try {
   console.log(`put: ${put.blobHash}`);
   console.log(
     `  plaintext ${put.bytes} bytes -> ciphertext ${put.storedBytes} bytes, ` +
-      `kdf=${put.placement.record.placement.sealed?.kdf}, cipher=${put.placement.record.placement.sealed?.algorithm}`,
+      `kdf=${put.placement.record.placement.sealed?.kdf}, cipher=${put.placement.record.placement.sealed?.algorithm}, ` +
+      `keyId=${put.placement.record.placement.sealed?.keyId}`,
   );
+  assert.equal(put.placement.record.placement.sealed?.keyId, "legacy");
 
   const files = holderServers.flatMap((_, index) => filesUnder(join(root, `holder-${index}`)));
   assert.ok(files.length >= HOLDERS);

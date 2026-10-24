@@ -7,10 +7,12 @@ code, and what remains open. It is the security companion to
 
 The short version: challenges are bound to the request, HTTP peers are bounded and
 hash-checked, the pin store is tamper-evident, and signed placements are validated
-before they are adopted. Payloads are **not encrypted by default**, and the unreviewed
-sealed-tier encryptor still derives its key with PBKDF2 where RFC 0015 specifies HKDF,
-so confidentiality is **not claimed**. Challenges prove possession rather than
-retrievability, and bearer tokens are shared secrets rather than identities.
+before they are adopted. Payloads are **not encrypted by default**. The opt-in sealed
+tier uses HKDF-SHA256 + AES-256-GCM, supports key ids and client-side rotation, and
+never gives holders a key, but the envelope is unreviewed and has no key wrapping,
+associated-data binding, or per-tenant isolation, so production confidentiality is
+**not claimed**. Challenges prove possession rather than retrievability, and bearer
+tokens are shared secrets rather than identities.
 
 ## Threat model
 
@@ -32,9 +34,11 @@ Out of scope, and not claimed:
   [#7](https://github.com/999svs999/RAREXT-protocol/issues/7));
 - a reporter or verifier that lies about its own audit (see issue
   [#9](https://github.com/999svs999/RAREXT-protocol/issues/9));
-- confidentiality of stored bytes. The sealed-tier module is not wired into the put
-  path and its key envelope is unreviewed; see [RFC 0015](../rfcs/0015-sealed-tier-encryption.md)
-  and issue [#6](https://github.com/999svs999/RAREXT-protocol/issues/6).
+- confidentiality of stored bytes against a determined holder or host attacker. The
+  opt-in sealed path is wired and holders receive only ciphertext, but its key envelope
+  is unreviewed and has no wrapping, associated-data binding, or per-tenant isolation;
+  see [RFC 0015](../rfcs/0015-sealed-tier-encryption.md) and issue
+  [#6](https://github.com/999svs999/RAREXT-protocol/issues/6).
 
 ## Controls enforced in code
 
@@ -120,26 +124,54 @@ manager's secret file.
 
 `apps/api/src/sealed-encryption.ts` provides AES-256-GCM encryption with a 12-byte IV,
 a 16-byte authentication tag, and a 32-byte key derived with **HKDF-SHA256** from a
-16-byte per-payload salt, matching [RFC 0015](../rfcs/0015-sealed-tier-encryption.md).
+16-byte per-payload salt. The envelope and signed placement also carry a key id,
+matching [RFC 0015](../rfcs/0015-sealed-tier-encryption.md)'s cipher and KDF.
 
-The real path is wired: `rarext_storage_put` with `sealed:true` encrypts with
-`RAREXT_SEALED_SECRET` before erasure coding, records the salt/IV/tag in the signed
-placement, and the shard digests and Merkle roots cover ciphertext. `rarext_storage_get`
-decrypts after reconstruction. `apps/api/test/sealed-path.test.ts` and
-`examples/sealed-storage` exercise it; `POST /v1/blobs` rejects `tier:"sealed"` instead
-of mislabelling plaintext.
+The real path is wired: `rarext_storage_put` with `sealed:true` encrypts before erasure
+coding and records `algorithm`, `kdf`, `salt`, `iv`, `authTag`, and `keyId` in the
+signed placement; shard digests and Merkle roots cover ciphertext. `rarext_storage_get`
+reconstructs and decrypts client-side. Holders receive neither the plaintext nor any
+key: rotating the keyring is a client/agent operation, not a holder one.
+`POST /v1/blobs` still rejects `tier:"sealed"` instead of mislabelling plaintext.
+
+### Keyring and rotation
+
+`RAREXT_SEALED_KEYS` is a JSON object `{ active, keys, revoked? }`. `keys` maps key ids
+to secrets of 16-1024 bytes, `active` selects the key for new puts, and `revoked` is a
+deny-list. `RAREXT_SEALED_SECRET` remains a legacy alias for the key id `legacy`; when
+both are set, the legacy key is added to the ring unless it conflicts. Key ids are
+1-64 letters, digits, dots, colons, underscores, or hyphens.
+
+A sealed placement names one key id, so rotation is per whole blob: add the new key,
+make it active for new puts, keep the old key for reads, and revoke it only when every
+blob under it is re-uploaded or may become unreadable. Old blobs stay readable while
+their key id remains configured and unrevoked. A revoked id is refused even if its
+material is still present; an unconfigured id is unknown. A read snapshots the keyring
+before contacting holders, so an environment rotation cannot strand an in-flight read.
+
+Metadata without a key id is legacy data: it opens only through a configured `legacy`
+key, or when the ring has exactly one key. Re-sealing an existing blob is not an
+in-place operation: fresh salt and IV produce a new ciphertext and blob hash, so the
+client must re-encrypt and re-upload every shard. The placement registry refuses an
+extension whose sealed metadata differs from the current record, so an old blob's
+ciphertext cannot be relabelled with a new key id in place. There is no partial
+rotation because one envelope covers the whole payload before erasure coding; metadata
+cannot name a different key per shard. A key id is public placement metadata, never a
+secret.
 
 It is still not a production confidentiality claim: there is no wrapping-key format,
-key rotation, per-tenant isolation, or associated-data binding to the placement
-identity, and the envelope has not been independently reviewed. Losing
-`RAREXT_SEALED_SECRET` loses the data; leaking it loses confidentiality. Do not upload
-real secrets or describe the tier as audited until those gaps are closed.
+associated-data binding to the placement identity, per-tenant isolation, recovery
+path, or independent envelope review. Losing a key loses every blob sealed under that
+id; leaking it loses their confidentiality. Errors and logs must never contain a
+secret, plaintext, nonce, salt, tag, or ciphertext; regression tests compare stringified
+errors against those values. Do not upload real secrets or describe the tier as audited
+until the remaining gaps are closed.
 
 ## Open findings
 
 | Finding | Issue |
 | --- | --- |
-| Sealed encryption is wired with HKDF-SHA256 and committed to ciphertext, but has no key wrapping, rotation, per-tenant isolation, or envelope review. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
+| Sealed encryption is wired with HKDF-SHA256, key ids, rotation/revocation, and committed ciphertext, but has no key wrapping, AAD binding, per-tenant isolation, recovery, or envelope review. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | Partly addressed: the API now has a write token with rotation, a per-process request limit, a total blob quota, and optional TLS ([#8](https://github.com/999svs999/RAREXT-protocol/issues/8), [`OPERATOR.md`](OPERATOR.md#public-exposure-and-write-limits)); still missing are per-client quotas, a durable rotation window, and an identity that is stronger than a shared token. Placement authority remains the steward's signing key. |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |

@@ -48,8 +48,10 @@ test("the sealed path encrypts before erasure coding and commits to ciphertext",
     "RAREXT_AGENT_KEY",
     "RAREXT_HOLDER_TOKEN",
     "RAREXT_SEALED_SECRET",
+    "RAREXT_SEALED_KEYS",
   ] as const;
   const previous = new Map(keys.map((key) => [key, process.env[key]]));
+  delete process.env.RAREXT_SEALED_KEYS;
   const holderServers = Array.from({ length: 3 }, (_, index) =>
     createHolderServer({ id: `holder-${index}`, directory: join(root, `holder-${index}`) }),
   );
@@ -94,12 +96,26 @@ test("the sealed path encrypts before erasure coding and commits to ciphertext",
       bytes: number;
       storedBytes: number;
       sealed: boolean;
-      sealedMetadata: { algorithm: string; kdf: string; salt: string; iv: string; authTag: string };
+      sealedMetadata: {
+        algorithm: string;
+        kdf: string;
+        salt: string;
+        iv: string;
+        authTag: string;
+        keyId?: string;
+      };
       placement: {
         record: {
           placement: {
             length: number;
-            sealed?: { algorithm: string; kdf: string; salt: string; iv: string; authTag: string };
+            sealed?: {
+              algorithm: string;
+              kdf: string;
+              salt: string;
+              iv: string;
+              authTag: string;
+              keyId?: string;
+            };
             shards: { index: number; holder: string; storedAs: string; digest: string; root: string }[];
           };
         };
@@ -117,12 +133,13 @@ test("the sealed path encrypts before erasure coding and commits to ciphertext",
     const files = holderServers.flatMap((_, index) => filesUnder(join(root, `holder-${index}`)));
     assert.ok(files.length >= 3, "the holders must actually hold shard files");
     for (const file of files) {
-      assert.equal(
-        readFileSync(file).includes(payload),
-        false,
-        `plaintext found in ${file}`,
-      );
+      const content = readFileSync(file);
+      assert.equal(content.includes(payload), false, `plaintext found in ${file}`);
+      assert.equal(content.includes(secret), false, `sealing secret found in ${file}`);
     }
+
+    assert.equal(put.sealedMetadata.keyId, "legacy");
+    assert.equal(put.placement.record.placement.sealed?.keyId, "legacy");
 
     const placement = put.placement.record.placement;
 
@@ -172,6 +189,163 @@ test("the sealed path encrypts before erasure coding and commits to ciphertext",
     await assert.rejects(() => storageGet({ blobHash: put.blobHash }));
 
     process.env.RAREXT_SEALED_SECRET = secret;
+
+    const secondSecret = "sealed-path-second-key-at-least-16";
+    const thirdSecret = "sealed-path-third-key-at-least-16";
+    const fourthSecret = "sealed-path-fourth-key-at-least-16";
+    const opened = async (blobHash: string): Promise<Buffer> => {
+      const got = (await storageGet({ blobHash })) as { content: string };
+      return Buffer.from(got.content, "base64");
+    };
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k2",
+      keys: { k2: secondSecret },
+    });
+    assert.deepEqual(await opened(put.blobHash), payload);
+
+    const put2 = (await storagePut({
+      content: payload.toString("base64"),
+      dataShards: 2,
+      parityShards: 1,
+      sealed: true,
+    })) as typeof put;
+
+    assert.equal(put2.sealedMetadata.keyId, "k2");
+    assert.equal(put2.placement.record.placement.sealed?.keyId, "k2");
+    assert.notEqual(put2.blobHash, put.blobHash);
+    assert.deepEqual(await opened(put2.blobHash), payload);
+    assert.deepEqual(await opened(put.blobHash), payload);
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k3",
+      keys: { k2: secondSecret, k3: thirdSecret },
+    });
+    const put3 = (await storagePut({
+      content: payload.toString("base64"),
+      dataShards: 2,
+      parityShards: 1,
+      sealed: true,
+    })) as typeof put;
+
+    assert.equal(put3.sealedMetadata.keyId, "k3");
+    assert.notEqual(put3.blobHash, put2.blobHash);
+    assert.deepEqual(await opened(put2.blobHash), payload);
+    assert.deepEqual(await opened(put3.blobHash), payload);
+
+    const rotatedFiles = holderServers.flatMap((_, index) =>
+      filesUnder(join(root, `holder-${index}`)),
+    );
+    for (const file of rotatedFiles) {
+      const content = readFileSync(file);
+      for (const forbidden of [secret, secondSecret, thirdSecret]) {
+        assert.equal(content.includes(forbidden), false, `sealing key found in ${file}`);
+      }
+    }
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k3",
+      keys: { k2: secondSecret, k3: thirdSecret },
+      revoked: ["k2"],
+    });
+    await assert.rejects(
+      () => storageGet({ blobHash: put2.blobHash }),
+      /k2 is revoked/,
+    );
+    assert.deepEqual(await opened(put3.blobHash), payload);
+    assert.deepEqual(await opened(put.blobHash), payload);
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k3",
+      keys: { k3: thirdSecret },
+    });
+    await assert.rejects(
+      () => storageGet({ blobHash: put2.blobHash }),
+      /unknown sealed key id: k2/,
+    );
+
+    process.env.RAREXT_SEALED_KEYS = "{not json";
+    await assert.rejects(
+      () =>
+        storagePut({
+          content: payload.toString("base64"),
+          dataShards: 2,
+          parityShards: 1,
+          sealed: true,
+        }),
+      /valid JSON/,
+    );
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k3",
+      keys: { k3: "leaky-config" },
+    });
+    await assert.rejects(
+      () =>
+        storagePut({
+          content: payload.toString("base64"),
+          dataShards: 2,
+          parityShards: 1,
+          sealed: true,
+        }),
+      (error: unknown) => {
+        const text = String(error);
+        assert.equal(text.includes("leaky-config"), false);
+        return /at least 16 bytes/.test(text);
+      },
+    );
+
+    process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+      active: "k3",
+      keys: { k3: thirdSecret },
+    });
+
+    const originalFetch = globalThis.fetch;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const enteredPromise = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let paused = false;
+
+    globalThis.fetch = (async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+
+      if (!paused && url.includes("/v1/holder/shards/")) {
+        paused = true;
+        entered();
+        await gate;
+      }
+
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    try {
+      const pending = storageGet({ blobHash: put3.blobHash });
+      await enteredPromise;
+      process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+        active: "k4",
+        keys: { k4: fourthSecret },
+      });
+      release();
+      const got = (await pending) as { content: string };
+      assert.deepEqual(Buffer.from(got.content, "base64"), payload);
+    } finally {
+      release();
+      globalThis.fetch = originalFetch;
+      process.env.RAREXT_SEALED_KEYS = JSON.stringify({
+        active: "k3",
+        keys: { k3: thirdSecret },
+      });
+    }
 
     const audited = (await storageAudit({ blobHash: put.blobHash, challenge: true })) as {
       audit: { status: string; live: number };

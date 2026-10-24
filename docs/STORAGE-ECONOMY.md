@@ -82,9 +82,11 @@ digests and Merkle roots are recorded in the signed placement. `rarext_storage_g
 decrypts client-side. The HTTP `POST /v1/blobs` route rejects `tier:"sealed"` rather than
 mislabelling plaintext.
 
-The remaining gap is key management, not the cipher path: there is no wrapping key,
-rotation, per-tenant isolation, or envelope review, and `RAREXT_SEALED_SECRET` is a raw
-caller-held secret. Do not sell or treat the tier as audited confidentiality yet.
+The cipher path is real, and the keyring now supports key ids, client-side rotation,
+and revocation. The remaining gap is key management depth, not the cipher: there is no
+wrapping key, recovery path, per-tenant isolation, AAD binding, or envelope review, and
+every key is a raw caller-held secret. Do not sell or treat the tier as audited
+confidentiality yet.
 
 ## Metering: the unit of the economy
 

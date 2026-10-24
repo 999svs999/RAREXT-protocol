@@ -14,7 +14,7 @@ import {
   SHARD_CHUNK_BYTES,
 } from "./durability.ts";
 import { suiteFor, verifyPayload } from "./identity.ts";
-import { isSealedMetadata } from "./sealed-encryption.ts";
+import { isSealedMetadata, type SealedMetadata } from "./sealed-encryption.ts";
 
 export const PLACEMENT_KIND = "rarext.placement";
 
@@ -68,6 +68,22 @@ export const MAX_PLACEMENT_HISTORY = 64;
 
 function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicKey)).digest("hex");
+}
+
+function sameSealedMetadata(
+  left: SealedMetadata | undefined,
+  right: SealedMetadata | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+
+  return (
+    left.algorithm === right.algorithm &&
+    left.kdf === right.kdf &&
+    left.salt === right.salt &&
+    left.iv === right.iv &&
+    left.authTag === right.authTag &&
+    left.keyId === right.keyId
+  );
 }
 
 export function recordDigest(record: PlacementRecord): string {
@@ -381,6 +397,12 @@ export class PlacementRegistry {
 
     if (current) {
       if (recordDigest(current.record) === verified.digest) return { status: 200 };
+      if (!sameSealedMetadata(current.record.placement.sealed, signed.record.placement.sealed)) {
+        return {
+          status: 409,
+          error: "sealed metadata cannot change for an existing blob; re-upload to re-seal",
+        };
+      }
       if (signed.record.sequence !== current.record.sequence + 1) {
         return { status: 409, error: "placement does not extend the current record" };
       }

@@ -79,6 +79,32 @@ services over HTTP, and its measured limits are pinned by the regression tests i
 | A holder token that is wrong or expired | the holder answers 401/403 to every challenge | the challenge records a `rejected` outcome per shard and `rarext_storage_challenge` rejects with `every holder rejected the challenge; check RAREXT_HOLDER_TOKEN` instead of silently reporting every shard lost |
 | `rarext_storage_audit` with a holder not in the placement | the read-only audit sees a configured holder set that is a subset of the placement | the audit degrades to `under-replicated` (shards on the absent holder report not live) instead of failing; `challenge: true` routes through `rarext_storage_challenge` and still requires the full set |
 
+## Sealed-tier keyring limits
+
+`rarext_storage_put`/`rarext_storage_get` with `sealed:true` encrypt before erasure
+coding and record one key id per placement. The keyring is read from
+`RAREXT_SEALED_KEYS` (`{ active, keys, revoked? }`); `RAREXT_SEALED_SECRET` is accepted
+as the legacy key id `legacy`. The limits below are measured by
+`apps/api/test/sealed-path.test.ts`, `apps/api/test/sealed-storage.test.ts`, and
+`apps/api/test/placements.test.ts`:
+
+| Check | Limit / behaviour | What happens at the limit |
+| --- | --- | --- |
+| Neither keyring variable set | a sealed put or get has no key | rejects with `this blob is sealed; set RAREXT_SEALED_KEYS or RAREXT_SEALED_SECRET ...`; no plaintext fallback |
+| Malformed keyring JSON or shape | `RAREXT_SEALED_KEYS` must be a JSON object with `keys` | rejects with `RAREXT_SEALED_KEYS must be valid JSON` or a shape error; the raw value is not echoed |
+| Key id / secret validation | ids are 1-64 safe characters; secrets are 16-1024 UTF-8 bytes | constructor rejects before use; an active id or any revoked id that is invalid is refused |
+| Active id is missing or revoked | `active` must name a configured, unrevoked key | constructor rejects with `active sealed key id ... is not configured` or `the active sealed key id is revoked` |
+| Old blob after rotation | its placement names the old id, which must remain in `keys` | decrypts with the old key; new puts use `active`. Removing the id makes it unknown |
+| Revoked key id | listed in `revoked` | get rejects with `sealed key <id> is revoked` even when the secret is still configured; no partial plaintext is returned |
+| Unknown key id | metadata names an id absent from `keys` | get rejects with `unknown sealed key id: <id>`; the whole blob fails rather than returning partial bytes |
+| Legacy metadata with no key id | old envelope from before key ids | opens with a configured `legacy` key, or when the ring has exactly one key; otherwise rejects with `does not name a key id` |
+| Rotation during an in-flight read | keyring is snapshotted before holder reads | the read completes with the snapshot; changing the environment mid-read does not make it fail |
+| Re-seal existing blob in place | not supported | a placement extension that changes `sealed` metadata is refused with `sealed metadata cannot change for an existing blob; re-upload to re-seal`; fresh salt/IV also means a new ciphertext and blob hash, so the client must re-encrypt and re-upload every shard |
+| Partial per-shard rotation | not representable | one envelope covers the whole payload before erasure coding and the placement has one `sealed.keyId`; there is no per-shard key state |
+| Holder receives a key | never | holders store ciphertext and public salt/IV/tag; keys and secrets stay in the client/agent process. Rotation needs no holder action |
+| Lost key | no recovery | every blob sealed under the missing id is unrecoverable; keep old ids until those blobs are re-uploaded |
+| Error/log leakage | no key, plaintext, nonce, salt, tag, or ciphertext | errors are generic or name only the key id; tests stringify errors and compare against those values |
+
 ## Holder process fault limits
 
 The holder process stores shard bytes for other machines and answers nonce-bound

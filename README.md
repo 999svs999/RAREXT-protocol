@@ -187,9 +187,10 @@ at **394 MiB RSS** (latest rerun 393 MiB), and 1 GiB over raw holder HTTP peaked
 and retrievals (100%)**, 145/145 repairs, and 145/145 re-audits with 23 holder
 kills; the earlier 611 s run did **143 repairs** but only 99.9% of puts, which is why
 retry was added. **44** random 4 KiB samples detect 10% withholding at 99% confidence.
-These are one-machine, mostly loopback measurements. The sealed tier is not confidential
-until its envelope is reviewed, and disks, power loss, TLS, and multi-writer coordination
-are not covered. See [docs/STORAGE.md](docs/STORAGE.md) before quoting any of it.
+These are one-machine, mostly loopback measurements. The sealed tier has key ids,
+client-side rotation, and revocation, but its envelope is unreviewed and has no key
+wrapping, recovery, or AAD binding, so it is not audited confidentiality. Disks, power
+loss, TLS, and multi-writer coordination are not covered. See [docs/STORAGE.md](docs/STORAGE.md) before quoting any of it.
 
 #### Run a storage network
 

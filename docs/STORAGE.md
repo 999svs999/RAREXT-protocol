@@ -59,10 +59,11 @@ bounded by its 8 MiB chunk size, not by the 1 GiB payload.
 
 ## What is not proven
 
-- **The sealed tier is not confidential yet.** Payloads are not encrypted by default.
-  The sealed encryptor is unreviewed and its key envelope does not yet match the RFC
-  0015 specification (PBKDF2 instead of HKDF); do not treat sealed mode as a
-  confidentiality guarantee until that envelope is reviewed and fixed.
+- **The sealed tier is opt-in and not audited.** Payloads are not encrypted by
+  default. The sealed path uses HKDF-SHA256 + AES-256-GCM and now records key ids with
+  client-side rotation/revocation, but the envelope has no key wrapping, AAD binding,
+  per-tenant isolation, recovery, or independent review. Do not treat sealed mode as a
+  confidentiality guarantee until those gaps are closed.
 - **The soak is not a durability proof.** It is one machine, loopback, 64 KiB payloads,
   with holders restarted against the same directories. It says nothing about disks,
   power loss, TLS, clock skew, or multi-writer coordination. The 1 GiB run is one

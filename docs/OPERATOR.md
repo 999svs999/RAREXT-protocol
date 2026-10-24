@@ -5,8 +5,8 @@ design. It covers the local demo, a persistent multi-holder set, the API, the pi
 service, a client, and the things that will bite you.
 
 Status: holders, placement, challenge/audit, repair, GC, quotas, rate limits, token
-rotation, and the sealed client path are implemented and tested on loopback and a
-non-loopback interface. There is no built-in TLS, no managed key service, no multi-writer
+rotation, and the sealed client path with key ids/rotation are implemented and tested
+on loopback and a non-loopback interface. There is no built-in TLS, no managed key service, no multi-writer
 coordination, and no production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`](STORAGE-SECURITY.md) and
 [`HARDENING.md`](HARDENING.md) before exposing anything.
 
@@ -288,10 +288,24 @@ shards and digest-checks them.
 For a one-shot local proof of the same path, run `npm run example:mcp-storage` or
 `npm run example:sealed-storage`. Both create their own temporary holders and clean up.
 
-Sealed puts encrypt client-side before encoding. Set `RAREXT_SEALED_SECRET` to at least
-16 characters; without it, a `sealed:true` put fails rather than silently storing
-plaintext. Losing that secret loses the data: there is no key wrapping, rotation, or
-recovery path yet.
+Sealed puts encrypt client-side before encoding. Configure a keyring with
+`RAREXT_SEALED_KEYS`, a JSON object whose `keys` maps key ids to secrets of 16-1024
+bytes and whose `active` id encrypts new puts:
+
+```bash
+RAREXT_SEALED_KEYS='{"active":"k2","keys":{"k1":"replace-with-a-real-secret","k2":"replace-with-another-secret"}}' \
+npm run dev:mcp
+```
+
+`RAREXT_SEALED_SECRET` still works as the legacy key id `legacy`. Without either, a
+`sealed:true` put fails rather than silently storing plaintext. Each placement records
+its key id, so to rotate add the new key, make it active, and restart the MCP process;
+old blobs stay readable while the old id remains in `keys`. Put an id in `revoked` to
+refuse it even if its secret is still present. Revoke an old id only after every blob
+under it is re-uploaded, because re-sealing cannot reuse the old shards: a fresh salt
+and IV produce a new blob hash and require re-uploading every shard. Holders never
+receive a key and need no rotation action. Losing a key loses every blob sealed under
+that id; there is no wrapping, recovery, per-tenant isolation, or AAD binding yet.
 
 ### 5. An external agent
 
@@ -379,8 +393,9 @@ directory is wiped.
 - **TLS.** The API can serve HTTPS directly (`RAREXT_TLS_CERT`/`RAREXT_TLS_KEY`), but a
   reverse proxy is still the recommended edge. Holders and the pin service remain
   HTTP-only, so keep them on a private network or front them too.
-- **Key management for the sealed tier.** `RAREXT_SEALED_SECRET` is a raw secret with
-  no wrapping, rotation, per-tenant isolation, or AAD binding; the envelope is
+- **Key management for the sealed tier.** `RAREXT_SEALED_KEYS` supports key ids,
+  active selection, and revocation, but each entry is still a raw secret with no
+  wrapping, recovery path, per-tenant isolation, or AAD binding; the envelope is
   unreviewed. Treat sealed storage as a prototype.
 - **Large file input at the MCP boundary.** Holders accept raw file upload/download,
   `placeStreamed`/`retrieveStreamed` move a 1 GiB blob with a flat client peak (about

@@ -17,6 +17,7 @@ import {
   signPlacement,
   verifyPlacement,
 } from "../src/placements.ts";
+import { encryptSealedPayload, sealedMetadata } from "../src/sealed-encryption.ts";
 import { RarextStore } from "../src/store.ts";
 import { post, start, stop } from "./helpers.ts";
 
@@ -156,6 +157,37 @@ test("placements are recorded and read back over HTTP", async () => {
     assert.equal(unknown.status, 404);
   } finally {
     await stop(server);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a placement cannot change sealed metadata without re-uploading the blob", async () => {
+  const { root, placement, signer } = await placed();
+
+  try {
+    const sealed = sealedMetadata(
+      encryptSealedPayload(Buffer.from("sealed placement bytes"), "placement-test-secret").envelope,
+    );
+    const first = signPlacement({ ...placement, sealed }, signer);
+    const registry = new PlacementRegistry(join(root, "records"));
+
+    assert.equal(registry.put(first).status, 201);
+
+    const changed = signPlacement(
+      { ...placement, sealed: { ...sealed, keyId: "rotated" } },
+      signer,
+      first,
+    );
+    const rejected = registry.put(changed);
+
+    assert.equal(rejected.status, 409);
+    assert.match(rejected.error ?? "", /sealed metadata cannot change/);
+    assert.equal(registry.get(placement.blobHash)!.record.sequence, 0);
+    assert.equal(registry.historyFor(placement.blobHash).length, 1);
+
+    const unsealed = signPlacement({ ...placement, sealed: undefined }, signer, first);
+    assert.equal(registry.put(unsealed).status, 409);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

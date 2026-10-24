@@ -16,12 +16,7 @@ import {
 } from "../../api/src/placements.ts";
 import { cidV1Raw } from "../../api/src/adapters/content.ts";
 import { AgentSigner, readAgentKeyfile } from "../../../packages/agent-sdk/src/index.ts";
-import {
-  decryptSealedPayload,
-  encryptSealedPayload,
-  sealedEnvelope,
-  sealedMetadata,
-} from "../../api/src/sealed-encryption.ts";
+import { SealedKeyring, sealedMetadata } from "../../api/src/sealed-encryption.ts";
 
 const DEFAULT_API = "http://127.0.0.1:8787";
 const DEFAULT_PIN = "http://127.0.0.1:9700";
@@ -39,20 +34,56 @@ function holderToken(): string | undefined {
   return process.env.RAREXT_HOLDER_TOKEN || undefined;
 }
 
-function sealedSecret(required: boolean): string | undefined {
-  const secret = process.env.RAREXT_SEALED_SECRET;
+function sealedKeyring(): SealedKeyring {
+  const raw = process.env.RAREXT_SEALED_KEYS;
+  const legacy = process.env.RAREXT_SEALED_SECRET;
 
-  if (!required) return secret || undefined;
+  if (raw) {
+    let parsed: unknown;
 
-  if (!secret) {
-    throw new Error("this blob is sealed; set RAREXT_SEALED_SECRET to encrypt or decrypt it");
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error("RAREXT_SEALED_KEYS must be valid JSON");
+    }
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("RAREXT_SEALED_KEYS must be a JSON object");
+    }
+
+    const record = parsed as { active?: unknown; keys?: unknown; revoked?: unknown };
+
+    if (!record.keys || typeof record.keys !== "object" || Array.isArray(record.keys)) {
+      throw new Error("RAREXT_SEALED_KEYS.keys must be a JSON object of key id to secret");
+    }
+
+    if (record.revoked !== undefined && !Array.isArray(record.revoked)) {
+      throw new Error("RAREXT_SEALED_KEYS.revoked must be an array of key ids");
+    }
+
+    const keys = { ...(record.keys as Record<string, string>) };
+
+    if (legacy) {
+      if (keys.legacy !== undefined && keys.legacy !== legacy) {
+        throw new Error("RAREXT_SEALED_SECRET conflicts with RAREXT_SEALED_KEYS.keys.legacy");
+      }
+      keys.legacy ??= legacy;
+    }
+
+    return new SealedKeyring({
+      active: record.active as string,
+      keys,
+      revoked: (record.revoked as string[] | undefined) ?? [],
+    });
   }
 
-  if (secret.length < 16) {
-    throw new Error("RAREXT_SEALED_SECRET must be at least 16 characters");
+  if (!legacy) {
+    throw new Error(
+      "this blob is sealed; set RAREXT_SEALED_KEYS or RAREXT_SEALED_SECRET to encrypt or decrypt it",
+    );
   }
 
-  return secret;
+  return new SealedKeyring({ active: "legacy", keys: { legacy } });
 }
 
 function storageHolders(): DurabilityHolder[] {
@@ -276,8 +307,8 @@ export async function storagePut(args: Record<string, unknown>): Promise<unknown
   }
 
   const sealed = args.sealed === true;
-  const secret = sealedSecret(sealed);
-  const encrypted = sealed ? encryptSealedPayload(encoded, secret!) : null;
+  const keyring = sealed ? sealedKeyring() : undefined;
+  const encrypted = keyring ? keyring.seal(encoded) : null;
   const stored = encrypted ? encrypted.ciphertextBytes : encoded;
   const metadata = encrypted ? sealedMetadata(encrypted.envelope) : null;
 
@@ -316,6 +347,7 @@ export async function storageGet(args: Record<string, unknown>): Promise<unknown
   if (!/^[0-9a-f]{64}$/.test(blobHash)) throw new Error("blobHash must be a sha256 hex digest");
 
   const placement = await placementFor(ledger, blobHash, args.placement);
+  const keyring = placement.sealed ? sealedKeyring() : undefined;
   const holders = holdersById();
   const verified: ErasureShard[] = [];
   const errors: { index: number; holder: string; error: string }[] = [];
@@ -368,9 +400,7 @@ export async function storageGet(args: Record<string, unknown>): Promise<unknown
   }
 
   const stored = decodeBytes(verified.slice(0, placement.dataShards));
-  const content = placement.sealed
-    ? decryptSealedPayload(sealedEnvelope(placement.sealed, stored), sealedSecret(true)!)
-    : stored;
+  const content = placement.sealed ? keyring!.open(placement.sealed, stored) : stored;
 
   return {
     blobHash,
@@ -517,7 +547,7 @@ export const storageTools = [
   {
     name: "rarext_storage_put",
     description:
-      "Erasure-code base64 content, place the shards on the configured holders, sign the placement with the local agent key, and register it with the API. Set sealed:true to encrypt with HKDF-SHA256 + AES-256-GCM using RAREXT_SEALED_SECRET before erasure coding, so holders receive only ciphertext. Returns the signed placement; content is capped by RAREXT_STORAGE_MAX_BYTES.",
+      "Erasure-code base64 content, place the shards on the configured holders, sign the placement with the local agent key, and register it with the API. Set sealed:true to encrypt with HKDF-SHA256 + AES-256-GCM using the active RAREXT_SEALED_KEYS key before erasure coding, so holders receive only ciphertext. RAREXT_SEALED_SECRET supplies the legacy key. Returns the signed placement; content is capped by RAREXT_STORAGE_MAX_BYTES.",
     inputSchema: {
       type: "object",
       properties: {
@@ -527,7 +557,7 @@ export const storageTools = [
         tier: { type: "string", enum: ["ephemeral", "pinned", "durable"] },
         sealed: {
           type: "boolean",
-          description: "Encrypt before erasure coding with RAREXT_SEALED_SECRET (at least 16 characters).",
+          description: "Encrypt before erasure coding with the active sealed key.",
         },
       },
       required: ["content"],
@@ -536,7 +566,7 @@ export const storageTools = [
   {
     name: "rarext_storage_get",
     description:
-      "Read a placed blob from the configured holders, verify each shard digest, reconstruct from k shards, and return base64 content plus any holder errors. A sealed blob is decrypted with RAREXT_SEALED_SECRET.",
+      "Read a placed blob from the configured holders, verify each shard digest, reconstruct from k shards, and return base64 content plus any holder errors. A sealed blob is decrypted with the key id recorded in its placement, or the legacy RAREXT_SEALED_SECRET.",
     inputSchema: {
       type: "object",
       properties: {
