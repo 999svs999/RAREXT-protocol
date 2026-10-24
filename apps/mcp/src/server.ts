@@ -17,6 +17,7 @@ import {
   removeAgentKeyfile,
   writeAgentKeyfile,
 } from "../../../packages/agent-sdk/src/index.ts";
+import { verifyAiLocally } from "./verify-ai.ts";
 import {
   storageAudit,
   storageChallenge,
@@ -365,6 +366,19 @@ const tools = [
     },
   },
   {
+    name: "rarext_verify_ai",
+    description:
+      "Independently verify an AI artifact locally without trusting the server: replay a committed generative model from its seed, or recompute a bounded metric against the challenge's committed reference. Returns the representation kind, the verdict, and the evidence (model digest or achieved metric value).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challengeId: { type: "string" },
+        artifact: artifactSchema,
+      },
+      required: ["challengeId", "artifact"],
+    },
+  },
+  {
     name: "rarext_anchor",
     description:
       "Batch all unanchored publications into a Merkle root. Uses TRAC_ANCHOR_URL when configured, otherwise stores a local anchor.",
@@ -646,6 +660,13 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
 
     case "rarext_verify":
       return client.verify(String(args.publicationId ?? ""));
+
+    case "rarext_verify_ai":
+      return verifyAiLocally(
+        String(args.challengeId ?? ""),
+        args.artifact as Artifact,
+        client,
+      );
 
     case "rarext_anchor":
       return client.anchor();
