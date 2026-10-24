@@ -82,7 +82,7 @@ export interface Challenge {
   sponsor?: string | null;
 }
 
-export type ClaimKind = "satisfies" | "attests" | "produces" | "derives";
+export type ClaimKind = "satisfies" | "attests" | "produces" | "derives" | "exact" | "bounded" | "generative";
 
 export type ProofKind = "recomputable" | "committed" | "attested" | "salted";
 
@@ -118,6 +118,7 @@ export type SemanticsBinding = "ok" | "missing" | "version-mismatch" | "spec-mis
 export interface Claim {
   kind: ClaimKind;
   subject: string;
+  representation?: "exact" | "bounded" | "generative";
   semanticsId: string;
   semanticsVersion: number;
   semanticsHash: string;
@@ -128,6 +129,10 @@ export interface Claim {
   verifier: string;
   verifierHash: string;
   createdAt: string;
+  metricName?: string;
+  metricBound?: number;
+  modelDigest?: string;
+  seed?: string;
 }
 
 export interface AppInfo {
@@ -156,6 +161,11 @@ export interface VerificationOutput {
   gateCount?: number;
   proof?: unknown;
   details?: unknown;
+  /** Representation kind this verification checked: exact bytes, bounded metric, or generative replay. */
+  representation?: "exact" | "bounded" | "generative";
+  /** For bounded verification: the metric name and the value the artifact achieved. */
+  metricName?: string;
+  metricValue?: number;
 }
 
 export type InputValues = Record<string, Bit>;
@@ -209,6 +219,8 @@ export interface Attestation {
   semanticsVersion: number;
   semanticsHash: string;
   claimKind: ClaimKind;
+  /** Representation kind attested: exact, bounded, or generative. Defaults to exact. */
+  representation?: "exact" | "bounded" | "generative";
   scope: ClaimScope | null;
   verifierHash: string;
   proofKind: ProofKind;

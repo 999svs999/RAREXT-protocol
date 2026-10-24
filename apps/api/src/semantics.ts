@@ -55,7 +55,7 @@ function asSemantics(value: unknown, fallbackApp: string): Semantics {
   }
 
   const claimKind = record.claimKind ?? "satisfies";
-  if (!["satisfies", "attests", "produces", "derives"].includes(claimKind)) {
+  if (!["satisfies", "attests", "produces", "derives", "exact", "bounded", "generative"].includes(claimKind)) {
     throw new Error(`semantics ${record.id} has an unknown claim kind`);
   }
 
