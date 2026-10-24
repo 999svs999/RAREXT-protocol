@@ -1,19 +1,25 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
 import { once } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { networkInterfaces, tmpdir } from "node:os";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { DurabilityLedger, httpHolder } from "../src/durability.ts";
-import { decodeBytes, encodeBytes } from "../src/erasure.ts";
+import { encodeFileToShards } from "../src/erasure-stream.ts";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const TOKEN = "non-loopback-test-token";
+
+function scratch(prefix: string): string {
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  return mkdtempSync(join(base, prefix));
+}
 
 function nonLoopbackIPv4(): string | null {
   for (const addresses of Object.values(networkInterfaces())) {
@@ -89,15 +95,16 @@ async function stopHolder(child: ChildProcess): Promise<void> {
   await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 2_000))]);
 }
 
-test("places a shard on a holder bound to a non-loopback address in a separate process", { timeout: 60_000 }, async (t) => {
+test("streams across a non-loopback holder, enforces its token, and retrieves byte-exact", { timeout: 60_000 }, async (t) => {
   const lan = nonLoopbackIPv4();
   if (!lan) {
     t.skip("no non-loopback IPv4 interface is available");
     return;
   }
 
-  const directory = mkdtempSync(join(tmpdir(), "rarext-non-loopback-"));
+  const directory = scratch("rarext-non-loopback-");
   const children: ChildProcess[] = [];
+  const urls: string[] = [];
   const holders = [];
 
   try {
@@ -107,14 +114,26 @@ test("places a shard on a holder bound to a non-loopback address in a separate p
       const id = `holder-${index}`;
       const port = await freePort(host);
       const child = await startHolder(id, host, port, join(directory, id));
+      const url = `http://${host}:${port}`;
       children.push(child);
-      holders.push(httpHolder(id, `http://${host}:${port}`, { token: TOKEN }));
+      urls.push(url);
+      holders.push(httpHolder(id, url, { token: TOKEN }));
     }
 
     const payload = randomBytes(256 * 1024);
-    const shards = encodeBytes(payload, 2, 1);
+    const inputPath = join(directory, "payload.bin");
+    writeFileSync(inputPath, payload);
+
+    const streamed = encodeFileToShards({
+      inputPath,
+      outputDir: join(directory, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+
     const ledger = new DurabilityLedger();
-    const placement = await ledger.place(shards, holders, "durable");
+    const placement = await ledger.placeStreamed(streamed, holders, "durable");
 
     assert.ok(
       placement.shards.some((shard) => shard.holder === "holder-0"),
@@ -125,24 +144,28 @@ test("places a shard on a holder bound to a non-loopback address in a separate p
     assert.equal(outcomes.filter((outcome) => outcome.ok).length, 3);
     assert.equal(ledger.audit(placement.blobHash).status, "ok");
 
-    const recovered = [];
+    const output = join(directory, "retrieved.bin");
+    const result = await ledger.retrieveStreamed(placement, output, holders);
+    assert.equal(result.sha256, streamed.payloadDigest);
+    assert.deepEqual(readFileSync(output), payload);
 
-    for (const shard of placement.shards.slice(0, placement.dataShards)) {
-      const holder = holders.find((candidate) => candidate.id === shard.holder)!;
-      const bytes = await holder.get(shard.storedAs);
-      assert.ok(bytes);
-      recovered.push({
-        index: shard.index,
-        dataShards: placement.dataShards,
-        parityShards: placement.parityShards,
-        length: placement.length,
-        payloadDigest: placement.blobHash,
-        digest: shard.digest,
-        bytes,
-      });
-    }
+    // A non-loopback bind requires a token, and the raw shard stream is behind
+    // the same check. One rejected holder degrades to parity; three fail closed.
+    const anonymous = holders.map((holder, index) => httpHolder(holder.id, urls[index]!));
+    const withOneRejected = await ledger.retrieveStreamed(
+      placement,
+      join(directory, "one-rejected.bin"),
+      [anonymous[0]!, holders[1]!, holders[2]!],
+    );
+    assert.equal(withOneRejected.downloaded, 2);
+    assert.deepEqual(readFileSync(join(directory, "one-rejected.bin")), payload);
 
-    assert.deepEqual(Buffer.from(decodeBytes(recovered)), payload);
+    const rejectedOutput = join(directory, "all-rejected.bin");
+    await assert.rejects(
+      () => ledger.retrieveStreamed(placement, rejectedOutput, anonymous),
+      /rejected getFile: 401/,
+    );
+    assert.equal(existsSync(rejectedOutput), false);
   } finally {
     await Promise.all(children.map(stopHolder));
     rmSync(directory, { recursive: true, force: true });

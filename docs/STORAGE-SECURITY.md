@@ -102,11 +102,25 @@ old attestations.
 
 ### HTTP holders
 
-`httpHolder` sends an optional bearer token, uses a request timeout (15 s by default),
-caps JSON responses (4 KiB for `put`, 256 KiB for challenges, 48 MiB for shard bytes),
-rejects a `storedAs` that is not a 64-hex digest, and re-hashes every shard returned by
-`get` before accepting it. A lying holder cannot substitute different bytes for the
-name the placement recorded.
+`httpHolder` sends an optional bearer token, uses a socket-idle/request timeout (15 s
+by default), and caps a raw shard download with a total wall-clock deadline (120 s by
+default, `readTimeoutMs`). The idle timeout stops a peer that accepts and never
+answers; the total deadline stops a peer that sends headers and then trickles bytes
+forever. Both are per attempt, so one dead holder cannot consume the whole read.
+It caps JSON responses (4 KiB for `put`, 256 KiB for challenges, 48 MiB for shard
+bytes), rejects a `storedAs` that is not a 64-hex digest, and re-hashes every shard
+returned by `get` or `getFile` before accepting it. A lying holder cannot substitute
+different bytes for the name the placement recorded: a wrong-length, garbage, or
+partially transferred body is deleted and skipped, never passed to reconstruction.
+A raw `401`/`403` becomes `HolderRejectedError`, so an exhausted token is reported as
+`holder <id> rejected getFile: 401` instead of being mistaken for a missing shard.
+
+`retrieveStreamed` downloads up to four shards at once by default and makes one
+attempt per holder. There is no same-holder retry; parity shards are the retry budget
+across holders. Requests already in flight when `k` succeed are awaited and their
+temporary files are removed, so a slow holder is not dropped prematurely and a dead
+one costs at most one timeout, not one timeout per shard. If fewer than `k` shards
+survive, the call fails before decode and creates no output.
 
 `createHolderServer` compares the bearer token in constant time, caps the declared and
 streamed request body, bounds the challenge nonce, validates the leaf index, and keeps a

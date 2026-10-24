@@ -13,8 +13,9 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 `apps/api/test/durability-repair-fault.test.ts`,
 `apps/api/test/erasure-stream-http.test.ts`, `apps/api/test/erasure-stream.test.ts`,
 `apps/api/test/erasure-storage.test.ts`, `apps/api/test/persistence.test.ts`,
-`apps/api/test/merkle.test.ts`, `apps/api/test/audit-attestation.test.ts`, and
-`apps/api/test/claim-verify.test.ts`:
+`apps/api/test/merkle.test.ts`, `apps/api/test/audit-attestation.test.ts`,
+`apps/api/test/holder-transport.test.ts`, `apps/api/test/gate-multiholder.test.ts`,
+`apps/api/test/non-loopback-holder.test.ts`, and `apps/api/test/claim-verify.test.ts`:
 
 | Check | Limit / behaviour | What happens at the limit |
 | --- | --- | --- |
@@ -26,6 +27,13 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 | Streamed shard file size | file size must equal the signed shard size (`paddedLength / k`) | a short or oversized file rejects `shard <i> file is <n> bytes, expected <m>`; the destination is untouched |
 | Streamed shard content | selected files must match the signed `sha256` and 4 KiB leaf count | a same-sized edit rejects `shard <i> bytes do not match their recorded digest`; a leaf-count mismatch rejects `shard <i> leaf count does not match its recorded root`; neither writes output |
 | Reconstructed payload | full output SHA-256 must equal the signed `payloadDigest` | a mismatch rejects `the reconstructed payload does not match its digest`; the temporary file is removed and any existing destination is left unchanged |
+| Multi-holder download concurrency | `retrieveStreamed` keeps at most 4 shard downloads in flight by default; `concurrency` overrides it, capped by the shard count | a dead holder occupies one slot for at most its read timeout, not the whole read; worst-case attempt rounds are `ceil(shards / concurrency)`, and unneeded shards are not scheduled after `k` succeed |
+| Holder read timeouts | socket idle timeout `timeoutMs` = 15 s; total raw-GET deadline `readTimeoutMs` = 120 s, including a body that trickles bytes | a holder that accepts and never answers fails that attempt after 15 s; a headers-then-trickle holder fails at 120 s; both are skipped, and the other shards still reconstruct |
+| Read retry bound | one `getFile` attempt per holder per retrieval; there is no same-holder retry | parity shards are the retry budget across holders; if fewer than `k` remain, the call rejects and the caller may retry the whole retrieval |
+| Bad raw shard body | every raw body is hashed against the placement's `storedAs` before the temporary file is renamed | a wrong-length, garbage, overwritten, or mid-chunk-dropped body throws, is deleted, and is never fed into reconstruction |
+| Faulty holder during retrieval | connection refused, TLS handshake failure, 404/500, 401/403 token rejection, timeout, and dropped body are all per-shard failures | recovery continues while at least `k` distinct shards succeed; the final error lists up to four reasons, and an exhausted token surfaces `holder <id> rejected getFile: 401` rather than reading every shard as absent |
+| More losses than parity | fewer than `k` shards download | rejects `need <k> shard files, downloaded <n>; ...` before decode; no output file and no partial or zero-filled payload is produced |
+| Concurrent readers of one blob | each `retrieveStreamed` call has its own work directory and no shared mutable download state | simultaneous reads across the same holder set each produce the signed payload digest; one slow or failing holder does not block another caller's successful shards |
 | Rebuilt repair shard | rebuilt bytes must match the signed size, SHA-256, leaf count, and Merkle root | `reencodeStreamedShard` checks before upload; a mismatch removes the temporary file and repair fails before committing the placement |
 | Duplicate or relabelled shard | indices must be distinct; a copied shard with a recomputed self-digest still fails the final payload digest | `decodeBytes` rejects duplicate indices (`shard <i> appears twice`) or the reconstructed digest; identical bytes are valid only when the payload actually decodes to the signed digest |
 | Merkle proof at challenge | proof must match the stored root, leaf index, and full path | `verifyProof` returns `false` for a wrong root, wrong index, truncated proof, or reordered siblings; the ledger records `bad-proof` and does not mark the shard live |

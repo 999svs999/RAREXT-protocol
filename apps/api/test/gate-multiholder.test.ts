@@ -1,118 +1,104 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import test from "node:test";
 import { once } from "node:events";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { join } from "node:path";
+import test from "node:test";
 
+import { DurabilityLedger, httpHolder, type DurabilityHolder } from "../src/durability.ts";
+import { encodeFileToShards } from "../src/erasure-stream.ts";
 import { createHolderServer } from "../src/holder-server.ts";
-import { DurabilityLedger, httpHolder } from "../src/durability.ts";
-import { encodeBytes, decodeBytes } from "../src/erasure.ts";
 
-test("end-to-end multi-holder gate with live holder failure, audit under-replication, repair, and byte-exact retrieval", async () => {
-  const root = mkdtempSync(join(tmpdir(), "rarext-gate-"));
-  const h0Dir = join(root, "h0");
-  const h1Dir = join(root, "h1");
-  const h2Dir = join(root, "h2");
+interface RunningHolder {
+  holder: DurabilityHolder;
+  stop: () => Promise<void>;
+}
 
-  const s0 = createHolderServer({ id: "holder-0", directory: h0Dir });
-  const s1 = createHolderServer({ id: "holder-1", directory: h1Dir });
-  const s2 = createHolderServer({ id: "holder-2", directory: h2Dir });
+function scratch(prefix: string): string {
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  return mkdtempSync(join(base, prefix));
+}
 
-  s0.listen(0, "127.0.0.1");
-  s1.listen(0, "127.0.0.1");
-  s2.listen(0, "127.0.0.1");
+async function startHolder(id: string, root: string): Promise<RunningHolder> {
+  const server = createHolderServer({ id, directory: join(root, id) });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
 
-  await Promise.all([once(s0, "listening"), once(s1, "listening"), once(s2, "listening")]);
+  return {
+    holder: httpHolder(id, `http://127.0.0.1:${port}`),
+    stop: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
 
-  const p0 = (s0.address() as AddressInfo).port;
-  const p1 = (s1.address() as AddressInfo).port;
-  const p2 = (s2.address() as AddressInfo).port;
-
-  const h0 = httpHolder("holder-0", `http://127.0.0.1:${p0}`);
-  const h1 = httpHolder("holder-1", `http://127.0.0.1:${p1}`);
-  const h2 = httpHolder("holder-2", `http://127.0.0.1:${p2}`);
-
-  const activeHolders = [h0, h1, h2];
+test("multi-holder gate survives a live failure, repairs, and retrieves concurrently", { timeout: 30_000 }, async () => {
+  const root = scratch("rarext-gate-");
+  const h0 = await startHolder("holder-0", root);
+  const h1 = await startHolder("holder-1", root);
+  const h2 = await startHolder("holder-2", root);
+  let h3: RunningHolder | null = null;
 
   try {
-    const payload = randomBytes(32 * 1024);
-    const ledger = new DurabilityLedger();
+    const payload = randomBytes(320_000);
+    const inputPath = join(root, "payload.bin");
+    writeFileSync(inputPath, payload);
 
-    // 1. Place blob across 3 holders (k=2, m=1)
-    const encoded = encodeBytes(payload, 2, 1);
-    const placement = await ledger.place(encoded, activeHolders, "durable");
-    assert.equal(placement.shards.length, 3);
+    const streamed = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+
+    const ledger = new DurabilityLedger();
+    const activeHolders = [h0.holder, h1.holder, h2.holder];
+    const placement = await ledger.placeStreamed(streamed, activeHolders, "durable");
     const blobHash = placement.blobHash;
 
-    // 2. Challenge active holders to establish liveness
+    assert.equal(placement.shards.length, 3);
     await ledger.challenge(blobHash, activeHolders);
-    const auditInitial = ledger.audit(blobHash);
-    assert.equal(auditInitial.status, "ok");
+    assert.equal(ledger.audit(blobHash).status, "ok");
 
-    // 3. Kill holder 1 mid-flight (close server)
-    s1.closeAllConnections();
-    await new Promise<void>((resolve) => s1.close(() => resolve()));
-
-    // 4. Challenging dead holder 1 will cause misses/failure, leading to under-replication
+    // Lose one of three shards (k=2, m=1): still retrievable, but the audit is
+    // under-replicated until repair moves the lost shard to a fresh holder.
+    await h1.stop();
     await ledger.challenge(blobHash, activeHolders);
-    const auditDegraded = ledger.audit(blobHash);
-    assert.equal(auditDegraded.status, "under-replicated");
+    assert.equal(ledger.audit(blobHash).status, "under-replicated");
 
-    // 5. Bring in a spare replacement holder h3
-    const h3Dir = join(root, "h3");
-    const s3 = createHolderServer({ id: "holder-3", directory: h3Dir });
-    s3.listen(0, "127.0.0.1");
-    await once(s3, "listening");
-    const p3 = (s3.address() as AddressInfo).port;
-    const h3 = httpHolder("holder-3", `http://127.0.0.1:${p3}`);
+    h3 = await startHolder("holder-3", root);
+    const repairHolders = [h0.holder, h2.holder, h3.holder];
+    const repaired = await ledger.repair(blobHash, repairHolders);
+    assert.equal(repaired.filled, 1);
 
-    try {
-      // 6. Repair blob using surviving holder h0, h2, and spare h3
-      const repairHolders = [h0, h2, h3];
-      const repairedOutcome = await ledger.repair(blobHash, repairHolders);
-      assert.ok(repairedOutcome.filled > 0);
+    await ledger.challenge(blobHash, repairHolders);
+    assert.equal(ledger.audit(blobHash).status, "ok");
 
-      // 7. Challenge and audit recovered state -> ok
-      await ledger.challenge(blobHash, repairHolders);
-      const auditRecovered = ledger.audit(blobHash);
-      assert.equal(auditRecovered.status, "ok");
+    // The same placement read at once by several callers must produce byte-exact
+    // output without one read starving or corrupting another.
+    const retrievals = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        ledger.retrieveStreamed(
+          repaired.placement,
+          join(root, `retrieved-${index}.bin`),
+          repairHolders,
+          { concurrency: 3 },
+        ),
+      ),
+    );
 
-      // 8. Retrieve shards from surviving/repaired holders and verify byte-exact reconstruction
-      const survivorShards = await Promise.all(
-        repairedOutcome.placement.shards.map(async (shard) => {
-          const holder = repairHolders.find((h) => h.id === shard.holder)!;
-          const foundBytes = await holder.get(shard.storedAs);
-          assert.ok(foundBytes);
-          return {
-            index: shard.index,
-            dataShards: repairedOutcome.placement.dataShards,
-            parityShards: repairedOutcome.placement.parityShards,
-            length: repairedOutcome.placement.length,
-            payloadDigest: repairedOutcome.placement.blobHash,
-            digest: shard.digest,
-            bytes: Uint8Array.from(foundBytes),
-          };
-        }),
-      );
-
-      const decodedPayload = decodeBytes(survivorShards);
-      assert.deepEqual(Buffer.from(decodedPayload), payload);
-
-    } finally {
-      s3.closeAllConnections();
-      await new Promise<void>((resolve) => s3.close(() => resolve()));
+    for (const [index, result] of retrievals.entries()) {
+      assert.equal(result.downloaded, 2);
+      assert.equal(result.sha256, streamed.payloadDigest);
+      assert.deepEqual(readFileSync(join(root, `retrieved-${index}.bin`)), payload);
     }
-
   } finally {
-    s0.closeAllConnections();
-    s2.closeAllConnections();
-    await Promise.all([
-      new Promise<void>((resolve) => s0.close(() => resolve())),
-      new Promise<void>((resolve) => s2.close(() => resolve())),
-    ]);
+    await Promise.all([h0.stop(), h2.stop(), ...(h3 ? [h3.stop()] : [])]);
     rmSync(root, { recursive: true, force: true });
   }
 });

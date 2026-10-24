@@ -239,11 +239,23 @@ export function directoryHolder(id: string, directory: string): DurabilityHolder
 export function httpHolder(
   id: string,
   baseUrl: string,
-  options: { fetch?: typeof fetch; token?: string; timeoutMs?: number } = {},
+  options: {
+    fetch?: typeof fetch;
+    token?: string;
+    timeoutMs?: number;
+    /**
+     * Total wall-clock budget for a raw shard download, including a holder that
+     * sends headers and then trickles bytes. `timeoutMs` only bounds socket
+     * inactivity. Defaults to 120 s so a large shard on a slow link is not
+     * dropped, while a stalled body still has a finite deadline.
+     */
+    readTimeoutMs?: number;
+  } = {},
 ): DurabilityHolder {
   const base = baseUrl.replace(/\/+$/, "");
   const call = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? 15_000;
+  const readTimeoutMs = options.readTimeoutMs ?? 120_000;
   const headers: Record<string, string> = options.token
     ? { authorization: `Bearer ${options.token}` }
     : {};
@@ -367,6 +379,11 @@ export function httpHolder(
         return false;
       }
 
+      if (response.statusCode === 401 || response.statusCode === 403) {
+        await discard(response);
+        throw new HolderRejectedError(id, response.statusCode, "getFile");
+      }
+
       if (response.statusCode !== 200) {
         await discard(response);
         throw new Error(`holder ${id} failed getFile: ${response.statusCode}`);
@@ -374,8 +391,14 @@ export function httpHolder(
 
       const temporary = `${path}.${randomBytesNode(6).toString("hex")}.tmp`;
       const hasher = createHash("sha256");
+      let deadline: NodeJS.Timeout | null = null;
 
       try {
+        deadline = setTimeout(() => {
+          response.destroy(new Error(`holder ${id} GET read timed out after ${readTimeoutMs}ms`));
+        }, readTimeoutMs);
+        deadline.unref();
+
         await pipeline(
           response,
           new Transform({
@@ -395,6 +418,8 @@ export function httpHolder(
       } catch (error) {
         rmSync(temporary, { force: true });
         throw error;
+      } finally {
+        if (deadline) clearTimeout(deadline);
       }
     },
     async put(bytes) {
@@ -541,6 +566,95 @@ export function responseFromLeaves(
 }
 
 const HEX_64 = /^[0-9a-f]{64}$/;
+
+const DEFAULT_RETRIEVAL_CONCURRENCY = 4;
+const MAX_FAILURE_NOTE = 200;
+
+function failureNote(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.length > MAX_FAILURE_NOTE ? `${text.slice(0, MAX_FAILURE_NOTE)}...` : text;
+}
+
+/**
+ * Download up to `needed` distinct shards with bounded parallelism. Every
+ * attempt gets its own file, and a holder failure is recorded rather than
+ * aborting the whole read: parity shards are the retry budget across holders.
+ *
+ * The worker pool stops scheduling once `needed` downloads succeed. Requests
+ * already in flight are awaited so their temporary files are cleaned before the
+ * caller removes the work directory; that bounds work to
+ * `ceil(shards / concurrency)` attempt rounds, not one timeout per shard.
+ */
+async function downloadShards(
+  shards: ShardPlacement[],
+  byId: Map<string, DurabilityHolder>,
+  working: string,
+  needed: number,
+  concurrency: number,
+): Promise<{ downloaded: { index: number; path: string }[]; failures: string[] }> {
+  const ordered = [...shards].sort((left, right) => left.index - right.index);
+  const downloaded: { index: number; path: string }[] = [];
+  const failures: string[] = [];
+  let next = 0;
+  let enough = false;
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      if (enough) return;
+
+      const position = next;
+      next += 1;
+
+      if (position >= ordered.length) return;
+
+      const shard = ordered[position]!;
+      const holder = byId.get(shard.holder);
+
+      if (!holder) {
+        failures.push(`shard ${shard.index}: holder ${shard.holder} is not configured`);
+        continue;
+      }
+
+      const path = join(working, `${shard.index}-${shard.storedAs}`);
+
+      try {
+        const ok = holder.getFile
+          ? await holder.getFile(shard.storedAs, path)
+          : await (async () => {
+            const bytes = await holder.get(shard.storedAs);
+            if (!bytes) return false;
+            writeFileSync(path, bytes);
+            return true;
+          })();
+
+        if (ok) {
+          downloaded.push({ index: shard.index, path });
+          if (downloaded.length >= needed) enough = true;
+        } else {
+          failures.push(`shard ${shard.index} on ${holder.id}: shard not found`);
+        }
+      } catch (error) {
+        rmSync(path, { force: true });
+        failures.push(`shard ${shard.index} on ${holder.id}: ${failureNote(error)}`);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, ordered.length) }, () => worker()),
+  );
+
+  // Two workers can finish at the same moment after the threshold is reached.
+  // Keep exactly k, remove any extra file from a caller-supplied work directory,
+  // and decode a deterministic index order.
+  const kept = downloaded.sort((left, right) => left.index - right.index).slice(0, needed);
+
+  for (const extra of downloaded.slice(needed)) {
+    rmSync(extra.path, { force: true });
+  }
+
+  return { downloaded: kept, failures };
+}
 
 export function verifyChallengeResponse(
   shard: ShardPlacement,
@@ -923,7 +1037,7 @@ export class DurabilityLedger {
     placement: Placement,
     outputPath: string,
     holders: DurabilityHolder[],
-    options: { workDir?: string } = {},
+    options: { workDir?: string; concurrency?: number } = {},
   ): Promise<{ bytes: number; sha256: string; downloaded: number }> {
     const meta = placement.streamed;
     if (!meta) throw new Error("this placement is not streamed");
@@ -931,43 +1045,32 @@ export class DurabilityLedger {
       throw new Error("streamed metadata is incomplete");
     }
 
+    const concurrency = options.concurrency ?? DEFAULT_RETRIEVAL_CONCURRENCY;
+
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new Error("retrieval concurrency must be a positive integer");
+    }
+
     const byId = new Map(holders.map((holder) => [holder.id, holder]));
     const working = options.workDir ?? mkdtempSync(join(tmpdir(), "rarext-streamed-"));
     const created = options.workDir === undefined;
-    const downloaded: { index: number; path: string }[] = [];
 
     try {
-      for (const shard of [...placement.shards].sort((left, right) => left.index - right.index)) {
-        if (downloaded.length >= placement.dataShards) break;
-
-        const holder = byId.get(shard.holder);
-
-        if (!holder) {
-          throw new Error(
-            `cannot retrieve: holder ${shard.holder} for shard ${shard.index} is not configured`,
-          );
-        }
-
-        const path = join(working, `${shard.index}-${shard.storedAs}`);
-
-        try {
-          const ok = holder.getFile
-            ? await holder.getFile(shard.storedAs, path)
-            : await (async () => {
-              const bytes = await holder.get(shard.storedAs);
-              if (!bytes) return false;
-              writeFileSync(path, bytes);
-              return true;
-            })();
-
-          if (ok) downloaded.push({ index: shard.index, path });
-        } catch {
-          rmSync(path, { force: true });
-        }
-      }
+      const { downloaded, failures } = await downloadShards(
+        placement.shards,
+        byId,
+        working,
+        placement.dataShards,
+        concurrency,
+      );
 
       if (downloaded.length < placement.dataShards) {
-        throw new Error(`need ${placement.dataShards} shard files, downloaded ${downloaded.length}`);
+        const detail = failures.length > 0
+          ? `; ${failures.slice(0, 4).join("; ")}${failures.length > 4 ? ` (+${failures.length - 4} more)` : ""}`
+          : "";
+        throw new Error(
+          `need ${placement.dataShards} shard files, downloaded ${downloaded.length}${detail}`,
+        );
       }
 
       const streamed: StreamedPlacement = {
