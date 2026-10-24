@@ -98,8 +98,12 @@ export function verifyDeploymentRecord(
     problems.push("deployment.proxyImplementation must equal deployment.implementation");
   }
 
-  if (!TRANSACTION.test(String(record.deployment?.implementationTransaction ?? ""))) {
-    problems.push("deployment.implementationTransaction must be a transaction hash");
+  for (const name of ["implementation", "proxy"]) {
+    const hash = record.deployment?.transactions?.[name]?.hash;
+
+    if (!TRANSACTION.test(String(hash ?? ""))) {
+      problems.push(`deployment.transactions.${name}.hash must be a transaction hash`);
+    }
   }
 
   return { ok: problems.length === 0, problems };

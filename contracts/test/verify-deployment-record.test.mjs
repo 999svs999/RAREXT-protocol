@@ -33,7 +33,11 @@ function record(overrides = {}) {
       proxy: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
       proxyImplementation: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
       owner: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      implementationTransaction: `0x${"a".repeat(64)}`,
+      transactions: {
+        implementation: { hash: `0x${"a".repeat(64)}`, blockNumber: 1 },
+        proxy: { hash: `0x${"b".repeat(64)}`, blockNumber: 2 },
+        publisher: null,
+      },
     },
   };
 
@@ -71,6 +75,15 @@ test("a mainnet chain id or a relaxed audit flag is refused", () => {
   assert.match(
     verifyDeploymentRecord(claimed).problems.join("; "),
     /audit.status must be not-performed/,
+  );
+});
+
+test("missing deployment transactions are refused", () => {
+  const missing = record();
+  delete missing.deployment.transactions.proxy;
+  assert.match(
+    verifyDeploymentRecord(missing).problems.join("; "),
+    /transactions\.proxy\.hash/,
   );
 });
 
