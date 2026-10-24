@@ -55,6 +55,7 @@ import {
 } from "./identity.ts";
 import { RateLimiter } from "./holder-server.ts";
 import { merkleProof, verifyProof } from "./merkle.ts";
+import { destructiveGcAllowed } from "./net.ts";
 import {
   createChallengeRegistry,
   type ChallengeRegistry,
@@ -1144,6 +1145,11 @@ export function createApp(options: AppOptions = {}): AppServer {
   const apiTokens = parseApiTokens(options.apiToken ?? process.env.RAREXT_API_TOKEN);
   const rateLimit = options.maxRequestsPerWindow ??
     (process.env.RAREXT_API_MAX_REQUESTS ? Number(process.env.RAREXT_API_MAX_REQUESTS) : 0);
+
+  if (!Number.isFinite(rateLimit) || rateLimit < 0) {
+    throw new Error("maxRequestsPerWindow must be a non-negative number");
+  }
+
   const rateLimiter = rateLimit > 0
     ? new RateLimiter(rateLimit, options.rateWindowMs ?? 60_000)
     : null;
@@ -1710,6 +1716,14 @@ export function createApp(options: AppOptions = {}): AppServer {
       if (req.method === "POST" && pathname === "/v1/storage/gc") {
         const body = asRecord(await readJson(req));
         const referenced = body.referenced;
+        const dryRun = body.dryRun !== false;
+
+        if (!dryRun && !destructiveGcAllowed(req, apiTokens.length)) {
+          send(res, 403, {
+            error: "destructive GC requires RAREXT_API_TOKEN or a loopback client",
+          });
+          return;
+        }
 
         if (
           !Array.isArray(referenced) ||
@@ -1729,7 +1743,7 @@ export function createApp(options: AppOptions = {}): AppServer {
           blobs.gc({
             referenced,
             gracePeriodMs,
-            dryRun: body.dryRun !== false,
+            dryRun,
           }),
         );
         return;
@@ -1817,6 +1831,13 @@ export function createApp(options: AppOptions = {}): AppServer {
           ? body.gracePeriodMs
           : undefined;
         const dryRun = body.dryRun !== false;
+
+        if (!dryRun && !destructiveGcAllowed(req, apiTokens.length)) {
+          send(res, 403, {
+            error: "destructive GC requires RAREXT_API_TOKEN or a loopback client",
+          });
+          return;
+        }
 
         send(res, 200, await durability.gcWithUrls(options.holderUrls, {
           gracePeriodMs,

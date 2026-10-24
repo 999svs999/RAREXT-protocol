@@ -234,6 +234,13 @@ token, a request limit, a disk quota, and TLS (either here or at a reverse proxy
 | `RAREXT_TLS_CERT`, `RAREXT_TLS_KEY` | unset | Serve HTTPS directly. Set both or neither. A reverse proxy is fine instead; the process then stays on loopback. |
 | `RAREXT_GC_DRY_RUN` | `true` | Collection only records candidates until set to `false`; see [garbage collection](#garbage-collection). |
 
+A GC request that would delete (`dryRun:false`), and a holder shard `DELETE`, are
+refused with `403` when they arrive from a non-loopback address and no token is
+configured. With a token configured, the token is required for the destructive pass as
+well. This keeps an unauthenticated public node from being wiped through its own GC
+endpoint; set `RAREXT_API_TOKEN` before exposing the API. A reverse proxy makes every
+request look loopback, so terminate auth at the proxy or set the API token as well.
+
 The token is a shared secret, not an identity: it decides whether a caller may write,
 not who they are. Writers are identified by the signing key on a placement or
 publication, and that is what the registry verifies. Rotate by listing old and new

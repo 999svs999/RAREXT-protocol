@@ -47,6 +47,7 @@ cannot interleave. Limits are measured by
 | Interrupted write or index save | `*.tmp` leftovers are swept (`purgedTemp`); only 64-hex names are blobs, so a temp file is never one |
 | Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second pass sees no orphans and reports zero |
 | A missing or malformed `referenced` list | `400 referenced must be an array of sha256 hashes`; nothing is scanned or deleted |
+| A destructive pass (`dryRun:false`) from a non-loopback client with no API token | `403 destructive GC requires RAREXT_API_TOKEN or a loopback client`; nothing is scanned or deleted |
 
 ## External agent (MCP) storage limits
 
@@ -95,6 +96,7 @@ limits are measured by the regression tests in
 | GC runs against a blob that is still being read | the holder tracks open reads per shard and defers collection: the pass reports `deferred`/`deferredShards`, deletes nothing for that shard, keeps its grace-period candidate entry, and the reader receives every byte. The shard is collected by a later pass once the read closes |
 | A crash leaves an orphaned shard directory or temp files | `_upload.*.tmp`, `<hash>.*.tmp`, and `_index.json.*.tmp` leftovers are swept at holder startup and by every GC pass (`purgedTemp`); the store only adopts 64-hex names, so a temp file is never a shard and is safe to delete. Real shards and `_gc-candidates.json` are left alone |
 | GC meets a placement whose lease is still live | shards listed in the pass's `referenced` set are never deleted and their candidate entry is cleared, so a live placement keeps all of its shards; only unreferenced orphans are collected |
+| A destructive scan or a shard DELETE from a non-loopback client with no holder token | `403`; the holder keeps the shards |
 | Two GC passes run concurrently | the synchronous scan/delete/save section serializes them: the second pass observes the first pass's deletions and reports zero, so an orphan is deleted exactly once, deletion counts never double-count, a live shard is not lost, and `_gc-candidates.json` stays valid |
 | A retained blob's holds have all expired | before the retention term matures `BlobStore.remove` refuses to collect the blob (returns `false`), so orphan cleanup cannot break an anchored retention commitment. Once the term matures the opening is released (or is `null` if the blob is already gone) and the blob is ordinary, collectable garbage |
 | A collected shard is challenged from the leaf cache | GC and DELETE invalidate the cached leaves, and a cache hit re-checks the file's existence and size, so a shard that is gone cannot answer a challenge with a stale proof |
@@ -188,6 +190,11 @@ one process cannot interleave. Limits are measured by
 | Interrupted write temp files | `*.tmp` leftovers are swept (`purgedTemp`); the sweep runs even in a dry run |
 | Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second reports zero |
 | A malformed `referenced` list | `400 referenced must be an array of CIDs`; nothing is scanned or deleted |
+| A destructive pass (`dryRun:false`) from a non-loopback client with no pin token | `403 destructive GC requires a pin token or a loopback client`; nothing is scanned or deleted |
+
+`deleted` counts whole pins whose content and metadata were both removed. Structure
+of a pin whose metadata or content alone was orphaned is reported through
+`orphanContent`/`orphanMetadata`, not `deleted`.
 
 ### Automatic garbage collection
 
@@ -211,8 +218,8 @@ candidates older than 24h, so a mistaken reference set has a full grace period
 before any byte is lost. The blob reference set is the union of every
 `blobs[].hash` in every publication's artifact body; a blob uploaded but never
 published, or one whose manifest was replaced, is a candidate. Shards are
-referenced through `DurabilityLedger` placements. A metadata-only publication
-does not protect the bytes it names unless the manifest is present.
+referenced through `DurabilityLedger` placements. Only `artifact.body.blobs`
+counts: a hash in a title, body text, or a draft does not protect bytes.
 
 These passes are single-node: a second API with a different placement directory
 can still see the first node's shards as unreferenced, so keep the grace period or

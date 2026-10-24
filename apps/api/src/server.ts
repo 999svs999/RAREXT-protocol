@@ -59,7 +59,8 @@ const gcScheduler = gcIntervalMs > 0
     intervalMs: gcIntervalMs,
     onRun: (run) => {
       const deleted =
-        run.blobs.deleted + run.holders.reduce((sum, result) => sum + result.deleted, 0);
+        run.blobs.deleted +
+        run.holders.reduce((sum, result) => sum + (result.deleted ?? 0), 0);
       console.log(
         `storage gc: dryRun=${run.dryRun} blobs deleted=${run.blobs.deleted} ` +
           `holders=${run.holders.length} shards deleted=${deleted - run.blobs.deleted}`,

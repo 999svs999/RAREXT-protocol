@@ -198,21 +198,29 @@ export class BlobStore {
   /** Cap on all stored bytes, or null when the node is unmetered. */
   readonly maxTotalBytes: number | null;
   private readonly records = new Map<string, BlobRecord>();
+  private bytes = 0;
 
   constructor(directory: string, options: { maxBytes?: number; maxTotalBytes?: number } = {}) {
+    const maxBytes = options.maxBytes ?? MAX_BLOB_BYTES;
+    const maxTotalBytes = options.maxTotalBytes ?? null;
+
+    if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+      throw new Error("maxBytes must be a positive number");
+    }
+    if (maxTotalBytes !== null && (!Number.isFinite(maxTotalBytes) || maxTotalBytes < 0)) {
+      throw new Error("maxTotalBytes must be a non-negative number");
+    }
+
     this.directory = directory;
-    this.maxBytes = options.maxBytes ?? MAX_BLOB_BYTES;
-    this.maxTotalBytes = options.maxTotalBytes ?? null;
+    this.maxBytes = maxBytes;
+    this.maxTotalBytes = maxTotalBytes;
     mkdirSync(this.directory, { recursive: true });
     this.load();
+    this.bytes = [...this.records.values()].reduce((sum, record) => sum + record.size, 0);
   }
 
   totalBytes(): number {
-    let total = 0;
-
-    for (const record of this.records.values()) total += record.size;
-
-    return total;
+    return this.bytes;
   }
 
   private checkQuota(size: number): void {
@@ -314,13 +322,17 @@ export class BlobStore {
     };
 
     this.records.set(hash, record);
+    this.bytes += size - (existing?.size ?? 0);
 
     try {
       this.saveIndex();
     } catch (error) {
       if (created) rmSync(this.path(hash), { force: true });
+      this.bytes -= size - (existing?.size ?? 0);
+
       if (existing) this.records.set(hash, existing);
       else this.records.delete(hash);
+
       throw error;
     }
 
@@ -494,8 +506,11 @@ export class BlobStore {
   }
 
   private deleteFile(hash: string): void {
+    const record = this.records.get(hash);
+
     rmSync(this.path(hash), { force: true });
     this.records.delete(hash);
+    if (record) this.bytes = Math.max(0, this.bytes - record.size);
   }
 
   /**
@@ -555,6 +570,12 @@ export class BlobStore {
       } else if (now - existing.firstSeen >= gracePeriodMs) {
         wouldDelete.push(record.hash);
       }
+    }
+
+    // A candidate for bytes that were removed by hand or by an earlier pass
+    // would otherwise stay in the file forever.
+    for (const hash of [...candidates.keys()]) {
+      if (!this.records.has(hash)) candidates.delete(hash);
     }
 
     let deleted = 0;

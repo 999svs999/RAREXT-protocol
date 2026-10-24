@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 
 import { cidV1Raw } from "./adapters/content.ts";
 import { GcScheduler, PinGc } from "./gc-schedule.ts";
+import { destructiveGcAllowed } from "./net.ts";
 
 const MAX_CONTENT = 32 * 1024 * 1024;
 const MAX_PUBLICATION_IDS = 100;
@@ -508,6 +509,7 @@ export class RateLimiter {
 
 export function createPinServer(store: PinStore, options: PinServerOptions = {}) {
   const tokenConfig = options.tokens ?? options.token;
+  const tokenCount = parseTokens(tokenConfig).length;
   const rateLimiter = options.maxRequestsPerWindow
     ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
     : null;
@@ -599,6 +601,14 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
           typeof body.gracePeriodMs === "number" && body.gracePeriodMs >= 0
             ? body.gracePeriodMs
             : undefined;
+        const dryRun = body.dryRun !== false;
+
+        if (!dryRun && !destructiveGcAllowed(req, tokenCount)) {
+          send(res, 403, {
+            error: "destructive GC requires a pin token or a loopback client",
+          });
+          return;
+        }
 
         send(
           res,
@@ -606,7 +616,7 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
           store.gc({
             referenced: referenced as string[] | undefined,
             gracePeriodMs,
-            dryRun: body.dryRun !== false,
+            dryRun,
           }),
         );
         return;

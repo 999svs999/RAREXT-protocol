@@ -22,6 +22,7 @@ import {
   SHARD_CHUNK_BYTES,
 } from "./durability.ts";
 import { merkleProof } from "./merkle.ts";
+import { destructiveGcAllowed } from "./net.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
 
 const MAX_BODY = 32 * 1024 * 1024;
@@ -281,6 +282,7 @@ export function createHolderServer(options: HolderServerOptions) {
   const rateLimiter = options.maxRequestsPerWindow
     ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
     : null;
+  const tokenCount = parseTokens(tokenConfig).length;
 
   function forgetLeaves(storedAs: string): void {
     const cached = leafCache.get(storedAs);
@@ -362,6 +364,13 @@ export function createHolderServer(options: HolderServerOptions) {
           ? body.gracePeriodMs
           : DEFAULT_GC_GRACE_PERIOD_MS;
         const dryRun = body.dryRun !== false;
+
+        if (!dryRun && !destructiveGcAllowed(req, tokenCount)) {
+          send(res, 403, {
+            error: "destructive GC requires a holder token or a loopback client",
+          });
+          return;
+        }
 
         const referencedSet = new Set(referenced);
         const allShards = store.list();
@@ -447,6 +456,12 @@ export function createHolderServer(options: HolderServerOptions) {
       if (url.pathname === "/v1/holder/gc/reset" && req.method === "POST") {
         if (!authorized(req, tokenConfig)) {
           send(res, 401, { error: "unauthorized" });
+          return;
+        }
+        if (!destructiveGcAllowed(req, tokenCount)) {
+          send(res, 403, {
+            error: "destructive GC requires a holder token or a loopback client",
+          });
           return;
         }
         rmSync(join(options.directory, GC_CANDIDATES_FILE), { force: true });
@@ -656,6 +671,12 @@ export function createHolderServer(options: HolderServerOptions) {
         }
 
         if (req.method === "DELETE") {
+          if (!destructiveGcAllowed(req, tokenCount)) {
+            send(res, 403, {
+              error: "deleting a shard requires a holder token or a loopback client",
+            });
+            return;
+          }
           const removed = isHash(hash) && store.remove(hash);
           if (removed) forgetLeaves(hash);
           res.writeHead(removed ? 204 : 404);
