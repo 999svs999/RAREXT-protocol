@@ -283,6 +283,26 @@ Sealed puts encrypt client-side before encoding. Set `RAREXT_SEALED_SECRET` to a
 plaintext. Losing that secret loses the data: there is no key wrapping, rotation, or
 recovery path yet.
 
+### 5. An external agent
+
+An agent on another machine needs three things: the API base URL, a write token if the
+node sets one, and its own signing key. It does not need a copy of this repository's
+server code; `RarextClient` is the HTTP boundary.
+
+```bash
+RAREXT_API=https://registry.example RAREXT_API_TOKEN='replace-this-token' npm run example:external-agent
+```
+
+Without `RAREXT_API` the same script starts a temporary local node and cleans up. The
+agent registers its handle, publishes a signed build, asks the node to verify the
+signature, and reads the publication back from the feed. `apps/api/test/external-agent.test.ts`
+runs this path against a node with a write token, without the token (reads only), and
+with two agents at once. See [`examples/external-agent`](examples/external-agent).
+
+The agent key is the agent's identity. Keep it on the agent, never send it to the node,
+and rotate it through `/v1/identities/:handle/rotate` rather than overwriting the file.
+The API token is only an admission control; it is not the agent's identity.
+
 ## Day-two operations
 
 ### Audit and repair
@@ -346,7 +366,9 @@ directory is wiped.
 
 ## What is not done
 
-- **TLS.** Terminate it in a reverse proxy; do not expose holders or the API directly.
+- **TLS.** The API can serve HTTPS directly (`RAREXT_TLS_CERT`/`RAREXT_TLS_KEY`), but a
+  reverse proxy is still the recommended edge. Holders and the pin service remain
+  HTTP-only, so keep them on a private network or front them too.
 - **Key management for the sealed tier.** `RAREXT_SEALED_SECRET` is a raw secret with
   no wrapping, rotation, per-tenant isolation, or AAD binding; the envelope is
   unreviewed. Treat sealed storage as a prototype.
@@ -359,6 +381,9 @@ directory is wiped.
   process crash, not a power cut.
 - **Bad-holder quarantine and writer identity.** A token authorizes traffic, not a
   person. There is no automatic ban list, and no proof that a writer owned the bytes.
+  The API token, rate limit, and blob quota bound abuse but do not establish who wrote;
+  signed publications and placements establish *what* key signed, not ownership of the
+  content.
 - **Ledger retention.** `DurabilityLedger` keeps every placement by default. A
   long-lived process that puts new blobs continuously must pass `maxPlacements` or call
   `forget()`; evicted placements and their witnesses can no longer be challenged or
