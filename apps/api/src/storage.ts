@@ -176,6 +176,17 @@ export function manifestEntry(
   };
 }
 
+export class BlobQuotaError extends Error {
+  readonly status = 507;
+  readonly limit: number;
+
+  constructor(limit: number) {
+    super(`insufficient storage: node byte quota exceeded (${limit} bytes)`);
+    this.name = "BlobQuotaError";
+    this.limit = limit;
+  }
+}
+
 export class BlobStore {
   readonly directory: string;
   /**
@@ -184,13 +195,31 @@ export class BlobStore {
    * use `put()` directly can. The cap bounds per-blob memory and disk.
    */
   readonly maxBytes: number;
+  /** Cap on all stored bytes, or null when the node is unmetered. */
+  readonly maxTotalBytes: number | null;
   private readonly records = new Map<string, BlobRecord>();
 
-  constructor(directory: string, options: { maxBytes?: number } = {}) {
+  constructor(directory: string, options: { maxBytes?: number; maxTotalBytes?: number } = {}) {
     this.directory = directory;
     this.maxBytes = options.maxBytes ?? MAX_BLOB_BYTES;
+    this.maxTotalBytes = options.maxTotalBytes ?? null;
     mkdirSync(this.directory, { recursive: true });
     this.load();
+  }
+
+  totalBytes(): number {
+    let total = 0;
+
+    for (const record of this.records.values()) total += record.size;
+
+    return total;
+  }
+
+  private checkQuota(size: number): void {
+    if (this.maxTotalBytes === null) return;
+    if (this.totalBytes() + size <= this.maxTotalBytes) return;
+
+    throw new BlobQuotaError(this.maxTotalBytes);
   }
 
   private path(hash: string): string {
@@ -315,6 +344,7 @@ export class BlobStore {
     const created = !existsSync(target);
 
     if (created) {
+      this.checkQuota(bytes.length);
       const temporary = `${target}.${randomBytes(6).toString("hex")}.tmp`;
 
       try {
@@ -350,6 +380,7 @@ export class BlobStore {
     const created = !existsSync(target);
 
     if (created) {
+      this.checkQuota(size);
       renameSync(sourcePath, target);
     } else {
       rmSync(sourcePath, { force: true });

@@ -23,6 +23,9 @@ regression tests in `apps/api/test/storage-hardening.test.ts`:
 
 A failed or refused repair never moves the signed placement: the staging is
 atomic, so a retry is idempotent and the holder store stays content-addressed.
+Write access, request rate, total blob quota, and TLS are separate exposure
+controls; see
+[`OPERATOR.md`](OPERATOR.md#public-exposure-and-write-limits).
 
 ## Node blob-store garbage-collection limits
 

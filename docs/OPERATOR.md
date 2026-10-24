@@ -220,6 +220,30 @@ so restarts do not lose the referenced-shard set. Back that directory up with th
 holder directories; shard files alone do not carry `k`, `m`, indices, or the original
 digest.
 
+#### Public exposure and write limits
+
+The defaults are loopback and unmetered. Before binding to a public interface, set a
+token, a request limit, a disk quota, and TLS (either here or at a reverse proxy):
+
+| Env | Default | Effect |
+| --- | --- | --- |
+| `HOST`, `PORT` | `127.0.0.1`, `8787` | Bind address and port. |
+| `RAREXT_API_TOKEN` | unset | Comma-separated bearer tokens for rotation. When set, every non-read request needs `Authorization: Bearer <token>`; reads stay open. |
+| `RAREXT_API_MAX_REQUESTS` | `0` (off) | Requests per 60s window; over the limit returns `429`. The counter is per process, not per client IP. |
+| `RAREXT_BLOB_QUOTA_BYTES` | unset | Total node blob bytes; a write that would cross it returns `507`. `GET /v1/storage/quota` reports the limit and used bytes. |
+| `RAREXT_TLS_CERT`, `RAREXT_TLS_KEY` | unset | Serve HTTPS directly. Set both or neither. A reverse proxy is fine instead; the process then stays on loopback. |
+| `RAREXT_GC_DRY_RUN` | `true` | Collection only records candidates until set to `false`; see [garbage collection](#garbage-collection). |
+
+The token is a shared secret, not an identity: it decides whether a caller may write,
+not who they are. Writers are identified by the signing key on a placement or
+publication, and that is what the registry verifies. Rotate by listing old and new
+tokens, then remove the old one once clients have switched. The API token does not
+replace holder and pin tokens; those protect the storage processes separately.
+
+The per-blob cap (`32 MiB`) still applies on top of the total quota. A quota refusal is
+reported before any bytes are written, and re-uploading identical content does not
+count twice because blobs are content-addressed.
+
 ### 3. Pin service (optional)
 
 ```bash

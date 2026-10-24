@@ -1,9 +1,11 @@
-import { createServer } from "node:http";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer as createHttpServer } from "node:http";
+import type { IncomingMessage, ServerResponse, Server as HttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import type { Server as HttpsServer } from "node:https";
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   findTask,
@@ -51,6 +53,7 @@ import {
   suiteFor,
   verifyPayload,
 } from "./identity.ts";
+import { RateLimiter } from "./holder-server.ts";
 import { merkleProof, verifyProof } from "./merkle.ts";
 import {
   createChallengeRegistry,
@@ -168,6 +171,13 @@ export interface AppOptions {
   challengeIntervalMs?: number;
   fetch?: typeof fetch;
   holderUrls?: Map<string, string>;
+  /** Serve TLS directly instead of putting a reverse proxy in front. */
+  tls?: { key: string | Buffer; cert: string | Buffer };
+  /** When set, every non-read request must carry `Authorization: Bearer <token>`. */
+  apiToken?: string | string[];
+  /** Maximum requests allowed in `rateWindowMs`; 0 or unset disables the limit. */
+  maxRequestsPerWindow?: number;
+  rateWindowMs?: number;
   consensus?: ConsensusOptions;
   tournaments?: TournamentService;
 }
@@ -771,7 +781,27 @@ type PublishResult =
   | { status: number; body: Publication }
   | { status: number; body: { error: string; attestation?: unknown } };
 
-export function createApp(options: AppOptions = {}): ReturnType<typeof createServer> {
+export type AppServer = HttpServer | HttpsServer;
+
+function parseApiTokens(value: string | string[] | undefined): string[] {
+  if (!value) return [];
+
+  const list = Array.isArray(value) ? value : [value];
+  return list.flatMap((entry) => entry.split(",")).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function apiAuthorized(req: IncomingMessage, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+
+  const given = Buffer.from(req.headers.authorization ?? "", "utf8");
+
+  return tokens.some((token) => {
+    const wanted = Buffer.from(`Bearer ${token}`, "utf8");
+    return given.length === wanted.length && timingSafeEqual(given, wanted);
+  });
+}
+
+export function createApp(options: AppOptions = {}): AppServer {
   const store = options.store ?? new RarextStore();
   const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
   const registry = options.registry ?? createDefaultRegistry(options.fetch);
@@ -795,7 +825,11 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     );
   const blobs =
     options.blobs ??
-    new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
+    new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs", {
+      maxTotalBytes: process.env.RAREXT_BLOB_QUOTA_BYTES
+        ? Number(process.env.RAREXT_BLOB_QUOTA_BYTES)
+        : undefined,
+    });
   const placements =
     options.placements ??
     new PlacementRegistry(process.env.RAREXT_PLACEMENTS_DIR ?? ".data/placements");
@@ -1107,12 +1141,36 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
     }));
   }
 
-  const server = createServer(async (req, res) => {
+  const apiTokens = parseApiTokens(options.apiToken ?? process.env.RAREXT_API_TOKEN);
+  const rateLimit = options.maxRequestsPerWindow ??
+    (process.env.RAREXT_API_MAX_REQUESTS ? Number(process.env.RAREXT_API_MAX_REQUESTS) : 0);
+  const rateLimiter = rateLimit > 0
+    ? new RateLimiter(rateLimit, options.rateWindowMs ?? 60_000)
+    : null;
+
+  const handler = async (req: IncomingMessage, res: ServerResponse) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-headers", "content-type, authorization");
     res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
 
     try {
+      if (rateLimiter && !rateLimiter.check()) {
+        send(res, 429, { error: "too many requests: rate limit exceeded" });
+        return;
+      }
+
+      const method = req.method ?? "GET";
+
+      if (
+        apiTokens.length > 0 &&
+        method !== "GET" &&
+        method !== "HEAD" &&
+        method !== "OPTIONS" &&
+        !apiAuthorized(req, apiTokens)
+      ) {
+        send(res, 401, { error: "unauthorized" });
+        return;
+      }
       if (req.method === "OPTIONS") {
         send(res, 204);
         return;
@@ -1624,6 +1682,15 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
 
       if (req.method === "GET" && pathname === "/v1/storage/usage") {
         send(res, 200, blobs.usage());
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/storage/quota") {
+        send(res, 200, {
+          maxBytes: blobs.maxBytes,
+          maxTotalBytes: blobs.maxTotalBytes,
+          usedBytes: blobs.totalBytes(),
+        });
         return;
       }
 
@@ -2806,9 +2873,14 @@ export function createApp(options: AppOptions = {}): ReturnType<typeof createSer
       send(res, 404, { error: "not found" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
-      send(res, 400, { error: message });
+      const status = (error as { status?: unknown }).status;
+      send(res, typeof status === "number" ? status : 400, { error: message });
     }
-  });
+  };
+
+  const server = options.tls
+    ? createHttpsServer(options.tls, handler)
+    : createHttpServer(handler);
 
   return server;
 }

@@ -141,7 +141,7 @@ real secrets or describe the tier as audited until those gaps are closed.
 | --- | --- |
 | Sealed encryption is wired with HKDF-SHA256 and committed to ciphertext, but has no key wrapping, rotation, per-tenant isolation, or envelope review. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
-| No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
+| No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | Partly addressed: the API now has a write token with rotation, a per-process request limit, a total blob quota, and optional TLS ([#8](https://github.com/999svs999/RAREXT-protocol/issues/8), [`OPERATOR.md`](OPERATOR.md#public-exposure-and-write-limits)); still missing are per-client quotas, a durable rotation window, and an identity that is stronger than a shared token. Placement authority remains the steward's signing key. |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
 | Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | Addressed: scheduled holder and blob GC ships with a 24h grace period and a dry-run default ([#10](https://github.com/999svs999/RAREXT-protocol/issues/10)); residual risk is a stale or single-node reference view, covered in [`OPERATIONS.md`](OPERATIONS.md#automatic-garbage-collection). |
 

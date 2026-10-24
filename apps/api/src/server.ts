@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { createApp } from "./app.ts";
 import { ChallengeScheduler } from "./durability-schedule.ts";
 import { DurabilityLedger } from "./durability.ts";
@@ -11,7 +13,11 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const DATA = process.env.RAREXT_DATA;
 const PUBLIC_DIR = process.env.RAREXT_PUBLIC_DIR;
 const store = DATA === "none" ? new RarextStore() : new RarextStore(DATA ?? ".data/rarext.json");
-const blobs = new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
+const blobs = new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs", {
+  maxTotalBytes: process.env.RAREXT_BLOB_QUOTA_BYTES
+    ? Number(process.env.RAREXT_BLOB_QUOTA_BYTES)
+    : undefined,
+});
 
 const holders = holdersFromEnv(undefined, {
   token: process.env.RAREXT_HOLDER_TOKEN || undefined,
@@ -65,6 +71,17 @@ const gcScheduler = gcIntervalMs > 0
   })
   : null;
 
+const tlsCert = process.env.RAREXT_TLS_CERT;
+const tlsKey = process.env.RAREXT_TLS_KEY;
+
+if (Boolean(tlsCert) !== Boolean(tlsKey)) {
+  throw new Error("set both RAREXT_TLS_CERT and RAREXT_TLS_KEY, or neither");
+}
+
+const tls = tlsCert && tlsKey
+  ? { cert: readFileSync(tlsCert), key: readFileSync(tlsKey) }
+  : undefined;
+
 const server = createApp({
   store,
   publicDir: PUBLIC_DIR,
@@ -73,10 +90,11 @@ const server = createApp({
   scheduler,
   holderUrls,
   blobs,
+  tls,
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`RAREXT API listening on http://${HOST}:${PORT}`);
+  console.log(`RAREXT API listening on ${tls ? "https" : "http"}://${HOST}:${PORT}`);
 
   if (holders.length > 0) {
     scheduler.start();
