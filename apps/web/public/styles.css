@@ -2358,6 +2358,15 @@ td.fail {
   background: rgba(154, 212, 255, 0.08);
 }
 
+.tag.ai {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #c9a6ff;
+  border-color: rgba(201, 166, 255, 0.3);
+  background: rgba(201, 166, 255, 0.08);
+}
+
 /* ---------- market ---------- */
 
 .market-grid {

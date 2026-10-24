@@ -28,6 +28,7 @@ Those are names, not links, so every document is linked once in the reference be
 | Document | The question it answers |
 | --- | --- |
 | [APP-PROTOCOL.md](APP-PROTOCOL.md) | How does an app publish an artifact, get it verified, and read it back over HTTP? |
+| [AI-VERIFICATION.md](AI-VERIFICATION.md) | How does RAREXT verify AI artifacts — exact, generative, and bounded claims — and how do I check one myself? |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What are the components, what talks to what, and which parts are still target-state? |
 | [BRANDING.md](BRANDING.md) | Which brand is speaking, and what may each one claim? |
 | [CHAINS.md](CHAINS.md) | How is an anchor written to a chain, and how is it read back independently? |

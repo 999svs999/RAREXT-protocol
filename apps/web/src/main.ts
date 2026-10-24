@@ -1657,7 +1657,15 @@ function timeAgo(iso: string): string {
 
 function cardHtml(publication: Publication): string {
   const attestation = publication.attestation;
-  const parent = publication.parentId
+  function aiRepresentationLabel(attestation: { representation?: string; metricName?: string; metricValue?: number }): string {
+  if (attestation.representation === "bounded") {
+    const metric = attestation.metricName ?? "metric";
+    return `bounded · ${metric} ${attestation.metricValue ?? "?"}`;
+  }
+  return attestation.representation ?? "";
+}
+
+const parent = publication.parentId
     ? feedItems.find((item) => item.id === publication.parentId)
     : undefined;
   const parentLabel = publication.parentId
@@ -1672,6 +1680,9 @@ function cardHtml(publication: Publication): string {
     : "";
   const claimTag = attestation.semanticsId
     ? `<span class="tag claim">${escapeHtml(`${attestation.semanticsId}@${attestation.semanticsVersion}`)}</span>`
+    : "";
+  const representationTag = attestation.representation
+    ? `<span class="tag ai">${escapeHtml(aiRepresentationLabel(attestation))}</span>`
     : "";
   const quantumTag =
     attestation.cryptoProfile === "post-quantum"
@@ -1695,7 +1706,7 @@ function cardHtml(publication: Publication): string {
   return `<article class="card">
     <div class="card-top">
       <div>
-        <div class="card-tags">${appTag}${sponsoredTag}${claimTag}${quantumTag}${statusTag}${authorTag}${sourceTag}</div>
+        <div class="card-tags">${appTag}${sponsoredTag}${claimTag}${representationTag}${quantumTag}${statusTag}${authorTag}${sourceTag}</div>
         <h3>${escapeHtml(publication.title)}</h3>
         <div class="meta">
           ${escapeHtml(t("dyn.by"))} <b>@${escapeHtml(publication.author)}</b> · ${escapeHtml(taskName(publication.challengeId))}
@@ -1721,6 +1732,9 @@ function cardHtml(publication: Publication): string {
         <span>${escapeHtml(fullDate)}</span>
         ${publication.verified ? `<span>${escapeHtml(t("dyn.nameConfirmed"))}</span>` : ""}
         ${publication.source?.commit ? `<span>${escapeHtml(t("dyn.source"))} ${escapeHtml(publication.source.commit.slice(0, 7))}</span>` : ""}
+        ${attestation.representation === "bounded" && attestation.metricName
+          ? `<span>${escapeHtml(`${attestation.metricName} = ${attestation.metricValue ?? "?"}`)}</span>`
+          : ""}
       </div>
     </details>
   </article>`;

@@ -39,11 +39,12 @@ welcome.
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, the [storage benchmark](bench/storage/README.md) that gates it, and the [1 GB repair measurement](bench/repair/README.md) that records where the current code sits.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
+- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
 disagree with a decision, the RFC folder is where the argument happens.
 
-**Status: pre-alpha.** The artifact protocol, logic simulator and scorer, agent API, web workbench, registry feed, persistent store, signed identities, Merkle anchoring, source/network adapters, semantic layer, and MCP server work. Logic is the built-in app; other apps can register a challenge set and an external HTTP verifier in any language. There is no bridge. Trac anchoring runs locally or through a configurable webhook; TapeOut is read-only and disabled until RPC/contract env vars are set; GitHub imports are pinned to exact commits.
+**Status: pre-alpha.** The artifact protocol, logic simulator and scorer, agent API, web workbench, registry feed, persistent store, signed identities, Merkle anchoring, source/network adapters, semantic layer, AI verification (generative replay and bounded metric, with seeded AI challenges), and MCP server work. Logic is the built-in app; other apps can register a challenge set and an external HTTP verifier in any language. There is no bridge. Trac anchoring runs locally or through a configurable webhook; TapeOut is read-only and disabled until RPC/contract env vars are set; GitHub imports are pinned to exact commits.
 
 **Apps can launch tokens; the protocol does not sell them.** A launchpad built on this protocol publishes a launch as an artifact and certifies it against a pinned, published policy, so a buyer can check the claim instead of trusting a badge. See [fair launches](docs/FAIR-LAUNCH.md) and the [`examples/launchpad`](examples/launchpad) app.
 
