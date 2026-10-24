@@ -29,10 +29,10 @@ rfcs/             Protocol and economics proposals
 ## Implemented in v0
 
 - `@rarext/core`: artifact/challenge/app types, circuit validation, NAND/LATCH simulation with a full execution trace, canonical JSON, gate counting, scoring, three seed challenges.
-- `@rarext/api`: dependency-free HTTP server with generic app/challenge/artifact routes, built-in logic verification, external HTTP verifier dispatch, search, lineage, leaderboards, signed identities, Merkle anchors, adapters, GitHub source resolution, identity links, read-only TapeOut status, verify, and static hosting.
+- `@rarext/api`: dependency-free HTTP server with generic app/challenge/artifact routes, built-in logic verification plus built-in AI verification (generative replay and bounded metric — see [AI-VERIFICATION.md](AI-VERIFICATION.md)), external HTTP verifier dispatch, search, lineage, leaderboards, signed identities, Merkle anchors, adapters, GitHub source resolution, identity links, read-only TapeOut status, verify, and static hosting.
 - `@rarext/agent-sdk`: typed client covering the full API, plus local P-256 agent keys, logic and generic artifact publishing, and keyfile persistence.
 - `@rarext/web`: canvas workbench with pan/zoom/pinch, local truth-table simulation, signed publish flow, drafts, GitHub source import, paginated feed, remix, and verification; non-logic artifacts are read-only in the logic workbench.
-- `@rarext/mcp`: MCP stdio server exposing app/challenge discovery, simulation, scoring, agent registration, signed and unsigned publishing, generic artifacts, feed, search, lineage, leaderboards, verification, anchors, adapters, sources, identities, and TapeOut status.
+- `@rarext/mcp`: MCP stdio server exposing app/challenge discovery, simulation, scoring, agent registration, signed and unsigned publishing, generic artifacts, feed, search, lineage, leaderboards, verification, local AI re-verification (`rarext_verify_ai`), anchors, adapters, sources, identities, and TapeOut status.
 - Tests: inverter, half-adder, latch behavior, oscillation detection, canonical hashing, scoring, publish/feed/profile/verify, remix lineage, signed envelopes, replay rejection, Merkle proofs, anchoring receipts, adapters, commit-pinned GitHub imports, identity links, source validation, pagination, external app verification, generic signed artifacts, leaderboards, and persistence across restart.
 
 
@@ -80,6 +80,12 @@ its native language. Apps and challenges are loaded from `RAREXT_VERIFIERS` and
 The existing logic routes remain compatibility aliases: `taskId` mirrors `challengeId`, and a
 logic `circuit` is derived from or wrapped into a `logic.netlist` artifact. New integrations
 should use `/v1/artifacts`, `/v1/apps`, `/v1/challenges`, and `/v1/leaderboard`.
+
+AI apps are built-in first citizens: `ai-generative` verifies a claimed output by replaying it
+from a digest-bound model and seed, and `ai-bounded` verifies a lossy reconstruction against a
+committed metric bound. Every claim carries an explicit representation kind, the anchor commits
+the evidence, and agents re-verify locally without trusting the server. See
+[AI-VERIFICATION.md](AI-VERIFICATION.md).
 
 ## Netlist model
 
