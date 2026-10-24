@@ -249,6 +249,24 @@ stopped.
 `--exclude blobs` when a large shard directory lives under the data root and is backed
 up by other means.
 
+### Backup and restore fault limits
+
+`restore` verifies the whole bundle before touching the target, stages every file as a
+unique `*.tmp`, then renames them into place. A lock file makes a second restore into
+the same target refuse rather than interleave. Limits are measured by
+`apps/api/test/backup-fault.test.ts` and `backup.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| A truncated archive or bad gzip | `readBackup` throws; `verify` never sees a partial bundle |
+| A version other than `BACKUP_VERSION` (1) | `verifyBackup` reports `backup.version must be 1`; `restoreBackup` throws before writing |
+| A staged write fails midway | every staged temp is removed, the lock is released, and the target keeps only what was there before; no partial file is committed |
+| A commit rename fails midway | remaining temps are removed and files created by this run are rolled back; files that already existed and were overwritten cannot be restored (that is the `--force` contract) |
+| Two restores into one target | the second refuses with `restore already in progress`; a crashed restore leaves `.rarext-restore.lock`, which an operator removes once no restore is running |
+| A symlinked directory inside the target | the destination's real parent must stay under the target root, so a restore cannot write through a symlink outside it |
+| Two `writeBackup` calls to one path | each writes a unique temp and renames, so the archive is always one complete valid bundle and no temp is left |
+| Restore target is a file | `restore target is not a directory` before any write |
+
 ## Restore procedure
 
 1. Stop the node.

@@ -1,10 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -23,6 +25,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 
 export const BACKUP_KIND = "rarext.backup";
 export const BACKUP_VERSION = 1;
+const RESTORE_LOCK = ".rarext-restore.lock";
 
 export interface BackupFile {
   /** Path relative to the backed-up data directory, using `/` separators. */
@@ -267,34 +270,81 @@ export function restoreBackup(
 
   const bundle = value as BackupBundle;
   const root = resolve(target);
+  const lock = join(root, RESTORE_LOCK);
 
-  if (existsSync(root) && readdirSync(root).length > 0 && !options.force) {
-    throw new Error(`restore target is not empty: ${target} (use --force to overwrite)`);
+  if (existsSync(root)) {
+    if (!statSync(root).isDirectory()) {
+      throw new Error(`restore target is not a directory: ${target}`);
+    }
+    if (existsSync(lock)) {
+      throw new Error(`restore already in progress for ${target} (remove ${lock} if not)`);
+    }
+    if (readdirSync(root).length > 0 && !options.force) {
+      throw new Error(`restore target is not empty: ${target} (use --force to overwrite)`);
+    }
   }
 
-  const bytes = new Map<string, Buffer>();
+  mkdirSync(root, { recursive: true });
+
+  // Two restores into one target would interleave their per-file renames. The
+  // lock makes the second one refuse instead of leaving a mixed tree. A crashed
+  // restore leaves the lock behind; remove it by hand once no restore is
+  // running.
+  try {
+    writeFileSync(lock, `${process.pid} ${Date.now()}\n`, { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`restore already in progress for ${target} (remove ${lock} if not)`);
+    }
+    throw error;
+  }
+
+  const realRoot = realpathSync(root);
+  const staged: { temporary: string; destination: string; existed: boolean }[] = [];
   let total = 0;
 
-  for (const file of bundle.files) {
-    const content = Buffer.from(file.content, "base64");
-    const destination = resolve(root, file.path);
+  try {
+    for (const file of bundle.files) {
+      const content = Buffer.from(file.content, "base64");
+      const destination = resolve(root, file.path);
 
-    if (destination !== root && !destination.startsWith(`${root}${sep}`)) {
-      throw new Error(`refusing to restore outside the target: ${file.path}`);
+      if (destination !== root && !destination.startsWith(`${root}${sep}`)) {
+        throw new Error(`refusing to restore outside the target: ${file.path}`);
+      }
+
+      mkdirSync(dirname(destination), { recursive: true });
+
+      // A pre-existing symlinked directory under the target must not redirect
+      // a write outside it.
+      const realParent = realpathSync(dirname(destination));
+      if (realParent !== realRoot && !realParent.startsWith(`${realRoot}${sep}`)) {
+        throw new Error(`refusing to restore through a symlink: ${file.path}`);
+      }
+
+      const temporary = `${destination}.${randomUUID()}.tmp`;
+      writeFileSync(temporary, content, { flag: "wx" });
+      staged.push({ temporary, destination, existed: existsSync(destination) });
+      total += content.length;
     }
-
-    bytes.set(destination, content);
-    total += content.length;
+  } catch (error) {
+    for (const entry of staged) rmSync(entry.temporary, { force: true });
+    rmSync(lock, { force: true });
+    throw error;
   }
 
-  for (const [destination, content] of bytes) {
-    mkdirSync(dirname(destination), { recursive: true });
-    const temp = `${destination}.${process.pid}.tmp`;
-    writeFileSync(temp, content);
-    renameSync(temp, destination);
+  try {
+    for (const entry of staged) renameSync(entry.temporary, entry.destination);
+  } catch (error) {
+    for (const entry of staged) {
+      rmSync(entry.temporary, { force: true });
+      if (!entry.existed) rmSync(entry.destination, { force: true });
+    }
+    throw error;
+  } finally {
+    rmSync(lock, { force: true });
   }
 
-  return { restored: bytes.size, bytes: total };
+  return { restored: staged.length, bytes: total };
 }
 
 export function writeBackup(bundle: BackupBundle, filePath: string): void {
@@ -304,11 +354,16 @@ export function writeBackup(bundle: BackupBundle, filePath: string): void {
     throw new Error(`refusing to write an invalid backup: ${checked.errors.join("; ")}`);
   }
 
-  mkdirSync(dirname(resolve(filePath)), { recursive: true });
-  const temp = `${resolve(filePath)}.${process.pid}.tmp`;
+  const destination = resolve(filePath);
+  mkdirSync(dirname(destination), { recursive: true });
+  const temp = `${destination}.${randomUUID()}.tmp`;
 
-  writeFileSync(temp, gzipSync(`${JSON.stringify(bundle)}\n`));
-  renameSync(temp, resolve(filePath));
+  try {
+    writeFileSync(temp, gzipSync(`${JSON.stringify(bundle)}\n`), { flag: "wx" });
+    renameSync(temp, destination);
+  } finally {
+    rmSync(temp, { force: true });
+  }
 }
 
 export function readBackup(filePath: string): BackupBundle {
