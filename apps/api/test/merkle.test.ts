@@ -32,3 +32,20 @@ test("odd levels duplicate the final leaf", () => {
   assert.equal(proof.length, 2);
   assert.equal(verifyProof("c3", proof, root, 2), true);
 });
+
+test("a proof is bound to its root, index, and full path", () => {
+  const root = merkleRoot(leaves);
+  const proof = merkleProof(leaves, 2);
+  const otherRoot = merkleRoot([...leaves.slice(0, 4), "zz"]);
+
+  assert.equal(verifyProof(leaves[2], proof, otherRoot, 2), false);
+  assert.equal(verifyProof(leaves[2], proof, root, 1), false);
+  assert.equal(verifyProof(leaves[2], proof.slice(0, -1), root, 2), false);
+  assert.equal(verifyProof(leaves[2], [proof[1]!, proof[0]!, proof[2]!], root, 2), false);
+});
+
+test("merkleProof refuses an out-of-range leaf index", () => {
+  assert.throws(() => merkleProof(leaves, leaves.length), /index out of range/);
+  assert.throws(() => merkleProof(leaves, -1), /index out of range/);
+  assert.throws(() => merkleProof([], 0), /index out of range/);
+});

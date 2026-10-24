@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { decodeBytes, encodeBytes, verifyShard } from "../src/erasure.ts";
+import { decodeBytes, encodeBytes, shardDigest, verifyShard } from "../src/erasure.ts";
 import { BlobStore } from "../src/storage.ts";
 
 /**
@@ -70,4 +70,39 @@ test("a corrupted stored shard is refused and the rest still reconstruct", () =>
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("exactly k shards reconstruct and k - 1 fails loudly", () => {
+  const payload = randomBytes(4096);
+  const shards = encodeBytes(payload, 3, 2);
+
+  assert.deepEqual(Buffer.from(decodeBytes(shards.slice(0, 3))), payload);
+  assert.throws(() => decodeBytes(shards.slice(0, 2)), /at least 3 shards are needed/);
+});
+
+test("a shard relabelled under another index is refused even with a valid self-digest", () => {
+  const payload = randomBytes(4096);
+  const shards = encodeBytes(payload, 2, 2);
+  const copied = {
+    ...shards[1]!,
+    bytes: Uint8Array.from(shards[0]!.bytes),
+    digest: "",
+  };
+
+  copied.digest = shardDigest(copied);
+
+  assert.throws(
+    () => decodeBytes([shards[0]!, copied]),
+    /reconstructed payload does not match its digest/,
+  );
+});
+
+test("shards with mismatched byte lengths are refused before reconstruction", () => {
+  const shards = encodeBytes(randomBytes(4096), 2, 2);
+  const short = {
+    ...shards[1]!,
+    bytes: shards[1]!.bytes.subarray(0, shards[1]!.bytes.length - 1),
+  };
+
+  assert.throws(() => decodeBytes([shards[0]!, short]), /same size/);
 });

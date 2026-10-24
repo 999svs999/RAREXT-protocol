@@ -88,6 +88,37 @@ rejected when:
 These checks are intentionally strict: a signature proves who signed a claim, not that
 the claim is physically possible.
 
+### Reconstruction and repair data path
+
+`decodeBytes` refuses fewer than `k` shards, duplicate indices, mixed code
+parameters, mixed shard sizes, a shard whose index-bound digest does not verify, and
+a reconstructed payload that does not hash to the committed payload digest. The
+streamed path (`decodeShardsToFile`) additionally checks every selected shard file
+against the signed shard size, SHA-256, and 4 KiB leaf count before it opens the
+output. It writes to a unique temporary sibling and renames only after the full
+payload hash matches, so a corrupt, truncated, or relabelled shard cannot leave a
+partial destination file.
+
+Streamed repair (`reencodeStreamedShard`) checks survivor file sizes before reading,
+decodes one chunk at a time, and compares the rebuilt shard's size, SHA-256, leaf
+count, and Merkle root with the signed placement before upload. A corrupt survivor
+therefore fails either a chunk digest or the rebuilt-shard check; it cannot silently
+become a signed shard. A shard copied from another index with a recomputed self-digest
+still fails the final payload digest, so byte equality alone is not treated as a
+valid replacement. `verifyProof` is bound to the stored root, leaf index, and exact
+proof path; a wrong root, wrong index, truncated proof, or reordered siblings returns
+`false`, and the challenge path records `bad-proof`.
+
+Limits: the streamed preflight and decode are separate reads, so a file rewritten
+between them is caught only by the final payload hash; the temp output is discarded,
+but this is not an `fsync`/power-loss guarantee. The preflight reads each selected
+shard twice, and a corrupt shard among the first `k` fails closed rather than being
+skipped in favour of an extra survivor. Merkle roots are checked on challenges and
+on rebuilt shards; streamed decode checks the signed SHA-256 and leaf count, not a
+fresh root over every shard. Regression tests are in
+`apps/api/test/erasure-storage.test.ts`, `apps/api/test/erasure-stream.test.ts`,
+`apps/api/test/persistence.test.ts`, and `apps/api/test/merkle.test.ts`.
+
 ### Pin service
 
 `PinStore` recomputes the CID from the bytes on write and on every read, checks that

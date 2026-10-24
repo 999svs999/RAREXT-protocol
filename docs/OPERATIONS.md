@@ -10,14 +10,24 @@ the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 The storage endpoints (`PUT`/`GET /v1/blobs`, the durability challenge, audit, and
 repair paths) are bounded by construction, and the limits are measured by the
 regression tests in `apps/api/test/storage-hardening.test.ts`,
-`apps/api/test/durability-repair-fault.test.ts`, and
-`apps/api/test/erasure-stream-http.test.ts`:
+`apps/api/test/durability-repair-fault.test.ts`,
+`apps/api/test/erasure-stream-http.test.ts`, `apps/api/test/erasure-stream.test.ts`,
+`apps/api/test/erasure-storage.test.ts`, `apps/api/test/persistence.test.ts`, and
+`apps/api/test/merkle.test.ts`:
 
 | Check | Limit / behaviour | What happens at the limit |
 | --- | --- | --- |
 | Shard digest / root / storedAs | must be 64-char lowercase SHA-256 hex | `placementProblem` / `signPlacement` / `verifyPlacement` refuse the placement; a truncated or non-hex digest is never written |
 | Blob size | `MAX_BLOB_BYTES` = 32 MiB per blob (`BlobStore`) | `store.put()` throws `blob is N bytes, above the 33554432 byte cap`; the JSON path is additionally capped by `MAX_BODY_BYTES` = 1 MiB |
 | Custom blob cap | `new BlobStore(dir, { maxBytes })` | same rejection, cap is per-store |
+| Signed shard size | `MAX_SHARD_BYTES` = 4 GiB; holder raw uploads cap at 8 GiB | a larger placement is refused (`shard size is invalid`); a raw PUT without a valid body length or above 8 GiB is refused with `raw upload needs a valid content-length` |
+| Streamed reconstruction shard count | exactly `dataShards` selected | fewer than `k` rejects `need <k> shard files, have <n>` before any output is created; exactly `k` reconstructs |
+| Streamed shard file size | file size must equal the signed shard size (`paddedLength / k`) | a short or oversized file rejects `shard <i> file is <n> bytes, expected <m>`; the destination is untouched |
+| Streamed shard content | selected files must match the signed `sha256` and 4 KiB leaf count | a same-sized edit rejects `shard <i> bytes do not match their recorded digest`; a leaf-count mismatch rejects `shard <i> leaf count does not match its recorded root`; neither writes output |
+| Reconstructed payload | full output SHA-256 must equal the signed `payloadDigest` | a mismatch rejects `the reconstructed payload does not match its digest`; the temporary file is removed and any existing destination is left unchanged |
+| Rebuilt repair shard | rebuilt bytes must match the signed size, SHA-256, leaf count, and Merkle root | `reencodeStreamedShard` checks before upload; a mismatch removes the temporary file and repair fails before committing the placement |
+| Duplicate or relabelled shard | indices must be distinct; a copied shard with a recomputed self-digest still fails the final payload digest | `decodeBytes` rejects duplicate indices (`shard <i> appears twice`) or the reconstructed digest; identical bytes are valid only when the payload actually decodes to the signed digest |
+| Merkle proof at challenge | proof must match the stored root, leaf index, and full path | `verifyProof` returns `false` for a wrong root, wrong index, truncated proof, or reordered siblings; the ledger records `bad-proof` and does not mark the shard live |
 | Chosen survivor holder missing | a survivor's holder is not in the caller's holder list | `repair()` rejects with `cannot repair: holder <id> for shard <i> is not configured` before any write; the placement is untouched |
 | Fewer than k live shards | `survivors < dataShards` | `repair()` rejects with `cannot repair: only <n> of <k> data shards survive` before any write |
 | Concurrent repair | two `repair()` calls for the same blob | the second caller joins the in-flight repair (`inFlightRepairs`) instead of writing the same shard twice; this is per process, not a distributed lock |
@@ -28,6 +38,21 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 | Repair after forget or `maxPlacements` eviction | the ledger has no placement for the blob | `repair()` rejects `unknown blob <hash>` before contacting any holder |
 | Repair storm | repeated failed repairs for one blob | the scheduler backs off per blob: `RAREXT_REPAIR_BACKOFF_MS` = 60s initial, doubled per consecutive failure, capped at `RAREXT_REPAIR_MAX_BACKOFF_MS` = 6h; skipped attempts appear in `repairDeferred` with `attempts`/`retryAt`, and a clean audit clears the backoff |
 | Duplicate challenge nonce | replayed nonce with a different binding | `verifyChallengeResponse` rejects (`bad-proof`); the holder also caps nonce length at `MAX_CHALLENGE_NONCE` (200) |
+
+Streamed decode verifies every selected shard before it opens the output file,
+then writes to a unique `.tmp` sibling and renames only after the full payload hash
+matches. A failed decode therefore leaves no partial destination; an existing file
+at the destination is not replaced. The verification pass reads each selected shard
+twice (hash, then decode), so the extra cost is disk I/O, not memory: peak RSS is
+still bounded by the 8 MiB chunk size. Repair checks survivor file sizes and then
+checks the rebuilt shard's size, SHA-256, leaf count, and Merkle root against the
+signed placement before upload; it does not hash every survivor twice. The 1 GiB
+repair benchmark predates this check, so re-run it before quoting repair throughput.
+
+A corrupt shard among the first `k` fails the decode; it is not silently skipped in
+favour of an extra survivor. Remove it from `available` and repair or replace it.
+The preflight and decode are separate reads, so a file changed between them is caught
+by the final payload hash, which discards the temp file.
 
 A failed or refused repair never moves the signed placement: the staging is
 atomic, so a retry is idempotent and the holder store stays content-addressed.

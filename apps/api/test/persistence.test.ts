@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,6 +13,7 @@ import type {
   Publication,
   PublicationPayload,
 } from "../../../packages/core/src/index.ts";
+import { BlobStore } from "../src/storage.ts";
 import { RarextStore } from "../src/store.ts";
 import { post, start, stop } from "./helpers.ts";
 
@@ -110,6 +111,35 @@ test("publications, identities, and anchors survive a restart", async () => {
     assert.equal(((await proofResponse.json()) as { valid: boolean }).valid, true);
 
     await stop(second.server);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a blob store survives restart and rejects truncated or corrupt bytes", () => {
+  mkdirSync(join(process.cwd(), ".data"), { recursive: true });
+  const dir = mkdtempSync(join(process.cwd(), ".data", "round7-persistence-"));
+
+  try {
+    const payload = randomBytes(4096);
+    const first = new BlobStore(dir);
+    const record = first.put(payload, { mediaType: "application/octet-stream" });
+
+    const restarted = new BlobStore(dir);
+    const found = restarted.get(record.hash);
+    assert.ok(found);
+    assert.deepEqual(found.bytes, payload);
+
+    const path = join(dir, record.hash);
+
+    writeFileSync(path, payload.subarray(0, payload.length - 1));
+    assert.equal(new BlobStore(dir).get(record.hash), null);
+
+    const corrupt = Uint8Array.from(payload);
+    corrupt[0] ^= 0xff;
+    writeFileSync(path, corrupt);
+    assert.equal(new BlobStore(dir).get(record.hash), null);
+    assert.equal(new BlobStore(dir).list().length, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

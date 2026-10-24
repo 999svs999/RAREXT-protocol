@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readSync, statSync, writeSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 
 import { decodeBytes, encodeBytes, shardDigest, type ErasureShard } from "./erasure.ts";
@@ -99,6 +99,51 @@ function writeFully(fd: number, bytes: Uint8Array): void {
 
   while (offset < bytes.length) {
     offset += writeSync(fd, bytes, offset, bytes.length - offset);
+  }
+}
+
+function verifyShardFile(
+  shard: Pick<StreamedShard, "index" | "bytes" | "leaves" | "sha256">,
+  path: string,
+  expectedBytes: number,
+): void {
+  if (shard.bytes !== expectedBytes) {
+    throw new Error(
+      `placement shard ${shard.index} records ${shard.bytes} bytes, expected ${expectedBytes}`,
+    );
+  }
+
+  const actualBytes = statSync(path).size;
+
+  if (actualBytes !== expectedBytes) {
+    throw new Error(`shard ${shard.index} file is ${actualBytes} bytes, expected ${expectedBytes}`);
+  }
+
+  const fd = openSync(path, "r");
+
+  try {
+    const hash = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    let size = 0;
+
+    for (;;) {
+      const read = readSync(fd, buffer, 0, buffer.length, null);
+      if (read === 0) break;
+      hash.update(buffer.subarray(0, read));
+      size += read;
+    }
+
+    if (hash.digest("hex") !== shard.sha256) {
+      throw new Error(`shard ${shard.index} bytes do not match their recorded digest`);
+    }
+
+    const leaves = size === 0 ? 1 : Math.ceil(size / SHARD_CHUNK_BYTES);
+
+    if (leaves !== shard.leaves) {
+      throw new Error(`shard ${shard.index} leaf count does not match its recorded root`);
+    }
+  } finally {
+    closeSync(fd);
   }
 }
 
@@ -229,21 +274,61 @@ export function reencodeStreamedShard(options: {
       throw new Error("available shard index is out of range");
     }
     if (shard.index === targetIndex) throw new Error("the target shard cannot be a survivor");
+
+    const existing = unique.get(shard.index);
+
+    if (existing !== undefined && existing !== shard.path) {
+      throw new Error(`shard ${shard.index} is available from more than one path`);
+    }
+
     unique.set(shard.index, shard.path);
   }
 
   const chosen = [...unique.entries()].sort((left, right) => left[0] - right[0]).slice(0, dataShards);
   if (chosen.length < dataShards) throw new Error(`need ${dataShards} survivor shards, have ${chosen.length}`);
 
+  const expectedBytes = paddedLength / dataShards;
+
+  if (!Number.isInteger(expectedBytes) || expectedBytes < 0) {
+    throw new Error("the shard size is misaligned");
+  }
+
   const fullBlock = chunkBytes / dataShards;
   const lastBlock = (paddedLength - (chunks - 1) * chunkBytes) / dataShards;
 
   if (!Number.isInteger(lastBlock) || lastBlock < 0) throw new Error("the last chunk is misaligned");
 
+  const recorded = new Map(placement.shards.map((shard) => [shard.index, shard]));
+  const target = recorded.get(targetIndex);
+
+  if (!target) throw new Error(`target shard ${targetIndex} is not in the placement`);
+
+  for (const [index, path] of chosen) {
+    const shard = recorded.get(index);
+
+    if (!shard) throw new Error(`shard ${index} is not in the placement`);
+
+    if (shard.bytes !== expectedBytes) {
+      throw new Error(
+        `placement shard ${index} records ${shard.bytes} bytes, expected ${expectedBytes}`,
+      );
+    }
+
+    const actualBytes = statSync(path).size;
+
+    if (actualBytes !== expectedBytes) {
+      throw new Error(`shard ${index} file is ${actualBytes} bytes, expected ${expectedBytes}`);
+    }
+  }
+
   const handles = chosen.map(([, path]) => openSync(path, "r"));
-  const output = openSync(outputPath, "w");
+  const temporaryPath = `${outputPath}.${randomBytes(6).toString("hex")}.tmp`;
+  let output: number | null = null;
+  let committed = false;
 
   try {
+    output = openSync(temporaryPath, "wx");
+
     for (let index = 0; index < chunks; index += 1) {
       const blockLength = index === chunks - 1 ? lastBlock : fullBlock;
       const offset = index * fullBlock;
@@ -267,38 +352,54 @@ export function reencodeStreamedShard(options: {
       const encoded = encodeBytes(chunk, dataShards, parityShards);
       writeFully(output, encoded[targetIndex]!.bytes);
     }
-  } finally {
+
     closeSync(output);
-    for (const fd of handles) closeSync(fd);
-  }
+    output = null;
 
-  const bytes = paddedLength / dataShards;
-  const hash = createHash("sha256");
-  const leaves: string[] = [];
-  const reader = openSync(outputPath, "r");
+    const hash = createHash("sha256");
+    const leaves: string[] = [];
+    const reader = openSync(temporaryPath, "r");
 
-  try {
-    const buffer = Buffer.alloc(SHARD_CHUNK_BYTES);
-    let position = 0;
+    try {
+      const buffer = Buffer.alloc(SHARD_CHUNK_BYTES);
+      let position = 0;
 
-    for (;;) {
-      const read = readSync(reader, buffer, 0, SHARD_CHUNK_BYTES, position);
-      if (read === 0) break;
-      const slice = buffer.subarray(0, read);
-      hash.update(slice);
-      leaves.push(sha256Hex(slice));
-      position += read;
+      for (;;) {
+        const read = readSync(reader, buffer, 0, SHARD_CHUNK_BYTES, position);
+        if (read === 0) break;
+        const slice = buffer.subarray(0, read);
+        hash.update(slice);
+        leaves.push(sha256Hex(slice));
+        position += read;
+      }
+
+      if (position !== expectedBytes) {
+        throw new Error(`rebuilt shard ${targetIndex} is ${position} bytes, expected ${expectedBytes}`);
+      }
+    } finally {
+      closeSync(reader);
     }
-  } finally {
-    closeSync(reader);
-  }
 
-  return {
-    bytes,
-    sha256: hash.digest("hex"),
-    leaves: leaves.length > 0 ? leaves.length : 1,
-    root: merkleRoot(leaves.length > 0 ? leaves : [sha256Hex(new Uint8Array())]),
-  };
+    const sha256 = hash.digest("hex");
+    const leafList = leaves.length > 0 ? leaves : [sha256Hex(new Uint8Array())];
+    const root = merkleRoot(leafList);
+
+    if (sha256 !== target.sha256) {
+      throw new Error(`rebuilt shard ${targetIndex} does not match its recorded digest`);
+    }
+    if (leafList.length !== target.leaves || root !== target.root) {
+      throw new Error(`rebuilt shard ${targetIndex} does not match its recorded root`);
+    }
+
+    renameSync(temporaryPath, outputPath);
+    committed = true;
+
+    return { bytes: expectedBytes, sha256, leaves: leafList.length, root };
+  } finally {
+    for (const fd of handles) closeSync(fd);
+    if (output !== null) closeSync(output);
+    if (!committed) rmSync(temporaryPath, { force: true });
+  }
 }
 
 export function decodeShardsToFile(options: DecodeFileOptions): {
@@ -329,7 +430,21 @@ export function decodeShardsToFile(options: DecodeFileOptions): {
   const unique = new Map<number, string>();
 
   for (const shard of source) {
-    if (Number.isInteger(shard.index)) unique.set(shard.index, shard.path);
+    if (
+      !Number.isInteger(shard.index) ||
+      shard.index < 0 ||
+      shard.index >= dataShards + parityShards
+    ) {
+      throw new Error("available shard index is out of range");
+    }
+
+    const existing = unique.get(shard.index);
+
+    if (existing !== undefined && existing !== shard.path) {
+      throw new Error(`shard ${shard.index} is available from more than one path`);
+    }
+
+    unique.set(shard.index, shard.path);
   }
 
   const chosen = [...unique.entries()].sort((left, right) => left[0] - right[0]).slice(0, dataShards);
@@ -340,19 +455,30 @@ export function decodeShardsToFile(options: DecodeFileOptions): {
 
   const expectedBytes = paddedLength / dataShards;
 
+  if (!Number.isInteger(expectedBytes) || expectedBytes < 0) {
+    throw new Error("the shard size is misaligned");
+  }
+
+  const recorded = new Map(placement.shards.map((shard) => [shard.index, shard]));
+
   for (const [index, path] of chosen) {
-    const actual = statSync(path).size;
-    if (actual !== expectedBytes) {
-      throw new Error(`shard ${index} file is ${actual} bytes, expected ${expectedBytes}`);
-    }
+    const shard = recorded.get(index);
+
+    if (!shard) throw new Error(`shard ${index} is not in the placement`);
+
+    verifyShardFile(shard, path, expectedBytes);
   }
 
   const handles = chosen.map(([, path]) => openSync(path, "r"));
-  const output = openSync(outputPath, "w");
+  const temporaryPath = `${outputPath}.${randomBytes(6).toString("hex")}.tmp`;
   const outputHasher = createHash("sha256");
+  let output: number | null = null;
+  let committed = false;
   let written = 0;
 
   try {
+    output = openSync(temporaryPath, "wx");
+
     for (let index = 0; index < chunks; index += 1) {
       const blockLength = index === chunks - 1 ? lastBlock : fullBlock;
       const offset = index * fullBlock;
@@ -386,18 +512,24 @@ export function decodeShardsToFile(options: DecodeFileOptions): {
         written += take;
       }
     }
+
+    if (written !== length) throw new Error(`wrote ${written} bytes, expected ${length}`);
+
+    const digest = outputHasher.digest("hex");
+
+    if (digest !== placement.payloadDigest) {
+      throw new Error("the reconstructed payload does not match its digest");
+    }
+
+    closeSync(output);
+    output = null;
+    renameSync(temporaryPath, outputPath);
+    committed = true;
+
+    return { bytes: written, payloadDigest: placement.payloadDigest, sha256: digest };
   } finally {
     for (const fd of handles) closeSync(fd);
-    closeSync(output);
+    if (output !== null) closeSync(output);
+    if (!committed) rmSync(temporaryPath, { force: true });
   }
-
-  if (written !== length) throw new Error(`wrote ${written} bytes, expected ${length}`);
-
-  const digest = outputHasher.digest("hex");
-
-  if (digest !== placement.payloadDigest) {
-    throw new Error("the reconstructed payload does not match its digest");
-  }
-
-  return { bytes: written, payloadDigest: placement.payloadDigest, sha256: digest };
 }

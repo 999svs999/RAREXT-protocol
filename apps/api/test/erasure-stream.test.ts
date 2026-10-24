@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import { chunkLeaves } from "../src/durability.ts";
-import { decodeShardsToFile, encodeFileToShards } from "../src/erasure-stream.ts";
+import { decodeShardsToFile, encodeFileToShards, reencodeStreamedShard } from "../src/erasure-stream.ts";
 import { merkleRoot } from "../src/merkle.ts";
 
 function workspace(): { root: string; cleanup(): void } {
@@ -138,8 +138,9 @@ test("a tampered or missing shard is refused", () => {
 
     assert.throws(
       () => decodeShardsToFile({ placement, outputPath: join(root, "bad.bin"), available: withTampered }),
-      /digest/,
+      /recorded digest/,
     );
+    assert.equal(existsSync(join(root, "bad.bin")), false);
 
     const unaffected = [0, 2].map((index) => ({
       index,
@@ -157,6 +158,75 @@ test("a tampered or missing shard is refused", () => {
       }),
       /need 2 shard files/,
     );
+    assert.equal(existsSync(join(root, "short.bin")), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a truncated shard is refused before any output is written", () => {
+  const { root, cleanup } = workspace();
+
+  try {
+    const payload = randomBytes(200_000);
+    const inputPath = writeInput(root, payload);
+    const placement = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+    const shardPath = placement.shards[1]!.path;
+    const bytes = read(shardPath);
+    writeFileSync(shardPath, bytes.subarray(0, bytes.length - 1));
+
+    const output = join(root, "truncated.bin");
+
+    assert.throws(
+      () => decodeShardsToFile({ placement, outputPath: output }),
+      /file is .* expected/,
+    );
+    assert.equal(existsSync(output), false);
+  } finally {
+    cleanup();
+  }
+});
+
+
+test("reencoding a shard refuses a corrupt survivor and leaves no output", () => {
+  const { root, cleanup } = workspace();
+
+  try {
+    const payload = randomBytes(200_000);
+    const inputPath = writeInput(root, payload);
+    const placement = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+    const survivorPath = placement.shards[1]!.path;
+    const bytes = read(survivorPath);
+    bytes[Math.floor(bytes.length / 2)]! ^= 0xff;
+    writeFileSync(survivorPath, bytes);
+
+    const output = join(root, "rebuilt-shard.bin");
+
+    assert.throws(
+      () => reencodeStreamedShard({
+        placement,
+        targetIndex: 2,
+        available: [0, 1].map((index) => ({
+          index,
+          path: placement.shards[index]!.path,
+        })),
+        outputPath: output,
+      }),
+      /digest/,
+    );
+    assert.equal(existsSync(output), false);
   } finally {
     cleanup();
   }

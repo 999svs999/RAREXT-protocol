@@ -8,8 +8,13 @@ will not quietly claim away.
 The failure tests are in
 [`apps/api/test/storage-hardening.test.ts`](../apps/api/test/storage-hardening.test.ts),
 [`apps/api/test/durability-repair-fault.test.ts`](../apps/api/test/durability-repair-fault.test.ts),
-and the streamed cases in
-[`apps/api/test/erasure-stream-http.test.ts`](../apps/api/test/erasure-stream-http.test.ts).
+the streamed cases in
+[`apps/api/test/erasure-stream-http.test.ts`](../apps/api/test/erasure-stream-http.test.ts)
+and [`apps/api/test/erasure-stream.test.ts`](../apps/api/test/erasure-stream.test.ts),
+and the codec/store cases in
+[`apps/api/test/erasure-storage.test.ts`](../apps/api/test/erasure-storage.test.ts),
+[`apps/api/test/persistence.test.ts`](../apps/api/test/persistence.test.ts), and
+[`apps/api/test/merkle.test.ts`](../apps/api/test/merkle.test.ts).
 The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 
 ## What was injected
@@ -19,6 +24,10 @@ The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 | Repair write fails part-way (full spare/disk, simulated `ENOSPC`) | Writes are staged first. A rejected spare is skipped for the next free spare; the placement and witnesses are updated only after **all** repairs are written. The call throws only when no target accepts a shard. | A two-loss repair fails on the second write when every remaining target rejects it, the serialized placement is byte-identical, audit stays `under-replicated`, and a retry with healthy holders fills both shards. |
 | Process crash after a shard hit the holder | The signed placement still names the old holder. The new shard is an orphan: content-addressed, valid, and not referenced. A retry is idempotent because `put` is content-addressed. | Crash after the first write, reopen the signed record from `PlacementRegistry`, adopt it into a new ledger, challenge, repair, reconstruct, and reach `ok`. |
 | Corrupt/tampered shard | Holder `get` is hash-checked by `BlobStore`; a challenge is bound to a nonce and a Merkle leaf; repair tries survivors until it has `k` readable shards and `decodeBytes` verifies each digest. | A tampered shard produces `bad-proof`; a corrupt survivor selected by repair fails the digest and does not move the placement. Repair from honest holders still succeeds. |
+| Streamed reconstruction shard set | Exactly `k` files are selected. Every selected file must match its signed size, SHA-256, and leaf count before output is opened; the full payload digest is checked before rename. | `k - 1` rejects `need <k> shard files, have <n>` with no output; a short/oversized file rejects `shard <i> file is ... expected ...`; an in-place edit rejects `shard <i> bytes do not match their recorded digest`; a truncated or corrupt file never reaches the destination. |
+| Copied or relabelled shard | Shard identity is index-bound; a copy with a recomputed self-digest is still fed through the codec and checked against the signed payload digest. | Two shards with byte-identical contents are only accepted when reconstruction yields the signed payload; a relabelled copy fails `the reconstructed payload does not match its digest`. `decodeBytes` also rejects duplicate indices. |
+| Merkle proof does not match | The proof must match the stored root, leaf index, and full path. | `verifyProof` returns `false` for a wrong root, wrong index, truncated proof, or reordered siblings; `verifyChallengeResponse` records `bad-proof` and the shard is not marked live. |
+| Rebuilt streamed shard | Repair checks survivor file sizes, decodes chunk by chunk, then compares the rebuilt shard's size, SHA-256, leaf count, and Merkle root with the signed placement. | A mismatch rejects before upload; the temporary rebuilt file is removed, the placement is not moved, and a retry can use honest survivors. |
 | Holder churn, two simultaneous losses | Repair reconstructs from `k` readable survivors, writes `m` shards, and places each on a holder not currently used by the blob. | Two losses fill two spares, all six holder ids stay distinct, the payload reconstructs; after removing another holder and adding a newcomer, a third repair still reconstructs. |
 | Survivor drops after the presence probe | A survivor that passed `has` then throws on `get` is skipped and the next survivor is read. A corrupt shard is still decoded and fails closed. | `durability-repair-fault.test.ts` makes the first survivor throw once; repair reads another, fills the loss, and reconstructs. Too few readable survivors rejects with the unreadable indices and writes nothing. |
 | Replacement spare rejects the write | A spare that answers `5xx`/`507` to `put`/`putFile` is marked unusable for this repair; the next free spare is tried. | The fault test fails the first spare, repairs onto the second, and checks the payload. Streamed repair has the same test in `erasure-stream-http.test.ts`. If every spare rejects, repair aborts with `repair write failed for shard <i>: no spare holder accepted it`. |
@@ -95,11 +104,22 @@ and concurrent repairs are unmeasured.
 ## Corruption and proof limits
 
 - A shard is checked when it is read, challenged, or used in repair. A corrupt shard
-  that is neither challenged nor selected in a repair can sit unnoticed.
+  that is neither challenged nor selected in a repair can sit unnoticed. Unselected
+  shards are not hashed by streamed decode; corruption there does not block a decode
+  that has `k` good chosen shards.
 - `repair` reads survivors until it has `k` readable shards. A holder that errors or
   returns nothing is skipped; a corrupt shard that was actually read still fails the
   digest loudly rather than being routed around. That is a deliberate fail-closed choice,
   not automatic corruption recovery.
+- Streamed decode hashes selected shard files against the signed digests before
+  decoding, so it reads them twice: once to verify, once to reconstruct. Peak memory
+  is still the chunk size, but retrieval I/O is higher. The 1 GiB repair measurement
+  predates the rebuilt-shard root check and was not rerun; do not quote it as the cost
+  of the current path without re-running `npm run bench:repair`.
+- The preflight hash and the decode are separate reads. A file rewritten between them
+  is caught by the final payload hash, the temp output is discarded, and the
+  destination is not replaced. There is still no `fsync`/power-loss guarantee for the
+  rename.
 - Challenges are **proof of possession**, not proof of retrievability. A holder that
   keeps the Merkle leaves and discards the shard bytes can still answer until it is
   asked for the bytes. The storage frontier lists that as open.

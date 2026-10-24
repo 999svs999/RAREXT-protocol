@@ -18,6 +18,10 @@ chunks with Merkle proofs for availability sampling.
 The client can put and get over whole-shard JSON (small payloads) or raw streamed shard
 files (large payloads). The streamed repair path rebuilds one shard at a time from
 survivor files, so its memory follows the chunk size rather than the payload size.
+Streamed decode checks each selected shard against the signed size, SHA-256, and leaf
+count, then publishes the result with a temp-file rename only after the full payload
+hash matches. Repair checks the rebuilt shard's size, SHA-256, leaf count, and Merkle
+root before upload.
 
 ## Measurements
 
@@ -56,6 +60,13 @@ bounded by its 8 MiB chunk size, not by the 1 GiB payload.
 - **Failure handling is tested.** Staged repairs, corrupt shards, crash/restart,
   disk-full, and simultaneous losses are covered in
   [`apps/api/test/storage-hardening.test.ts`](../apps/api/test/storage-hardening.test.ts).
+  Reconstruction has its own fail-closed cases: exactly `k` vs `k - 1`, an in-place
+  edit, a truncated part-file, a copied/relabelled shard, mismatched shard sizes, and
+  a Merkle proof against the wrong root/index/path in
+  [`erasure-storage.test.ts`](../apps/api/test/erasure-storage.test.ts),
+  [`erasure-stream.test.ts`](../apps/api/test/erasure-stream.test.ts), and
+  [`merkle.test.ts`](../apps/api/test/merkle.test.ts). A failed decode leaves no
+  partial destination file.
 
 ## What is not proven
 
@@ -77,6 +88,10 @@ bounded by its 8 MiB chunk size, not by the 1 GiB payload.
 - **No fsync/power-loss guarantee, TLS, identity, or multi-writer lock.** Tokens are
   shared bearer secrets, not identities. Holders should sit behind TLS and a firewall;
   a non-loopback bind without a token is refused, but that is not transport security.
+- **Streamed decode reads selected shards twice.** It hashes them before decoding and
+  reads them again to reconstruct; the extra cost is I/O, not peak RSS. The 1 GiB
+  repair number predates the rebuilt-shard root check and was not rerun, so treat the
+  current repair bandwidth as unmeasured.
 - **Ledger retention is opt-in.** `DurabilityLedger` keeps every placement by default.
   A long-lived client must set `maxPlacements` or call `forget()`; evicted placements
   can no longer be challenged or retrieved through that ledger.

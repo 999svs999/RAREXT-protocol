@@ -148,6 +148,11 @@ shards, deletes one, and rebuilds from the rest is in
   the payload digest, and its own bytes. A corrupted shard fails its digest; a shard
   relabelled with another index fails its digest; a shard borrowed from a different
   set fails the set check. None of those failures are silent.
+- The file-backed path verifies each selected shard against the signed size, SHA-256,
+  and leaf count before decoding, then writes to a temp file and renames only after
+  the full payload digest matches. Repair checks the rebuilt shard's size, SHA-256,
+  leaf count, and Merkle root before upload. A short or partial output is never
+  published.
 
 Two independent replicas encoding the same blob produce byte-identical shards, so
 they can compare digests instead of paying for a third opinion.
