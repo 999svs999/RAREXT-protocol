@@ -23,6 +23,9 @@ contract is not deployed to any chain. Do not describe it as audited or live.
 | Original source SHA-256 | `94e14312a017178c358284ffd52429f217948757a30a83a84ad7754f7c2eb656` |
 | Current source SHA-256 | `de959d17ce44f9e3d24adda074adbf1e67eacf6e89de97a90322595586655162` |
 | Git blob | `7a8e733f2f0eac0f52d93d85441358b7b1724e33` |
+| Creation bytecode SHA-256 | `9923a601128717344f060b98f3f2679fe749be42dabbcd510a24d44be9d558a9` |
+| Runtime bytecode SHA-256 | `4966357a6af858713d53d329ca52e4ac117d3e4e8ec00e73bcce495b9a7d62a1` |
+| ABI SHA-256 | `8947e90e961a225d558a26fe052ba88d13181c46de94ca12f9f28df3363a9d79` |
 | Compiler | `solc 0.8.38` |
 | Optimizer | enabled, `runs: 200` |
 | EVM target | `cancun` |
@@ -35,7 +38,18 @@ The current source hash covers the zero-owner initialization fix in finding
 F-01. It does not represent an external audit baseline until an auditor records
 it.
 
-Verify the source hash:
+Verify the whole baseline (source, git blob, bytecode, ABI) with the pinned
+toolchain:
+
+```bash
+npm run audit:baseline
+```
+
+The script compiles with the checked-in settings, hashes the creation and runtime
+bytecode and the ABI, and fails when any value differs from this table. It is also
+run by `npm run test:contracts`. A source or dependency change that is not
+recorded here fails the check instead of being silently reviewed. To inspect a
+single file by hand:
 
 ```bash
 shasum -a 256 contracts/RarextAnchor.sol
@@ -344,6 +358,8 @@ An auditor engaged for this contract should receive:
   `contracts/test/anchor.test.mjs`;
 - the pinned OpenZeppelin and solc versions;
 - the deploy and upgrade runbooks in `contracts/README.md`;
+- the reproducible baseline command (`npm run audit:baseline`) and the
+  deployment record validator (`npm run verify:deployment`);
 - the proxy address and deployment record once a testnet deployment exists;
 - the EVM relay read shape in `apps/api/src/chains/relay.ts`;
 - this document and the finding dispositions.
@@ -353,12 +369,35 @@ severity, identify unresolved items, and explicitly say whether the contract is
 approved for a value-bearing mainnet deployment. A report covering a different
 bytecode or compiler configuration is not a review of this deployment.
 
+## Deployment record validation
+
+The testnet script writes a JSON record next to the addresses. The record can be
+checked offline before anyone quotes it:
+
+```bash
+npm run verify:deployment -- path/to/deployment.json
+```
+
+The validator refuses a record whose source hash is not the current
+`contracts/RarextAnchor.sol`, a known mainnet chain id, a non-checksummed or
+malformed address, a proxy/implementation mismatch, or any record that has
+relaxed `audit.status`, `externalReviewNeeded`, or `liveDeploymentBlocked`.
+It does not contact a chain and is not an audit. The checks are covered by
+`contracts/test/verify-deployment-record.test.mjs`.
+
+`npm run audit:baseline` pins the reviewed bytecode, and
+`contracts/test/audit-baseline.test.mjs` fails if the source, compiler, or
+dependency change without the table above being updated. CI (`.github/workflows/ci.yml`)
+runs both.
+
 ## Deployment gate
 
 | Gate | Status |
 | --- | --- |
 | Contract source complete | yes |
 | Local-EVM tests passing | yes |
+| Baseline hash check in tests/CI | yes |
+| Deployment record validator | yes |
 | Internal review trail | yes, this document |
 | External audit report | **no** |
 | Auditor review needed | **yes** |
