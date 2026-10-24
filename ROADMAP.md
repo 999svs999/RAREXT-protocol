@@ -45,7 +45,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
   - [x] Reproducible source/bytecode/ABI baseline (`npm run audit:baseline`) and a
     test that fails on drift
   - [x] Offline deployment-record validator (`npm run verify:deployment`)
-  - [x] CI checks in `scripts/ci.sh` (Actions template included)
+  - [x] CI checks in `scripts/ci.sh` (`npm run ci`)
   - [ ] External auditor engaged; report recorded in `contracts/AUDIT.md`
 - [x] A pinning service for the content adapter
 - [x] Continuous fair-launch attestations as a verifiable trajectory
