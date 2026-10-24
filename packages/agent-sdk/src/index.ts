@@ -10,7 +10,11 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { canonicalize } from "@rarext/core";
+import {
+  canonicalize,
+  verifyAiArtifact,
+  type AiLocalVerification,
+} from "@rarext/core";
 import type {
   AdapterInfo,
   AdapterStatus,
@@ -799,6 +803,32 @@ export class RarextClient {
 
   verify(publicationId: string): Promise<VerifyResult> {
     return this.request("/v1/verify", { publicationId });
+  }
+
+  /**
+   * Trust-minimized AI verification: fetch the challenge from the API, then
+   * compute the verdict locally from the pure representation math in core.
+   * The server's attestation is never trusted for the outcome. For
+   * generative claims the committed model's digest is computed here too.
+   */
+  async verifyAi(
+    challengeId: string,
+    artifact: Artifact,
+  ): Promise<AiLocalVerification & { modelDigest?: string }> {
+    const challenge = await this.challenge(challengeId);
+    const result = verifyAiArtifact(artifact, challenge);
+
+    if ("error" in result) throw new Error(result.error);
+
+    if (result.representation === "generative") {
+      const body = artifact.body as { model: unknown };
+      return {
+        ...result,
+        modelDigest: createHash("sha256").update(canonicalize(body.model)).digest("hex"),
+      };
+    }
+
+    return result;
   }
 
   private async request<T>(path: string, body?: unknown): Promise<T> {

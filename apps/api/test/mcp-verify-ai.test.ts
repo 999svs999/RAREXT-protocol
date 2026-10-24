@@ -123,7 +123,7 @@ test("unsupported kinds and malformed bodies are rejected", async () => {
         { ...generativeArtifact("x"), kind: "logic.netlist" },
         registryWith(generativeChallenge),
       ),
-    /does not support artifact kind/,
+    /not a locally verifiable AI claim/,
   );
   await assert.rejects(
     () =>

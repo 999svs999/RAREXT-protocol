@@ -1,6 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
+
+import {
+  generate,
+  isGenerativeBody,
+  isGenerativeSpec,
+  MAX_GENERATIVE_STEPS,
+  MAX_VOCAB,
+  verifyGenerativeReplay as replayGenerative,
+  type GenerativeBody,
+  type GenerativeSpec,
+  type XorshiftModel,
+} from "../../../packages/core/src/index.ts";
 import type {
   Artifact,
   Attestation,
@@ -14,6 +26,19 @@ import {
   type ClaimOptions,
   type SemanticsRegistry,
 } from "./semantics.ts";
+
+export {
+  generate,
+  isGenerativeBody,
+  isGenerativeSpec,
+  MAX_GENERATIVE_STEPS,
+  MAX_VOCAB,
+};
+export type { GenerativeBody, GenerativeSpec, XorshiftModel };
+
+export function modelDigest(model: XorshiftModel): string {
+  return createHash("sha256").update(canonicalize(model)).digest("hex");
+}
 
 /**
  * The first on-chain AI verifier: it does not trust a claimed output, it
@@ -39,110 +64,19 @@ export function generativeVerifierHash(): string {
   return hashValue(GENERATIVE_VERIFIER_MANIFEST);
 }
 
-/**
- * A committed generative model. `kind` pins the replay algorithm; `params`
- * and `vocab` are part of the commitment — changing any of them changes the
- * model digest and therefore the attestation.
- */
-export interface XorshiftModel {
-  kind: "xorshift32";
-  params: { a: number; b: number; c: number };
-  vocab: string[];
-}
-
-/** Artifact body for `ai.generative`: a model, a seed, and the claimed output. */
-export interface GenerativeBody {
-  model: XorshiftModel;
-  seed: number;
-  output: string;
-}
-
-/** Challenge spec: how many tokens the model must generate. */
-export interface GenerativeSpec {
-  steps: number;
-}
-
-export const MAX_GENERATIVE_STEPS = 100_000;
-export const MAX_VOCAB = 4096;
-
-export function modelDigest(model: XorshiftModel): string {
-  return createHash("sha256").update(canonicalize(model)).digest("hex");
-}
-
-function isXorshiftModel(value: unknown): value is XorshiftModel {
-  if (typeof value !== "object" || value === null) return false;
-  const model = value as Partial<XorshiftModel>;
-  if (model.kind !== "xorshift32") return false;
-  const params = model.params as Partial<XorshiftModel["params"]> | undefined;
-  if (!params) return false;
-  return (
-    Number.isInteger(params.a) && params.a! >= 1 && params.a! <= 31 &&
-    Number.isInteger(params.b) && params.b! >= 1 && params.b! <= 31 &&
-    Number.isInteger(params.c) && params.c! >= 1 && params.c! <= 31 &&
-    Array.isArray(model.vocab) &&
-    model.vocab.length >= 1 &&
-    model.vocab.length <= MAX_VOCAB &&
-    model.vocab.every((token) => typeof token === "string" && token.length > 0)
-  );
-}
-
-export function isGenerativeBody(value: unknown): value is GenerativeBody {
-  if (typeof value !== "object" || value === null) return false;
-  const body = value as Partial<GenerativeBody>;
-  return (
-    isXorshiftModel(body.model) &&
-    Number.isInteger(body.seed) &&
-    body.seed! >= 0 &&
-    body.seed! <= 0xffffffff &&
-    typeof body.output === "string"
-  );
-}
-
-export function isGenerativeSpec(value: unknown): value is GenerativeSpec {
-  if (typeof value !== "object" || value === null) return false;
-  const spec = value as Partial<GenerativeSpec>;
-  return (
-    Number.isInteger(spec.steps) &&
-    spec.steps! >= 1 &&
-    spec.steps! <= MAX_GENERATIVE_STEPS
-  );
-}
-
-/**
- * Replay the model deterministically. xorshift32, the canonical Marsaglia
- * form: x ^= x << a; x ^= x >>> b; x ^= x << c, all mod 2^32. The token at
- * each step is vocab[state % vocab.length].
- */
-export function generate(model: XorshiftModel, seed: number, steps: number): string {
-  const { a, b, c } = model.params;
-  let state = seed >>> 0;
-  let out = "";
-
-  for (let i = 0; i < steps; i++) {
-    state ^= (state << a) >>> 0;
-    state ^= state >>> b;
-    state ^= (state << c) >>> 0;
-    state >>>= 0;
-    out += model.vocab[state % model.vocab.length];
-  }
-
-  return out;
-}
-
 export interface GenerativeReplayResult {
   correct: boolean;
   expected: string;
   digest: string;
 }
 
-/** Pure replay check, exported for independent re-verification (web, SDK, tests). */
+/** Pure replay check with the digest attached (hashing is a server-side concern). */
 export function verifyGenerativeReplay(
   body: GenerativeBody,
   spec: GenerativeSpec,
 ): GenerativeReplayResult {
-  const digest = modelDigest(body.model);
-  const expected = generate(body.model, body.seed, spec.steps);
-  return { correct: expected === body.output, expected, digest };
+  const replay = replayGenerative(body, spec);
+  return { ...replay, digest: modelDigest(body.model) };
 }
 
 export function generativeVerifier(
