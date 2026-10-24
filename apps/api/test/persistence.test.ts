@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
@@ -16,6 +15,12 @@ import type {
 import { BlobStore } from "../src/storage.ts";
 import { RarextStore } from "../src/store.ts";
 import { post, start, stop } from "./helpers.ts";
+
+function scratch(prefix: string): string {
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  return mkdtempSync(join(base, prefix));
+}
 
 const halfAdder: Circuit = {
   components: [
@@ -32,7 +37,7 @@ const halfAdder: Circuit = {
 };
 
 test("publications, identities, and anchors survive a restart", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "rarext-store-"));
+  const dir = scratch("rarext-store-");
   const file = join(dir, "store.json");
 
   try {
@@ -117,8 +122,7 @@ test("publications, identities, and anchors survive a restart", async () => {
 });
 
 test("a blob store survives restart and rejects truncated or corrupt bytes", () => {
-  mkdirSync(join(process.cwd(), ".data"), { recursive: true });
-  const dir = mkdtempSync(join(process.cwd(), ".data", "round7-persistence-"));
+  const dir = scratch("round7-persistence-");
 
   try {
     const payload = randomBytes(4096);

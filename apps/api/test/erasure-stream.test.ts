@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -10,7 +9,9 @@ import { decodeShardsToFile, encodeFileToShards, reencodeStreamedShard } from ".
 import { merkleRoot } from "../src/merkle.ts";
 
 function workspace(): { root: string; cleanup(): void } {
-  const root = mkdtempSync(join(tmpdir(), "rarext-erasure-stream-"));
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  const root = mkdtempSync(join(base, "rarext-erasure-stream-"));
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 

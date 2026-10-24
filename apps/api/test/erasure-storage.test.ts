@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
 import { decodeBytes, encodeBytes, shardDigest, verifyShard } from "../src/erasure.ts";
 import { BlobStore } from "../src/storage.ts";
+
+function scratch(prefix: string): string {
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  return mkdtempSync(join(base, prefix));
+}
 
 /**
  * The shards are just bytes, so they live in the same content-addressed store as
@@ -15,7 +20,7 @@ import { BlobStore } from "../src/storage.ts";
  */
 
 test("shards stored as blobs reconstruct the payload after one is lost", () => {
-  const directory = mkdtempSync(join(tmpdir(), "rarext-erasure-"));
+  const directory = scratch("rarext-erasure-");
 
   try {
     const store = new BlobStore(directory);
@@ -41,7 +46,7 @@ test("shards stored as blobs reconstruct the payload after one is lost", () => {
 });
 
 test("a corrupted stored shard is refused and the rest still reconstruct", () => {
-  const directory = mkdtempSync(join(tmpdir(), "rarext-erasure-"));
+  const directory = scratch("rarext-erasure-");
 
   try {
     const store = new BlobStore(directory);

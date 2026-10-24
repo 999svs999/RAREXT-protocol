@@ -37,6 +37,17 @@ The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 | Disk full while writing a blob | A blob is written to a unique temp name and renamed; the index is written to a temp name and renamed. If the index write fails, a newly created blob is removed and its in-memory record rolled back. Temp files are removed in `finally`. | A read-only blob directory refuses the write and leaves no temp file or blob; a forced index-write failure leaves no orphan blob and a restart sees the original set. |
 | Restart | Signed placement records are the map; the ledger rebuilds witnesses from a record. Witness freshness is not persisted, so a restarted node treats every shard as unchallenged until the next challenge. | The crash/restart test reloads the registry, adopts the record, re-challenges, repairs, and reports `ok` only after the challenge. |
 
+## Guarantees by path
+
+| Path | Guarantees | Does not guarantee |
+| --- | --- | --- |
+| `BlobStore.get` | Re-hashes the file on every read and returns `null` for a truncated, missing, or altered file. Startup adopts only files whose bytes match their 64-hex name. | No repair, quarantine, `fsync`, or protection from a writer that changes the file after the read. |
+| Holder raw read (`httpHolder.getFile`) | Hashes the streamed response against `storedAs`; a truncated, partial, or altered body throws and the caller skips that holder. | No automatic retry of the same holder, and no proof that the holder kept the bytes rather than producing them now. |
+| `decodeBytes` | Requires at least `k` distinct shards, one code/parameter set, equal shard sizes, an index-bound digest per shard, and a final payload digest. | It trusts the caller-supplied parameters and payload digest; it does not verify a placement signature or prove the digest came from the publisher. |
+| `decodeShardsToFile` | Checks each selected file against the signed size, SHA-256, and leaf count; verifies the full payload digest; writes through a temp file and renames only on success. | It does not rebuild the shard Merkle root, does not check unselected shards, reads selected shards twice, and leaves a `.tmp` sibling if the process crashes. No `fsync`/power-loss guarantee. |
+| `reencodeStreamedShard` | Checks survivor sizes, verifies chunk digests during decode, and compares the rebuilt shard's size, SHA-256, leaf count, and Merkle root with the signed placement before upload. | It does not hash every survivor file up front; a same-sized corrupt survivor is caught by a chunk digest or the rebuilt-shard check, not before work starts. No `fsync` guarantee for the staged file. |
+| `verifyProof` / `verifyChallengeResponse` | Binds the proof to the stored root, leaf index, exact proof path, nonce, and request leaf. A mismatch returns `false`/`bad-proof`. | Possession, not retrievability; a holder can keep leaves and discard bytes. Unselected or unchallenged shards are not proven. |
+
 ## GB-scale
 
 `npm run bench:repair -- --bytes 1073741824 --losses 2` encodes 1 GiB as `4 + 2`,
