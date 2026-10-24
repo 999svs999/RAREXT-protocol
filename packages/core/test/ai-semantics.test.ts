@@ -12,7 +12,7 @@ import {
 import type { Attestation } from "../src/types.ts";
 
 test("the declared AI semantics licenses generative claims", () => {
-  assert.equal(AI_SEMANTICS.length, 1);
+  assert.equal(AI_SEMANTICS.length, 2);
 
   const record = AI_SEMANTICS[0]!;
   assert.equal(record.id, "ai-generative/gen-starter");
@@ -22,6 +22,35 @@ test("the declared AI semantics licenses generative claims", () => {
   assert.equal(record.createdAt, SEMANTICS_CREATED_AT);
   assert.equal(claimKindAllowed(record, "generative"), true);
   assert.equal(claimKindAllowed(record, "satisfies"), false);
+});
+
+test("the declared bounded semantics licenses bounded claims", () => {
+  const record = AI_SEMANTICS[1]!;
+  assert.equal(record.id, "ai-bounded/bounded-starter");
+  assert.equal(record.app, "ai-bounded");
+  assert.equal(record.claimKind, "bounded");
+  assert.equal(claimKindAllowed(record, "bounded"), true);
+  assert.equal(claimKindAllowed(record, "satisfies"), false);
+  assert.match(record.specHash, /^[0-9a-f]{64}$/);
+  assert.equal(record.specHash, "f60f26388d166de74bb596ba449f96a135490c3a690584cb05031a8cf51c8b1f");
+});
+
+test("a bounded claim derives a recomputable proof kind", () => {
+  const record = AI_SEMANTICS[1]!;
+  const attestation = {
+    claimKind: "bounded",
+    circuitHash: "c".repeat(64),
+    traceHash: "t".repeat(64),
+    semanticsHash: record.specHash,
+    scope: null,
+    verifier: "bounded-metric-replay",
+    verifierHash: record.verifierHash!,
+    createdAt: SEMANTICS_CREATED_AT,
+  } as Attestation;
+
+  const claim = claimFromAttestation(attestation, record, "bounded-starter");
+  assert.equal(claim.kind, "bounded");
+  assert.equal(claim.proofKind, "recomputable");
 });
 
 test("the pinned spec hash matches the gen-starter spec", () => {

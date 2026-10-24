@@ -4,11 +4,11 @@ import test from "node:test";
 import type { Artifact, Challenge } from "../../../packages/core/src/index.ts";
 import { AI_SEMANTICS } from "../../../packages/core/src/index.ts";
 import { createChallengeRegistry } from "../src/challenges.ts";
-import { createSemanticsRegistry } from "../src/semantics.ts";
 import {
   generativeVerifierHash,
   verifyGenerative,
 } from "../src/generative.ts";
+import { bindClaim, createSemanticsRegistry } from "../src/semantics.ts";
 import { createVerifierRegistry } from "../src/verifiers.ts";
 
 const seeded = createChallengeRegistry().get("gen-starter");
@@ -71,4 +71,38 @@ test("a satisfied-claims alternative would be rejected: the meaning licenses onl
 
   if (!("error" in result)) throw new Error("expected the binding to be rejected");
   assert.match(result.error, /licenses "generative" claims/);
+});
+
+test("the bounded starter binds to its declared meaning end to end", async () => {
+  const bounded = createChallengeRegistry().get("bounded-starter");
+  if (!bounded) throw new Error("bounded-starter seed missing");
+
+  const challenges = [challenge, bounded];
+  const semantics = createSemanticsRegistry(() => challenges);
+  const registry = createVerifierRegistry(fetch, semantics);
+
+  const sample = bounded.sampleArtifact as Artifact;
+  const attestation = await registry.verify(sample, bounded);
+
+  assert.equal(attestation.correct, true);
+  assert.equal(attestation.representation, "bounded");
+  assert.equal(attestation.claimKind, "bounded");
+  assert.equal(attestation.semanticsId, "ai-bounded/bounded-starter");
+  assert.equal(attestation.verifierHash, AI_SEMANTICS[1]!.verifierHash);
+});
+
+test("a satisfied-claims alternative is rejected for the bounded starter too", async () => {
+  const bounded = createChallengeRegistry().get("bounded-starter");
+  if (!bounded) throw new Error("bounded-starter seed missing");
+
+  const challenges = [challenge, bounded];
+  const semantics = createSemanticsRegistry(() => challenges);
+
+  const sample = bounded.sampleArtifact as Artifact;
+  const verifier = createVerifierRegistry(fetch, null);
+  const attestation = await verifier.verify(sample, bounded);
+  const bound = bindClaim(attestation, bounded, semantics, { claimKind: "satisfies" });
+
+  assert.ok("error" in bound);
+  assert.match(bound.error, /licenses "bounded" claims/);
 });

@@ -90,10 +90,14 @@ export const LOGIC_SEMANTICS: Semantics[] = [
 
 /**
  * The declared AI semantics. Where the logic records license "satisfies"
- * claims about circuits, `ai-generative/gen-starter@1` licenses "generative"
- * claims: the output is attested as *coming from* the digest-bound starter
- * model and seed, not as being good. The verifier hash is pinned to the
- * generative verifier manifest; the app-side test suite enforces the match.
+ * claims about circuits, the AI records license the two non-exact kinds:
+ * `ai-generative/gen-starter@1` licenses "generative" claims (the output is
+ * attested as *coming from* the digest-bound starter model and seed) and
+ * `ai-bounded/bounded-starter@1` licenses "bounded" claims (the
+ * reconstruction stays within the committed metric bound of the committed
+ * reference). Neither is a quality judgment. The verifier hashes are pinned
+ * to the live verifier manifests; the app-side test suite enforces the
+ * matches.
  */
 export const AI_SEMANTICS: Semantics[] = [
   {
@@ -110,6 +114,27 @@ export const AI_SEMANTICS: Semantics[] = [
     outputs: ["output"],
     interpretation: {
       doc: "https://rarext.build/semantics/ai-generative/gen-starter@1",
+      owner: "rarext",
+      reviewedAt: SEMANTICS_CREATED_AT,
+    },
+    owner: "rarext",
+    origin: "declared",
+    createdAt: SEMANTICS_CREATED_AT,
+  },
+  {
+    id: "ai-bounded/bounded-starter",
+    app: "ai-bounded",
+    version: 1,
+    claimKind: "bounded",
+    title: "Reconstruction within the committed bound",
+    summary:
+      "The attested reconstruction stays within the committed metric bound of the committed reference — a graded, metric-scoped satisfaction, not a quality judgment.",
+    specHash: "f60f26388d166de74bb596ba449f96a135490c3a690584cb05031a8cf51c8b1f",
+    verifierHash: "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
+    inputs: ["values"],
+    outputs: ["metricValue"],
+    interpretation: {
+      doc: "https://rarext.build/semantics/ai-bounded/bounded-starter@1",
       owner: "rarext",
       reviewedAt: SEMANTICS_CREATED_AT,
     },
@@ -182,7 +207,9 @@ export function claimFromAttestation(
     predicate: claimPredicate(semantics, challengeId),
     scope: attestation.scope,
     proofKind:
-      attestation.claimKind === "satisfies" || attestation.claimKind === "generative"
+      attestation.claimKind === "satisfies" ||
+      attestation.claimKind === "generative" ||
+      attestation.claimKind === "bounded"
         ? "recomputable"
         : attestation.claimKind === "attests"
           ? "attested"
