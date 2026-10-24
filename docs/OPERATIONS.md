@@ -43,6 +43,7 @@ cannot interleave. Limits are measured by
 | --- | --- |
 | A blob is unreferenced | it becomes a candidate, not a deletion, and is only collected after `gracePeriodMs` (default 24h) |
 | A blob with a live retention term | held even when unreferenced: `held` is reported and the blob is not a candidate; the commitment cannot be broken by cleanup. Once the term matures it is collectable |
+| An unparseable `retentionUntil` | fail closed: `matured` is `false`, `opening` stays `null`, `remove` returns `false`, and GC counts the blob as `held`. A corrupt timestamp can delay collection but never release the opening or delete the bytes early |
 | A referenced blob | never deleted, and its candidate entry is cleared |
 | Interrupted write or index save | `*.tmp` leftovers are swept (`purgedTemp`); only 64-hex names are blobs, so a temp file is never one |
 | Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second pass sees no orphans and reports zero |
@@ -88,17 +89,17 @@ Holder GC is driven by `POST /v1/durability/gc` (or a direct
 `POST /v1/holder/gc/scan`). The scan, delete, and candidate-save section is
 synchronous on the holder's event loop, so two passes cannot interleave. These
 limits are measured by the regression tests in
-`apps/api/test/holder-gc-fault.test.ts`, `holder-gc.test.ts`, and
-`storage-properties.test.ts`:
+`apps/api/test/holder-gc-fault.test.ts`, `holder-gc.test.ts`,
+`storage-gc-fault.test.ts`, and `storage-properties.test.ts`:
 
 | Fault | Behaviour at the limit |
 | --- | --- |
-| GC runs against a blob that is still being read | the holder tracks open reads per shard and defers collection: the pass reports `deferred`/`deferredShards`, deletes nothing for that shard, keeps its grace-period candidate entry, and the reader receives every byte. The shard is collected by a later pass once the read closes |
-| A crash leaves an orphaned shard directory or temp files | `_upload.*.tmp`, `<hash>.*.tmp`, and `_index.json.*.tmp` leftovers are swept at holder startup and by every GC pass (`purgedTemp`); the store only adopts 64-hex names, so a temp file is never a shard and is safe to delete. Real shards and `_gc-candidates.json` are left alone |
-| GC meets a placement whose lease is still live | shards listed in the pass's `referenced` set are never deleted and their candidate entry is cleared, so a live placement keeps all of its shards; only unreferenced orphans are collected |
+| GC runs against a blob that is still being read | the holder tracks an open-read count per shard and defers collection while it is non-zero: the pass reports `deferred`/`deferredShards`, deletes nothing for that shard, keeps its grace-period candidate entry, and the reader receives every byte. The shard is collected by a later pass once every reader closes. The count is per process; a second holder process on the same directory is unsupported |
+| A crash leaves an orphaned shard directory or temp files | Regular `_upload.*.tmp`, `<hash>.*.tmp`, and `_index.json.*.tmp` files are swept at startup and by every GC pass (`purgedTemp`); a directory ending in `.tmp` is left alone. A temp file whose raw upload is still in flight is excluded in-process, so the writer's rename still succeeds. The store adopts only regular files whose bytes hash to their 64-hex name: a 64-hex directory is ignored at startup and never deleted, and a misnamed 64-hex file is neither adopted nor deleted. Re-hashing at startup streams through a 1 MiB buffer, so adopting an 8 GiB holder shard does not load it into the heap |
+| GC meets a placement whose lease is still live | shards listed in the pass's `referenced` set are never deleted and any grace candidate is cleared, so a live placement keeps all of its shards; only unreferenced orphans are collected. A placement has no expiry field: it holds its shards until the ledger `forget`s it or evicts it (`maxPlacements`). A node blob's retention expiry does **not** release the holder copies |
 | A destructive scan or a shard DELETE from a non-loopback client with no holder token | `403`; the holder keeps the shards |
-| Two GC passes run concurrently | the synchronous scan/delete/save section serializes them: the second pass observes the first pass's deletions and reports zero, so an orphan is deleted exactly once, deletion counts never double-count, a live shard is not lost, and `_gc-candidates.json` stays valid |
-| A retained blob's holds have all expired | before the retention term matures `BlobStore.remove` refuses to collect the blob (returns `false`), so orphan cleanup cannot break an anchored retention commitment. Once the term matures the opening is released (or is `null` if the blob is already gone) and the blob is ordinary, collectable garbage |
+| Two GC passes run concurrently | the synchronous scan/delete/save section serializes them: the second pass observes the first pass's deletions and reports zero, so an orphan is deleted exactly once, deletion counts never double-count, a live shard is not lost, and `_gc-candidates.json` stays valid. A raw upload may be in flight during the pass; its temp file is skipped and the upload commits normally. One holder process per data directory: two processes sharing a directory can race the candidate file |
+| A retained blob's holds have all expired | before the term matures `BlobStore.remove` refuses to collect (returns `false`), so cleanup cannot break an anchored commitment. An unparseable `retentionUntil` is treated as still live (`matured: false`, opening `null`, GC `held`), so corrupt metadata fails closed. Once a parseable term matures the opening is released and the node's blob is ordinary garbage; the holder shards still follow the placement rule above |
 | A collected shard is challenged from the leaf cache | GC and DELETE invalidate the cached leaves, and a cache hit re-checks the file's existence and size, so a shard that is gone cannot answer a challenge with a stale proof |
 
 ## Tournament and Trac task registry limits

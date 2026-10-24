@@ -102,13 +102,18 @@ function saveGcCandidates(directory: string, candidates: Map<string, GcCandidate
  * only adopts names that are a 64-char digest, so a temp file is never a shard
  * and never referenced; it is safe to delete. Returns the number removed.
  */
-function purgeTempFiles(directory: string): number {
+function purgeTempFiles(directory: string, isActive?: (name: string) => boolean): number {
   if (!existsSync(directory)) return 0;
 
   let removed = 0;
 
-  for (const name of readdirSync(directory)) {
-    if (!name.endsWith(".tmp")) continue;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const name = entry.name;
+
+    // A directory or other non-file is not an interrupted write and must not
+    // be recursively deleted by a sweep.
+    if (!entry.isFile() || !name.endsWith(".tmp")) continue;
+    if (isActive?.(name)) continue;
 
     try {
       rmSync(join(directory, name), { force: true });
@@ -259,6 +264,10 @@ export function createHolderServer(options: HolderServerOptions) {
   // the file lazily and would race a delete, so GC defers any shard with a
   // reader until the read closes.
   const activeReads = new Map<string, number>();
+  // Raw uploads stream into `_upload.*.tmp` and rename only at the end. GC is
+  // synchronous but an upload is not, so a sweep must skip a temp file whose
+  // writer is still alive or the rename would fail with ENOENT.
+  const activeTemps = new Set<string>();
 
   function beginRead(hash: string): void {
     activeReads.set(hash, (activeReads.get(hash) ?? 0) + 1);
@@ -406,7 +415,10 @@ export function createHolderServer(options: HolderServerOptions) {
           return false;
         });
 
-        const purgedThisPass = purgeTempFiles(options.directory);
+        const purgedThisPass = purgeTempFiles(
+          options.directory,
+          (name) => activeTemps.has(name),
+        );
 
         let deletedCount = 0;
 
@@ -596,10 +608,12 @@ export function createHolderServer(options: HolderServerOptions) {
             }
           }
 
-          const temporary = join(options.directory, `_upload.${randomUUID()}.tmp`);
+          const temporaryName = `_upload.${randomUUID()}.tmp`;
+          const temporary = join(options.directory, temporaryName);
           const hasher = createHash("sha256");
           let received = 0;
 
+          activeTemps.add(temporaryName);
           try {
             await pipeline(
               req,
@@ -640,6 +654,8 @@ export function createHolderServer(options: HolderServerOptions) {
                 send(res, failure.status, { error: failure.message });
               }
             }
+          } finally {
+            activeTemps.delete(temporaryName);
           }
           return;
         }

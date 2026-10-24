@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { BlobStore } from "../src/storage.ts";
+import { BlobStore, sha256Bytes } from "../src/storage.ts";
 import { post, start, stop } from "./helpers.ts";
 
 function tempStore(prefix: string): { store: BlobStore; directory: string; root: string } {
@@ -173,6 +180,67 @@ test("the storage GC endpoint requires an explicit referenced list", async () =>
     assert.equal(store.has(orphan.hash), false);
   } finally {
     await stop(server);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** Scratch inside the repository, not /tmp. */
+function scratch(prefix: string): string {
+  const parent = join(process.cwd(), ".data");
+  mkdirSync(parent, { recursive: true });
+  return mkdtempSync(join(parent, prefix));
+}
+
+test("an unparseable retention timestamp fails closed", () => {
+  const root = scratch("rarext-blob-gc-bad-retention-");
+  const store = new BlobStore(join(root, "blobs"));
+
+  try {
+    const held = store.put(Buffer.from("a corrupt commitment must not release"), {
+      retentionUntil: "not-a-timestamp",
+    });
+    const empty = store.put(Buffer.from("an empty term is not an absent term"), {
+      retentionUntil: "",
+    });
+
+    assert.equal(store.remove(held.hash), false, "remove refuses an unparseable term");
+    assert.equal(store.retention(held.hash)!.matured, false);
+    assert.equal(store.retention(held.hash)!.opening, null, "the opening stays sealed");
+    assert.equal(store.remove(empty.hash), false, "remove refuses an empty term");
+
+    const pass = store.gc({ referenced: [], gracePeriodMs: 0, dryRun: false });
+
+    assert.equal(pass.held, 2, "corrupt and empty terms are treated as still live");
+    assert.equal(pass.deleted, 0);
+    assert.deepEqual(pass.wouldDelete, []);
+    assert.equal(store.has(held.hash), true);
+    assert.equal(store.has(empty.hash), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reload hashes large blobs in bounded chunks and ignores non-file 64-hex entries", () => {
+  const root = scratch("rarext-blob-reload-");
+  const directory = join(root, "blobs");
+  const payload = Buffer.alloc(3 * 1024 * 1024 + 17, 7);
+  const hash = sha256Bytes(payload);
+  const directoryName = "d".repeat(64);
+
+  mkdirSync(join(directory, directoryName), { recursive: true });
+  writeFileSync(join(directory, directoryName, "keep"), "operator data");
+  writeFileSync(join(directory, hash), payload);
+
+  const store = new BlobStore(directory);
+
+  try {
+    assert.equal(store.has(hash), true, "a multi-megabyte blob is adopted across read chunks");
+    assert.equal(store.totalBytes(), payload.length);
+
+    const pass = store.gc({ referenced: [hash], gracePeriodMs: 0, dryRun: false });
+    assert.equal(pass.scanned, 1);
+    assert.ok(existsSync(join(directory, directoryName, "keep")), "GC does not touch directories");
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

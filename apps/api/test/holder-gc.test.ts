@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,13 @@ import { createHolderServer } from "../src/holder-server.ts";
 async function close(server: { closeAllConnections(): void; close(cb: () => void): void }) {
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
+}
+
+/** Scratch inside the repository, not /tmp. */
+function scratch(prefix: string): string {
+  const parent = join(process.cwd(), ".data");
+  mkdirSync(parent, { recursive: true });
+  return mkdtempSync(join(parent, prefix));
 }
 
 async function putShard(base: string, content: string, token?: string): Promise<{ hash: string }> {
@@ -199,6 +206,45 @@ test("holder GC requires auth when token configured", async () => {
       body: JSON.stringify({ referenced: [] }),
     });
     assert.equal(ok.status, 200);
+  } finally {
+    await close(server);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a referenced shard's grace candidate is cleared and the shard survives", async () => {
+  const root = scratch("rarext-holder-gc-lease-");
+  const server = createHolderServer({ id: "holder-gc-lease", directory: join(root, "holder") });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const shard = await putShard(base, "a shard with a live placement");
+
+    // The first pass, with no reference, starts the grace clock.
+    const first = await fetch(`${base}/v1/holder/gc/scan`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ referenced: [], dryRun: false, gracePeriodMs: 3_600_000 }),
+    }).then((response) => response.json()) as { candidates: number; deleted: number };
+    assert.equal(first.deleted, 0);
+    assert.equal(first.candidates, 1);
+
+    // The placement appears: the shard is referenced, so the candidate entry
+    // must be cleared and the destructive pass must keep the bytes.
+    const held = await fetch(`${base}/v1/holder/gc/scan`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ referenced: [shard.hash], dryRun: false, gracePeriodMs: 0 }),
+    }).then((response) => response.json()) as { candidates: number; deleted: number };
+    assert.equal(held.deleted, 0);
+    assert.equal(held.candidates, 0, "a referenced shard is not left as a grace candidate");
+
+    const candidates = await fetch(`${base}/v1/holder/gc/candidates`)
+      .then((response) => response.json()) as { candidates: unknown[] };
+    assert.equal(candidates.candidates.length, 0);
+    assert.equal((await fetch(`${base}/v1/holder/shards/${shard.hash}`)).status, 200);
   } finally {
     await close(server);
     rmSync(root, { recursive: true, force: true });

@@ -1482,7 +1482,16 @@ export class DurabilityLedger {
           signal: AbortSignal.timeout(30_000),
         });
 
-        const data = await resp.json() as GcScanResponse;
+        const data = await resp.json() as GcScanResponse & { error?: string };
+
+        if (!resp.ok) {
+          results.push({
+            holder: holderId,
+            error: data.error ?? `holder GC failed with status ${resp.status}`,
+          } as GcResult);
+          continue;
+        }
+
         results.push(data);
       } catch (error) {
         results.push({

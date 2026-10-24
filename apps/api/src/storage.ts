@@ -1,5 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
@@ -26,6 +39,63 @@ export const MAX_BLOB_BYTES = 32 * 1024 * 1024;
 
 export function sha256Bytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+const LOAD_HASH_CHUNK_BYTES = 1024 * 1024;
+
+/**
+ * Hash a file for startup adoption without reading it into memory. Holder
+ * shards can be up to 8 GiB, so `readFileSync` here would exhaust the heap;
+ * a fixed 1 MiB buffer bounds the cost. Non-regular files (a directory left
+ * under a 64-hex name) and entries that disappear mid-read are skipped.
+ */
+function digestFile(path: string): { hash: string; size: number } | null {
+  let fd: number;
+
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return null;
+  }
+
+  try {
+    if (!fstatSync(fd).isFile()) return null;
+
+    const hash = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(LOAD_HASH_CHUNK_BYTES);
+    let size = 0;
+
+    for (;;) {
+      const read = readSync(fd, buffer, 0, buffer.length, null);
+
+      if (read === 0) break;
+
+      hash.update(buffer.subarray(0, read));
+      size += read;
+    }
+
+    return { hash: hash.digest("hex"), size };
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Whether a retention term has matured. A timestamp the node cannot parse is
+ * treated as still live: a corrupt record must not release the opening early
+ * or let cleanup delete bytes the node may have promised to keep.
+ */
+function retentionMatured(record: BlobRecord, now: number): boolean {
+  // Legacy records may have no field at all; an empty or malformed string is a
+  // present-but-unusable term and must fail closed.
+  if (record.retentionUntil == null) return true;
+
+  const until = Date.parse(record.retentionUntil);
+  if (!Number.isFinite(until)) return false;
+
+  return now >= until;
 }
 
 export function blobHash(bytes: Uint8Array): string {
@@ -241,15 +311,29 @@ export class BlobStore {
   private load(): void {
     if (!existsSync(this.directory)) return;
 
-    for (const name of readdirSync(this.directory)) {
+    for (const entry of readdirSync(this.directory, { withFileTypes: true })) {
+      // Only regular files (or symlinks to them) are shards. A directory,
+      // FIFO, or device under a digest-shaped name is ignored rather than
+      // opened, which would block or crash startup.
+      if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+
+      const name = entry.name;
       if (!/^[0-9a-f]{64}$/.test(name)) continue;
 
-      const bytes = readFileSync(this.path(name));
-      if (sha256Bytes(bytes) !== name) continue;
+      if (entry.isSymbolicLink()) {
+        try {
+          if (!statSync(this.path(name)).isFile()) continue;
+        } catch {
+          continue;
+        }
+      }
+
+      const digest = digestFile(this.path(name));
+      if (!digest || digest.hash !== name) continue;
 
       this.records.set(name, {
         hash: name,
-        size: bytes.length,
+        size: digest.size,
         mediaType: "application/octet-stream",
         tier: "public",
         sealed: false,
@@ -264,11 +348,19 @@ export class BlobStore {
     if (!existsSync(indexPath)) return;
 
     try {
-      const saved = JSON.parse(readFileSync(indexPath, "utf8")) as BlobRecord[];
+      const saved = JSON.parse(readFileSync(indexPath, "utf8")) as unknown;
+      if (!Array.isArray(saved)) return;
 
-      for (const record of saved) {
-        if (!this.records.has(record.hash)) continue;
-        this.records.set(record.hash, record);
+      for (const value of saved) {
+        if (typeof value !== "object" || value === null) continue;
+
+        const record = value as BlobRecord;
+        const current = this.records.get(record.hash);
+        if (!current || typeof record.hash !== "string") continue;
+
+        // The bytes on disk decide the size; the index may only enrich
+        // metadata. A stale or edited index must not corrupt quota accounting.
+        this.records.set(record.hash, { ...record, hash: record.hash, size: current.size });
       }
     } catch {
       return;
@@ -420,7 +512,7 @@ export class BlobStore {
       return null;
     }
 
-    if (Date.now() < Date.parse(record.retentionUntil)) return null;
+    if (!retentionMatured(record, Date.now())) return null;
 
     return {
       opening: record.retentionSecret,
@@ -443,9 +535,8 @@ export class BlobStore {
     const record = this.records.get(hash);
     if (!record) return null;
 
-    const matured = Boolean(
-      record.retentionUntil && Date.now() >= Date.parse(record.retentionUntil),
-    );
+    const matured =
+      record.retentionUntil != null && retentionMatured(record, Date.now());
 
     return {
       hash,
@@ -496,9 +587,7 @@ export class BlobStore {
     // matures. Refuse to collect it early, so orphan cleanup cannot break a
     // promise the node published and anchored. Once the term matures the
     // opening is released and the blob is ordinary garbage.
-    if (record.retentionUntil && Date.now() < Date.parse(record.retentionUntil)) {
-      return false;
-    }
+    if (!retentionMatured(record, Date.now())) return false;
 
     this.deleteFile(hash);
     this.saveIndex();
@@ -557,7 +646,7 @@ export class BlobStore {
         continue;
       }
 
-      if (record.retentionUntil && now < Date.parse(record.retentionUntil)) {
+      if (record.retentionUntil != null && !retentionMatured(record, now)) {
         held += 1;
         candidates.delete(record.hash);
         continue;
@@ -655,8 +744,12 @@ export class BlobStore {
   private purgeTempFiles(): number {
     let removed = 0;
 
-    for (const name of readdirSync(this.directory)) {
-      if (!name.endsWith(".tmp")) continue;
+    for (const entry of readdirSync(this.directory, { withFileTypes: true })) {
+      const name = entry.name;
+
+      // Sweep only regular temp files: a directory ending in `.tmp` is not an
+      // interrupted write and is never removed recursively.
+      if (!entry.isFile() || !name.endsWith(".tmp")) continue;
 
       try {
         rmSync(join(this.directory, name), { force: true });
