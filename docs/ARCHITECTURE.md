@@ -298,7 +298,7 @@ signature says who, a verifier says which mechanical property, an anchor says wh
   [`OPERATIONS.md`](OPERATIONS.md).
 - **Lost shard** — the scheduled challenge reports `under-replicated`; a repair pass
   rebuilds it onto a spare holder and re-challenges the result. Without a spare, the
-  run records `repairErrors` and the next tick retries.
+  run records `repairErrors` and retries after a per-blob backoff (60s, doubling to 6h).
 
 ## Non-goals for v0
 

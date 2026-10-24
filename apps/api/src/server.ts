@@ -32,13 +32,23 @@ const holderUrls = new Map<string, string>(
   }),
 );
 
-const durability = new DurabilityLedger();
+const durability = new DurabilityLedger(
+  process.env.RAREXT_REPAIR_LEASE_MS
+    ? { repairLeaseMs: Number(process.env.RAREXT_REPAIR_LEASE_MS) }
+    : {},
+);
 const intervalMs = Number(process.env.RAREXT_CHALLENGE_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
 const scheduler = new ChallengeScheduler({
   ledger: durability,
   holders: () => holders,
   repair: true,
   intervalMs,
+  repairBackoffMs: Number(
+    process.env.RAREXT_REPAIR_BACKOFF_MS ?? 60 * 1000,
+  ),
+  maxRepairBackoffMs: Number(
+    process.env.RAREXT_REPAIR_MAX_BACKOFF_MS ?? 6 * 60 * 60 * 1000,
+  ),
 });
 
 const gcIntervalMs = Number(process.env.RAREXT_GC_INTERVAL_MS ?? 24 * 60 * 60 * 1000);

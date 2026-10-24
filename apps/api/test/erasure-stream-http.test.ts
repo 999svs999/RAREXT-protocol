@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,6 +128,75 @@ test("streamed repair rebuilds a lost shard and is auditable again", async () =>
     const rebuilt = placement.shards.find((shard) => shard.index === 1)!;
     assert.equal(rebuilt.digest, original.digest);
     assert.notEqual(rebuilt.holder, original.holder);
+
+    await ledger.challenge(placement.blobHash, network.holders);
+    assert.equal(ledger.audit(placement.blobHash).status, "ok");
+
+    const output = join(root, "repaired-output.bin");
+    const result = await ledger.retrieveStreamed(placement, output, network.holders);
+    assert.equal(result.sha256, streamed.payloadDigest);
+    assert.deepEqual(readFileSync(output), payload);
+  } finally {
+    await network.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("streamed repair skips a spare that rejects the upload", async () => {
+  const base = join(process.cwd(), ".data");
+  mkdirSync(base, { recursive: true });
+  const root = mkdtempSync(join(base, "rarext-stream-spare-"));
+  const network = await startHolders(5, root);
+
+  try {
+    const payload = randomBytes(180_000);
+    const inputPath = join(root, "payload.bin");
+    writeFileSync(inputPath, payload);
+
+    const streamed = encodeFileToShards({
+      inputPath,
+      outputDir: join(root, "shards"),
+      dataShards: 2,
+      parityShards: 1,
+      chunkBytes: 2 * 4096 * 2,
+    });
+
+    const ledger = new DurabilityLedger();
+    const placement = await ledger.placeStreamed(streamed, network.holders.slice(0, 3), "durable");
+    const lost = structuredClone(placement.shards.find((shard) => shard.index === 0)!);
+    const lostHolder = network.holders.find((holder) => holder.id === lost.holder)!;
+    assert.equal(await lostHolder.remove(lost.storedAs), true);
+    await ledger.challenge(placement.blobHash, network.holders);
+
+    const used = new Set(placement.shards.map((shard) => shard.holder));
+    const spares = network.holders
+      .filter((holder) => !used.has(holder.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    assert.equal(spares.length, 2);
+
+    let rejected = 0;
+    const refusing = {
+      ...spares[0]!,
+      async putFile() {
+        rejected += 1;
+        throw new Error("failed putFile: 507");
+      },
+      async put() {
+        rejected += 1;
+        throw new Error("failed put: 507");
+      },
+    };
+    const withRefusing = network.holders.map((holder) =>
+      holder.id === refusing.id ? refusing : holder,
+    );
+
+    const outcome = await ledger.repair(placement.blobHash, withRefusing);
+    const rebuilt = placement.shards.find((shard) => shard.index === lost.index)!;
+
+    assert.equal(rejected, 1);
+    assert.equal(outcome.filled, 1);
+    assert.equal(rebuilt.holder, spares[1]!.id);
+    assert.equal(rebuilt.digest, lost.digest);
 
     await ledger.challenge(placement.blobHash, network.holders);
     assert.equal(ledger.audit(placement.blobHash).status, "ok");

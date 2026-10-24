@@ -13,10 +13,15 @@ The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 
 | Failure | What happens | What the tests assert |
 | --- | --- | --- |
-| Repair write fails part-way (full spare/disk, simulated `ENOSPC`) | Writes are staged first. The placement and witnesses are updated only after **all** repairs are written. The call throws. | A two-loss repair fails on the second write, the serialized placement is byte-identical, audit stays `under-replicated`, and a retry with healthy holders fills both shards. |
+| Repair write fails part-way (full spare/disk, simulated `ENOSPC`) | Writes are staged first. A rejected spare is skipped for the next free spare; the placement and witnesses are updated only after **all** repairs are written. The call throws only when no target accepts a shard. | A two-loss repair fails on the second write when every remaining target rejects it, the serialized placement is byte-identical, audit stays `under-replicated`, and a retry with healthy holders fills both shards. |
 | Process crash after a shard hit the holder | The signed placement still names the old holder. The new shard is an orphan: content-addressed, valid, and not referenced. A retry is idempotent because `put` is content-addressed. | Crash after the first write, reopen the signed record from `PlacementRegistry`, adopt it into a new ledger, challenge, repair, reconstruct, and reach `ok`. |
-| Corrupt/tampered shard | Holder `get` is hash-checked by `BlobStore`; a challenge is bound to a nonce and a Merkle leaf; repair reads exactly `k` survivors and `decodeBytes` verifies each shard digest. | A tampered shard produces `bad-proof`; a corrupt survivor selected by repair fails the digest and does not move the placement. Repair from honest holders still succeeds. |
-| Holder churn, two simultaneous losses | Repair reconstructs from exactly `k` survivors, writes `m` shards, and places each on a holder not currently used by the blob. | Two losses fill two spares, all six holder ids stay distinct, the payload reconstructs; after removing another holder and adding a newcomer, a third repair still reconstructs. |
+| Corrupt/tampered shard | Holder `get` is hash-checked by `BlobStore`; a challenge is bound to a nonce and a Merkle leaf; repair tries survivors until it has `k` readable shards and `decodeBytes` verifies each digest. | A tampered shard produces `bad-proof`; a corrupt survivor selected by repair fails the digest and does not move the placement. Repair from honest holders still succeeds. |
+| Holder churn, two simultaneous losses | Repair reconstructs from `k` readable survivors, writes `m` shards, and places each on a holder not currently used by the blob. | Two losses fill two spares, all six holder ids stay distinct, the payload reconstructs; after removing another holder and adding a newcomer, a third repair still reconstructs. |
+| Survivor drops after the presence probe | A survivor that passed `has` then throws on `get` is skipped and the next survivor is read. A corrupt shard is still decoded and fails closed. | `durability-repair-fault.test.ts` makes the first survivor throw once; repair reads another, fills the loss, and reconstructs. Too few readable survivors rejects with the unreadable indices and writes nothing. |
+| Replacement spare rejects the write | A spare that answers `5xx`/`507` to `put`/`putFile` is marked unusable for this repair; the next free spare is tried. | The fault test fails the first spare, repairs onto the second, and checks the payload. Streamed repair has the same test in `erasure-stream-http.test.ts`. If every spare rejects, repair aborts with `repair write failed for shard <i>: no spare holder accepted it`. |
+| Placement forgotten/replaced or repair lease expires mid-repair | The repair holds an in-memory lease tied to the placement object (`RAREXT_REPAIR_LEASE_MS`, default 30 min) and re-checks it before every read, spare probe, staged write, and commit. | Forgetting the placement mid-read aborts with `the placement is no longer current`; advancing past the lease aborts with `the repair lease expired`; in both cases no commit occurs and the placement is unchanged. |
+| Repair storm | Consecutive failed repairs for one blob back off in the scheduler: 60s initial, doubled per failure, capped at 6h (`RAREXT_REPAIR_BACKOFF_MS` / `RAREXT_REPAIR_MAX_BACKOFF_MS`). | The scheduler test forces a failure, observes `repairDeferred` on the next runs, then a retry at the backoff deadline; a clean audit clears the failure count. |
+| A source holder is gone when repair starts | A holder whose `has` throws is treated as degraded even if it is still configured. | The fault test makes a configured survivor unreachable; repair marks it degraded, rebuilds it from the remaining `k`, and moves it to a spare. |
 | Disk full while writing a blob | A blob is written to a unique temp name and renamed; the index is written to a temp name and renamed. If the index write fails, a newly created blob is removed and its in-memory record rolled back. Temp files are removed in `finally`. | A read-only blob directory refuses the write and leaves no temp file or blob; a forced index-write failure leaves no orphan blob and a restart sees the original set. |
 | Restart | Signed placement records are the map; the ledger rebuilds witnesses from a record. Witness freshness is not persisted, so a restarted node treats every shard as unchallenged until the next challenge. | The crash/restart test reloads the registry, adopts the record, re-challenges, repairs, and reports `ok` only after the challenge. |
 
@@ -73,8 +78,8 @@ and concurrent repairs are unmeasured.
   multi-writer setup needs a lock or a real database; the current tests are
   single-process.
 - **No quota or free-space guard.** A full disk surfaces as an error from the holder
-  write. Repair aborts before committing the placement, but bytes already staged on
-  other holders remain as orphans.
+  write. Repair tries another free spare; if every candidate rejects, it aborts before
+  committing the placement, but bytes already staged on other holders remain as orphans.
 - **No cross-holder transaction.** Staging prevents a half-committed *placement*, not
   orphan bytes. Scheduled GC (`RAREXT_GC_INTERVAL_MS`, dry run by default) and the
   holder scan reclaim unreferenced shards, but the grace period and single-node
@@ -88,9 +93,10 @@ and concurrent repairs are unmeasured.
 
 - A shard is checked when it is read, challenged, or used in repair. A corrupt shard
   that is neither challenged nor selected in a repair can sit unnoticed.
-- `repair` reads exactly `k` survivors. If one of those is corrupt, the repair fails
-  loudly rather than reading more shards to route around it. That is a deliberate
-  fail-closed choice, not automatic recovery.
+- `repair` reads survivors until it has `k` readable shards. A holder that errors or
+  returns nothing is skipped; a corrupt shard that was actually read still fails the
+  digest loudly rather than being routed around. That is a deliberate fail-closed choice,
+  not automatic corruption recovery.
 - Challenges are **proof of possession**, not proof of retrievability. A holder that
   keeps the Merkle leaves and discards the shard bytes can still answer until it is
   asked for the bytes. The storage frontier lists that as open.
@@ -102,7 +108,8 @@ and concurrent repairs are unmeasured.
 - `DurabilityLedger` is in-memory. It is rebuilt from signed placement records, and
   witnesses are reset. No recent challenge means `unverified`, not `ok`.
 - The scheduler is per-process state and does not survive a restart; the next node
-  starts a fresh schedule. It records runs but does not alert anyone yet.
+  starts a fresh schedule and a fresh repair backoff map. It records runs, including
+  `repairDeferred` and `repairErrors`, but does not alert anyone yet.
 - A placement is updated in place by repair and returned to the caller. Persisting the
   new sequence is the caller's responsibility (`signPlacement` + `PlacementRegistry.put`);
   a crash before that leaves the prior signed map authoritative.
@@ -113,8 +120,8 @@ and concurrent repairs are unmeasured.
 
 - A local-reconstruction or regenerating code would lower the repair floor, at the cost
   of storage overhead and a new RFC.
-- A concurrent repair scheduler with backoff would make repairs under many failures
-  less serial; today repair is one placement at a time.
+- A distributed repair lock would coordinate multiple API processes; today repair
+  coalescing, the repair lease, and backoff are per process.
 - An orphan-shard garbage collector and a corrupt-index repair command would make
   crash recovery operationally complete.
 - A retrievability proof, not just possession, needs a new challenge format and is a

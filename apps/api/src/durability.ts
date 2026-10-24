@@ -176,6 +176,14 @@ export interface DurabilityOptions {
    * from holders. Defaults to unlimited for backwards compatibility.
    */
   maxPlacements?: number;
+  /**
+   * How long a repair may hold its in-memory lease. A placement has no
+   * time-based expiry of its own, but a repair that takes too long, or whose
+   * placement is forgotten or replaced while it is reading, must not commit.
+   * The check is repeated before the commit, so a slow repair fails closed
+   * instead of moving a placement nobody is looking after. Defaults to 30 min.
+   */
+  repairLeaseMs?: number;
 }
 
 export function requiredHolders(
@@ -574,6 +582,7 @@ export class DurabilityLedger {
   readonly windowMs: number;
   private readonly random: (upper: number) => number;
   private readonly maxPlacements: number;
+  private readonly repairLeaseMs: number;
 
   constructor(options: DurabilityOptions = {}) {
     this.now = options.now ?? Date.now;
@@ -588,7 +597,41 @@ export class DurabilityLedger {
       throw new Error("maxPlacements must be a positive integer");
     }
 
+    if (
+      options.repairLeaseMs !== undefined &&
+      (!Number.isFinite(options.repairLeaseMs) || options.repairLeaseMs <= 0)
+    ) {
+      throw new Error("repairLeaseMs must be a positive number");
+    }
+
     this.maxPlacements = options.maxPlacements ?? Number.POSITIVE_INFINITY;
+    this.repairLeaseMs = options.repairLeaseMs ?? 30 * 60 * 1000;
+  }
+
+  /**
+   * A repair holds an in-memory lease for one placement object. Placements do
+   * not expire on a clock, so the lease is how a forgotten, evicted, or
+   * replaced placement is detected after the repair has awaited holders. The
+   * time bound stops a repair that hangs on a slow holder from committing into
+   * a placement the rest of the node has already moved past.
+   */
+  private assertRepairLease(
+    blobHash: string,
+    placement: Placement,
+    expiresAt: number,
+    stage: string,
+  ): void {
+    if (this.placements.get(blobHash) !== placement) {
+      throw new Error(
+        `cannot repair ${blobHash}: the placement is no longer current (forgotten or replaced during ${stage})`,
+      );
+    }
+
+    if (this.now() > expiresAt) {
+      throw new Error(
+        `cannot repair ${blobHash}: the repair lease expired during ${stage}`,
+      );
+    }
   }
 
   private remember(blobHash: string, placement: Placement, witnesses: Map<number, Witness>): void {
@@ -1143,17 +1186,33 @@ export class DurabilityLedger {
       );
     }
 
+    const leaseExpiresAt = this.now() + this.repairLeaseMs;
+
     if (placement.streamed) {
-      return await this.repairStreamed(placement, degraded, survivors, holders, byId, used, witnesses);
+      return await this.repairStreamed(
+        placement,
+        degraded,
+        survivors,
+        holders,
+        byId,
+        used,
+        witnesses,
+        leaseExpiresAt,
+      );
     }
 
-    // An MDS repair needs exactly k shards; reading every survivor is overhead,
-    // not extra safety. If one of the chosen shards is corrupt, decode fails
-    // loudly rather than silently reading around it.
-    const chosen = survivors.slice(0, placement.dataShards);
+    // An MDS repair needs exactly k shards. If a survivor cannot be read
+    // (a holder dropped out after the presence probe), try the next survivor
+    // before failing. Corruption is different: those bytes were read, so they
+    // still go to decode and fail loudly rather than being routed around.
     const survivorShards: ErasureShard[] = [];
+    const unreadable: number[] = [];
+    let readBytes = 0;
 
-    for (const shard of chosen) {
+    for (const shard of survivors) {
+      if (survivorShards.length >= placement.dataShards) break;
+
+      this.assertRepairLease(blobHash, placement, leaseExpiresAt, "reading survivors");
       const holder = byId.get(shard.holder);
 
       if (!holder) {
@@ -1162,10 +1221,17 @@ export class DurabilityLedger {
         );
       }
 
-      const bytes = await holder.get(shard.storedAs);
+      let bytes: Uint8Array | null = null;
+
+      try {
+        bytes = await holder.get(shard.storedAs);
+      } catch {
+        bytes = null;
+      }
 
       if (!bytes) {
-        throw new Error(`holder ${shard.holder} lost shard ${shard.index} during repair`);
+        unreadable.push(shard.index);
+        continue;
       }
 
       survivorShards.push({
@@ -1177,6 +1243,17 @@ export class DurabilityLedger {
         bytes: Uint8Array.from(bytes),
         digest: shard.digest,
       });
+      readBytes += bytes.length;
+    }
+
+    if (survivorShards.length < placement.dataShards) {
+      const suffix =
+        unreadable.length > 0
+          ? `; unreadable survivor shards: ${unreadable.join(", ")}`
+          : "";
+      throw new Error(
+        `cannot repair: read ${survivorShards.length} of ${placement.dataShards} survivor shards${suffix}`,
+      );
     }
 
     const payload = decodeBytes(survivorShards);
@@ -1193,6 +1270,8 @@ export class DurabilityLedger {
     const spare: DurabilityHolder[] = [];
 
     for (const candidate of candidates) {
+      this.assertRepairLease(blobHash, placement, leaseExpiresAt, "probing spares");
+
       try {
         await candidate.has(probe);
         spare.push(candidate);
@@ -1200,9 +1279,6 @@ export class DurabilityLedger {
         // Offline or refusing the read; leave it out of this repair.
       }
     }
-
-    let readBytes = 0;
-    for (const shard of survivorShards) readBytes += shard.bytes.length;
 
     if (spare.length < degraded.size) {
       const reason =
@@ -1214,7 +1290,9 @@ export class DurabilityLedger {
 
     // Stage every write before touching the placement. A failed write, a full
     // spare, or a crash leaves the signed placement exactly as it was; a retry
-    // is idempotent because the holder store is content-addressed.
+    // is idempotent because the holder store is content-addressed. If a spare
+    // rejects the write, try the next free holder instead of abandoning a
+    // repair that has other viable targets.
     const staged: {
       index: number;
       holder: DurabilityHolder;
@@ -1222,23 +1300,47 @@ export class DurabilityLedger {
       bytes: Uint8Array;
       leaves: string[];
     }[] = [];
+    const assigned = new Set<string>();
+    const unusable = new Set<string>();
 
-    for (const [position, index] of [...degraded].sort((left, right) => left - right).entries()) {
-      const holder = spare[position]!;
+    for (const index of [...degraded].sort((left, right) => left - right)) {
+      this.assertRepairLease(blobHash, placement, leaseExpiresAt, "staging writes");
       const bytes = reencoded.find((shard) => shard.index === index)!.bytes;
+      let lastError: unknown = null;
+      let written = false;
 
-      try {
-        const storedAs = await holder.put(bytes);
-        staged.push({ index, holder, storedAs, bytes, leaves: chunkLeaves(bytes) });
-      } catch (error) {
+      for (const holder of spare) {
+        if (assigned.has(holder.id) || unusable.has(holder.id)) continue;
+
+        try {
+          const storedAs = await holder.put(bytes);
+          staged.push({
+            index,
+            holder,
+            storedAs,
+            bytes,
+            leaves: chunkLeaves(bytes),
+          });
+          assigned.add(holder.id);
+          lastError = null;
+          written = true;
+          break;
+        } catch (error) {
+          lastError = error;
+          unusable.add(holder.id);
+        }
+      }
+
+      if (!written) {
         throw new Error(
-          `repair write failed for shard ${index} on ${holder.id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `repair write failed for shard ${index}: no spare holder accepted it (${
+            lastError instanceof Error ? lastError.message : String(lastError)
+          })`,
         );
       }
     }
 
+    this.assertRepairLease(blobHash, placement, leaseExpiresAt, "commit");
     let writtenBytes = 0;
 
     for (const entry of staged) {
@@ -1272,9 +1374,11 @@ export class DurabilityLedger {
     byId: Map<string, DurabilityHolder>,
     used: Set<string>,
     witnesses: Map<number, Witness>,
+    leaseExpiresAt: number,
   ): Promise<RepairOutcome> {
     const meta = placement.streamed!;
     const working = mkdtempSync(join(tmpdir(), "rarext-repair-streamed-"));
+    const blobHash = placement.blobHash;
 
     try {
       const available: { index: number; path: string }[] = [];
@@ -1283,6 +1387,7 @@ export class DurabilityLedger {
       for (const shard of survivors) {
         if (available.length >= placement.dataShards) break;
 
+        this.assertRepairLease(blobHash, placement, leaseExpiresAt, "downloading survivors");
         const holder = byId.get(shard.holder);
 
         if (!holder) {
@@ -1325,6 +1430,8 @@ export class DurabilityLedger {
       const spare: DurabilityHolder[] = [];
 
       for (const candidate of candidates) {
+        this.assertRepairLease(blobHash, placement, leaseExpiresAt, "probing spares");
+
         try {
           await candidate.has(probe);
           spare.push(candidate);
@@ -1351,8 +1458,11 @@ export class DurabilityLedger {
         digest: string;
       }[] = [];
 
-      for (const [position, index] of [...degraded].sort((left, right) => left - right).entries()) {
-        const holder = spare[position]!;
+      const assigned = new Set<string>();
+      const unusable = new Set<string>();
+
+      for (const index of [...degraded].sort((left, right) => left - right)) {
+        this.assertRepairLease(blobHash, placement, leaseExpiresAt, "rebuilding shards");
         const target = placement.shards.find((shard) => shard.index === index)!;
         const path = join(working, `rebuilt-${index}`);
         const rebuiltShard = reencodeStreamedShard({
@@ -1380,31 +1490,47 @@ export class DurabilityLedger {
           throw new Error(`rebuilt shard ${index} does not match the signed digest`);
         }
 
-        let storedAs: string;
+        let storedAs: string | null = null;
+        let lastError: unknown = null;
 
-        try {
-          storedAs = holder.putFile
-            ? await holder.putFile(path, rebuiltShard.sha256)
-            : await holder.put(Uint8Array.from(readFileSync(path)));
-        } catch (error) {
-          throw new Error(
-            `repair write failed for shard ${index} on ${holder.id}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
+        for (const holder of spare) {
+          if (assigned.has(holder.id) || unusable.has(holder.id)) continue;
+          this.assertRepairLease(blobHash, placement, leaseExpiresAt, "writing shards");
+
+          try {
+            const uploaded = holder.putFile
+              ? await holder.putFile(path, rebuiltShard.sha256)
+              : await holder.put(Uint8Array.from(readFileSync(path)));
+            storedAs = uploaded;
+            assigned.add(holder.id);
+            rebuilt.push({
+              index,
+              holder,
+              storedAs: uploaded,
+              size: rebuiltShard.bytes,
+              leaves: rebuiltShard.leaves,
+              root: rebuiltShard.root,
+              digest: rebuiltShard.sha256,
+            });
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+            storedAs = null;
+            unusable.add(holder.id);
+          }
         }
 
-        rebuilt.push({
-          index,
-          holder,
-          storedAs,
-          size: rebuiltShard.bytes,
-          leaves: rebuiltShard.leaves,
-          root: rebuiltShard.root,
-          digest: rebuiltShard.sha256,
-        });
+        if (storedAs === null || lastError !== null) {
+          throw new Error(
+            `repair write failed for shard ${index}: no spare holder accepted it (${
+              lastError instanceof Error ? lastError.message : String(lastError)
+            })`,
+          );
+        }
       }
 
+      this.assertRepairLease(blobHash, placement, leaseExpiresAt, "commit");
       let writtenBytes = 0;
 
       for (const entry of rebuilt) {

@@ -212,7 +212,10 @@ npm run dev:api
 `RAREXT_STORAGE_HOLDERS` is accepted as an alias for `RAREXT_HOLDERS`. The API listens
 on `127.0.0.1:8787` by default (`PORT`, `HOST`). With holders configured it starts the
 retention scheduler every 6 hours (`RAREXT_CHALLENGE_INTERVAL_MS`) and repairs
-under-replicated placements automatically. It prints
+under-replicated placements automatically. A failed repair backs off per blob for 60s,
+doubling to a 6h ceiling (`RAREXT_REPAIR_BACKOFF_MS`, `RAREXT_REPAIR_MAX_BACKOFF_MS`),
+and one repair holds its placement for at most 30 minutes
+(`RAREXT_REPAIR_LEASE_MS`). It prints
 `retention challenges every 21600s across 3 holder(s)` when that happens.
 
 Signed placement records live in `RAREXT_PLACEMENTS_DIR`. On boot the API adopts them,

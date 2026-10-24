@@ -180,13 +180,13 @@ test("repair recovers after a crash and a restart from the signed placement", as
       ...holder,
       async put(bytes: Uint8Array) {
         writes += 1;
-        const storedAs = await holder.put(bytes);
-        if (writes === 1) throw new Error("simulated crash after first write");
-        return storedAs;
+        await holder.put(bytes);
+        throw new Error("simulated crash after write");
       },
     }));
 
     await assert.rejects(() => ledger.repair(placement.blobHash, crashing), /simulated crash/);
+    assert.ok(writes > 1, "the repair tried another spare before giving up");
     assert.equal(JSON.stringify(placement), before);
 
     const recovered = new DurabilityLedger();

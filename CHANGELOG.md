@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Repair-path hardening.** `DurabilityLedger.repair` now reads another survivor when
+  a holder drops between the presence probe and `get`, and tries the next free spare
+  when a target rejects `put`/`putFile`; streamed repair follows the same rules. A repair
+  holds a 30-minute in-memory lease tied to the placement object and refuses to commit
+  after a `forget`, `maxPlacements` eviction, replacement, or lease expiry. The challenge
+  scheduler backs off failed repairs per blob (60s initial, doubled, 6h cap) and reports
+  `repairDeferred`/attempt counts instead of retrying every run. New fault tests cover
+  each path, and `docs/OPERATIONS.md` records the measured limits.
+
 - **Community tournament hardening.** `TournamentService` now caps a field at
   `MAX_TOURNAMENT_PARTICIPANTS` (1024) and refuses a participant-count overflow, and a
   recorded result must name the two participants of the match it settles: a winner that

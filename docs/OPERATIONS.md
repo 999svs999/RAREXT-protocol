@@ -9,7 +9,9 @@ the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 
 The storage endpoints (`PUT`/`GET /v1/blobs`, the durability challenge, audit, and
 repair paths) are bounded by construction, and the limits are measured by the
-regression tests in `apps/api/test/storage-hardening.test.ts`:
+regression tests in `apps/api/test/storage-hardening.test.ts`,
+`apps/api/test/durability-repair-fault.test.ts`, and
+`apps/api/test/erasure-stream-http.test.ts`:
 
 | Check | Limit / behaviour | What happens at the limit |
 | --- | --- | --- |
@@ -18,11 +20,21 @@ regression tests in `apps/api/test/storage-hardening.test.ts`:
 | Custom blob cap | `new BlobStore(dir, { maxBytes })` | same rejection, cap is per-store |
 | Chosen survivor holder missing | a survivor's holder is not in the caller's holder list | `repair()` rejects with `cannot repair: holder <id> for shard <i> is not configured` before any write; the placement is untouched |
 | Fewer than k live shards | `survivors < dataShards` | `repair()` rejects with `cannot repair: only <n> of <k> data shards survive` before any write |
-| Concurrent repair | two `repair()` calls for the same blob | the second caller joins the in-flight repair (`inFlightRepairs`) instead of writing the same shard twice |
+| Concurrent repair | two `repair()` calls for the same blob | the second caller joins the in-flight repair (`inFlightRepairs`) instead of writing the same shard twice; this is per process, not a distributed lock |
+| Survivor drops after the presence probe | a survivor's `get`/`getFile` throws or returns `null` before `k` shards are read | repair skips it and reads the next survivor; if fewer than `k` remain readable it rejects `cannot repair: read <n> of <k> survivor shards; unreadable survivor shards: <indices>` before any write |
+| Spare rejects the write | a target answers `507`/`500` to `put`/`putFile` | repair skips that holder for the rest of the attempt and tries the next free spare; if none accepts it rejects `repair write failed for shard <i>: no spare holder accepted it (<reason>)` and the signed placement is untouched |
+| Placement forgotten or replaced mid-repair | the in-memory placement object is no longer the ledger's current entry | `assertRepairLease` rejects `<blob>: the placement is no longer current (forgotten or replaced during <stage>)`; no commit happens, and already staged shards are orphans for GC |
+| Repair lease timeout | default `RAREXT_REPAIR_LEASE_MS` = 30 min per repair | the next lease check rejects `<blob>: the repair lease expired during <stage>` before commit; the placement is untouched |
+| Repair after forget or `maxPlacements` eviction | the ledger has no placement for the blob | `repair()` rejects `unknown blob <hash>` before contacting any holder |
+| Repair storm | repeated failed repairs for one blob | the scheduler backs off per blob: `RAREXT_REPAIR_BACKOFF_MS` = 60s initial, doubled per consecutive failure, capped at `RAREXT_REPAIR_MAX_BACKOFF_MS` = 6h; skipped attempts appear in `repairDeferred` with `attempts`/`retryAt`, and a clean audit clears the backoff |
 | Duplicate challenge nonce | replayed nonce with a different binding | `verifyChallengeResponse` rejects (`bad-proof`); the holder also caps nonce length at `MAX_CHALLENGE_NONCE` (200) |
 
 A failed or refused repair never moves the signed placement: the staging is
 atomic, so a retry is idempotent and the holder store stays content-addressed.
+The repair lease and repair backoff are per process. Two API processes repairing
+the same placement do not hold a distributed lock: content-addressed staging makes
+duplicate writes harmless, and the signed placement record decides which update is
+current, but operators should run one repair scheduler per placement set.
 Write access, request rate, total blob quota, and TLS are separate exposure
 controls; see
 [`OPERATOR.md`](OPERATOR.md#public-exposure-and-write-limits).

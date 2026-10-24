@@ -27,7 +27,18 @@ export interface ChallengeRun {
   underReplicated: string[];
   /** Shards rebuilt and re-placed during this run. */
   repairs: ChallengeRunRepair[];
-  repairErrors: { blobHash: string; error: string }[];
+  repairErrors: {
+    blobHash: string;
+    error: string;
+    attempts: number;
+    retryAt: string;
+  }[];
+  /** Under-replicated blobs whose repair is waiting out a failure backoff. */
+  repairDeferred: {
+    blobHash: string;
+    attempts: number;
+    retryAt: string;
+  }[];
   errors: { blobHash: string; error: string }[];
 }
 
@@ -50,11 +61,21 @@ export interface ChallengeScheduleOptions {
   now?: () => number;
   /** Rebuild and re-place shards that a challenge found missing. Off by default. */
   repair?: boolean;
+  /**
+   * Delay after a failed repair before the blob is attempted again. It doubles
+   * per consecutive failure up to `maxRepairBackoffMs`, so a holder that keeps
+   * rejecting writes cannot turn every scheduled run into another repair storm.
+   */
+  repairBackoffMs?: number;
+  /** Ceiling for the exponential repair backoff. Defaults to six hours. */
+  maxRepairBackoffMs?: number;
   onRun?: (run: ChallengeRun) => void;
 }
 
 const DEFAULT_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_HISTORY = 20;
+const DEFAULT_REPAIR_BACKOFF_MS = 60 * 1000;
+const DEFAULT_MAX_REPAIR_BACKOFF_MS = 6 * 60 * 60 * 1000;
 
 const systemTimers: SchedulerTimers = {
   setTimeout(callback, ms) {
@@ -81,6 +102,12 @@ export class ChallengeScheduler {
   private readonly clock: () => number;
   private readonly historyLimit: number;
   private readonly repair: boolean;
+  private readonly repairBackoffMs: number;
+  private readonly maxRepairBackoffMs: number;
+  private readonly repairFailures = new Map<
+    string,
+    { attempts: number; retryAt: number }
+  >();
   private readonly onRun: ChallengeScheduleOptions["onRun"];
   private readonly runs: ChallengeRun[] = [];
   private startedAt: number | null = null;
@@ -96,10 +123,24 @@ export class ChallengeScheduler {
     this.clock = options.now ?? Date.now;
     this.historyLimit = options.historyLimit ?? DEFAULT_HISTORY;
     this.repair = options.repair ?? false;
+    this.repairBackoffMs = options.repairBackoffMs ?? DEFAULT_REPAIR_BACKOFF_MS;
+    this.maxRepairBackoffMs =
+      options.maxRepairBackoffMs ?? DEFAULT_MAX_REPAIR_BACKOFF_MS;
     this.onRun = options.onRun;
 
     if (!Number.isFinite(this.intervalMs) || this.intervalMs <= 0) {
       throw new Error("intervalMs must be a positive number");
+    }
+
+    if (!Number.isFinite(this.repairBackoffMs) || this.repairBackoffMs <= 0) {
+      throw new Error("repairBackoffMs must be a positive number");
+    }
+
+    if (
+      !Number.isFinite(this.maxRepairBackoffMs) ||
+      this.maxRepairBackoffMs < this.repairBackoffMs
+    ) {
+      throw new Error("maxRepairBackoffMs must be at least repairBackoffMs");
     }
   }
 
@@ -183,16 +224,35 @@ export class ChallengeScheduler {
       }
     }
 
+    for (const audit of audits) {
+      if (audit.status === "ok") this.repairFailures.delete(audit.blobHash);
+    }
+
     const underReplicated = audits
       .filter((audit) => audit.status === "under-replicated")
       .map((audit) => audit.blobHash);
     const repairs: ChallengeRunRepair[] = [];
-    const repairErrors: { blobHash: string; error: string }[] = [];
+    const repairErrors: ChallengeRun["repairErrors"] = [];
+    const repairDeferred: ChallengeRun["repairDeferred"] = [];
 
     if (this.repair) {
       for (const blobHash of underReplicated) {
+        const now = this.clock();
+        const previous = this.repairFailures.get(blobHash);
+
+        if (previous && now < previous.retryAt) {
+          repairDeferred.push({
+            blobHash,
+            attempts: previous.attempts,
+            retryAt: new Date(previous.retryAt).toISOString(),
+          });
+          continue;
+        }
+
         try {
           const outcome = await this.ledger.repair(blobHash, holders);
+
+          this.repairFailures.delete(blobHash);
 
           if (outcome.filled > 0) {
             repairs.push({
@@ -209,9 +269,19 @@ export class ChallengeScheduler {
             audits[index] = this.ledger.audit(blobHash);
           }
         } catch (error) {
+          const attempts = (previous?.attempts ?? 0) + 1;
+          const delay = Math.min(
+            this.repairBackoffMs * 2 ** (attempts - 1),
+            this.maxRepairBackoffMs,
+          );
+          const retryAt = this.clock() + delay;
+
+          this.repairFailures.set(blobHash, { attempts, retryAt });
           repairErrors.push({
             blobHash,
             error: error instanceof Error ? error.message : "repair failed",
+            attempts,
+            retryAt: new Date(retryAt).toISOString(),
           });
         }
       }
@@ -226,6 +296,7 @@ export class ChallengeScheduler {
       underReplicated,
       repairs,
       repairErrors,
+      repairDeferred,
       errors,
     };
 
