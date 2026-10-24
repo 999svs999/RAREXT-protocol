@@ -14,6 +14,7 @@ import type {
   VerificationOutput,
 } from "../../../packages/core/src/index.ts";
 import { attest } from "./attest.ts";
+import { generativeVerifier } from "./generative.ts";
 import {
   bindClaim,
   hashValue,
@@ -266,6 +267,9 @@ export function createVerifierRegistry(
   const verifiers = new Map<string, AppVerifier>();
   const logic = logicVerifier(semantics);
   verifiers.set(logic.id, logic);
+
+  const generative = generativeVerifier(semantics);
+  verifiers.set(generative.id, generative);
 
   for (const config of configuredVerifiers()) {
     const verifier = externalVerifier(config, requestFetch);
