@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { canonicalize, leafPayload } from "@rarext/core";
+import { canonicalize, generate, leafPayload } from "@rarext/core";
 import type { Publication } from "@rarext/core";
 
 import { verifyBundle, type Bundle } from "../src/verify.ts";
@@ -241,4 +241,95 @@ test("legacy publications surface as representation null", async () => {
   assert.equal(legacy.representation, null);
   assert.equal(legacy.metricName, null);
   assert.equal(legacy.withinBound, null);
+});
+
+test("the browser replays a generative claim itself when given the steps", async () => {
+  const model = {
+    kind: "xorshift32" as const,
+    params: { a: 13, b: 17, c: 5 },
+    vocab: ["a", "b", "c", "d"],
+  };
+  const output = generate(model, 42, 16);
+  const pub = aiPublication("gen-1");
+  pub.app = "ai-generative";
+  pub.challengeId = "gen-starter";
+  pub.artifact = {
+    app: "ai-generative",
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body: { model, seed: 42, output },
+  };
+  pub.attestation = {
+    ...pub.attestation,
+    app: "ai-generative",
+    challengeId: "gen-starter",
+    representation: "generative",
+    metricName: undefined,
+    metricValue: undefined,
+  } as typeof pub.attestation;
+
+  const result = await verifyBundle(bundle([pub]), {
+    "gen-starter": { steps: 16 },
+  });
+  const claim = result.aiClaims[0]!;
+  assert.equal(claim.representation, "generative");
+  assert.deepEqual(claim.local, { correct: true });
+
+  const tampered = { ...pub };
+  tampered.artifact = {
+    ...pub.artifact,
+    body: { model, seed: 42, output: output.slice(0, -1) + (output.endsWith("a") ? "b" : "a") },
+  };
+  const bad = await verifyBundle(bundle([tampered]), {
+    "gen-starter": { steps: 16 },
+  });
+  assert.deepEqual(bad.aiClaims[0]!.local, { correct: false });
+});
+
+test("the browser recomputes a bounded metric from the raw reconstruction", async () => {
+  const pub = aiPublication("ai-1");
+  const reference = [10, 20, 30, 40, 200, 255, 0, 128];
+
+  const result = await verifyBundle(bundle([pub]), {
+    "bounded-starter": {
+      metric: "maxAbsError",
+      bound: 4,
+      reference,
+    },
+  });
+  const claim = result.aiClaims[0]!;
+  assert.equal(claim.representation, "bounded");
+  assert.deepEqual(claim.local, { correct: true, metricValue: 2 });
+});
+
+test("a locally recomputed metric that disagrees with the attestation is exposed", async () => {
+  const pub = aiPublication("ai-3");
+  pub.attestation = { ...pub.attestation, metricValue: 9 };
+  const reference = [10, 20, 30, 40, 200, 255, 0, 128];
+
+  const result = await verifyBundle(bundle([pub]), {
+    "bounded-starter": {
+      metric: "maxAbsError",
+      bound: 4,
+      reference,
+    },
+  });
+  const claim = result.aiClaims[0]!;
+
+  // The local check verifies the ARTIFACT: the reconstruction really is
+  // within bound (metric 2 of 4), so local.correct is true. The fraud shows
+  // in the comparison: the attestation committed metricValue 9 for an
+  // artifact whose true metric is 2. Reader-side, local.metricValue !==
+  // claim.metricValue is the tamper signal — no trust in the mirror or the
+  // attestation required.
+  assert.deepEqual(claim.local, { correct: true, metricValue: 2 });
+  assert.equal(claim.metricValue, 9);
+  assert.notEqual(claim.local!.metricValue, claim.metricValue);
+  assert.equal(claim.withinBound, false);
+});
+
+test("without a usable spec the local check stays null, not a guess", async () => {
+  const result = await verifyBundle(bundle([aiPublication("ai-1")]));
+  assert.equal(result.aiClaims[0]!.local, null);
 });

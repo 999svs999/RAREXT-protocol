@@ -1,5 +1,9 @@
-import { canonicalize, leafPayload } from "@rarext/core";
-import type { Publication } from "@rarext/core";
+import {
+  canonicalize,
+  leafPayload,
+  verifyAiArtifact,
+} from "@rarext/core";
+import type { AiLocalVerification, Publication } from "@rarext/core";
 
 /**
  * The browser-side mirror verifier.
@@ -48,10 +52,28 @@ export interface AiClaimSummary {
    * committed metric value actually satisfies the bound.
    */
   withinBound: boolean | null;
+  /**
+   * When the bundle carries the challenge spec for this claim: the verdict
+   * computed locally in this browser from the raw artifact data — replay for
+   * generative, recomputed metric for bounded. Null when no usable spec was
+   * supplied. This is the strongest check a mirror reader gets: it does not
+   * trust the mirror, the anchor, or the attestation for the verdict.
+   */
+  local: { correct: boolean; metricValue?: number } | null;
 }
 
+/**
+ * Challenge specs a reader can supply alongside a bundle: bounded claims use
+ * `bound` (+ optionally the full spec with `metric` and `reference` for local
+ * recomputation), generative claims use `steps` for a local replay.
+ */
 export interface ChallengeIndex {
-  [challengeId: string]: { bound?: number } & Record<string, unknown>;
+  [challengeId: string]: {
+    bound?: number;
+    steps?: number;
+    metric?: string;
+    reference?: number[];
+  } & Record<string, unknown>;
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -86,6 +108,71 @@ async function merkleRoot(leaves: string[]): Promise<string> {
   return level[0]!;
 }
 
+function localAiCheck(
+  publication: Publication,
+  spec: Record<string, unknown> | undefined,
+): { correct: boolean; metricValue?: number } | null {
+  if (!spec) return null;
+
+  const representation = (publication.attestation as { representation?: string })
+    .representation;
+
+  // Generative: replay needs only the step count — the model, seed, and
+  // claimed output travel inside the artifact.
+  if (representation === "generative") {
+    if (typeof spec.steps !== "number") return null;
+    const challenge = {
+      id: publication.challengeId,
+      app: publication.app,
+      title: "",
+      description: "",
+      version: 1,
+      spec: { steps: spec.steps },
+      semanticsId: "",
+      semanticsVersion: 1,
+      createdAt: "",
+    };
+    const result = verifyAiArtifact(publication.artifact, challenge);
+    if ("error" in result) return null;
+    return { correct: result.correct === true };
+  }
+
+  // Bounded: with metric + reference + bound the browser recomputes the
+  // metric from the raw reconstruction instead of trusting the attestation.
+  if (representation === "bounded") {
+    if (
+      (spec.metric !== "maxAbsError" && spec.metric !== "meanAbsError") ||
+      !Array.isArray(spec.reference) ||
+      typeof spec.bound !== "number"
+    ) {
+      return null;
+    }
+    const challenge = {
+      id: publication.challengeId,
+      app: publication.app,
+      title: "",
+      description: "",
+      version: 1,
+      spec: {
+        metric: spec.metric,
+        bound: spec.bound,
+        reference: spec.reference,
+      },
+      semanticsId: "",
+      semanticsVersion: 1,
+      createdAt: "",
+    };
+    const result = verifyAiArtifact(publication.artifact, challenge);
+    if ("error" in result) return null;
+    return {
+      correct: result.correct === true,
+      metricValue: typeof result.metricValue === "number" ? result.metricValue : undefined,
+    };
+  }
+
+  return null;
+}
+
 function aiClaimsFor(
   bundle: Bundle,
   challenges?: ChallengeIndex,
@@ -103,6 +190,7 @@ function aiClaimsFor(
     const bound = typeof spec?.bound === "number" ? spec.bound : null;
     const metricValue =
       typeof attestation.metricValue === "number" ? attestation.metricValue : null;
+    const local = localAiCheck(publication, spec as Record<string, unknown> | undefined);
 
     return {
       publicationId: publication.id,
@@ -115,6 +203,7 @@ function aiClaimsFor(
         representation === "bounded" && metricValue !== null && bound !== null
           ? metricValue <= bound
           : null,
+      local,
     };
   });
 }
