@@ -188,6 +188,229 @@ export class PinStore {
     rmSync(paths.content, { force: true });
     return true;
   }
+
+  /**
+   * Reap structural orphans and, when the caller supplies a reference set,
+   * pins nothing references. A pin with `publicationIds` is a live hold and is
+   * never collected that way. `dryRun` defaults to true.
+   *
+   * `put`, `remove`, and this pass are synchronous, so two calls in one
+   * process cannot interleave and a read never races an unlink.
+   */
+  gc(options: {
+    referenced?: Iterable<string>;
+    gracePeriodMs?: number;
+    dryRun?: boolean;
+    now?: number;
+  } = {}): {
+    scanned: number;
+    referenced: number;
+    held: number;
+    candidates: number;
+    deleted: number;
+    orphanContent: number;
+    orphanMetadata: number;
+    purgedTemp: number;
+    wouldDelete: string[];
+    dryRun: boolean;
+    gracePeriodMs: number;
+  } {
+    const referenced = options.referenced
+      ? new Set([...options.referenced].filter((cid) => CID_PATTERN.test(cid)))
+      : null;
+    const gracePeriodMs = options.gracePeriodMs ?? 24 * 60 * 60 * 1000;
+    const dryRun = options.dryRun !== false;
+    const now = options.now ?? Date.now();
+    const candidates = this.loadGcCandidates();
+    const names = readdirSync(this.directory);
+    const metadata = new Set<string>();
+    const content = new Set<string>();
+
+    for (const name of names) {
+      if (name.endsWith(".json")) {
+        const cid = name.slice(0, -".json".length);
+        if (CID_PATTERN.test(cid)) metadata.add(cid);
+      } else if (name.endsWith(".bin")) {
+        const cid = name.slice(0, -".bin".length);
+        if (CID_PATTERN.test(cid)) content.add(cid);
+      }
+    }
+
+    const wouldDelete: string[] = [];
+    const orphanMetadata = new Set<string>();
+    const orphanContent = new Set<string>();
+    let referencedCount = 0;
+    let held = 0;
+
+    const consider = (cid: string): void => {
+      const existing = candidates.get(cid);
+
+      if (!existing) {
+        candidates.set(cid, { cid, firstSeen: now });
+        if (gracePeriodMs === 0) wouldDelete.push(cid);
+      } else if (now - existing.firstSeen >= gracePeriodMs) {
+        wouldDelete.push(cid);
+      }
+    };
+
+    for (const cid of metadata) {
+      let record: PinRecord | null = null;
+
+      try {
+        record = this.get(cid);
+      } catch {
+        // A corrupt metadata/content pair is unusable and is an orphan.
+        record = null;
+      }
+
+      if (!record) {
+        orphanMetadata.add(cid);
+        consider(cid);
+        continue;
+      }
+
+      if (referenced && !referenced.has(cid)) {
+        if (record.publicationIds.length > 0) {
+          held += 1;
+          candidates.delete(cid);
+          continue;
+        }
+        consider(cid);
+      } else {
+        referencedCount += 1;
+        candidates.delete(cid);
+      }
+    }
+
+    for (const cid of content) {
+      if (metadata.has(cid)) continue;
+      orphanContent.add(cid);
+      consider(cid);
+    }
+
+    for (const cid of [...candidates.keys()]) {
+      if (!metadata.has(cid) && !content.has(cid)) candidates.delete(cid);
+    }
+
+    let deleted = 0;
+    let removedContent = 0;
+    let removedMetadata = 0;
+
+    if (!dryRun) {
+      for (const cid of wouldDelete) {
+        const hasMetadata = metadata.has(cid);
+        const hasContent = content.has(cid);
+
+        if (hasMetadata && hasContent) {
+          let record: PinRecord | null = null;
+
+          try {
+            record = this.get(cid);
+          } catch {
+            record = null;
+          }
+
+          const protectedPin =
+            record && (record.publicationIds.length > 0 || (referenced?.has(cid) ?? false));
+          if (protectedPin) {
+            candidates.delete(cid);
+            continue;
+          }
+          this.remove(cid);
+          deleted += 1;
+        } else {
+          const paths = this.paths(cid);
+          if (hasMetadata) {
+            rmSync(paths.metadata, { force: true });
+            removedMetadata += 1;
+          }
+          if (hasContent) {
+            rmSync(paths.content, { force: true });
+            removedContent += 1;
+          }
+        }
+
+        candidates.delete(cid);
+      }
+    }
+
+    this.saveGcCandidates(candidates);
+
+    return {
+      scanned: metadata.size,
+      referenced: referencedCount,
+      held,
+      candidates: candidates.size,
+      deleted,
+      orphanContent: orphanContent.size,
+      orphanMetadata: orphanMetadata.size,
+      purgedTemp: this.purgeTempFiles(),
+      wouldDelete,
+      dryRun,
+      gracePeriodMs,
+    };
+  }
+
+  private gcCandidatesPath(): string {
+    return join(this.directory, "_pin-gc-candidates.json");
+  }
+
+  private loadGcCandidates(): Map<string, { cid: string; firstSeen: number }> {
+    const path = this.gcCandidatesPath();
+    if (!existsSync(path)) return new Map();
+
+    try {
+      const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+        cid?: unknown;
+        firstSeen?: unknown;
+      }[];
+      const candidates = new Map<string, { cid: string; firstSeen: number }>();
+
+      for (const entry of parsed) {
+        if (
+          typeof entry.cid === "string" &&
+          CID_PATTERN.test(entry.cid) &&
+          typeof entry.firstSeen === "number" &&
+          Number.isFinite(entry.firstSeen)
+        ) {
+          candidates.set(entry.cid, { cid: entry.cid, firstSeen: entry.firstSeen });
+        }
+      }
+
+      return candidates;
+    } catch {
+      return new Map();
+    }
+  }
+
+  private saveGcCandidates(candidates: Map<string, { cid: string; firstSeen: number }>): void {
+    const path = this.gcCandidatesPath();
+    const temporary = `${path}.${randomUUID()}.tmp`;
+
+    try {
+      writeFileSync(temporary, JSON.stringify([...candidates.values()], null, 2));
+      renameSync(temporary, path);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  }
+
+  private purgeTempFiles(): number {
+    let removed = 0;
+
+    for (const name of readdirSync(this.directory)) {
+      if (!name.endsWith(".tmp")) continue;
+
+      try {
+        rmSync(join(this.directory, name), { force: true });
+        removed += 1;
+      } catch {
+        // Another handle still holds it; leave it for the next sweep.
+      }
+    }
+
+    return removed;
+  }
 }
 
 function parseTokens(tokenConfig?: string | string[]): string[] {
@@ -355,6 +578,36 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
         }
 
         send(res, 405, { error: "method not allowed" });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/v1/pins/gc") {
+        const body = await readBody(req);
+        const referenced = body.referenced;
+
+        if (
+          referenced !== undefined &&
+          (!Array.isArray(referenced) ||
+            !referenced.every((cid) => typeof cid === "string" && CID_PATTERN.test(cid)))
+        ) {
+          send(res, 400, { error: "referenced must be an array of CIDs" });
+          return;
+        }
+
+        const gracePeriodMs =
+          typeof body.gracePeriodMs === "number" && body.gracePeriodMs >= 0
+            ? body.gracePeriodMs
+            : undefined;
+
+        send(
+          res,
+          200,
+          store.gc({
+            referenced: referenced as string[] | undefined,
+            gracePeriodMs,
+            dryRun: body.dryRun !== false,
+          }),
+        );
         return;
       }
 

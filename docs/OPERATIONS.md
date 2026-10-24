@@ -141,6 +141,26 @@ matches the bytes it receives, writes pins atomically, and stores no secrets. Se
 `RAREXT_PIN_TOKEN` on the service and every client to require a bearer token. Back up
 the pin directory with `.data/`; a pin is one replica, not a permanence guarantee.
 
+### Pin garbage-collection limits
+
+`POST /v1/pins/gc` reaps structural orphans and, when a `referenced` CID list is
+supplied, unreferenced pins. `dryRun` defaults to `true`. `put`, `remove`, and
+the GC pass are synchronous, so a read never races an unlink and two passes in
+one process cannot interleave. Limits are measured by
+`apps/api/test/pin-gc-fault.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| A crash leaves content without metadata | the `.bin` is an orphan: reported as `orphanContent` and removed after `gracePeriodMs` |
+| A crash or manual delete leaves metadata without content | the `.json` is an orphan: reported as `orphanMetadata` and removed after the grace period |
+| A corrupt content/metadata pair | the pin no longer verifies against its CID, so it is treated as an orphan and collected |
+| A pin with `publicationIds` | a live hold: never collected when `referenced` omits it; counted as `held` |
+| A pin the caller references | never deleted, and its candidate entry is cleared |
+| A pin the caller does not reference | becomes a candidate and is collected only after the grace period |
+| Interrupted write temp files | `*.tmp` leftovers are swept (`purgedTemp`); the sweep runs even in a dry run |
+| Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second reports zero |
+| A malformed `referenced` list | `400 referenced must be an array of CIDs`; nothing is scanned or deleted |
+
 ## Holder and pin tokens
 
 `RAREXT_HOLDER_TOKEN` and `RAREXT_PIN_TOKEN` are shared bearer secrets, not identities.
