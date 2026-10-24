@@ -25,6 +25,33 @@ export interface BundleVerification {
   computedRoot: string;
   publications: number;
   reason: string | null;
+  /**
+   * Per-publication AI representation evidence, as committed by leaf v4.
+   * Every entry here is covered by the anchor: a mirror cannot have stripped
+   * or inflated it without failing the root check above.
+   */
+  aiClaims: AiClaimSummary[];
+}
+
+export interface AiClaimSummary {
+  publicationId: string;
+  /** The representation kind the anchor committed, or null for pre-AI claims. */
+  representation: "exact" | "bounded" | "generative" | null;
+  correct: boolean;
+  /** Bounded evidence: which metric was measured and the committed value. */
+  metricName: string | null;
+  metricValue: number | null;
+  /** The bound from the challenge spec carried in the bundle, when supplied. */
+  bound: number | null;
+  /**
+   * When the bundle carries the challenge spec for a bounded claim: the
+   * committed metric value actually satisfies the bound.
+   */
+  withinBound: boolean | null;
+}
+
+export interface ChallengeIndex {
+  [challengeId: string]: { bound?: number } & Record<string, unknown>;
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -59,7 +86,43 @@ async function merkleRoot(leaves: string[]): Promise<string> {
   return level[0]!;
 }
 
-export async function verifyBundle(bundle: Bundle): Promise<BundleVerification> {
+function aiClaimsFor(
+  bundle: Bundle,
+  challenges?: ChallengeIndex,
+): AiClaimSummary[] {
+  return bundle.publications.map((publication) => {
+    const attestation = publication.attestation as {
+      representation?: "exact" | "bounded" | "generative";
+      metricName?: string;
+      metricValue?: number;
+      correct?: boolean;
+    };
+
+    const representation = attestation.representation ?? null;
+    const spec = challenges?.[publication.challengeId];
+    const bound = typeof spec?.bound === "number" ? spec.bound : null;
+    const metricValue =
+      typeof attestation.metricValue === "number" ? attestation.metricValue : null;
+
+    return {
+      publicationId: publication.id,
+      representation,
+      correct: attestation.correct === true,
+      metricName: attestation.metricName ?? null,
+      metricValue,
+      bound,
+      withinBound:
+        representation === "bounded" && metricValue !== null && bound !== null
+          ? metricValue <= bound
+          : null,
+    };
+  });
+}
+
+export async function verifyBundle(
+  bundle: Bundle,
+  challenges?: ChallengeIndex,
+): Promise<BundleVerification> {
   const leaves: string[] = [];
 
   for (const publication of bundle.publications) {
@@ -81,6 +144,7 @@ export async function verifyBundle(bundle: Bundle): Promise<BundleVerification> 
       computedRoot,
       publications: leaves.length,
       reason: "the publications in this bundle do not rebuild the anchored root",
+      aiClaims: aiClaimsFor(bundle, challenges),
     };
   }
 
@@ -91,6 +155,7 @@ export async function verifyBundle(bundle: Bundle): Promise<BundleVerification> 
       computedRoot,
       publications: leaves.length,
       reason: "the manifest leaf list does not match the publications",
+      aiClaims: aiClaimsFor(bundle, challenges),
     };
   }
 
@@ -100,5 +165,6 @@ export async function verifyBundle(bundle: Bundle): Promise<BundleVerification> 
     computedRoot,
     publications: leaves.length,
     reason: null,
+    aiClaims: aiClaimsFor(bundle, challenges),
   };
 }

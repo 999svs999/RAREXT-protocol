@@ -165,3 +165,80 @@ test("the verifier honours the leaf version an old anchor was made with", async 
   );
   assert.equal(result.valid, true, result.reason ?? "");
 });
+
+function aiPublication(id: string): Publication {
+  const base = publication(id);
+
+  return {
+    ...base,
+    app: "ai-bounded",
+    challengeId: "bounded-starter",
+    artifact: {
+      app: "ai-bounded",
+      kind: "ai.bounded",
+      version: 1,
+      mediaType: "application/json",
+      body: { values: [12, 22, 32, 42, 200, 255, 0, 130] },
+    },
+    attestation: {
+      ...base.attestation,
+      app: "ai-bounded",
+      challengeId: "bounded-starter",
+      representation: "bounded",
+      metricName: "maxAbsError",
+      metricValue: 2,
+    },
+  };
+}
+
+test("the verifier surfaces the AI representation evidence leaf v4 commits", async () => {
+  const result = await verifyBundle(bundle([aiPublication("ai-1")]));
+
+  assert.equal(result.valid, true, result.reason ?? "");
+  assert.equal(result.aiClaims.length, 1);
+
+  const claim = result.aiClaims[0]!;
+  assert.equal(claim.publicationId, "ai-1");
+  assert.equal(claim.representation, "bounded");
+  assert.equal(claim.correct, true);
+  assert.equal(claim.metricName, "maxAbsError");
+  assert.equal(claim.metricValue, 2);
+  assert.equal(claim.bound, null);
+  assert.equal(claim.withinBound, null);
+});
+
+test("with a challenge index the verifier checks the bound itself", async () => {
+  const challenges = {
+    "bounded-starter": { bound: 4 },
+  };
+
+  const result = await verifyBundle(bundle([aiPublication("ai-1")]), challenges);
+  const claim = result.aiClaims[0]!;
+
+  assert.equal(claim.bound, 4);
+  assert.equal(claim.withinBound, true);
+});
+
+test("an over-bound committed metric is reported as violating the bound", async () => {
+  const over = aiPublication("ai-2");
+  over.attestation = { ...over.attestation, metricValue: 10 };
+
+  const result = await verifyBundle(bundle([over]), {
+    "bounded-starter": { bound: 4 },
+  });
+
+  const claim = result.aiClaims[0]!;
+  assert.equal(claim.metricValue, 10);
+  assert.equal(claim.withinBound, false);
+});
+
+test("legacy publications surface as representation null", async () => {
+  const result = await verifyBundle(
+    bundle([publication("p1"), aiPublication("ai-1")]),
+  );
+
+  const legacy = result.aiClaims.find((claim) => claim.publicationId === "p1")!;
+  assert.equal(legacy.representation, null);
+  assert.equal(legacy.metricName, null);
+  assert.equal(legacy.withinBound, null);
+});
