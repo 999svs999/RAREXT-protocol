@@ -14,6 +14,7 @@ import type {
   VerificationOutput,
 } from "../../../packages/core/src/index.ts";
 import { attest } from "./attest.ts";
+import { boundedVerifier } from "./bounded.ts";
 import { generativeVerifier } from "./generative.ts";
 import {
   bindClaim,
@@ -270,6 +271,9 @@ export function createVerifierRegistry(
 
   const generative = generativeVerifier(semantics);
   verifiers.set(generative.id, generative);
+
+  const bounded = boundedVerifier(semantics);
+  verifiers.set(bounded.id, bounded);
 
   for (const config of configuredVerifiers()) {
     const verifier = externalVerifier(config, requestFetch);

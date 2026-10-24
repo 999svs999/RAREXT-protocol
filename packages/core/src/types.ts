@@ -221,6 +221,9 @@ export interface Attestation {
   claimKind: ClaimKind;
   /** Representation kind attested: exact, bounded, or generative. Defaults to exact. */
   representation?: "exact" | "bounded" | "generative";
+  /** For bounded verification: which metric was measured and the value achieved. */
+  metricName?: string;
+  metricValue?: number;
   scope: ClaimScope | null;
   verifierHash: string;
   proofKind: ProofKind;
