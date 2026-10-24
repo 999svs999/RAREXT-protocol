@@ -14,6 +14,7 @@ import {
 import { profileFor, suiteFor, verifyPayload } from "./identity.ts";
 
 export const OPERATOR_KIND = "rarext.verifier-operator";
+export const OPERATOR_REVOCATION_KIND = "rarext.verifier-operator-revocation";
 
 export interface VerifierOperator {
   kind: typeof OPERATOR_KIND;
@@ -30,6 +31,20 @@ export interface VerifierOperator {
 
 export interface SignedOperator {
   operator: VerifierOperator;
+  signature: string;
+}
+
+export interface OperatorRevocation {
+  kind: typeof OPERATOR_REVOCATION_KIND;
+  version: 1;
+  keyId: string;
+  publicKey: JsonWebKey;
+  algorithm: SignatureSuite;
+  revokedAt: string;
+}
+
+export interface SignedOperatorRevocation {
+  revocation: OperatorRevocation;
   signature: string;
 }
 
@@ -78,6 +93,57 @@ export function signOperator(
   };
 
   return { operator, signature: signer.sign(operator) };
+}
+
+export function signOperatorRevocation(
+  signer: OperatorSigner,
+  revokedAt: string = new Date().toISOString(),
+): SignedOperatorRevocation {
+  const publicKey = signer.publicKey as JsonWebKey;
+  const revocation: OperatorRevocation = {
+    kind: OPERATOR_REVOCATION_KIND,
+    version: 1,
+    keyId: sha256(publicKey),
+    publicKey,
+    algorithm: signer.suite,
+    revokedAt,
+  };
+
+  return { revocation, signature: signer.sign(revocation) };
+}
+
+export function verifyOperatorRevocation(signed: SignedOperatorRevocation): {
+  ok: boolean;
+  reason: string | null;
+} {
+  const invalid = (reason: string) => ({ ok: false, reason });
+  const revocation = signed?.revocation;
+
+  if (!revocation || typeof revocation !== "object") {
+    return invalid("revocation must be an object");
+  }
+  if (revocation.kind !== OPERATOR_REVOCATION_KIND) {
+    return invalid("kind is not an operator revocation");
+  }
+  if (revocation.version !== 1) return invalid("version is not supported");
+  if (typeof signed.signature !== "string") return invalid("signature must be a string");
+  if (!revocation.publicKey || typeof revocation.publicKey !== "object") {
+    return invalid("publicKey is missing");
+  }
+
+  const suite = suiteFor(revocation.publicKey);
+  if (!suite || suite !== revocation.algorithm) return invalid("algorithm is not supported");
+  if (sha256(revocation.publicKey) !== revocation.keyId) {
+    return invalid("keyId does not match the public key");
+  }
+  if (typeof revocation.revokedAt !== "string" || Number.isNaN(Date.parse(revocation.revokedAt))) {
+    return invalid("revokedAt must be an ISO timestamp");
+  }
+  if (!verifyPayload(revocation.publicKey, revocation, signed.signature, suite)) {
+    return invalid("signature does not verify");
+  }
+
+  return { ok: true, reason: null };
 }
 
 export function verifyOperator(signed: SignedOperator): {
@@ -139,6 +205,17 @@ export function asSignedOperator(value: unknown): SignedOperator | null {
   return candidate as SignedOperator;
 }
 
+export function asSignedOperatorRevocation(value: unknown): SignedOperatorRevocation | null {
+  if (!value || typeof value !== "object") return null;
+
+  const candidate = value as Partial<SignedOperatorRevocation>;
+
+  if (!candidate.revocation || typeof candidate.revocation !== "object") return null;
+  if (typeof candidate.signature !== "string") return null;
+
+  return candidate as SignedOperatorRevocation;
+}
+
 export function asOperatorAttestation(value: unknown): OperatorAttestation | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
@@ -166,6 +243,14 @@ export function verifyOperatorAttestation(
 
   if (!operator) {
     return { ok: false, reason: `unknown verifier operator: ${submission.keyId}`, operator: null };
+  }
+
+  if (operators.isRevoked(submission.keyId)) {
+    return {
+      ok: false,
+      reason: `operator ${operator.name} key is revoked`,
+      operator,
+    };
   }
 
   if (!operators.authorize(submission.keyId, artifact.app)) {
@@ -231,6 +316,7 @@ export function verifyOperatorAttestation(
 export class VerifierOperatorRegistry {
   private readonly directory: string | null;
   private readonly operators = new Map<string, SignedOperator>();
+  private readonly revocations = new Set<string>();
 
   constructor(directory: string | null = null) {
     this.directory = directory;
@@ -251,9 +337,16 @@ export class VerifierOperatorRegistry {
     const parsed = JSON.parse(readFileSync(this.index(), "utf8")) as {
       version?: number;
       operators?: SignedOperator[];
+      revoked?: unknown;
     };
 
     if (parsed.version !== 1 || !Array.isArray(parsed.operators)) return;
+
+    if (Array.isArray(parsed.revoked)) {
+      for (const keyId of parsed.revoked) {
+        if (typeof keyId === "string" && HASH.test(keyId)) this.revocations.add(keyId);
+      }
+    }
 
     for (const signed of parsed.operators) {
       const verified = verifyOperator(signed);
@@ -271,7 +364,15 @@ export class VerifierOperatorRegistry {
 
     writeFileSync(
       temporary,
-      JSON.stringify({ version: 1, operators: [...this.operators.values()] }, null, 2),
+      JSON.stringify(
+        {
+          version: 1,
+          operators: [...this.operators.values()],
+          revoked: [...this.revocations].sort(),
+        },
+        null,
+        2,
+      ),
     );
     renameSync(temporary, this.index());
   }
@@ -280,6 +381,9 @@ export class VerifierOperatorRegistry {
     const verified = verifyOperator(signed);
 
     if (!verified.ok) return { status: 401, error: verified.reason ?? "invalid operator" };
+    if (this.revocations.has(signed.operator.keyId)) {
+      return { status: 409, error: "operator key is revoked" };
+    }
 
     const existing = this.operators.get(signed.operator.keyId);
 
@@ -295,6 +399,28 @@ export class VerifierOperatorRegistry {
     return { status: 201 };
   }
 
+  revoke(signed: SignedOperatorRevocation): { status: number; error?: string } {
+    const verified = verifyOperatorRevocation(signed);
+
+    if (!verified.ok) return { status: 401, error: verified.reason ?? "invalid revocation" };
+
+    const keyId = signed.revocation.keyId;
+
+    if (!this.operators.has(keyId)) {
+      return { status: 404, error: `unknown verifier operator: ${keyId}` };
+    }
+    if (this.revocations.has(keyId)) return { status: 200 };
+
+    this.revocations.add(keyId);
+    this.save();
+
+    return { status: 200 };
+  }
+
+  isRevoked(keyId: string): boolean {
+    return this.revocations.has(keyId);
+  }
+
   get(keyId: string): VerifierOperator | null {
     return this.operators.get(keyId)?.operator ?? null;
   }
@@ -306,6 +432,8 @@ export class VerifierOperatorRegistry {
   }
 
   authorize(keyId: string, app: string): VerifierOperator | null {
+    if (this.isRevoked(keyId)) return null;
+
     const operator = this.get(keyId);
 
     if (!operator) return null;

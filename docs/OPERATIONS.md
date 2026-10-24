@@ -12,8 +12,9 @@ repair paths) are bounded by construction, and the limits are measured by the
 regression tests in `apps/api/test/storage-hardening.test.ts`,
 `apps/api/test/durability-repair-fault.test.ts`,
 `apps/api/test/erasure-stream-http.test.ts`, `apps/api/test/erasure-stream.test.ts`,
-`apps/api/test/erasure-storage.test.ts`, `apps/api/test/persistence.test.ts`, and
-`apps/api/test/merkle.test.ts`:
+`apps/api/test/erasure-storage.test.ts`, `apps/api/test/persistence.test.ts`,
+`apps/api/test/merkle.test.ts`, `apps/api/test/audit-attestation.test.ts`, and
+`apps/api/test/claim-verify.test.ts`:
 
 | Check | Limit / behaviour | What happens at the limit |
 | --- | --- | --- |
@@ -38,6 +39,14 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 | Repair after forget or `maxPlacements` eviction | the ledger has no placement for the blob | `repair()` rejects `unknown blob <hash>` before contacting any holder |
 | Repair storm | repeated failed repairs for one blob | the scheduler backs off per blob: `RAREXT_REPAIR_BACKOFF_MS` = 60s initial, doubled per consecutive failure, capped at `RAREXT_REPAIR_MAX_BACKOFF_MS` = 6h; skipped attempts appear in `repairDeferred` with `attempts`/`retryAt`, and a clean audit clears the backoff |
 | Duplicate challenge nonce | replayed nonce with a different binding | `verifyChallengeResponse` rejects (`bad-proof`); the holder also caps nonce length at `MAX_CHALLENGE_NONCE` (200) |
+| Audit attestation signer | the caller supplies `expectedVerifierKeyId` and/or `expectedVerifierPublicKey` | a self-consistent attestation from another key rejects `audit is not signed by the expected verifier`; without an expected key, `verifyAuditAttestation` checks integrity but cannot establish who signed it |
+| Audit transcript coverage | exactly one entry per placement shard, matched by holder and `storedAs` | a missing holder rejects `audit transcript does not cover every placement shard`; a duplicate or unknown holder rejects before its proof is trusted |
+| Audit nonce reuse | nonces are non-empty, at most `MAX_CHALLENGE_NONCE` (200) characters, and unique within one attestation | a repeated nonce rejects `challenge nonce is reused for holder <id>` |
+| Audit freshness | default `AUDIT_WINDOW_MS` = 15 min; timestamps up to 5 min in the future are tolerated | an older signed audit rejects `audit attestation has expired`; an older challenge entry rejects `challenge response window has closed for holder <id>`; a future timestamp rejects |
+| Concurrent audits | every `newAuditChallenge` call draws a fresh 16-byte nonce and a random leaf index; verification keeps no shared mutable state | two audits of the same holder produce distinct nonces and both attestations verify; the second audit does not overwrite the first, and neither mutates the placement |
+| Operator key rotation | a rotated key is registered as a new `keyId` beside the old record | attestations from the old key still verify until that key is revoked; rotation does not rewrite history |
+| Operator key revocation | a revocation signed by the operator key is posted to `/v1/verifier-operators/:keyId/revocation` | the old key's attestations reject `operator <name> key is revoked`; the revoked `keyId` cannot re-register; revocation survives a registry reload |
+| Unauthenticated operator revocation | the body must be a signed revocation whose `keyId` matches the path | a wrong key, bad signature, or mismatched path is refused before the revoked set changes |
 
 Streamed decode verifies every selected shard before it opens the output file,
 then writes to a unique `.tmp` sibling and renames only after the full payload hash
@@ -195,7 +204,7 @@ By default the API writes to `.data/`. `RAREXT_DATA` moves the store file
 | --- | --- | --- |
 | `.data/rarext.json` | Publications, profiles, identities, key rotations and delegations, anchors, identity links, revocations, the credit ledger (snapshot v2) | The registry loses its index and reputation. Anchors on chain still commit to the publications, but the registry cannot serve them. |
 | `.data/placements/` | Signed placement records: blob hash, shard map, steward key | The registry forgets where shard bytes live. The records are also published over `/v1/placements`, so a steward or a reader may still hold a copy. |
-| `.data/verifier-operators/` | Self-signed verifier operator registrations | The registry cannot check operator attestations until it sees the records again. The operator's key is in the record, so re-registration is cheap. |
+| `.data/verifier-operators/` | Self-signed verifier operator registrations and revoked key ids | The registry cannot check operator attestations until it sees the records again, and it forgets which keys were revoked. A lost revocation record lets a revoked key re-register, so back this directory up with the rest of `.data/`. |
 | Holder directories | Shard bytes (`RAREXT_HOLDER_DIR` per holder) | Data loss for that holder. Erasure coding and repair cover a lost holder only if the placement is current and a spare exists. |
 | Pin directory | Pinned bundle bytes (`RAREXT_PIN_DIR`, default `.data/pins`) | The content adapter loses its locally pinned copy; the CID still names the bytes, but this host no longer serves them. |
 

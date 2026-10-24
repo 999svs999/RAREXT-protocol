@@ -134,6 +134,7 @@ import {
   VerifierOperatorRegistry,
   asOperatorAttestation,
   asSignedOperator,
+  asSignedOperatorRevocation,
   verifyOperatorAttestation,
 } from "./verifier-operators.ts";
 
@@ -1312,6 +1313,33 @@ export function createApp(options: AppOptions = {}): AppServer {
         }
 
         send(res, 200, operator);
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/verifier-operators/") &&
+        pathname.endsWith("/revocation")
+      ) {
+        const keyId = pathname.slice(
+          "/v1/verifier-operators/".length,
+          -"/revocation".length,
+        );
+        const signed = asSignedOperatorRevocation(await readJson(req));
+
+        if (!signed) {
+          throw new Error("body must be a signed operator revocation");
+        }
+        if (signed.revocation.keyId !== keyId) {
+          send(res, 400, { error: "revocation keyId does not match the path" });
+          return;
+        }
+
+        const result = operators.revoke(signed);
+
+        send(res, result.status, result.error
+          ? { error: result.error }
+          : { status: "revoked", keyId });
         return;
       }
 

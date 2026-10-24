@@ -22,6 +22,9 @@ In scope:
   answer, or claims a shard it does not have;
 - a network peer that sends a malformed or oversized HTTP response;
 - a caller that submits a malformed, co-located, or impossible signed placement;
+- a verifier that signs an audit under a key other than the operator key the reader
+  expects, omits a holder it never challenged, reuses a challenge nonce, or presents a
+  transcript outside the verification window;
 - local pin metadata or content that was modified outside the service;
 - an unauthenticated network client reaching a holder or pin service that was exposed
   without a token.
@@ -32,7 +35,9 @@ Out of scope, and not claimed:
 - traffic analysis, including shard size and request timing;
 - a holder that keeps the Merkle leaves and discards the bytes (see issue
   [#7](https://github.com/999svs999/RAREXT-protocol/issues/7));
-- a reporter or verifier that lies about its own audit (see issue
+- a trusted verifier that lies about when a challenge ran, or replays an old valid
+  leaf/proof as a new challenge. The attestation carries a verifier-signed timestamp,
+  not a holder-signed timestamp, and there is no public challenge log (see issue
   [#9](https://github.com/999svs999/RAREXT-protocol/issues/9));
 - confidentiality of stored bytes against a determined holder or host attacker. The
   opt-in sealed path is wired and holders receive only ciphertext, but its key envelope
@@ -58,6 +63,42 @@ hashes a proof:
 
 The ledger records a failed response as a miss and does not mark the shard live. The
 verification is possession: it does not prove the bytes are still retrievable.
+
+### Independent audit attestations
+
+`signAuditAttestation` signs a canonical placement digest, blob hash, verifier key id,
+timestamp, and one transcript entry per holder. `verifyAuditAttestation` checks:
+
+- the signature over the canonical payload and that `verifierKeyId` is derived from
+  `verifierPublicKey`; callers that need signer authenticity must also pass an expected
+  verifier key id or public key;
+- the blob hash and recomputed placement digest, so a transcript cannot be moved to
+  another placement;
+- exactly one entry for every placement shard, with no unknown or repeated holders;
+- unique, non-empty nonces of at most `MAX_CHALLENGE_NONCE` characters, and a fresh
+  nonce from `newAuditChallenge` for each concurrent audit;
+- an attestation and transcript inside `AUDIT_WINDOW_MS` (15 min by default), with at
+  most 5 min of future clock skew;
+- `verified: true` plus a fresh `verifyChallengeResponse` result for every entry.
+
+The window rejects an old signed attestation and a challenge entry whose response
+window has closed. It does not prove the holder answered at that exact second: the
+verifier controls the timestamp, so this is evidence from a trusted operator, not a
+trustless timestamp. A reader that omits the expected key verifies integrity and
+placement binding but not the operator's identity. The verifier is implemented and
+tested, but the default API/MCP audit endpoint still returns witness state and does not
+emit these attestations.
+
+### Verifier operator keys
+
+Operator registration is permissionless and self-signed. A rotated key is a new key id
+beside the old record; old attestations remain valid while the old key is registered.
+Revocation is explicit: the operator posts a self-signed revocation to
+`/v1/verifier-operators/:keyId/revocation`, and the registry rejects every attestation
+from that key, including ones issued before the revocation. This is a fail-closed
+historical invalidation, not a "valid at signing time" model. Revoked ids persist in
+`operators.json` and cannot re-register. Rotation alone never rewrites or invalidates
+old attestations.
 
 ### HTTP holders
 
@@ -205,7 +246,7 @@ until the remaining gaps are closed.
 | Sealed encryption is wired with HKDF-SHA256, key ids, rotation/revocation, and committed ciphertext, but has no key wrapping, AAD binding, per-tenant isolation, recovery, or envelope review. | [#6](https://github.com/999svs999/RAREXT-protocol/issues/6) |
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | Partly addressed: the API now has a write token with rotation, a per-process request limit, a total blob quota, and optional TLS ([#8](https://github.com/999svs999/RAREXT-protocol/issues/8), [`OPERATOR.md`](OPERATOR.md#public-exposure-and-write-limits)); still missing are per-client quotas, a durable rotation window, and an identity that is stronger than a shared token. Placement authority remains the steward's signing key. |
-| A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
+| A verifier or agent can report its own `ok` without an independently checkable transcript. | Partly addressed by signed, fully covered audit attestations and operator key revocation ([#9](https://github.com/999svs999/RAREXT-protocol/issues/9)); still missing holder-signed challenge timestamps, a public challenge log, and emission from the default audit endpoint. |
 | Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | Addressed: scheduled holder and blob GC ships with a 24h grace period and a dry-run default ([#10](https://github.com/999svs999/RAREXT-protocol/issues/10)); residual risk is a stale or single-node reference view, covered in [`OPERATIONS.md`](OPERATIONS.md#automatic-garbage-collection). |
 
 Also unchanged from [`HARDENING.md`](HARDENING.md): no `fsync`/power-loss guarantee, no
