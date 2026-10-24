@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { tasks } from "../../../packages/core/src/index.ts";
 import type { Challenge, SampleArtifact, Task } from "../../../packages/core/src/index.ts";
+import { generate, type XorshiftModel } from "./generative.ts";
 
 const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z";
 
@@ -169,11 +170,85 @@ export interface ChallengeRegistry {
   get(id: string): Challenge | null;
 }
 
+/**
+ * Built-in AI seeds, so an out-of-the-box node can accept and verify AI
+ * publications without anyone configuring RAREXT_CHALLENGES. The generative
+ * sample's output is computed by the same replay the verifier runs — the seed
+ * cannot drift from the model the way a hand-pasted constant would.
+ */
+export const AI_SEED_MODEL: XorshiftModel = {
+  kind: "xorshift32",
+  params: { a: 13, b: 17, c: 5 },
+  vocab: ["alpha", "beta", "gamma", "delta"],
+};
+
+const AI_SEED_STEPS = 32;
+const AI_SEED_SEED = 42;
+const AI_SEED_REFERENCE = [10, 20, 30, 40, 200, 255, 0, 128];
+const AI_SEED_BOUND = 4;
+
+function aiSeedChallenges(): Challenge[] {
+  return [
+    {
+      id: "gen-starter",
+      app: "ai-generative",
+      title: "Generate from the committed starter model",
+      description:
+        "Replay the digest-bound starter model from the seed and match its output exactly.",
+      version: 1,
+      spec: { steps: AI_SEED_STEPS },
+      sampleArtifact: {
+        app: "ai-generative",
+        kind: "ai.generative",
+        version: 1,
+        mediaType: "application/json",
+        body: {
+          model: AI_SEED_MODEL,
+          seed: AI_SEED_SEED,
+          output: generate(AI_SEED_MODEL, AI_SEED_SEED, AI_SEED_STEPS),
+        },
+      },
+      semanticsId: "ai-generative/gen-starter",
+      semanticsVersion: 1,
+      createdAt: SEED_CREATED_AT,
+      status: "seed",
+      sponsor: null,
+    },
+    {
+      id: "bounded-starter",
+      app: "ai-bounded",
+      title: "Reconstruct within the starter bound",
+      description:
+        "Return a reconstruction of the committed reference vector whose maxAbsError stays within 4.",
+      version: 1,
+      spec: { metric: "maxAbsError", bound: AI_SEED_BOUND, reference: AI_SEED_REFERENCE },
+      sampleArtifact: {
+        app: "ai-bounded",
+        kind: "ai.bounded",
+        version: 1,
+        mediaType: "application/json",
+        body: {
+          values: AI_SEED_REFERENCE.map((v) => Math.min(255, v + 2)),
+        },
+      },
+      semanticsId: "ai-bounded/bounded-starter",
+      semanticsVersion: 1,
+      createdAt: SEED_CREATED_AT,
+      status: "seed",
+      sponsor: null,
+    },
+  ];
+}
+
 export function createChallengeRegistry(): ChallengeRegistry {
   const registry = new Map<string, Challenge>();
 
   for (const task of tasks) {
     const challenge = challengeFromTask(task);
+    registry.set(challenge.id, challenge);
+  }
+
+  for (const challenge of aiSeedChallenges()) {
     registry.set(challenge.id, challenge);
   }
 
