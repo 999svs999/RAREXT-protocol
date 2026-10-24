@@ -42,6 +42,11 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [ ] A deployed EVM anchor contract, audited — implementation, local-EVM tests,
   audit trail, and guarded funded-testnet path are in `contracts/`; external audit
   and live deployment remain pending (`contracts/AUDIT.md`)
+  - [x] Reproducible source/bytecode/ABI baseline (`npm run audit:baseline`) and a
+    test that fails on drift
+  - [x] Offline deployment-record validator (`npm run verify:deployment`)
+  - [x] CI checks in `scripts/ci.sh` (Actions template included)
+  - [ ] External auditor engaged; report recorded in `contracts/AUDIT.md`
 - [x] A pinning service for the content adapter
 - [x] Continuous fair-launch attestations as a verifiable trajectory
 - [ ] Consensus chain behind the RAREXT interface, gated on real settlement volume —
@@ -49,7 +54,13 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
   and a strict `CONSENSUS_SETTLEMENT_MIN` gate; production settlement volume is
   pending and live gating is deferred (`docs/CHAINS.md`)
 - [ ] Public testnet registry
+  - [x] API write token, per-process rate limit, total blob quota, and optional TLS
+  - [x] Scheduled, dry-run-first GC for holder shards, node blobs, and pins
+  - [ ] Published endpoints, DNS, monitoring, and an operator runbook rehearsal
 - [ ] First external agent integration
+  - [x] Reference agent over the public SDK/HTTP boundary, with tests for token
+    writes, read-only access, and concurrent agents (`examples/external-agent`)
+  - [ ] A third party running it against a public node
 - [ ] First non-logic app integration in production
 
 ## Next — v1 Agent registry (weeks 5–8)
