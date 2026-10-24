@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { cidV1Raw } from "./adapters/content.ts";
+import { GcScheduler, PinGc } from "./gc-schedule.ts";
 
 const MAX_CONTENT = 32 * 1024 * 1024;
 const MAX_PUBLICATION_IDS = 100;
@@ -655,7 +656,52 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const store = new PinStore(directory);
   const server = createPinServer(store, { token, maxBytes, maxRequestsPerWindow });
 
+  const gcIntervalMs = Number(process.env.RAREXT_PIN_GC_INTERVAL_MS ?? 24 * 60 * 60 * 1000);
+  const gcGracePeriodMs = Number(process.env.RAREXT_PIN_GC_GRACE_MS ?? 24 * 60 * 60 * 1000);
+  const gcDryRun = process.env.RAREXT_PIN_GC_DRY_RUN !== "false";
+  const pinGc = new PinGc({
+    pins: store,
+    gracePeriodMs: gcGracePeriodMs,
+    dryRun: gcDryRun,
+  });
+  const gcScheduler = gcIntervalMs > 0
+    ? new GcScheduler({
+      run: () => pinGc.run(),
+      intervalMs: gcIntervalMs,
+      onRun: (run) => {
+        console.log(
+          `pin gc: dryRun=${run.dryRun} deleted=${run.pins.deleted} ` +
+            `candidates=${run.pins.candidates}`,
+        );
+      },
+      onError: (error) => {
+        console.error(`pin gc failed: ${error instanceof Error ? error.message : error}`);
+      },
+    })
+    : null;
+
   server.listen(port, "127.0.0.1", () => {
     console.log(`pinning service on http://127.0.0.1:${port} (${directory})`);
+
+    if (gcScheduler) {
+      gcScheduler.start();
+      console.log(
+        `pin gc every ${Math.round(gcIntervalMs / 1000)}s ` +
+          `(dryRun=${gcDryRun}, grace ${Math.round(gcGracePeriodMs / 1000)}s)`,
+      );
+    } else {
+      console.log("pin gc disabled: RAREXT_PIN_GC_INTERVAL_MS=0");
+    }
   });
+
+  function shutdown(signal: string): void {
+    console.log(`${signal}: shutting down`);
+    gcScheduler?.stop();
+    server.closeAllConnections();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  }
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 }

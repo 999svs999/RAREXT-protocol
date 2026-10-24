@@ -143,7 +143,7 @@ real secrets or describe the tier as audited until those gaps are closed.
 | A challenge proves possession, not retrievability; leaf-only storage can pass. | Addressed in [RFC 0013](../rfcs/0013-proof-of-retrievability.md) |
 | No quotas, rate limits, TLS, rotation window, or real writer identity; permissionless placement can squat holders. | [#8](https://github.com/999svs999/RAREXT-protocol/issues/8) |
 | A verifier or agent can report its own `ok` without an independently checkable transcript. | [#9](https://github.com/999svs999/RAREXT-protocol/issues/9) |
-| Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | [#10](https://github.com/999svs999/RAREXT-protocol/issues/10) |
+| Crash, failed repair, and abandoned puts leave unreferenced shards with no GC. | Addressed: scheduled holder and blob GC ships with a 24h grace period and a dry-run default ([#10](https://github.com/999svs999/RAREXT-protocol/issues/10)); residual risk is a stale or single-node reference view, covered in [`OPERATIONS.md`](OPERATIONS.md#automatic-garbage-collection). |
 
 Also unchanged from [`HARDENING.md`](HARDENING.md): no `fsync`/power-loss guarantee, no
 automatic bad-holder quarantine, and witnesses reset on restart. `encodeBytes` still

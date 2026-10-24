@@ -76,8 +76,10 @@ and concurrent repairs are unmeasured.
   write. Repair aborts before committing the placement, but bytes already staged on
   other holders remain as orphans.
 - **No cross-holder transaction.** Staging prevents a half-committed *placement*, not
-  orphan bytes. There is no garbage collector for unreferenced shards; an operator must
-  reclaim them deliberately.
+  orphan bytes. Scheduled GC (`RAREXT_GC_INTERVAL_MS`, dry run by default) and the
+  holder scan reclaim unreferenced shards, but the grace period and single-node
+  reference view remain operator concerns; see
+  [`OPERATIONS.md`](OPERATIONS.md#automatic-garbage-collection).
 - **A crash between the last staged write and the signed record** leaves all repaired
   shards unreferenced. The next repair writes them again; content addressing makes that
   safe, not free.

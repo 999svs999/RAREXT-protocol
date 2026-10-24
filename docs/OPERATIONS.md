@@ -29,8 +29,11 @@ atomic, so a retry is idempotent and the holder store stays content-addressed.
 `POST /v1/storage/gc` collects blobs the caller does not reference. The body is
 `{ referenced: [sha256, ...], gracePeriodMs?, dryRun? }`; `dryRun` defaults to
 `true` and an explicit `referenced` array is required, so an unconfigured sweep
-cannot delete anything. The scan/candidate-save/delete section is synchronous,
-so two calls in one process cannot interleave. Limits are measured by
+cannot delete anything. The API also runs this pass on a schedule with the
+reference set computed from its own publications; see
+[Automatic garbage collection](#automatic-garbage-collection). The
+scan/candidate-save/delete section is synchronous, so two calls in one process
+cannot interleave. Limits are measured by
 `apps/api/test/storage-gc-fault.test.ts`:
 
 | Fault | Behaviour at the limit |
@@ -182,6 +185,38 @@ one process cannot interleave. Limits are measured by
 | Interrupted write temp files | `*.tmp` leftovers are swept (`purgedTemp`); the sweep runs even in a dry run |
 | Two GC passes from one process | the synchronous pass collects each orphan exactly once; the second reports zero |
 | A malformed `referenced` list | `400 referenced must be an array of CIDs`; nothing is scanned or deleted |
+
+### Automatic garbage collection
+
+Both processes collect on a timer, so orphan bytes do not accumulate when nobody
+calls the endpoints by hand. A pass never overlaps the previous one; a tick during
+a pass is skipped and the next one is scheduled after it finishes. The reference
+set is computed by the process that owns the records, not supplied by an
+unauthenticated caller.
+
+| Service | Env | Default | What a pass collects |
+| --- | --- | --- | --- |
+| API | `RAREXT_GC_INTERVAL_MS` | 24h (`0` disables) | holder shards from this node's placements, and node blobs unreferenced by any publication manifest |
+| API | `RAREXT_GC_GRACE_MS` | 24h | how long a candidate must be seen before deletion |
+| API | `RAREXT_GC_DRY_RUN` | `true` | set to `false` to delete; a dry run still records candidates and sweeps temps |
+| Pinning service | `RAREXT_PIN_GC_INTERVAL_MS` | 24h (`0` disables) | structural pin orphans and corrupt pairs; pins with `publicationIds` are holds |
+| Pinning service | `RAREXT_PIN_GC_GRACE_MS` | 24h | candidate age before deletion |
+| Pinning service | `RAREXT_PIN_GC_DRY_RUN` | `true` | set to `false` to delete |
+
+With the defaults a first pass records candidates and the second deletes
+candidates older than 24h, so a mistaken reference set has a full grace period
+before any byte is lost. The blob reference set is the union of every
+`blobs[].hash` in every publication's artifact body; a blob uploaded but never
+published, or one whose manifest was replaced, is a candidate. Shards are
+referenced through `DurabilityLedger` placements. A metadata-only publication
+does not protect the bytes it names unless the manifest is present.
+
+These passes are single-node: a second API with a different placement directory
+can still see the first node's shards as unreferenced, so keep the grace period or
+run GC from the API that owns the records. Node blobs are only collected by the
+node that stores them. Nothing in the pass is a durable transaction; a crash
+between the scan and the index save leaves the candidates file, which the next
+pass re-reads. Measured by `apps/api/test/gc-schedule.test.ts`.
 
 ## Holder and pin tokens
 

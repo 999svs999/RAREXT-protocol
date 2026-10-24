@@ -276,7 +276,17 @@ scheduler's repair path fills missing shards from survivors. Repair costs
 
 ### Garbage collection
 
-Orphaned shards are deleted in two phases, with a default 24-hour grace period:
+The API and the pinning service collect on a timer (`RAREXT_GC_INTERVAL_MS` and
+`RAREXT_PIN_GC_INTERVAL_MS`, both 24h, `0` disables). Both default to a dry run, so
+the first scheduled pass records candidates and does not delete; set
+`RAREXT_GC_DRY_RUN=false` / `RAREXT_PIN_GC_DRY_RUN=false` once the candidate list
+looks right. The API computes its own reference set from publications and
+placements. See
+[`OPERATIONS.md`](OPERATIONS.md#automatic-garbage-collection) for the grace period
+and the single-node caveat.
+
+Orphaned shards can also be collected on demand, in two phases, with a default
+24-hour grace period:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8787/v1/durability/gc \

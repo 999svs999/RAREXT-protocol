@@ -1,7 +1,9 @@
 import { createApp } from "./app.ts";
 import { ChallengeScheduler } from "./durability-schedule.ts";
 import { DurabilityLedger } from "./durability.ts";
+import { GcScheduler, NodeGc } from "./gc-schedule.ts";
 import { holdersFromEnv } from "./holders.ts";
+import { BlobStore } from "./storage.ts";
 import { RarextStore } from "./store.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -9,6 +11,7 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const DATA = process.env.RAREXT_DATA;
 const PUBLIC_DIR = process.env.RAREXT_PUBLIC_DIR;
 const store = DATA === "none" ? new RarextStore() : new RarextStore(DATA ?? ".data/rarext.json");
+const blobs = new BlobStore(process.env.RAREXT_BLOB_DIR ?? ".data/blobs");
 
 const holders = holdersFromEnv(undefined, {
   token: process.env.RAREXT_HOLDER_TOKEN || undefined,
@@ -32,6 +35,36 @@ const scheduler = new ChallengeScheduler({
   intervalMs,
 });
 
+const gcIntervalMs = Number(process.env.RAREXT_GC_INTERVAL_MS ?? 24 * 60 * 60 * 1000);
+const gcGracePeriodMs = Number(process.env.RAREXT_GC_GRACE_MS ?? 24 * 60 * 60 * 1000);
+const gcDryRun = process.env.RAREXT_GC_DRY_RUN !== "false";
+const nodeGc = new NodeGc({
+  store,
+  blobs,
+  ledger: durability,
+  holderUrls,
+  token: process.env.RAREXT_HOLDER_TOKEN || undefined,
+  gracePeriodMs: gcGracePeriodMs,
+  dryRun: gcDryRun,
+});
+const gcScheduler = gcIntervalMs > 0
+  ? new GcScheduler({
+    run: () => nodeGc.run(),
+    intervalMs: gcIntervalMs,
+    onRun: (run) => {
+      const deleted =
+        run.blobs.deleted + run.holders.reduce((sum, result) => sum + result.deleted, 0);
+      console.log(
+        `storage gc: dryRun=${run.dryRun} blobs deleted=${run.blobs.deleted} ` +
+          `holders=${run.holders.length} shards deleted=${deleted - run.blobs.deleted}`,
+      );
+    },
+    onError: (error) => {
+      console.error(`storage gc failed: ${error instanceof Error ? error.message : error}`);
+    },
+  })
+  : null;
+
 const server = createApp({
   store,
   publicDir: PUBLIC_DIR,
@@ -39,6 +72,7 @@ const server = createApp({
   holders,
   scheduler,
   holderUrls,
+  blobs,
 });
 
 server.listen(PORT, HOST, () => {
@@ -52,4 +86,26 @@ server.listen(PORT, HOST, () => {
   } else {
     console.log("retention challenges idle: set RAREXT_HOLDERS to enable them");
   }
+
+  if (gcScheduler) {
+    gcScheduler.start();
+    console.log(
+      `storage gc every ${Math.round(gcIntervalMs / 1000)}s ` +
+        `(dryRun=${gcDryRun}, grace ${Math.round(gcGracePeriodMs / 1000)}s)`,
+    );
+  } else {
+    console.log("storage gc disabled: RAREXT_GC_INTERVAL_MS=0");
+  }
 });
+
+function shutdown(signal: string): void {
+  console.log(`${signal}: shutting down`);
+  scheduler.stop();
+  gcScheduler?.stop();
+  server.closeAllConnections();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
