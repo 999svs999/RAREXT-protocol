@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -57,6 +57,14 @@ const HASH = /^[0-9a-f]{64}$/;
 const TIERS: DurabilityTier[] = ["ephemeral", "pinned", "durable"];
 const MAX_SHARDS = 255;
 const MAX_SHARD_BYTES = 4 * 1024 * 1024 * 1024;
+
+/**
+ * The number of placement records kept per blob. Older records are dropped when
+ * the window overflows; the newest record and enough history to verify the
+ * retained chain stay. A retained window starts at a non-zero sequence and its
+ * first record links backwards to a record that was dropped.
+ */
+export const MAX_PLACEMENT_HISTORY = 64;
 
 function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicKey)).digest("hex");
@@ -269,13 +277,24 @@ export function asSignedPlacement(value: unknown): SignedPlacement | null {
 }
 
 function chainProblem(history: SignedPlacement[]): string | null {
+  if (history.length === 0) return "history is empty";
+
+  // A compacted history starts at the first retained record's sequence, not
+  // necessarily at zero. The retained suffix must still be contiguous.
+  const base = history[0]!.record.sequence;
+
   for (let index = 0; index < history.length; index += 1) {
     const current = history[index]!;
     const previous = index === 0 ? null : history[index - 1]!;
 
-    if (current.record.sequence !== index) return "history skips a sequence";
+    if (current.record.sequence !== base + index) return "history skips a sequence";
     if (index === 0) {
-      if (current.record.previous !== null) return "the first record cannot link backwards";
+      if (base === 0 && current.record.previous !== null) {
+        return "the first record cannot link backwards";
+      }
+      if (base > 0 && !HASH.test(current.record.previous ?? "")) {
+        return "a retained record must link backwards";
+      }
       continue;
     }
 
@@ -339,10 +358,16 @@ export class PlacementRegistry {
       blobHash,
       history,
     }));
-    const temporary = `${this.index()}.tmp`;
+    const temporary = `${this.index()}.${randomUUID()}.tmp`;
 
-    writeFileSync(temporary, JSON.stringify({ version: 1, blobs }, null, 2));
-    renameSync(temporary, this.index());
+    try {
+      writeFileSync(temporary, JSON.stringify({ version: 1, blobs }, null, 2));
+      renameSync(temporary, this.index());
+    } finally {
+      // A crash before the rename leaves the previous index intact; a leftover
+      // temp is never read as the index.
+      rmSync(temporary, { force: true });
+    }
   }
 
   put(signed: SignedPlacement): { status: number; error?: string } {
@@ -366,9 +391,32 @@ export class PlacementRegistry {
       return { status: 409, error: "the first placement must start at sequence 0" };
     }
 
+    const previousHistory = [...history];
     history.push(signed);
+
+    // Keep the newest window. The newest record is never dropped, and the
+    // retained suffix stays verifiable against its own links.
+    if (history.length > MAX_PLACEMENT_HISTORY) {
+      history.splice(0, history.length - MAX_PLACEMENT_HISTORY);
+    }
+
     this.entries.set(blobHash, history);
-    this.save();
+
+    try {
+      this.save();
+    } catch (error) {
+      // The write did not land. Roll the in-memory view back so it cannot
+      // report a record the disk does not have.
+      if (previousHistory.length > 0) this.entries.set(blobHash, previousHistory);
+      else this.entries.delete(blobHash);
+
+      return {
+        status: 507,
+        error: `placement registry write failed: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      };
+    }
 
     return { status: 201 };
   }

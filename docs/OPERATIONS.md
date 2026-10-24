@@ -132,6 +132,28 @@ separately, or treat them as replaceable: the registry can repair a missing shar
 any `k` survivors when a spare holder is configured. A backup of `.data/` alone restores
 the map, not the bytes.
 
+### Placement registry growth limits
+
+`.data/placements/placements.json` holds every blob's signed history and is rewritten in
+full on each accepted record. Per-blob history is capped at `MAX_PLACEMENT_HISTORY` (64)
+records; the newest record and its verifiable suffix are kept, and the oldest records are
+dropped. A retained window starts at a non-zero sequence and its first record links back
+to a record that was dropped, which is still accepted on load. Measured by
+`apps/api/test/placements-fault.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| History exceeds 64 records | the oldest are dropped on the next append; the head and the newest 64 stay |
+| A reloaded history starts above sequence 0 | accepted when the retained suffix is contiguous and links backwards |
+| The index write fails (`ENOSPC`, `EACCES`, ...) | `PUT /v1/placements` returns `507` and the in-memory head is rolled back, so it never serves a record the disk lacks |
+| A crash before the index rename | the previous `placements.json` stays; a stale `placements.json.<uuid>.tmp` is ignored on load and never read as the index |
+| The same head record is replayed | `200`, no second append; an older record no longer extends the head and gets `409` |
+
+Total blob entries are not capped: each blob has its own bounded history, and dropping a
+placement would forget where shard bytes live. The index therefore grows with the number
+of blobs, not with the number of updates. `put` is synchronous, so appends in one process
+serialize; run one registry writer per data directory.
+
 ## Pinning service
 
 `npm run pin` starts the reference service on `127.0.0.1:9700` with
