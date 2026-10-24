@@ -449,6 +449,14 @@ export class BlobStore {
     const record = this.records.get(hash);
     if (!record) return false;
 
+    // A retention commitment binds the node to holding the blob until the term
+    // matures. Refuse to collect it early, so orphan cleanup cannot break a
+    // promise the node published and anchored. Once the term matures the
+    // opening is released and the blob is ordinary garbage.
+    if (record.retentionUntil && Date.now() < Date.parse(record.retentionUntil)) {
+      return false;
+    }
+
     rmSync(this.path(hash), { force: true });
     this.records.delete(hash);
     this.saveIndex();

@@ -6,6 +6,7 @@ import {
   createWriteStream,
   existsSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -93,6 +94,30 @@ function saveGcCandidates(directory: string, candidates: Map<string, GcCandidate
   } finally {
     rmSync(temporary, { force: true });
   }
+}
+
+/**
+ * Remove `*.tmp` leftovers from an interrupted write or index save. The store
+ * only adopts names that are a 64-char digest, so a temp file is never a shard
+ * and never referenced; it is safe to delete. Returns the number removed.
+ */
+function purgeTempFiles(directory: string): number {
+  if (!existsSync(directory)) return 0;
+
+  let removed = 0;
+
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith(".tmp")) continue;
+
+    try {
+      rmSync(join(directory, name), { force: true });
+      removed += 1;
+    } catch {
+      // A file another process is still holding; leave it for the next sweep.
+    }
+  }
+
+  return removed;
 }
 
 function parseTokens(tokenConfig?: string | string[]): string[] {
@@ -224,25 +249,61 @@ async function readRange(path: string, start: number, end: number): Promise<Buff
  */
 export function createHolderServer(options: HolderServerOptions) {
   const store = new BlobStore(options.directory);
-  const leafCache = new Map<string, string[]>();
+  const leafCache = new Map<string, { leaves: string[]; size: number }>();
   let cachedLeaves = 0;
   const tokenConfig = options.tokens ?? options.token;
+
+  // A shard with an in-flight read is not collectable. The raw stream may
+  // survive an unlink through its open fd, but the leaves/challenge path opens
+  // the file lazily and would race a delete, so GC defers any shard with a
+  // reader until the read closes.
+  const activeReads = new Map<string, number>();
+
+  function beginRead(hash: string): void {
+    activeReads.set(hash, (activeReads.get(hash) ?? 0) + 1);
+  }
+
+  function endRead(hash: string): void {
+    const remaining = (activeReads.get(hash) ?? 1) - 1;
+
+    if (remaining <= 0) activeReads.delete(hash);
+    else activeReads.set(hash, remaining);
+  }
+
+  // A crash can leave `_upload.*.tmp` or `<hash>.*.tmp` files behind. No upload
+  // is in flight during startup or a synchronous GC pass, so any leftover temp
+  // file is dead weight that would otherwise sit on disk forever.
+  const purgedTemp = purgeTempFiles(options.directory);
+  if (purgedTemp > 0) {
+    console.log(`RAREXT holder ${options.id} removed ${purgedTemp} stale temp file(s)`);
+  }
 
   const rateLimiter = options.maxRequestsPerWindow
     ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
     : null;
 
-  function cacheLeaves(storedAs: string, leaves: string[]): string[] {
+  function forgetLeaves(storedAs: string): void {
+    const cached = leafCache.get(storedAs);
+    if (!cached) return;
+
+    leafCache.delete(storedAs);
+    cachedLeaves -= cached.leaves.length * 64;
+  }
+
+  function cacheLeaves(storedAs: string, leaves: string[], size: number): string[] {
     const cost = leaves.length * 64;
 
     if (leaves.length <= MAX_CACHED_LEAVES && cachedLeaves + cost <= MAX_CACHED_LEAVES * 64) {
-      leafCache.set(storedAs, leaves);
+      leafCache.set(storedAs, { leaves, size });
       cachedLeaves += cost;
 
       while (leafCache.size > MAX_CACHE_ENTRIES) {
-        const [oldest, oldLeaves] = leafCache.entries().next().value as [string, string[]];
+        const [oldest, oldLeaves] = leafCache.entries().next().value as [
+          string,
+          { leaves: string[]; size: number },
+        ];
         leafCache.delete(oldest);
-        cachedLeaves -= oldLeaves.length * 64;
+        cachedLeaves -= oldLeaves.leaves.length * 64;
       }
     }
 
@@ -250,8 +311,21 @@ export function createHolderServer(options: HolderServerOptions) {
   }
 
   async function leavesForFile(storedAs: string): Promise<string[] | null> {
+    // A GC pass or DELETE must not leave a cached proof behind: a shard that no
+    // longer exists on disk cannot answer a challenge. On a hit, confirm the
+    // file is still there and the same size before trusting the cache.
     const cached = leafCache.get(storedAs);
-    if (cached) return cached;
+    const path = store.filePath(storedAs);
+
+    if (!path) {
+      forgetLeaves(storedAs);
+      return null;
+    }
+
+    if (cached) {
+      if (statSync(path).size === cached.size) return cached.leaves;
+      forgetLeaves(storedAs);
+    }
 
     // The leaves are computed over the on-disk bytes, but only after proving
     // those bytes still hash to `storedAs`. A corrupted or truncated file would
@@ -260,10 +334,7 @@ export function createHolderServer(options: HolderServerOptions) {
     const found = store.get(storedAs);
     if (!found) return null;
 
-    const path = store.filePath(storedAs);
-    if (!path) return null;
-
-    return cacheLeaves(storedAs, await fileLeaves(path));
+    return cacheLeaves(storedAs, await fileLeaves(path), found.bytes.length);
   }
 
   return createServer(async (req, res) => {
@@ -297,6 +368,7 @@ export function createHolderServer(options: HolderServerOptions) {
         const candidates = loadGcCandidates(options.directory);
         const now = Date.now();
         const toDelete: GcCandidate[] = [];
+        const deferred: string[] = [];
         const stillReferenced: string[] = [];
 
         for (const shard of allShards) {
@@ -316,10 +388,25 @@ export function createHolderServer(options: HolderServerOptions) {
           }
         }
 
+        // A shard being read right now is a live reference for this pass. Keep
+        // its candidate entry (so the grace clock does not restart) but do not
+        // unlink it: the leaves/challenge path may still be opening the file.
+        const deletable = toDelete.filter((c) => {
+          if (!activeReads.has(c.storedAs)) return true;
+          deferred.push(c.storedAs);
+          return false;
+        });
+
+        const purgedThisPass = purgeTempFiles(options.directory);
+
+        let deletedCount = 0;
+
         if (!dryRun) {
-          for (const c of toDelete) {
-            store.remove(c.storedAs);
+          for (const c of deletable) {
+            if (!store.remove(c.storedAs)) continue;
+            forgetLeaves(c.storedAs);
             candidates.delete(c.storedAs);
+            deletedCount += 1;
           }
           saveGcCandidates(options.directory, candidates);
         }
@@ -329,8 +416,11 @@ export function createHolderServer(options: HolderServerOptions) {
           scanned: allShards.length,
           referenced: stillReferenced.length,
           candidates: candidates.size,
-          deleted: dryRun ? 0 : toDelete.length,
-          wouldDelete: toDelete.map((c) => c.storedAs),
+          deleted: deletedCount,
+          deferred: deferred.length,
+          deferredShards: deferred,
+          purgedTemp: purgedThisPass,
+          wouldDelete: deletable.map((c) => c.storedAs),
           dryRun,
           gracePeriodMs: graceMs,
         });
@@ -462,11 +552,16 @@ export function createHolderServer(options: HolderServerOptions) {
             return;
           }
 
-          res.writeHead(200, {
-            "content-type": "application/octet-stream",
-            "content-length": String(statSync(path).size),
-          });
-          await pipeline(createReadStream(path), res);
+          beginRead(hash);
+          try {
+            res.writeHead(200, {
+              "content-type": "application/octet-stream",
+              "content-length": String(statSync(path).size),
+            });
+            await pipeline(createReadStream(path), res);
+          } finally {
+            endRead(hash);
+          }
           return;
         }
 
@@ -561,7 +656,9 @@ export function createHolderServer(options: HolderServerOptions) {
         }
 
         if (req.method === "DELETE") {
-          res.writeHead(isHash(hash) && store.remove(hash) ? 204 : 404);
+          const removed = isHash(hash) && store.remove(hash);
+          if (removed) forgetLeaves(hash);
+          res.writeHead(removed ? 204 : 404);
           res.end();
           return;
         }
@@ -589,25 +686,30 @@ export function createHolderServer(options: HolderServerOptions) {
           return;
         }
 
-        const leaves = await leavesForFile(hash);
+        beginRead(hash);
+        try {
+          const leaves = await leavesForFile(hash);
 
-        if (!leaves) {
-          send(res, 404, { error: "unknown shard" });
-          return;
+          if (!leaves) {
+            send(res, 404, { error: "unknown shard" });
+            return;
+          }
+
+          if (!Number.isInteger(index) || index < 0 || index >= leaves.length) {
+            send(res, 404, { error: "leaf index is out of range" });
+            return;
+          }
+
+          const start = index * SHARD_CHUNK_BYTES;
+          const bytes = await readRange(path, start, start + SHARD_CHUNK_BYTES - 1);
+          send(res, 200, {
+            index,
+            bytes: bytes.toString("base64"),
+            proof: merkleProof(leaves, index),
+          });
+        } finally {
+          endRead(hash);
         }
-
-        if (!Number.isInteger(index) || index < 0 || index >= leaves.length) {
-          send(res, 404, { error: "leaf index is out of range" });
-          return;
-        }
-
-        const start = index * SHARD_CHUNK_BYTES;
-        const bytes = await readRange(path, start, start + SHARD_CHUNK_BYTES - 1);
-        send(res, 200, {
-          index,
-          bytes: bytes.toString("base64"),
-          proof: merkleProof(leaves, index),
-        });
         return;
       }
 
@@ -629,20 +731,25 @@ export function createHolderServer(options: HolderServerOptions) {
           return;
         }
 
-        const leaves = await leavesForFile(storedAs);
-        if (!leaves) {
-          send(res, 404, { error: "unknown shard" });
-          return;
+        beginRead(storedAs);
+        try {
+          const leaves = await leavesForFile(storedAs);
+          if (!leaves) {
+            send(res, 404, { error: "unknown shard" });
+            return;
+          }
+
+          const response = responseFromLeaves(leaves, leafIndex as number, nonce);
+
+          if (!response) {
+            send(res, 404, { error: "leaf index is out of range" });
+            return;
+          }
+
+          send(res, 200, response);
+        } finally {
+          endRead(storedAs);
         }
-
-        const response = responseFromLeaves(leaves, leafIndex as number, nonce);
-
-        if (!response) {
-          send(res, 404, { error: "leaf index is out of range" });
-          return;
-        }
-
-        send(res, 200, response);
         return;
       }
 

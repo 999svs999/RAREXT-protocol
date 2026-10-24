@@ -57,6 +57,24 @@ challenges. Its failure modes are bounded by the regression tests in
 | A corrupted or truncated shard on the holder disk | the challenge refuses to serve a proof over the wrong bytes: it re-hashes the on-disk file against the shard name and falls back to `404 unknown shard` instead of a valid-looking Merkle proof |
 | A holder restart mid-challenge | shard bytes reload from disk, so the restarted holder still answers challenges; a holder that is not running surfaces a clean `fetch failed` / connection error to the caller, which the ledger records as a `holder-missing` outcome rather than hanging |
 
+## Holder garbage-collection and orphan-cleanup limits
+
+Holder GC is driven by `POST /v1/durability/gc` (or a direct
+`POST /v1/holder/gc/scan`). The scan, delete, and candidate-save section is
+synchronous on the holder's event loop, so two passes cannot interleave. These
+limits are measured by the regression tests in
+`apps/api/test/holder-gc-fault.test.ts`, `holder-gc.test.ts`, and
+`storage-properties.test.ts`:
+
+| Fault | Behaviour at the limit |
+| --- | --- |
+| GC runs against a blob that is still being read | the holder tracks open reads per shard and defers collection: the pass reports `deferred`/`deferredShards`, deletes nothing for that shard, keeps its grace-period candidate entry, and the reader receives every byte. The shard is collected by a later pass once the read closes |
+| A crash leaves an orphaned shard directory or temp files | `_upload.*.tmp`, `<hash>.*.tmp`, and `_index.json.*.tmp` leftovers are swept at holder startup and by every GC pass (`purgedTemp`); the store only adopts 64-hex names, so a temp file is never a shard and is safe to delete. Real shards and `_gc-candidates.json` are left alone |
+| GC meets a placement whose lease is still live | shards listed in the pass's `referenced` set are never deleted and their candidate entry is cleared, so a live placement keeps all of its shards; only unreferenced orphans are collected |
+| Two GC passes run concurrently | the synchronous scan/delete/save section serializes them: the second pass observes the first pass's deletions and reports zero, so an orphan is deleted exactly once, deletion counts never double-count, a live shard is not lost, and `_gc-candidates.json` stays valid |
+| A retained blob's holds have all expired | before the retention term matures `BlobStore.remove` refuses to collect the blob (returns `false`), so orphan cleanup cannot break an anchored retention commitment. Once the term matures the opening is released (or is `null` if the blob is already gone) and the blob is ordinary, collectable garbage |
+| A collected shard is challenged from the leaf cache | GC and DELETE invalidate the cached leaves, and a cache hit re-checks the file's existence and size, so a shard that is gone cannot answer a challenge with a stale proof |
+
 ## Tournament and Trac task registry limits
 
 The newest session-scoped endpoints are bounded by construction, and the limits are

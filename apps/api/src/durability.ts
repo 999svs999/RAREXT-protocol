@@ -1502,6 +1502,11 @@ export interface GcScanResponse {
   referenced: number;
   candidates: number;
   deleted: number;
+  /** Shards skipped this pass because a reader still had them open. */
+  deferred?: number;
+  deferredShards?: string[];
+  /** Stale `*.tmp` files left by an interrupted write that this pass removed. */
+  purgedTemp?: number;
   wouldDelete: string[];
   dryRun: boolean;
   gracePeriodMs: number;
