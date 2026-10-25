@@ -18,6 +18,7 @@ const root = new URL("..", import.meta.url);
 const rfcPath = process.env.RAREXT_CLAIM_RFC ?? fileURLToPath(new URL("rfcs/0010-data-availability-sampling.md", root));
 
 const das = await import(new URL("apps/api/src/das.ts", root).href);
+const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const { samplesForMissingFraction, missProbability } = das;
 
@@ -135,8 +136,15 @@ if (process.argv.includes("--self-test")) {
     readRatio: 1, writeRatio: 0.5, totalRatio: 1.4, floorRatio: 1.5,
     exact: true, elapsedMs: 1,
   });
-  const caught = failures > beforeDoctoredRecord;
+  let caught = failures > beforeDoctoredRecord;
   if (!caught) fail("self-test: the checker accepted totalRatio 1.4 against a floor of 1.5");
+  // And a pricing drift: if the code's default rate stops being the documented
+  // 1,000,000, the doc's claim must be reported as a mismatch, not silently pass.
+  const beforePricing = failures;
+  checkRentClaims({ public: 0, sealed: 1_500_000 });
+  const caughtPricing = failures > beforePricing;
+  if (!caughtPricing) fail("self-test: the checker accepted an undocumented default rate");
+  caught = caught && caughtPricing;
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
   process.exit(caught ? 0 : 1);
 }
@@ -144,6 +152,64 @@ if (process.argv.includes("--self-test")) {
 checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMdsFloor();
 checkRepairRecord();
+checkRentClaims();
+
+/**
+ * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
+ * zero rate; the sealed tier defaults to 1,000,000 microcredits (1 credit) per
+ * GiB-month", prorated by the month, with rounding UP to a whole microcredit so
+ * a tiny quote cannot become free by truncation.
+ */
+function checkRentClaims(overrides) {
+  console.log(`rent pricing (docs/STORAGE-ECONOMY.md${overrides ? ", INJECTED" : ""}):`);
+  const defaults = overrides ?? rent.storagePricingFromEnv({});
+  const GIB = 1024 ** 3;
+  const from = new Date("2026-01-01T00:00:00.000Z");
+  const month = 30 * 24 * 60 * 60 * 1000;
+  const quote = (bytes, tier, durationMs) =>
+    rent.quoteStorageRent({ bytes, tier, from, until: new Date(from.getTime() + durationMs) }, defaults);
+
+  // The published default rate: 1,000,000 microcredits (1 credit) per GiB-month.
+  if (defaults.tiers.find((tier) => tier.tier === "sealed")?.rateMicroCreditsPerGiBMonth !== 1_000_000) {
+    fail("the sealed default rate is no longer 1,000,000 microcredits per GiB-month");
+  }
+  if (defaults.tiers.find((tier) => tier.tier === "public")?.rateMicroCreditsPerGiBMonth !== 0) {
+    fail("the public default rate is no longer zero");
+  }
+
+  const wholeMonth = quote(GIB, "sealed", month);
+  if (wholeMonth.costMicroCredits !== 1_000_000) {
+    fail(`a GiB-month at the default rate should cost 1,000,000 microcredits; it costs ${wholeMonth.costMicroCredits}`);
+  }
+  if (wholeMonth.costCredits !== 1) fail("a GiB-month should read as 1 credit");
+
+  const halfMonth = quote(GIB, "sealed", month / 2);
+  if (halfMonth.costCredits !== 0.5) fail(`half a month should prorate to 0.5 credits; it is ${halfMonth.costCredits}`);
+
+  const tiny = quote(1, "sealed", month);
+  if (tiny.costMicroCredits !== 1 || tiny.free !== false) {
+    fail(`a tiny quote must cost one microcredit, not ${tiny.costMicroCredits} (free: ${tiny.free})`);
+  }
+
+  const free = quote(GIB, "public", month);
+  if (free.costMicroCredits !== 0 || free.free !== true) {
+    fail(`the public tier is documented free; it quotes ${free.costMicroCredits}`);
+  }
+
+  // The documented override, quoted from the same section.
+  const custom = rent.storagePricingFromEnv({ RAREXT_STORAGE_SEALED_MICROCREDITS_PER_GIB_MONTH: "2500000" });
+  const customQuote = rent.quoteStorageRent(
+    { bytes: GIB, tier: "sealed", from, until: new Date(from.getTime() + month) },
+    custom,
+  );
+  if (customQuote.costCredits !== 2.5) {
+    fail(`the documented 2,500,000 override should quote 2.5 credits per GiB-month; it is ${customQuote.costCredits}`);
+  }
+
+  console.log(
+    "  GiB-month at the sealed default: 1 credit | half month: 0.5 | 1 byte: 1 microcredit | public: free | override 2.5 credits: ok",
+  );
+}
 
 /** The measured claim: the repair bench records its own arithmetic in RESULTS.json. */
 function checkRepairRecord(record) {
