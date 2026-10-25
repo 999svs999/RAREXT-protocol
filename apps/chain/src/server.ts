@@ -206,7 +206,11 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const address = server.address();
+  const boundPort =
+    typeof address === "object" && address !== null ? address.port : PORT;
+
   console.log(
-    `RAREXT chain node listening on http://${HOST}:${PORT} (${CHAIN_ID}, height ${chain.height})`,
+    `RAREXT chain node listening on http://${HOST}:${boundPort} (${CHAIN_ID}, height ${chain.height})`,
   );
 });

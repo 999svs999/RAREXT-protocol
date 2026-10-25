@@ -22,28 +22,51 @@ async function startChainNode(options: {
 }> {
   const data = options.data ?? mkdtempSync(join(tmpdir(), "rarext-chain-"));
   const cleanup = options.cleanup ?? true;
-  const port = 8790 + Math.floor(Math.random() * 80);
 
   const child = spawn(process.execPath, ["apps/chain/src/server.ts"], {
     cwd: repoRoot,
     env: {
       ...process.env,
-      PORT: String(port),
+      PORT: "0",
       RAREXT_CHAIN_KEY: join(data, "key.json"),
       RAREXT_CHAIN_LOG: join(data, "log.json"),
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
 
-  await new Promise((resolve, reject) => {
+  const url = await new Promise<string>((resolve, reject) => {
+    let output = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(new Error("the chain node did not start"));
+    }, 10_000);
+
+    function finish(error?: Error, value?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+
+      if (error) {
+        child.kill("SIGTERM");
+        reject(error);
+      } else {
+        resolve(value as string);
+      }
+    }
+
     child.stdout.on("data", (chunk) => {
-      if (String(chunk).includes("listening")) resolve(null);
+      output += String(chunk);
+      const match = /listening on (http:\/\/\S+)/.exec(output);
+      if (match) finish(undefined, match[1]);
     });
-    setTimeout(() => reject(new Error("the chain node did not start")), 10_000);
+    child.on("error", (error) => finish(error));
+    child.on("exit", (code) => {
+      finish(new Error(`the chain node exited with status ${code ?? "unknown"}`));
+    });
   });
 
   return {
-    url: `http://127.0.0.1:${port}`,
+    url,
     data,
     stop: async () => {
       child.kill("SIGTERM");
