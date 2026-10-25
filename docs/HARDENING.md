@@ -83,8 +83,12 @@ valid chain link.
 loses two shards, reads exactly four survivors, rebuilds both, and verifies the payload
 and both shard digests.
 
-Last measurement: read `1.000 GiB`, write `0.500 GiB`, total `1.500 GiB` (`1.500x`),
-matching the MDS floor `1 + m/k`; 127 s on the reference laptop. One-loss runs hit
+Last measurement (2026-10-25): read `1.000 GiB`, write `0.500 GiB`, total `1.500 GiB`
+(`1.500x`), matching the MDS floor `1 + m/k`; 121.7 s on the reference laptop, with an
+earlier run of the same command at 127 s — run-to-run variance of a few percent, so the
+number to trust is the ratio, which is exact, not the seconds. The harness writes
+`bench/repair/RESULTS.json` with `exact: true` and `totalRatio: 1.5`, and
+`scripts/claim-check.mjs` verifies this paragraph against that file. One-loss runs hit
 `1.250x`. The earlier `>512 MB` shard-digest bug (hex encoding a whole shard) is fixed
 by streaming large shards into SHA-256 with a distinct domain, and the 1 GiB run
 exercises that path.

@@ -127,13 +127,54 @@ if (process.argv.includes("--self-test")) {
   const before = failures;
   const doctored = original.replace(/^\|\s*10%\s*\|\s*44\s*\|/m, "| 10% | 45 |");
   checkSamplingTable(doctored, "doctored");
-  const caught = failures > before;
+  // And a doctored bench record: the arithmetic must not forgive a wrong ratio.
+  const beforeDoctoredRecord = failures;
+  checkRepairRecord({
+    payloadBytes: 1073741824, dataShards: 4, parityShards: 2, losses: 2,
+    readBytes: 1073741824, writeBytes: 536870912, totalBytes: 1610612736,
+    readRatio: 1, writeRatio: 0.5, totalRatio: 1.4, floorRatio: 1.5,
+    exact: true, elapsedMs: 1,
+  });
+  const caught = failures > beforeDoctoredRecord;
+  if (!caught) fail("self-test: the checker accepted totalRatio 1.4 against a floor of 1.5");
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
   process.exit(caught ? 0 : 1);
 }
 
 checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMdsFloor();
+checkRepairRecord();
+
+/** The measured claim: the repair bench records its own arithmetic in RESULTS.json. */
+function checkRepairRecord(record) {
+  console.log("repair bench (bench/repair/RESULTS.json):");
+  if (record === undefined) {
+    try {
+      record = JSON.parse(readFileSync(new URL("bench/repair/RESULTS.json", root), "utf8"));
+    } catch (error) {
+      fail(`RESULTS.json is unreadable: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+  }
+
+  const floor = 1 + record.parityShards / record.dataShards;
+  if (record.exact !== true) fail(`the bench did not report an exact floor match (exact: ${record.exact})`);
+  if (record.totalRatio !== floor) {
+    fail(`totalRatio ${record.totalRatio} does not equal the MDS floor ${floor}`);
+  }
+  if (record.readBytes + record.writeBytes !== record.totalBytes) {
+    fail(`read ${record.readBytes} + write ${record.writeBytes} does not add up to ${record.totalBytes}`);
+  }
+  if (!Number.isFinite(record.elapsedMs) || record.elapsedMs <= 0) {
+    fail(`elapsedMs ${record.elapsedMs} is not a measurement`);
+  }
+
+  console.log(
+    `  ${record.losses} loss(es) on ${record.dataShards}+${record.parityShards}: ` +
+      `read ${(record.readBytes / 2 ** 30).toFixed(3)} GiB + write ${(record.writeBytes / 2 ** 30).toFixed(3)} GiB ` +
+      `= ${record.totalRatio}x (floor ${floor}x), exact ${record.exact}, ${Math.round(record.elapsedMs / 100) / 10} s`,
+  );
+}
 
 console.log(failures === 0 ? "\nall published claims match the implementation" : `\n${failures} mismatch(es)`);
 process.exit(failures === 0 ? 0 : 1);

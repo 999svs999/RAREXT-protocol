@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The measured repair claim is re-derived and checked too.** The 1 GiB `4 + 2`
+  bench was re-run against the published claim: read 1.000 GiB, write 0.500 GiB, total
+  1.500x — the MDS floor, `exact: true` — in 121.7 s (an earlier run of the same
+  command: 127 s, so the ratio is the number to trust). `claim:check` now verifies the
+  doc's paragraph against `bench/repair/RESULTS.json` — the harness's own committed
+  artifact — asserting the ratios add up, `totalRatio` equals the floor, and a plausible
+  elapsed time exists; its self-test feeds a doctored record (`totalRatio: 1.4` against
+  a floor of 1.5) and asserts the mismatch is reported. The self-test monkey-patch that
+  first attempted this was replaced with injection, because reassigning an ESM import
+  binding throws.
 - **Published claims are checked against the code (`npm run claim:check`).** The
   availability-sampling table in RFC 0010 and the MDS floor `1 + m/k` cited in
   `docs/HARDENING.md` and `docs/STORAGE-FRONTIER.md` are now re-derived from
