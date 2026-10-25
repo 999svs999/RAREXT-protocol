@@ -1,6 +1,8 @@
 import {
   canonicalize,
+  isGenerativeMedia,
   leafPayload,
+  renderRaster,
   verifyAiArtifact,
 } from "@rarext/core";
 import type { AiLocalVerification, Publication } from "@rarext/core";
@@ -60,6 +62,28 @@ export interface AiClaimSummary {
    * trust the mirror, the anchor, or the attestation for the verdict.
    */
   local: { correct: boolean; metricValue?: number } | null;
+  /**
+   * Media rendition evidence. When an AI artifact ships a picture derived from
+   * its commitment, this browser re-derives the raster from the committed
+   * model and seed and hashes it — no trust in the uploaded file. When the
+   * blob's bytes were supplied (a mirror's inline blobs), the blob digest is
+   * checked too, so a substituted picture fails here.
+   */
+  media: AiMediaEvidence | null;
+}
+
+export interface AiMediaEvidence {
+  /** Digest of the encoded picture as stored on the node. */
+  blob: string;
+  /** Digest of the raw raster the artifact committed. */
+  raster: string;
+  size: number;
+  /** sha256 of the raster re-derived here from the committed model and seed. */
+  reDerived: string | null;
+  /** reDerived === raster: the picture really is a function of the commitment. */
+  matches: boolean | null;
+  /** sha256 of the supplied blob bytes === blob, when bytes were supplied. */
+  blobMatches: boolean | null;
 }
 
 /**
@@ -91,6 +115,18 @@ export interface ChallengeIndex {
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
+
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256BytesHex(bytes: Uint8Array): Promise<string> {
+  // Copy into a plain ArrayBuffer-backed view: a derived raster may come back
+  // as Uint8Array<ArrayBufferLike>, which WebCrypto's BufferSource rejects.
+  const view = new Uint8Array(bytes.length);
+  view.set(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", view);
 
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -185,17 +221,73 @@ function localAiCheck(
   return null;
 }
 
-function aiClaimsFor(
+/**
+ * Media evidence for one publication. The picture is derived, not trusted:
+ * the raster comes from the committed model and seed, so the check is the same
+ * shape as the generative replay — recompute, then compare. The blob digest
+ * covers the encoded file, which is the part a node could swap.
+ */
+async function mediaFor(
+  publication: Publication,
+  blobBytes: Uint8Array | undefined,
+): Promise<AiMediaEvidence | null> {
+  const body = publication.artifact?.body as { model?: unknown; seed?: unknown; media?: unknown } | undefined;
+  if (!body || typeof body.seed !== "number" || !isGenerativeMedia(body.media)) {
+    return null;
+  }
+  const media = body.media;
+
+  let reDerived: string | null = null;
+  try {
+    const raster = renderRaster(
+      body.model as Parameters<typeof renderRaster>[0],
+      body.seed,
+      media.size,
+    );
+    reDerived = await sha256BytesHex(raster);
+  } catch {
+    reDerived = null;
+  }
+
+  let blobMatches: boolean | null = null;
+  if (blobBytes) {
+    blobMatches = (await sha256BytesHex(blobBytes)) === media.blob;
+  }
+
+  return {
+    blob: media.blob,
+    raster: media.raster,
+    size: media.size,
+    reDerived,
+    matches: reDerived === null ? null : reDerived === media.raster,
+    blobMatches,
+  };
+}
+
+function base64ToBytes(value: string): Uint8Array | undefined {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return undefined;
+  }
+}
+
+async function aiClaimsFor(
   bundle: Bundle,
   challenges?: ChallengeIndex,
-): AiClaimSummary[] {
+  media?: Record<string, string>,
+): Promise<AiClaimSummary[]> {
   // The AI evidence is only meaningful when the anchor actually committed it.
   // Leaf v4 added representation/metric fields; on v2/v3 the same fields can
   // still appear on the JSON object, but they are outside the Merkle leaf, so
   // a mirror could edit them without changing the root. Do not surface them.
   const committed = bundle.manifest.leafVersion >= 4;
 
-  return bundle.publications.map((publication) => {
+  const claims: AiClaimSummary[] = [];
+  for (const publication of bundle.publications) {
     const attestation = publication.attestation as {
       representation?: "exact" | "bounded" | "generative";
       metricName?: string;
@@ -214,7 +306,19 @@ function aiClaimsFor(
       ? localAiCheck(publication, spec as Record<string, unknown> | undefined)
       : null;
 
-    return {
+    let mediaEvidence: AiMediaEvidence | null = null;
+
+    if (committed) {
+      const body = publication.artifact?.body as { media?: { blob?: unknown } } | undefined;
+      const hash = body?.media?.blob;
+      if (typeof hash === "string") {
+        const encoded = media?.[hash];
+        const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : undefined;
+        mediaEvidence = await mediaFor(publication, bytes);
+      }
+    }
+
+    claims.push({
       publicationId: publication.id,
       representation,
       correct: committed && attestation.correct === true,
@@ -226,13 +330,18 @@ function aiClaimsFor(
           ? metricValue <= bound
           : null,
       local,
-    };
-  });
+      media: mediaEvidence,
+    });
+  }
+
+  return claims;
 }
 
 export async function verifyBundle(
   bundle: Bundle,
   challenges?: ChallengeIndex,
+  pinnedRoot?: string,
+  media?: Record<string, string>,
 ): Promise<BundleVerification> {
   const leaves: string[] = [];
 
@@ -255,7 +364,7 @@ export async function verifyBundle(
       computedRoot,
       publications: leaves.length,
       reason: "the publications in this bundle do not rebuild the anchored root",
-      aiClaims: aiClaimsFor(bundle, challenges),
+      aiClaims: await aiClaimsFor(bundle, challenges, media),
     };
   }
 
@@ -266,7 +375,18 @@ export async function verifyBundle(
       computedRoot,
       publications: leaves.length,
       reason: "the manifest leaf list does not match the publications",
-      aiClaims: aiClaimsFor(bundle, challenges),
+      aiClaims: await aiClaimsFor(bundle, challenges, media),
+    };
+  }
+
+  if (pinnedRoot && computedRoot !== pinnedRoot) {
+    return {
+      valid: false,
+      root: bundle.manifest.root,
+      computedRoot,
+      publications: leaves.length,
+      reason: "the bundle root does not match the pinned chain root",
+      aiClaims: await aiClaimsFor(bundle, challenges, media),
     };
   }
 
@@ -276,6 +396,6 @@ export async function verifyBundle(
     computedRoot,
     publications: leaves.length,
     reason: null,
-    aiClaims: aiClaimsFor(bundle, challenges),
+    aiClaims: await aiClaimsFor(bundle, challenges, media),
   };
 }

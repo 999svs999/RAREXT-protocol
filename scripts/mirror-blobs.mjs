@@ -34,12 +34,38 @@ function decodeContent(content, size) {
   return bytes;
 }
 
+/**
+ * `aiClaims` optionally marks blobs that are renditions of an AI claim, so the
+ * gallery can say what a picture IS (which claim, which representation) and
+ * link back to the page that re-verifies it. Each entry: { blob, raster, app,
+ * representation, publicationId, challengeId, title }.
+ */
+function aiIndex(aiClaims) {
+  const index = new Map();
+  for (const claim of Array.isArray(aiClaims) ? aiClaims : []) {
+    if (!claim || typeof claim !== "object") continue;
+    if (typeof claim.blob !== "string" || !HASH.test(claim.blob)) continue;
+    index.set(claim.blob, {
+      app: typeof claim.app === "string" ? claim.app : null,
+      representation: typeof claim.representation === "string" ? claim.representation : null,
+      publicationId: typeof claim.publicationId === "string" ? claim.publicationId : null,
+      challengeId: typeof claim.challengeId === "string" ? claim.challengeId : null,
+      title: typeof claim.title === "string" ? claim.title : null,
+      raster: typeof claim.raster === "string" && HASH.test(claim.raster) ? claim.raster : null,
+      size: Number.isSafeInteger(claim.size) ? claim.size : null,
+    });
+  }
+  return index;
+}
+
 export async function writeMirrorBlobs({
   base,
   mirrorDir,
   fetchImpl = fetch,
+  aiClaims = [],
 }) {
   const embedded = [];
+  const ai = aiIndex(aiClaims);
   let embeddedTotal = 0;
 
   try {
@@ -66,13 +92,16 @@ export async function writeMirrorBlobs({
       if (!bytes) continue;
       if (createHash("sha256").update(bytes).digest("hex") !== hash) continue;
 
-      embedded.push({
+      const entry = {
         hash,
         mediaType: safeType(full.mediaType),
         size,
         tier: full.tier === "sealed" ? "sealed" : "public",
         content: full.content,
-      });
+      };
+      const claim = ai.get(hash);
+      if (claim) entry.ai = claim;
+      embedded.push(entry);
       embeddedTotal += size;
     }
   } catch (error) {

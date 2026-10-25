@@ -45,6 +45,22 @@ within that output bound. A malformed or oversized body/spec is refused instead
 of being replayed, so one request cannot turn a tiny model into an arbitrarily
 large string.
 
+### Media renditions
+
+An `ai.generative` artifact may carry a picture beside its output. The picture
+is not an uploaded file that the claim merely points at: it is a pure function
+of the committed model, the seed, and a side length. The rule is
+`xorshift32-image-v1` — step the same recurrence, emit the low byte per channel,
+fill the raster row-major as R,G,B. The artifact records the digest of those
+raw raster bytes, and the PNG is one faithful encoding of them.
+
+Verification re-derives the raster from the commitment and compares digests.
+The browser does this itself; when a mirror supplies the inline blob bytes, it
+also hashes those bytes against the recorded blob digest. A substituted picture
+or a hand-drawn replacement fails both checks, and neither check trusts the
+mirror or the attestation. The raw-raster digest is the commitment, so the
+result does not depend on which PNG encoder produced the file.
+
 ## Bounded: lossy reconstructions with a promise
 
 Real model classes — quantized weights, compressed embeddings, neural codec
@@ -85,7 +101,9 @@ all committed before the artifact is verified.
   value, and bound).
 - **Browser mirror:** the mirror verifier reports per-publication AI evidence
   alongside the Merkle root check, and with a challenge index checks the bound
-  itself. Everything it shows is covered by the anchor.
+  itself. When an AI rendition is present it re-derives the raster and, for
+  blobs embedded in the mirror, checks the blob digest too. Everything it shows
+  is covered by the anchor.
 - **Library:** `verifyGenerativeReplay` and `verifyBoundedReconstruction` are
   pure functions with no network dependency — independent tools can re-implement
   or re-run them.
@@ -96,8 +114,9 @@ The anchored bundle deployed at <https://999svs999.github.io/RAREXT-protocol/mir
 carries two real AI publications — one generative, one bounded — and its
 verification page recomputes the Merkle root and runs the local AI checks in
 your browser: the generative output is replayed from the committed model and
-seed, the bounded metric is recomputed from the raw reconstruction. The proof
-pipeline is committed and reproducible:
+seed, the bounded metric is recomputed from the raw reconstruction, and the
+generative rendition is re-derived and digest-checked against the mirror's
+inline blob. The proof pipeline is committed and reproducible:
 
 ```
 node scripts/publish-ai-proof.mjs

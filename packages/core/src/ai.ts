@@ -30,6 +30,11 @@ export interface GenerativeBody {
   model: XorshiftModel;
   seed: number;
   output: string;
+  /**
+   * Optional media rendition. Additive: bodies without it verify exactly as
+   * before, and the claim's digest already covers whatever is present here.
+   */
+  media?: GenerativeMedia;
 }
 
 export interface GenerativeSpec {
@@ -304,4 +309,78 @@ export function verifyAiArtifact(
   }
 
   return { error: `artifact kind ${artifact.kind} is not a locally verifiable AI claim` };
+}
+
+/**
+ * Media renditions. An AI artifact may ship a picture beside its output, and
+ * that picture is *derived*, not chosen: it is a pure function of the
+ * committed model, the seed, and the side length. Nothing in the derivation
+ * reads a clock, a file, or a random source, so anyone holding the artifact
+ * can re-derive the exact bytes. That is what makes it a commitment rather
+ * than an illustration.
+ *
+ * The rule, id `xorshift32-image-v1`, is deliberately small enough to
+ * reimplement in a paragraph:
+ *   1. state = seed (mod 2^32)
+ *   2. repeat size*size*3 times: step the xorshift recurrence, then emit the
+ *      low byte of the state; the emitted bytes fill the raster row-major as
+ *      R,G,B per pixel.
+ * The raster digest is taken over those raw bytes, so it does not depend on
+ * any PNG encoder. The stored blob is one valid PNG encoding of the same
+ * raster; its digest is recorded separately.
+ */
+export const RASTER_RULE = "xorshift32-image-v1";
+export const MAX_RASTER_SIZE = 512;
+
+export interface GenerativeMedia {
+  mediaType: "image/png";
+  rule: string;
+  blob: string;
+  raster: string;
+  size: number;
+  bytes: number;
+}
+
+export function isGenerativeMedia(value: unknown): value is GenerativeMedia {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value as Partial<GenerativeMedia>;
+  return (
+    media.mediaType === "image/png" &&
+    media.rule === RASTER_RULE &&
+    typeof media.blob === "string" &&
+    /^[0-9a-f]{64}$/.test(media.blob) &&
+    typeof media.raster === "string" &&
+    /^[0-9a-f]{64}$/.test(media.raster) &&
+    Number.isInteger(media.size) &&
+    media.size! >= 1 &&
+    media.size! <= MAX_RASTER_SIZE &&
+    Number.isInteger(media.bytes) &&
+    media.bytes! >= 1
+  );
+}
+
+/** Pure, deterministic raster derivation — see the rule above. */
+export function renderRaster(
+  model: XorshiftModel,
+  seed: number,
+  size: number,
+): Uint8Array {
+  if (!isXorshiftModel(model)) throw new Error("renderRaster: malformed model");
+  if (!Number.isInteger(size) || size < 1 || size > MAX_RASTER_SIZE) {
+    throw new Error(`renderRaster: size must be 1..${MAX_RASTER_SIZE}`);
+  }
+
+  const { a, b, c } = model.params;
+  let state = seed >>> 0;
+  const out = new Uint8Array(size * size * 3);
+
+  for (let i = 0; i < out.length; i++) {
+    state ^= (state << a) >>> 0;
+    state ^= state >>> b;
+    state ^= (state << c) >>> 0;
+    state >>>= 0;
+    out[i] = state & 0xff;
+  }
+
+  return out;
 }

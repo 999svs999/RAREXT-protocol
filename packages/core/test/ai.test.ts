@@ -17,6 +17,9 @@ import {
   verifyAiArtifact,
   verifyBoundedReconstruction,
   verifyGenerativeReplay,
+  isGenerativeMedia,
+  RASTER_RULE,
+  renderRaster,
 } from "../src/ai.ts";
 
 const model = {
@@ -125,4 +128,60 @@ test("verifyAiArtifact dispatches by kind and reports errors", () => {
   );
   assert.ok("error" in wrongKind);
   assert.match(wrongKind.error, /not a locally verifiable AI claim/);
+});
+
+test("renderRaster is a pure function of the commitment", () => {
+  const model = { kind: "xorshift32" as const, params: { a: 13, b: 17, c: 5 }, vocab: ["alpha"] };
+  const first = renderRaster(model, 42, 16);
+  const again = renderRaster(model, 42, 16);
+  assert.equal(first.length, 16 * 16 * 3);
+  assert.deepEqual(Array.from(first), Array.from(again));
+
+  // A different seed is a different picture; the same model with a different
+  // recurrence is too. Nothing else can move it.
+  assert.notDeepEqual(Array.from(first), Array.from(renderRaster(model, 43, 16)));
+  const other = { kind: "xorshift32" as const, params: { a: 13, b: 17, c: 7 }, vocab: ["alpha"] };
+  assert.notDeepEqual(Array.from(first), Array.from(renderRaster(other, 42, 16)));
+});
+
+test("renderRaster follows the documented rule literally", () => {
+  // Rule xorshift32-image-v1, spelled out: step the recurrence, emit the low
+  // byte, row-major R,G,B. Reimplemented here from the paragraph in ai.ts.
+  const model = { kind: "xorshift32" as const, params: { a: 13, b: 17, c: 5 }, vocab: ["x"] };
+  const size = 3;
+  const expected = [];
+  let state = 7 >>> 0;
+  for (let i = 0; i < size * size * 3; i++) {
+    state ^= (state << 13) >>> 0;
+    state ^= state >>> 17;
+    state ^= (state << 5) >>> 0;
+    state >>>= 0;
+    expected.push(state & 0xff);
+  }
+  assert.deepEqual(Array.from(renderRaster(model, 7, size)), expected);
+});
+
+test("renderRaster refuses malformed input rather than inventing a picture", () => {
+  const model = { kind: "xorshift32" as const, params: { a: 13, b: 17, c: 5 }, vocab: ["x"] };
+  assert.throws(() => renderRaster(model, 42, 0));
+  assert.throws(() => renderRaster(model, 42, 513));
+  assert.throws(() => renderRaster(model, 42, 1.5));
+  assert.throws(() => renderRaster({ kind: "other" } as never, 42, 8));
+});
+
+test("isGenerativeMedia accepts a well-formed commitment and nothing sloppier", () => {
+  const media = {
+    mediaType: "image/png" as const,
+    rule: RASTER_RULE,
+    blob: "a".repeat(64),
+    raster: "b".repeat(64),
+    size: 64,
+    bytes: 1234,
+  };
+  assert.equal(isGenerativeMedia(media), true);
+  assert.equal(isGenerativeMedia({ ...media, rule: "hand-drawn-v2" }), false);
+  assert.equal(isGenerativeMedia({ ...media, raster: "not-a-digest" }), false);
+  assert.equal(isGenerativeMedia({ ...media, size: 0 }), false);
+  assert.equal(isGenerativeMedia({ ...media, mediaType: "image/svg+xml" }), false);
+  assert.equal(isGenerativeMedia(null), false);
 });

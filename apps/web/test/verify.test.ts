@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { canonicalize, generate, leafPayload } from "@rarext/core";
+import {
+  canonicalize,
+  generate,
+  leafPayload,
+  RASTER_RULE,
+  renderRaster,
+} from "@rarext/core";
 import type { Publication } from "@rarext/core";
 
 import { localVerdict, verifyBundle, type Bundle } from "../src/verify.ts";
@@ -112,6 +118,25 @@ function bundle(publications: Publication[], leafVersion = 4): Bundle {
 test("a one-publication mirror rebuilds the anchored root", async () => {
   const result = await verifyBundle(bundle([publication("p1")]));
   assert.equal(result.valid, true, result.reason ?? "");
+});
+
+test("a mirror verifies only against the chain root it was pinned to", async () => {
+  const original = bundle([publication("p1"), publication("p2")]);
+
+  const pinned = await verifyBundle(
+    original,
+    undefined,
+    original.manifest.root,
+  );
+  assert.equal(pinned.valid, true, pinned.reason ?? "");
+
+  const wrong = await verifyBundle(
+    original,
+    undefined,
+    "f".repeat(64),
+  );
+  assert.equal(wrong.valid, false);
+  assert.match(wrong.reason ?? "", /pinned chain root/);
 });
 
 test("a two-publication mirror rebuilds the anchored root", async () => {
@@ -260,6 +285,109 @@ test("legacy publications surface as representation null", async () => {
   assert.equal(legacy.representation, null);
   assert.equal(legacy.metricName, null);
   assert.equal(legacy.withinBound, null);
+});
+
+function mediaPublication(id: string): {
+  publication: Publication;
+  blob: string;
+} {
+  const model = {
+    kind: "xorshift32" as const,
+    params: { a: 13, b: 17, c: 5 },
+    vocab: ["a", "b", "c", "d"],
+  };
+  const seed = 42;
+  const size = 4;
+  const output = generate(model, seed, 16);
+  const raster = renderRaster(model, seed, size);
+  const rasterDigest = createHash("sha256").update(raster).digest("hex");
+  const blobBytes = Buffer.from("a png-shaped rendition");
+  const blob = createHash("sha256").update(blobBytes).digest("hex");
+
+  const pub = aiPublication(id);
+  pub.app = "ai-generative";
+  pub.challengeId = "gen-starter";
+  pub.artifact = {
+    app: "ai-generative",
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body: {
+      model,
+      seed,
+      output,
+      media: {
+        mediaType: "image/png",
+        rule: RASTER_RULE,
+        blob,
+        raster: rasterDigest,
+        size,
+        bytes: blobBytes.length,
+      },
+    },
+  };
+  pub.attestation = {
+    ...pub.attestation,
+    app: "ai-generative",
+    challengeId: "gen-starter",
+    representation: "generative",
+    metricName: undefined,
+    metricValue: undefined,
+  } as typeof pub.attestation;
+
+  return { publication: pub, blob: blobBytes.toString("base64") };
+}
+
+test("the browser re-derives an AI rendition and checks the blob bytes", async () => {
+  const { publication: pub, blob } = mediaPublication("media-1");
+  const body = pub.artifact.body as { media: { blob: string } };
+
+  const result = await verifyBundle(
+    bundle([pub]),
+    { "gen-starter": { steps: 16 } },
+    undefined,
+    { [body.media.blob]: blob },
+  );
+
+  const claim = result.aiClaims[0]!;
+  assert.ok(claim.media);
+  assert.equal(claim.media.matches, true);
+  assert.equal(claim.media.blobMatches, true);
+  assert.equal(claim.media.reDerived, claim.media.raster);
+
+  const substituted = await verifyBundle(
+    bundle([pub]),
+    { "gen-starter": { steps: 16 } },
+    undefined,
+    { [body.media.blob]: Buffer.from("different bytes").toString("base64") },
+  );
+  assert.equal(substituted.aiClaims[0]!.media?.blobMatches, false);
+});
+
+test("a rendition whose raster was changed fails the local derivation", async () => {
+  const { publication: pub } = mediaPublication("media-2");
+  const body = pub.artifact.body as { media: { raster: string } };
+  body.media.raster = "0".repeat(64);
+
+  const result = await verifyBundle(bundle([pub]), {
+    "gen-starter": { steps: 16 },
+  });
+
+  assert.equal(result.aiClaims[0]!.media?.matches, false);
+});
+
+test("pre-v4 leaves do not treat media fields as committed evidence", async () => {
+  const { publication: pub, blob } = mediaPublication("media-v3");
+  const body = pub.artifact.body as { media: { blob: string } };
+
+  const result = await verifyBundle(
+    bundle([pub], 3),
+    { "gen-starter": { steps: 16 } },
+    undefined,
+    { [body.media.blob]: blob },
+  );
+
+  assert.equal(result.aiClaims[0]!.media, null);
 });
 
 test("the browser replays a generative claim itself when given the steps", async () => {

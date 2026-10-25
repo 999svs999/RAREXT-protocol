@@ -23,6 +23,7 @@
       .meta { padding: 10px 12px; font-size: 11px; color: #8fa0b5; font-family: ui-monospace, monospace; }
       .meta b { color: #e3eaf3; }
       .meta code { color: #6ff0c4; word-break: break-all; }
+      .meta .ai { color: #c8b6ff; margin-top: 4px; }
       .empty { color: #6c7a8b; padding: 30px; text-align: center; }
     </style>
   </head>
@@ -60,6 +61,25 @@
         [...new Uint8Array(buffer)]
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
+
+      const safeText = (value, max = 120) =>
+        typeof value === "string" ? value.slice(0, max) : null;
+
+      // Optional claim metadata from the mirror builder. It never controls
+      // rendering or bytes; it only labels a rendition so a reader can see
+      // which AI claim the picture belongs to.
+      const safeAi = (ai) => {
+        if (!ai || typeof ai !== "object") return null;
+        return {
+          app: safeText(ai.app),
+          representation: safeText(ai.representation),
+          publicationId: safeText(ai.publicationId),
+          challengeId: safeText(ai.challengeId),
+          title: safeText(ai.title, 160),
+          raster: typeof ai.raster === "string" && HASH.test(ai.raster) ? ai.raster : null,
+          size: Number.isSafeInteger(ai.size) ? ai.size : null,
+        };
+      };
 
       const decode = (content) => {
         if (
@@ -99,6 +119,7 @@
           size,
           tier: record.tier === "sealed" ? "sealed" : "public",
           url: `data:${mediaType};base64,${record.content}`,
+          ai: safeAi(record.ai),
         };
       };
 
@@ -115,6 +136,7 @@
           size: record.size,
           tier: record.tier === "sealed" ? "sealed" : "public",
           url: `./v1/blobs/${encodeURIComponent(hash)}/raw`,
+          ai: safeAi(record.ai),
         };
       };
 
@@ -189,6 +211,17 @@
         const code = document.createElement("code");
         code.textContent = record.hash;
         meta.appendChild(code);
+
+        if (record.ai) {
+          const ai = document.createElement("div");
+          ai.className = "ai";
+          const kind = [record.ai.representation, record.ai.app].filter(Boolean).join(" · ");
+          ai.textContent =
+            "AI rendition" +
+            (kind ? ` · ${kind}` : "") +
+            (record.ai.title ? ` — ${record.ai.title}` : "");
+          meta.appendChild(ai);
+        }
 
         card.append(media, meta);
 

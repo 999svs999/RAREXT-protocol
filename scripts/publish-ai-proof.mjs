@@ -1,11 +1,13 @@
 // Publishes real AI publications through the live API flow, anchors them,
 // and saves the resulting bundle — the proof that AI lives on RAREXT.
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeMirrorBlobs } from "./mirror-blobs.mjs";
+import { encodePngRaster } from "./png-raster.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const OUT = join(root, ".ai-proof");
@@ -49,6 +51,40 @@ const boundedChallenge = challenges.find((c) => c.id === "bounded-starter");
 if (!genChallenge || !boundedChallenge) throw new Error("AI seeds missing");
 const genBody = genChallenge.sampleArtifact.body;
 const boundedBody = boundedChallenge.sampleArtifact.body;
+
+// 3a. A media rendition of the SAME commitment. The picture is derived from
+// the committed model and seed alone, so it is a function of the commitment:
+// a stranger can re-derive these bytes and compare digests instead of
+// trusting an uploaded file. The raster digest is the encoder-independent
+// part; the PNG blob is one faithful encoding of that raster.
+const RASTER_SIZE = 64;
+const raster = core.renderRaster(genBody.model, genBody.seed, RASTER_SIZE);
+const rasterDigest = createHash("sha256").update(raster).digest("hex");
+const png = encodePngRaster(raster, RASTER_SIZE);
+
+const renditionResponse = await fetch(`${base}/v1/blobs`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    content: png.toString("base64"),
+    encoding: "base64",
+    mediaType: "image/png",
+  }),
+});
+if (!renditionResponse.ok) throw new Error(`rendition store failed: ${renditionResponse.status}`);
+const renditionBlob = await renditionResponse.json();
+
+genBody.media = {
+  mediaType: "image/png",
+  rule: core.RASTER_RULE,
+  blob: renditionBlob.hash,
+  raster: rasterDigest,
+  size: RASTER_SIZE,
+  bytes: png.length,
+};
+console.log(
+  `rendition stored: blob ${renditionBlob.hash.slice(0, 16)}… raster ${rasterDigest.slice(0, 16)}… (${png.length} bytes)`,
+);
 
 // 4. Publish REAL generative + bounded publications, signed by the agent.
 const genPublication = await client.publishArtifactAs(signer, {
@@ -201,13 +237,24 @@ const verifyHtml = `<!doctype html>
       const out = document.getElementById("out");
 
       async function run() {
-        const bundle = await (await fetch("./bundle.json")).json();
+        const [bundle, blobFile] = await Promise.all([
+          (await fetch("./bundle.json")).json(),
+          fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] }),
+        ]);
         // The bundle carries every challenge spec, so this page can replay the
-        // generative claims and recompute the bounded metrics itself.
+        // generative claims and recompute the bounded metrics itself. The
+        // mirror's inline blobs let it check the rendition bytes as well.
         const challenges = Object.fromEntries(
           (bundle.challenges ?? []).map((c) => [c.id, c.spec ?? {}]),
         );
-        const result = await verifyBundle(bundle, challenges);
+        const media = Object.fromEntries(
+          (Array.isArray(blobFile.blobs) ? blobFile.blobs : [])
+            .filter((blob) => typeof blob.hash === "string" && typeof blob.content === "string")
+            .map((blob) => [blob.hash, blob.content]),
+        );
+        const requested = new URLSearchParams(location.search).get("root");
+        const pinned = requested && /^[0-9a-f]{64}$/.test(requested) ? requested : null;
+        const result = await verifyBundle(bundle, challenges, pinned ?? undefined, media);
 
         const row = (label, value, cls) =>
           '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
@@ -244,6 +291,18 @@ const verifyHtml = `<!doctype html>
             } else {
               sections.push(row(title.slice(0, 60), "local check: not run (spec unavailable)", "dim"));
             }
+            if (claim.media) {
+              sections.push(row("rendition", claim.media.matches === true
+                ? "raster re-derived from the commitment"
+                : claim.media.matches === false ? "raster MISMATCH" : "not checked",
+                claim.media.matches === true ? "ok" : "bad"));
+              if (claim.media.blobMatches !== null) {
+                sections.push(row("rendition bytes", claim.media.blobMatches
+                  ? "blob digest matches the mirror copy"
+                  : "blob MISMATCH",
+                  claim.media.blobMatches ? "ok" : "bad"));
+              }
+            }
           }
         }
 
@@ -258,7 +317,22 @@ const verifyHtml = `<!doctype html>
 `;
 writeFileSync(join(mirrorDir, "verify.html"), verifyHtml);
 
-const blobs = await writeMirrorBlobs({ base, mirrorDir });
+const blobs = await writeMirrorBlobs({
+  base,
+  mirrorDir,
+  aiClaims: [
+    {
+      blob: genBody.media.blob,
+      raster: genBody.media.raster,
+      size: genBody.media.size,
+      app: "ai-generative",
+      representation: "generative",
+      publicationId: genPublication.id,
+      challengeId: "gen-starter",
+      title: genPublication.title,
+    },
+  ],
+});
 console.log(`  embedded ${blobs.count} blob(s), ${blobs.total} bytes`);
 console.log("MIRROR BUILT AT", mirrorDir);
 
