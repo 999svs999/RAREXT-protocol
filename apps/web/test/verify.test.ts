@@ -548,3 +548,55 @@ test("the browser re-derives a bounded rendition from the committed measurement"
   const caught = await verifyBundle(bundle([shifted]), spec);
   assert.equal(caught.aiClaims[0]!.media?.matches, false);
 });
+
+test("mechanism: rendition — an uncheckable declaration is reported, not silently dropped", async () => {
+  // "no picture" and "a picture this reader cannot verify" are different facts.
+  // The reader must not collapse them into the same silence.
+  const pub = aiPublication("media-declared");
+  pub.artifact = {
+    app: "ai-generative",
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body: {
+      model: { kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] },
+      seed: 42,
+      output: generate({ kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] }, 42, 16),
+      media: {
+        mediaType: "image/png",
+        rule: "hand-drawn-v2",
+        blob: "a".repeat(64),
+        raster: "b".repeat(64),
+        size: 64,
+        bytes: 128,
+      },
+    },
+  } as typeof pub.artifact;
+
+  const result = await verifyBundle(bundle([pub]), {
+    "gen-starter": { steps: 16 },
+  });
+  const claim = result.aiClaims[0]!;
+
+  assert.ok(claim.media, "the declaration must be surfaced, not dropped");
+  assert.equal(claim.media.unverifiable, true);
+  assert.match(claim.media.reason ?? "", /hand-drawn-v2/);
+  assert.equal(claim.media.matches, null);
+
+  // And an artifact with NO rendition still reports null, so the two states
+  // remain distinguishable.
+  const bare = aiPublication("no-media");
+  bare.artifact = {
+    app: "ai-generative",
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body: {
+      model: { kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] },
+      seed: 42,
+      output: generate({ kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] }, 42, 16),
+    },
+  } as typeof bare.artifact;
+  const bareResult = await verifyBundle(bundle([bare]), { "gen-starter": { steps: 16 } });
+  assert.equal(bareResult.aiClaims[0]!.media, null);
+});

@@ -91,6 +91,15 @@ export interface AiMediaEvidence {
   matches: boolean | null;
   /** sha256 of the supplied blob bytes === blob, when bytes were supplied. */
   blobMatches: boolean | null;
+  /**
+   * The artifact declared a rendition this reader cannot check — an
+   * unimplemented rule, or a shape that is not a committed rendition. Reported
+   * rather than dropped: "no picture" and "a picture I cannot verify" are
+   * different facts, and only one of them is harmless.
+   */
+  unverifiable: true | null;
+  /** Why the declared rendition could not be checked, when it could not. */
+  reason: string | null;
 }
 
 /**
@@ -238,6 +247,7 @@ async function mediaFor(
   publication: Publication,
   spec: Record<string, unknown> | undefined,
   blobBytes: Uint8Array | undefined,
+  representation: string | null,
 ): Promise<AiMediaEvidence | null> {
   const body = publication.artifact?.body as
     | { model?: unknown; seed?: unknown; values?: unknown; media?: unknown }
@@ -286,7 +296,26 @@ async function mediaFor(
     }
   }
 
-  if (!media) return null;
+  if (!media) {
+    // A rendition was declared but is not one this build can check. Say so.
+    if (body.media !== undefined && body.media !== null) {
+      const shape = typeof body.media === "object" ? body.media as { rule?: unknown } : {};
+      const rule = typeof shape.rule === "string" ? shape.rule : "an unknown rule";
+      return {
+        blob: "",
+        raster: "",
+        size: null,
+        width: null,
+        height: null,
+        reDerived: null,
+        matches: null,
+        blobMatches: null,
+        unverifiable: true,
+        reason: `declared a ${representation ?? "unknown"} rendition under ${rule} that this reader cannot check`,
+      };
+    }
+    return null;
+  }
 
   let reDerived: string | null = null;
   if (raster) {
@@ -311,6 +340,8 @@ async function mediaFor(
     reDerived,
     matches: reDerived === null ? null : reDerived === media.raster,
     blobMatches,
+    unverifiable: null,
+    reason: null,
   };
 }
 
@@ -360,14 +391,15 @@ async function aiClaimsFor(
 
     if (committed) {
       const body = publication.artifact?.body as { media?: { blob?: unknown } } | undefined;
-      const hash = body?.media?.blob;
-      if (typeof hash === "string") {
-        const encoded = media?.[hash];
+      if (body?.media !== undefined && body?.media !== null) {
+        const hash = (body.media as { blob?: unknown }).blob;
+        const encoded = typeof hash === "string" ? media?.[hash] : undefined;
         const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : undefined;
         mediaEvidence = await mediaFor(
           publication,
           spec as Record<string, unknown> | undefined,
           bytes,
+          representation,
         );
       }
     }
