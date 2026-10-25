@@ -157,6 +157,11 @@ if (process.argv.includes("--self-test")) {
   );
   checkRouteSurface(doctoredDoc);
   caught = caught && failures > beforeRoutes;
+  // And a soak run that failed must be reported, not waved through.
+  const beforeSoak = failures;
+  const realSoak = readFileSync(new URL("bench/storage/soak-2026-10-26.log", root), "utf8");
+  checkSoakLog(realSoak.replace("| Put | 5991 | 5991 | 0 | 100.0% |", "| Put | 5991 | 5942 | 49 | 99.2% |"));
+  caught = caught && failures > beforeSoak;
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
   process.exit(caught ? 0 : 1);
 }
@@ -166,6 +171,7 @@ checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
 checkRouteSurface();
+checkSoakLog();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -227,6 +233,46 @@ function checkRentClaims(rateOverrides) {
     "  GiB-month at the sealed default: 1 credit | half month: 0.5 | 1 byte: 1 microcredit | public: free | override 2.5 credits: ok",
   );
 }
+
+/**
+ * The soak claim: the docs cite a dated chaos run, and its log is committed.
+ * Every operation class in that log must have completed at 100%, and the docs'
+ * "latest" numbers must be the log's numbers.
+ */
+function checkSoakLog(logOverride) {
+  console.log(`soak log (bench/storage/soak-2026-10-26.log${logOverride ? ", DOCTORED" : ""}):`);
+  let log;
+  if (logOverride !== undefined) log = logOverride;
+  else {
+    try {
+      log = readFileSync(new URL("bench/storage/soak-2026-10-26.log", root), "utf8");
+    } catch (error) {
+      fail(`the committed soak log is unreadable: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+  }
+
+  const rows = {};
+  for (const match of log.matchAll(/^\| (Put|Retrieval|Repair) \| (\d+) \| (\d+) \| (\d+[^|]*) \| ([^|]+) \|$/gm)) {
+    rows[match[1]] = { attempted: Number(match[2]), ok: Number(match[3]), rate: match[5].trim() };
+  }
+  for (const name of ["Put", "Retrieval", "Repair"]) {
+    const row = rows[name];
+    if (!row) { fail(`the soak log has no ${name} row`); continue; }
+    if (row.rate !== "100.0%") fail(`the soak log's ${name} completion is ${row.rate}, not 100%`);
+    if (row.ok !== row.attempted) fail(`the soak log's ${name} row does not add up (${row.ok}/${row.attempted})`);
+  }
+
+  const operatorDoc = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
+  if (!operatorDoc.includes("5,991 puts at 100%, 148 repairs,")) {
+    fail("OPERATOR.md no longer cites the committed soak run (5,991 puts, 148 repairs)");
+  }
+  if (!operatorDoc.includes("22 kills")) fail("OPERATOR.md no longer cites 22 kills");
+  console.log(
+    `  ${rows.Put?.attempted} puts, ${rows.Retrieval?.attempted} retrievals, ${rows.Repair?.attempted} repairs, all 100%`,
+  );
+}
+
 
 /**
  * The route-surface claim: every route docs/ARCHITECTURE.md publishes must be

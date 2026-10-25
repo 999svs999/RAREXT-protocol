@@ -416,8 +416,9 @@ directory is wiped.
   once the grace period passes. The soak uses retention 24 and a zero-grace sweep; the
   production GC default is 24 hours and dry-run.
 - **Scale.** 1 GiB is the largest measured network placement, and the 10-minute chaos
-  run uses 64 KiB payloads (latest: 5,910 puts at 100%, 145 repairs, 23 kills; the
-  earlier 611 s run had 143 repairs at 99.9% puts; see `bench/storage/SOAK.md`). Repair
+  run uses 64 KiB payloads (latest 2026-10-26: 5,991 puts at 100%, 148 repairs,
+  22 kills; earlier runs: 5,910 puts/145 repairs/23 kills and 143 repairs at
+  99.9% puts; see `bench/storage/SOAK.md` and `bench/storage/soak-2026-10-26.log`). Repair
   and GC are per-holder loops with no sharding of the control plane; streamed repair is
   bounded but not load-tested at 100 GiB. The public summary is
   [`STORAGE.md`](STORAGE.md).

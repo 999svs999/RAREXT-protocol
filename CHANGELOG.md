@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The soak claims are re-derived and artifact-backed.** The 10-minute chaos run was
+  re-run against its published numbers: 5,991 puts at 100%, 5,991 retrievals at 100%,
+  148 repairs at 100% with 148 re-audits passing, 22 holder kills, 2 transient put
+  retries; peak client RSS 196.0 MiB (median 180.3, live heap 22.8 MiB) and peak holder
+  RSS 91.8 MiB — better than the published 242/94 MiB, same 100% completion. The log is
+  committed as `bench/storage/soak-2026-10-26.log`; HARDENING and OPERATOR cite it with
+  the date, and `claim:check` now parses the committed log, requires every operation
+  class at 100%, requires OPERATOR's "latest" numbers to be the log's numbers, and its
+  self-test feeds a doctored log (99.2% completion) that must be reported.
 - **The measured repair claim is re-derived and checked too.** The 1 GiB `4 + 2`
   bench was re-run against the published claim: read 1.000 GiB, write 0.500 GiB, total
   1.500x — the MDS floor, `exact: true` — in 121.7 s (an earlier run of the same

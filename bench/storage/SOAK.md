@@ -2,7 +2,7 @@
 
 ## Soak and chaos
 
-Run on 2026-10-23T03:17:46.318Z for 604s with Node `v24.15.0`
+Run on 2026-10-25T19:38:29.358Z for 601s with Node `v24.15.0`
 on Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz. 8 holder child processes on loopback,
 4+2, 65536-byte payloads, ledger retention
 24, 24 active blobs.
@@ -12,29 +12,29 @@ statement about disks, power loss, TLS, or multi-writer coordination.
 
 | Operation | Attempts | Success | Failure | Success rate |
 | --- | ---: | ---: | ---: | ---: |
-| Put | 5910 | 5910 | 0 | 100.0% |
-| Challenge response | 35460 | 35315 | 145 | 99.6% |
-| Audit | 5910 | 5765 | 145 under | 97.5% |
-| Repair | 145 | 145 | 0 | 100.0% |
-| Retrieval | 5910 | 5910 | 0 | 100.0% |
+| Put | 5991 | 5991 | 0 | 100.0% |
+| Challenge response | 35946 | 35798 | 148 | 99.6% |
+| Audit | 5991 | 5843 | 148 under | 97.5% |
+| Repair | 148 | 148 | 0 | 100.0% |
+| Retrieval | 5991 | 5991 | 0 | 100.0% |
 
-- Repairs filled **145** shard(s); **145** re-audits
+- Repairs filled **148** shard(s); **148** re-audits
   passed and **0** did not.
-- Holder kills: **23**; restarts: **23**;
-  transient put retries: **3**. Orphan GC removed
-  **35166** shard(s) across **470** holder scans at a zero grace period.
+- Holder kills: **22**; restarts: **22**;
+  transient put retries: **2**. Orphan GC removed
+  **35638** shard(s) across **470** holder scans at a zero grace period.
 - The audit failures are expected while a holder is down; repair is attempted on the next
   cycle, and the re-audit is the number that matters.
-- Peak client RSS: **184.0 MiB**. From 60 s onward the client RSS median was
-  **170.7 MiB** (range 150.1-184.0 MiB) while live
-  JS heap stayed at **10.5 MiB**. The retained RSS is V8 reserved heap and
+- Peak client RSS: **196.0 MiB**. From 60 s onward the client RSS median was
+  **180.3 MiB** (range 160.9-196.0 MiB) while live
+  JS heap stayed at **22.8 MiB**. The retained RSS is V8 reserved heap and
   external/allocator buffers, not live JS objects; external memory median was
-  **10.5 MiB**. Peak holder RSS (max single holder): **90.2 MiB**;
-  peak sum across live holders: **693.7 MiB**.
+  **14.8 MiB**. Peak holder RSS (max single holder): **91.8 MiB**;
+  peak sum across live holders: **709.8 MiB**.
 - Errors recorded: 0.
 - Put success moved from 99.9% in the precursor run (5 failures in 5,507 puts) to
   **100.0%** here (**0** failure(s),
-  **3** transient retries); the retry path is the evidence for the change.
+  **2** transient retries); the retry path is the evidence for the change.
 
 ### Why this profile is bounded
 
@@ -49,10 +49,10 @@ This run bounds the retention rather than changing what a put does. DurabilityLe
 is constructed with maxPlacements: 24; it evicts the oldest placement and
 its witnesses after each insert, so the ledger stays at 24
 records. Orphan shards left by eviction or repair are removed by a zero-grace holder GC
-sweep every 10 s; shard files stay around 815 (repair briefly
-adds copies). Client live heap stayed between 10.8
-and 13.8 MiB; RSS reached a warm-up plateau as V8
-reserved 144.3 MiB of heap. The default ledger remains
+sweep every 10 s; shard files stay around 800 (repair briefly
+adds copies). Client live heap stayed between 12.0
+and 43.5 MiB; RSS reached a warm-up plateau as V8
+reserved 145.6 MiB of heap. The default ledger remains
 unbounded for backwards compatibility; a long-lived client should set maxPlacements or
 call forget() when it no longer needs to challenge a placement.
 
@@ -65,34 +65,34 @@ call forget() when it no longer needs to challenge a placement.
 - Put retry: transient network failures (including a holder killed mid-upload) get up to
   six attempts with 250 ms-4 s exponential backoff and jitter; validation, auth, and quota
   errors are not retried.
-- Sampling: a forced GC runs before each 2 s memory sample (`--gc`) so the
-  table separates live heap from allocator/reserved-page retention.
+- Sampling: no forced GC is used;
+  RSS includes allocator pages that V8 has not returned.
 
 ### Memory over time
 
 | Elapsed | Client RSS | Client heap | Holder max | Holder sum | Ledger | Shard files | Holders |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1s | 77.9 MiB | 10.8 MiB | 77.7 MiB | 612.7 MiB | 0 | 0 | 8 |
-| 32s | 149.2 MiB | 9.9 MiB | 87.0 MiB | 677.4 MiB | 24 | 732 | 8 |
-| 62s | 150.1 MiB | 10.0 MiB | 88.4 MiB | 687.4 MiB | 24 | 457 | 8 |
-| 93s | 158.7 MiB | 10.1 MiB | 88.7 MiB | 692.6 MiB | 24 | 145 | 8 |
-| 123s | 160.2 MiB | 10.1 MiB | 89.4 MiB | 595.0 MiB | 24 | 234 | 7 |
-| 153s | 160.9 MiB | 10.3 MiB | 90.1 MiB | 678.1 MiB | 24 | 176 | 8 |
-| 184s | 167.5 MiB | 10.2 MiB | 86.7 MiB | 677.8 MiB | 24 | 192 | 8 |
-| 214s | 168.1 MiB | 10.5 MiB | 88.3 MiB | 673.2 MiB | 24 | 202 | 8 |
-| 244s | 168.6 MiB | 10.4 MiB | 88.9 MiB | 681.9 MiB | 24 | 222 | 8 |
-| 275s | 168.7 MiB | 10.6 MiB | 89.8 MiB | 684.2 MiB | 24 | 232 | 8 |
-| 305s | 170.2 MiB | 10.5 MiB | 87.9 MiB | 683.8 MiB | 24 | 246 | 8 |
-| 336s | 170.7 MiB | 10.5 MiB | 88.5 MiB | 680.7 MiB | 24 | 253 | 8 |
-| 366s | 177.5 MiB | 10.4 MiB | 89.5 MiB | 687.9 MiB | 24 | 264 | 8 |
-| 396s | 177.6 MiB | 10.5 MiB | 88.3 MiB | 684.4 MiB | 24 | 288 | 8 |
-| 427s | 177.7 MiB | 10.6 MiB | 89.0 MiB | 690.9 MiB | 24 | 310 | 8 |
-| 457s | 177.9 MiB | 10.5 MiB | 89.2 MiB | 610.1 MiB | 24 | 323 | 7 |
-| 488s | 178.0 MiB | 10.5 MiB | 89.3 MiB | 682.8 MiB | 24 | 399 | 8 |
-| 518s | 178.1 MiB | 10.6 MiB | 87.8 MiB | 686.9 MiB | 24 | 349 | 8 |
-| 548s | 182.7 MiB | 10.5 MiB | 87.9 MiB | 685.6 MiB | 24 | 372 | 8 |
-| 579s | 184.0 MiB | 10.7 MiB | 88.9 MiB | 692.3 MiB | 24 | 390 | 8 |
-| 599s | 184.0 MiB | 10.5 MiB | 89.0 MiB | 690.6 MiB | 24 | 390 | 8 |
+| 1s | 81.8 MiB | 12.0 MiB | 79.6 MiB | 624.4 MiB | 0 | 0 | 8 |
+| 32s | 156.2 MiB | 14.7 MiB | 89.5 MiB | 696.0 MiB | 24 | 732 | 8 |
+| 62s | 160.9 MiB | 19.0 MiB | 90.7 MiB | 702.1 MiB | 24 | 462 | 8 |
+| 92s | 168.7 MiB | 24.5 MiB | 91.2 MiB | 621.3 MiB | 24 | 351 | 7 |
+| 123s | 170.9 MiB | 17.6 MiB | 89.8 MiB | 693.2 MiB | 24 | 172 | 8 |
+| 153s | 173.4 MiB | 17.5 MiB | 88.9 MiB | 694.2 MiB | 24 | 144 | 8 |
+| 183s | 173.5 MiB | 32.6 MiB | 89.2 MiB | 693.3 MiB | 24 | 150 | 8 |
+| 213s | 177.6 MiB | 21.4 MiB | 88.8 MiB | 686.9 MiB | 24 | 157 | 8 |
+| 244s | 179.8 MiB | 26.9 MiB | 89.0 MiB | 695.1 MiB | 24 | 168 | 8 |
+| 274s | 179.9 MiB | 12.2 MiB | 90.6 MiB | 697.3 MiB | 24 | 174 | 8 |
+| 304s | 180.0 MiB | 12.2 MiB | 91.4 MiB | 696.9 MiB | 24 | 180 | 8 |
+| 334s | 180.4 MiB | 17.9 MiB | 91.8 MiB | 612.0 MiB | 24 | 258 | 7 |
+| 365s | 180.4 MiB | 29.7 MiB | 88.8 MiB | 688.9 MiB | 24 | 199 | 8 |
+| 395s | 182.1 MiB | 31.9 MiB | 88.1 MiB | 681.7 MiB | 24 | 210 | 8 |
+| 425s | 183.8 MiB | 33.9 MiB | 88.6 MiB | 689.0 MiB | 24 | 217 | 8 |
+| 456s | 184.9 MiB | 21.0 MiB | 88.3 MiB | 687.4 MiB | 24 | 228 | 8 |
+| 486s | 184.8 MiB | 19.4 MiB | 88.8 MiB | 603.4 MiB | 24 | 246 | 7 |
+| 516s | 185.0 MiB | 32.5 MiB | 89.7 MiB | 690.2 MiB | 24 | 246 | 8 |
+| 546s | 185.6 MiB | 21.0 MiB | 90.8 MiB | 695.3 MiB | 24 | 264 | 8 |
+| 577s | 195.3 MiB | 31.9 MiB | 89.1 MiB | 602.2 MiB | 24 | 336 | 7 |
+| 599s | 195.9 MiB | 32.5 MiB | 89.1 MiB | 604.8 MiB | 24 | 391 | 7 |
 
 ### Caveats
 

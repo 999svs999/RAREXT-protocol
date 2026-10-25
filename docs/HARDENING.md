@@ -115,7 +115,12 @@ this end to end (signed placement, fresh registry load, kill, repair, re-audit, 
 retrieval at 8 MiB). A retry-enabled 10-minute local chaos run (604 s) completed 5,910
 puts (100%), 5,910 retrievals (100%), 145 repairs (100%), and 145 post-repair
 re-audits (100%) with 23 random holder kills and restarts; median client RSS after
-warm-up was 170.7 MiB and live heap was about 10.5 MiB. The earlier 611 s run completed
+warm-up was 170.7 MiB and live heap was about 10.5 MiB. Re-run on 2026-10-26
+(600 s, `bench/storage/soak-2026-10-26.log`): 5,991 puts (100%), 5,991 retrievals
+(100%), 148 repairs (100%) with 148 re-audits passing, 22 kills, 2 transient put
+retries; peak client RSS 196.0 MiB (median 180.3) with a 22.8 MiB live heap, peak
+holder RSS 91.8 MiB. Across three runs the completion rate is 100% every time and
+the RSS band is 196-249 MiB — the invariant to trust is the completion rate. The earlier 611 s run completed
 143 repairs at 99.9% puts, which motivated the retry change. Repair throughput at 100 GiB
 and concurrent repairs are unmeasured.
 
