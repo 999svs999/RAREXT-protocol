@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Published claims are checked against the code (`npm run claim:check`).** The
+  availability-sampling table in RFC 0010 and the MDS floor `1 + m/k` cited in
+  `docs/HARDENING.md` and `docs/STORAGE-FRONTIER.md` are now re-derived from
+  `samplesForMissingFraction` and from the codec's own shard sizes, with the table parsed
+  out of the RFC itself so editing either the document or the implementation alone fails
+  the check. Verified: all four published rows match (20%→21/31, 10%→44/66, 5%→90/134,
+  1%→444/657), the prose holds (44 samples miss 10% withholding with probability 0.957%,
+  costing 0.48% of the media), and the codec measures the floor at 1.5000x for `4 + 2`,
+  1.4001x for `10 + 4`, 1.3334x for `3 + 1`. `--self-test` asserts the checker reports a
+  doctored row as a mismatch, so a passing run means something. Runs inside
+  `scripts/ci.sh`.
 - **The operator and placement gates are pinned branch by branch (hardening).** A sweep
   for store-shaped methods with no in-body type check produced four candidates; all four
   are gated before they store anything, so the sweep found no defect and is recorded as a
