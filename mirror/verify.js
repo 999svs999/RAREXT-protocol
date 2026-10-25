@@ -388,7 +388,7 @@ function localAiCheck(publication, spec) {
   }
   return null;
 }
-async function mediaFor(publication, spec, blobBytes) {
+async function mediaFor(publication, spec, blobBytes, representation) {
   const body = publication.artifact?.body;
   if (!body) return null;
   let raster = null;
@@ -427,7 +427,25 @@ async function mediaFor(publication, spec, blobBytes) {
       }
     }
   }
-  if (!media) return null;
+  if (!media) {
+    if (body.media !== void 0 && body.media !== null) {
+      const shape = typeof body.media === "object" ? body.media : {};
+      const rule = typeof shape.rule === "string" ? shape.rule : "an unknown rule";
+      return {
+        blob: "",
+        raster: "",
+        size: null,
+        width: null,
+        height: null,
+        reDerived: null,
+        matches: null,
+        blobMatches: null,
+        unverifiable: true,
+        reason: `declared a ${representation ?? "unknown"} rendition under ${rule} that this reader cannot check`
+      };
+    }
+    return null;
+  }
   let reDerived = null;
   if (raster) {
     try {
@@ -448,7 +466,9 @@ async function mediaFor(publication, spec, blobBytes) {
     height: geometry.height,
     reDerived,
     matches: reDerived === null ? null : reDerived === media.raster,
-    blobMatches
+    blobMatches,
+    unverifiable: null,
+    reason: null
   };
 }
 function base64ToBytes(value) {
@@ -474,14 +494,15 @@ async function aiClaimsFor(bundle, challenges, media) {
     let mediaEvidence = null;
     if (committed) {
       const body = publication.artifact?.body;
-      const hash = body?.media?.blob;
-      if (typeof hash === "string") {
-        const encoded = media?.[hash];
+      if (body?.media !== void 0 && body?.media !== null) {
+        const hash = body.media.blob;
+        const encoded = typeof hash === "string" ? media?.[hash] : void 0;
         const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : void 0;
         mediaEvidence = await mediaFor(
           publication,
           spec,
-          bytes
+          bytes,
+          representation
         );
       }
     }
