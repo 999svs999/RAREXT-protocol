@@ -1,11 +1,13 @@
 import {
   canonicalize,
+  isBoundedMedia,
   isGenerativeMedia,
   leafPayload,
+  renderBoundedRaster,
   renderRaster,
   verifyAiArtifact,
 } from "@rarext/core";
-import type { AiLocalVerification, Publication } from "@rarext/core";
+import type { AiLocalVerification, Challenge, Publication } from "@rarext/core";
 
 /**
  * The browser-side mirror verifier.
@@ -23,6 +25,8 @@ export interface Bundle {
     publications: { id: string; leaf: string }[];
   };
   publications: Publication[];
+  /** Challenge specs are optional; a caller may supply them separately. */
+  challenges?: Challenge[];
 }
 
 export interface BundleVerification {
@@ -77,7 +81,10 @@ export interface AiMediaEvidence {
   blob: string;
   /** Digest of the raw raster the artifact committed. */
   raster: string;
-  size: number;
+  /** Generative renditions are square; bounded plots carry explicit geometry. */
+  size: number | null;
+  width: number | null;
+  height: number | null;
   /** sha256 of the raster re-derived here from the committed model and seed. */
   reDerived: string | null;
   /** reDerived === raster: the picture really is a function of the commitment. */
@@ -229,24 +236,65 @@ function localAiCheck(
  */
 async function mediaFor(
   publication: Publication,
+  spec: Record<string, unknown> | undefined,
   blobBytes: Uint8Array | undefined,
 ): Promise<AiMediaEvidence | null> {
-  const body = publication.artifact?.body as { model?: unknown; seed?: unknown; media?: unknown } | undefined;
-  if (!body || typeof body.seed !== "number" || !isGenerativeMedia(body.media)) {
-    return null;
+  const body = publication.artifact?.body as
+    | { model?: unknown; seed?: unknown; values?: unknown; media?: unknown }
+    | undefined;
+  if (!body) return null;
+
+  let raster: Uint8Array | null = null;
+  let geometry: { size: number | null; width: number | null; height: number | null } = {
+    size: null,
+    width: null,
+    height: null,
+  };
+  let media: { blob: string; raster: string } | null = null;
+
+  // Generative: the picture is a function of the committed model and seed.
+  if (typeof body.seed === "number" && isGenerativeMedia(body.media)) {
+    media = body.media;
+    geometry = { size: body.media.size, width: body.media.size, height: body.media.size };
+    try {
+      raster = renderRaster(
+        body.model as Parameters<typeof renderRaster>[0],
+        body.seed,
+        body.media.size,
+      );
+    } catch {
+      raster = null;
+    }
+  } else if (isBoundedMedia(body.media)) {
+    // Bounded: the plot is a function of the committed reference and the
+    // artifact's own reconstruction. Both sit inside the claim, so a reader
+    // re-derives the measurement's picture instead of trusting the blob.
+    media = body.media;
+    geometry = { size: null, width: body.media.width, height: body.media.height };
+    const reference = spec?.reference;
+    if (Array.isArray(reference) && Array.isArray(body.values)) {
+      try {
+        raster = renderBoundedRaster(
+          reference as number[],
+          body.values as number[],
+          body.media.width,
+          body.media.height,
+        );
+      } catch {
+        raster = null;
+      }
+    }
   }
-  const media = body.media;
+
+  if (!media) return null;
 
   let reDerived: string | null = null;
-  try {
-    const raster = renderRaster(
-      body.model as Parameters<typeof renderRaster>[0],
-      body.seed,
-      media.size,
-    );
-    reDerived = await sha256BytesHex(raster);
-  } catch {
-    reDerived = null;
+  if (raster) {
+    try {
+      reDerived = await sha256BytesHex(raster);
+    } catch {
+      reDerived = null;
+    }
   }
 
   let blobMatches: boolean | null = null;
@@ -257,7 +305,9 @@ async function mediaFor(
   return {
     blob: media.blob,
     raster: media.raster,
-    size: media.size,
+    size: geometry.size,
+    width: geometry.width,
+    height: geometry.height,
     reDerived,
     matches: reDerived === null ? null : reDerived === media.raster,
     blobMatches,
@@ -314,7 +364,11 @@ async function aiClaimsFor(
       if (typeof hash === "string") {
         const encoded = media?.[hash];
         const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : undefined;
-        mediaEvidence = await mediaFor(publication, bytes);
+        mediaEvidence = await mediaFor(
+          publication,
+          spec as Record<string, unknown> | undefined,
+          bytes,
+        );
       }
     }
 

@@ -17,8 +17,14 @@ import {
   verifyAiArtifact,
   verifyBoundedReconstruction,
   verifyGenerativeReplay,
+  BOUNDED_RASTER_GAIN,
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  BOUNDED_RASTER_SCALE,
+  isBoundedMedia,
   isGenerativeMedia,
   RASTER_RULE,
+  renderBoundedRaster,
   renderRaster,
 } from "../src/ai.ts";
 
@@ -184,4 +190,53 @@ test("isGenerativeMedia accepts a well-formed commitment and nothing sloppier", 
   assert.equal(isGenerativeMedia({ ...media, size: 0 }), false);
   assert.equal(isGenerativeMedia({ ...media, mediaType: "image/svg+xml" }), false);
   assert.equal(isGenerativeMedia(null), false);
+});
+
+test("renderBoundedRaster plots the committed measurement deterministically", () => {
+  const reference = [10, 20, 30, 40, 200, 255, 0, 128];
+  const reconstruction = reference.map((v) => Math.min(255, v + 2));
+  const width = reference.length * BOUNDED_RASTER_SCALE;
+
+  const first = renderBoundedRaster(reference, reconstruction);
+  assert.equal(first.length, width * BOUNDED_RASTER_HEIGHT * 3);
+  assert.deepEqual(
+    Array.from(first),
+    Array.from(renderBoundedRaster(reference, reconstruction)),
+  );
+
+  // The reference lane is the reference value as grey.
+  assert.equal(first[(0 * width + 0) * 3], 10);
+  // The error lane is |difference| * gain, in red only.
+  const laneTwoStart = 2 * (48 + 4);
+  const errorOffset = ((laneTwoStart + 1) * width + 0) * 3;
+  assert.equal(first[errorOffset], 2 * BOUNDED_RASTER_GAIN);
+  assert.equal(first[errorOffset + 1], 0);
+  assert.equal(first[errorOffset + 2], 0);
+
+  // A different reconstruction is a different picture.
+  const shifted = reconstruction.map((v, i) => (i === 0 ? v + 16 : v));
+  assert.notDeepEqual(Array.from(first), Array.from(renderBoundedRaster(reference, shifted)));
+});
+
+test("renderBoundedRaster refuses a mismatched pair instead of guessing", () => {
+  assert.throws(() => renderBoundedRaster([1, 2, 3], [1, 2]));
+  assert.throws(() => renderBoundedRaster([], []));
+  assert.throws(() => renderBoundedRaster([1], [1], 0));
+});
+
+test("isBoundedMedia accepts the plotted rendition and nothing sloppier", () => {
+  const media = {
+    mediaType: "image/png" as const,
+    rule: BOUNDED_RASTER_RULE,
+    blob: "c".repeat(64),
+    raster: "d".repeat(64),
+    width: 128,
+    height: BOUNDED_RASTER_HEIGHT,
+    bytes: 512,
+  };
+  assert.equal(isBoundedMedia(media), true);
+  assert.equal(isBoundedMedia({ ...media, rule: "bounded-strip-v2" }), false);
+  assert.equal(isBoundedMedia({ ...media, height: 0 }), false);
+  assert.equal(isBoundedMedia({ ...media, raster: "zz" }), false);
+  assert.equal(isBoundedMedia(undefined), false);
 });

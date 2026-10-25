@@ -61,6 +61,15 @@ or a hand-drawn replacement fails both checks, and neither check trusts the
 mirror or the attestation. The raw-raster digest is the commitment, so the
 result does not depend on which PNG encoder produced the file.
 
+An `ai.bounded` artifact can carry a rendition too, and there the picture *is*
+the measurement: rule `bounded-strip-v1` draws the committed reference in one
+lane, the artifact's own reconstruction in a second, and the absolute error
+amplified by a fixed gain in a third. A reconstruction inside a tight bound
+shows an almost blank error lane; a violation glows. The input is the committed
+reference plus the reconstruction the artifact already carries, so a reader
+re-derives the plot from data the claim covers — the bound stops being a number
+in a JSON field and becomes something checkable by eye and by digest.
+
 ## Bounded: lossy reconstructions with a promise
 
 Real model classes — quantized weights, compressed embeddings, neural codec

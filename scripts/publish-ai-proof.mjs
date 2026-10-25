@@ -58,6 +58,8 @@ const boundedBody = boundedChallenge.sampleArtifact.body;
 // trusting an uploaded file. The raster digest is the encoder-independent
 // part; the PNG blob is one faithful encoding of that raster.
 const RASTER_SIZE = 64;
+const boundedPngWidth = boundedChallenge.spec.reference.length * core.BOUNDED_RASTER_SCALE;
+const boundedPngHeight = core.BOUNDED_RASTER_HEIGHT;
 const raster = core.renderRaster(genBody.model, genBody.seed, RASTER_SIZE);
 const rasterDigest = createHash("sha256").update(raster).digest("hex");
 const png = encodePngRaster(raster, RASTER_SIZE);
@@ -84,6 +86,44 @@ genBody.media = {
 };
 console.log(
   `rendition stored: blob ${renditionBlob.hash.slice(0, 16)}… raster ${rasterDigest.slice(0, 16)}… (${png.length} bytes)`,
+);
+
+// 3b. The bounded class gets the same treatment, and here the picture is the
+// measurement itself: reference lane, reconstruction lane, and the absolute
+// error amplified by a fixed gain. A reconstruction inside the committed bound
+// looks almost blank in the error lane — the promise becomes something the
+// reader can see and re-derive, not just a number in a JSON field.
+const boundedRaster = core.renderBoundedRaster(
+  boundedChallenge.spec.reference,
+  boundedBody.values,
+);
+const boundedRasterDigest = createHash("sha256").update(boundedRaster).digest("hex");
+const boundedPng = encodePngRaster(boundedRaster, boundedPngWidth, boundedPngHeight);
+const boundedStoreResponse = await fetch(`${base}/v1/blobs`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    content: boundedPng.toString("base64"),
+    encoding: "base64",
+    mediaType: "image/png",
+  }),
+});
+if (!boundedStoreResponse.ok) {
+  throw new Error(`bounded rendition store failed: ${boundedStoreResponse.status}`);
+}
+const boundedBlob = await boundedStoreResponse.json();
+
+boundedBody.media = {
+  mediaType: "image/png",
+  rule: core.BOUNDED_RASTER_RULE,
+  blob: boundedBlob.hash,
+  raster: boundedRasterDigest,
+  width: boundedPngWidth,
+  height: boundedPngHeight,
+  bytes: boundedPng.length,
+};
+console.log(
+  `bounded rendition stored: blob ${boundedBlob.hash.slice(0, 16)}… raster ${boundedRasterDigest.slice(0, 16)}… (${boundedPng.length} bytes)`,
 );
 
 // 4. Publish REAL generative + bounded publications, signed by the agent.
@@ -330,6 +370,15 @@ const blobs = await writeMirrorBlobs({
       publicationId: genPublication.id,
       challengeId: "gen-starter",
       title: genPublication.title,
+    },
+    {
+      blob: boundedBody.media.blob,
+      raster: boundedBody.media.raster,
+      app: "ai-bounded",
+      representation: "bounded",
+      publicationId: boundedPublication.id,
+      challengeId: "bounded-starter",
+      title: boundedPublication.title,
     },
   ],
 });

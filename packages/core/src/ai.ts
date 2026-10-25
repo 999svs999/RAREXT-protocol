@@ -153,6 +153,13 @@ export interface BoundedBody {
   values: number[];
   /** Optional codec label — descriptive only, never trusted for correctness. */
   codec?: string;
+  /**
+   * Optional media rendition, additive like the generative one: a plot of the
+   * committed reference against this reconstruction, with the error amplified
+   * so the committed bound is something a reader can see rather than take on
+   * faith. Bodies without it verify exactly as before.
+   */
+  media?: BoundedMedia;
 }
 
 export interface BoundedSpec {
@@ -383,4 +390,136 @@ export function renderRaster(
   }
 
   return out;
+}
+
+/**
+ * Renditions for the bounded class. The generative rule draws a picture from a
+ * model; this one draws a picture of the measurement. Two lanes show the
+ * committed reference and the artifact's reconstruction side by side, and a
+ * third lane shows the absolute error amplified by a fixed gain, so a
+ * reconstruction inside a tight bound looks almost blank and a violation
+ * glows. The picture is a pure function of (reference, reconstruction, gain,
+ * geometry) — all of which the commitment already covers — so a reader can
+ * re-derive it and compare digests.
+ *
+ * Rule id `bounded-strip-v1`, spelled out:
+ *   columns = reference.length, scaled to `SCALE` pixels each
+ *   lane 0: reference[i] as grey (v,v,v)
+ *   lane 1: reconstruction[i] as grey (v,v,v)
+ *   lane 2: min(255, |reference[i] - reconstruction[i]| * ERROR_GAIN) in red
+ *   lanes are separated by a 4-pixel black gutter; lanes beyond the data are
+ *   filled black
+ */
+export const BOUNDED_RASTER_RULE = "bounded-strip-v1";
+export const BOUNDED_RASTER_SCALE = 16;
+export const BOUNDED_RASTER_LANE = 48;
+export const BOUNDED_RASTER_GUTTER = 4;
+export const BOUNDED_RASTER_GAIN = 32;
+export const MAX_BOUNDED_RASTER_WIDTH = 4096;
+
+export interface BoundedMedia {
+  mediaType: "image/png";
+  rule: string;
+  blob: string;
+  raster: string;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
+export function isBoundedMedia(value: unknown): value is BoundedMedia {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value as Partial<BoundedMedia>;
+  return (
+    media.mediaType === "image/png" &&
+    media.rule === BOUNDED_RASTER_RULE &&
+    typeof media.blob === "string" &&
+    /^[0-9a-f]{64}$/.test(media.blob) &&
+    typeof media.raster === "string" &&
+    /^[0-9a-f]{64}$/.test(media.raster) &&
+    Number.isInteger(media.width) &&
+    media.width! >= 1 &&
+    media.width! <= MAX_BOUNDED_RASTER_WIDTH &&
+    Number.isInteger(media.height) &&
+    media.height! >= 1 &&
+    media.height! <= MAX_BOUNDED_RASTER_WIDTH &&
+    Number.isInteger(media.bytes) &&
+    media.bytes! >= 1
+  );
+}
+
+export const BOUNDED_RASTER_HEIGHT =
+  3 * BOUNDED_RASTER_LANE + 2 * BOUNDED_RASTER_GUTTER;
+
+/** Pure, deterministic plot of the committed measurement — see the rule above. */
+export function renderBoundedRaster(
+  reference: number[],
+  reconstruction: number[],
+  width?: number,
+  height: number = BOUNDED_RASTER_HEIGHT,
+): Uint8Array {
+  if (!Array.isArray(reference) || reference.length < 1) {
+    throw new Error("renderBoundedRaster: reference must be a non-empty array");
+  }
+  if (!Array.isArray(reconstruction) || reconstruction.length !== reference.length) {
+    throw new Error("renderBoundedRaster: reconstruction must match the reference length");
+  }
+  if (reference.length > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: at most ${MAX_BOUNDED_RASTER_WIDTH} values`);
+  }
+
+  const w = width ?? reference.length * BOUNDED_RASTER_SCALE;
+  if (!Number.isInteger(w) || w < 1 || w > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: width must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+  if (!Number.isInteger(height) || height < 1 || height > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: height must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+
+  const raster = new Uint8Array(w * height * 3);
+  const lane = BOUNDED_RASTER_LANE;
+  const gutter = BOUNDED_RASTER_GUTTER;
+  const laneStarts = [0, lane + gutter, 2 * (lane + gutter)];
+
+  for (let x = 0; x < w; x++) {
+    const index = Math.min(
+      reference.length - 1,
+      Math.floor((x * reference.length) / w),
+    );
+    const grey = clampByte(reference[index]!);
+    const reconstructionGrey = clampByte(reconstruction[index]!);
+    const error = clampByte(Math.abs(reference[index]! - reconstruction[index]!) * BOUNDED_RASTER_GAIN);
+
+    for (let y = 0; y < height; y++) {
+      const offset = (y * w + x) * 3;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+
+      if (y < lane) {
+        r = g = b = grey;
+      } else if (y < lane + gutter) {
+        // gutter stays black
+      } else if (y < laneStarts[1]! + lane) {
+        r = g = b = reconstructionGrey;
+      } else if (y < laneStarts[1]! + lane + gutter) {
+        // gutter stays black
+      } else if (y < laneStarts[2]! + lane) {
+        r = error;
+      }
+
+      raster[offset] = r;
+      raster[offset + 1] = g;
+      raster[offset + 2] = b;
+    }
+  }
+
+  return raster;
+}
+
+function clampByte(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  if (value >= 255) return 255;
+  return Math.round(value);
 }

@@ -3,14 +3,19 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  BOUNDED_RASTER_SCALE,
   canonicalize,
   generate,
   leafPayload,
   RASTER_RULE,
+  renderBoundedRaster,
   renderRaster,
 } from "@rarext/core";
 import type { Publication } from "@rarext/core";
 
+import { encodePngRaster } from "../../../scripts/png-raster.mjs";
 import { localVerdict, verifyBundle, type Bundle } from "../src/verify.ts";
 
 /**
@@ -486,4 +491,60 @@ test("a local AI failure overrides a server pass", () => {
 test("without a usable spec the local check stays null, not a guess", async () => {
   const result = await verifyBundle(bundle([aiPublication("ai-1")]));
   assert.equal(result.aiClaims[0]!.local, null);
+});
+
+test("the browser re-derives a bounded rendition from the committed measurement", async () => {
+  const reference = [10, 20, 30, 40, 200, 255, 0, 128];
+  const values = reference.map((v) => Math.min(255, v + 2));
+
+  // The picture the pipeline would publish: reference lane, reconstruction
+  // lane, amplified error lane.
+  const raster = renderBoundedRaster(reference, values);
+  const width = reference.length * BOUNDED_RASTER_SCALE;
+  const png = encodePngRaster(raster, width, BOUNDED_RASTER_HEIGHT);
+  const rasterDigest = createHash("sha256").update(raster).digest("hex");
+  const blob = createHash("sha256").update(png).digest("hex");
+
+  const pub = aiPublication("ai-plot");
+  pub.artifact = {
+    app: "ai-bounded",
+    kind: "ai.bounded",
+    version: 1,
+    mediaType: "application/json",
+    body: {
+      values,
+      media: {
+        mediaType: "image/png",
+        rule: BOUNDED_RASTER_RULE,
+        blob,
+        raster: rasterDigest,
+        width,
+        height: BOUNDED_RASTER_HEIGHT,
+        bytes: png.length,
+      },
+    },
+  } as typeof pub.artifact;
+
+  const spec = { "bounded-starter": { metric: "maxAbsError", bound: 4, reference } };
+  const result = await verifyBundle(bundle([pub]), spec, undefined, {
+    [blob]: Buffer.from(png).toString("base64"),
+  });
+
+  const claim = result.aiClaims[0]!;
+  assert.ok(claim.media);
+  assert.equal(claim.media.width, width);
+  assert.equal(claim.media.height, BOUNDED_RASTER_HEIGHT);
+  assert.equal(claim.media.matches, true, "the plot must re-derive from the commitment");
+  assert.equal(claim.media.blobMatches, true, "the stored bytes must hash to the committed blob");
+  assert.equal(claim.media.reDerived, rasterDigest);
+
+  // A different reconstruction is a different picture: point the artifact at
+  // bytes that do not match its own numbers and the reader catches it.
+  const shifted = { ...pub } as Publication;
+  shifted.artifact = {
+    ...pub.artifact,
+    body: { values: values.map((v) => v + 8), media: (pub.artifact.body as { media: unknown }).media },
+  } as typeof pub.artifact;
+  const caught = await verifyBundle(bundle([shifted]), spec);
+  assert.equal(caught.aiClaims[0]!.media?.matches, false);
 });

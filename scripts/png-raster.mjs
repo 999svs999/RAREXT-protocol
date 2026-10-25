@@ -32,16 +32,19 @@ function chunk(type, data) {
   return Buffer.concat([length, body, crc]);
 }
 
-export function encodePngRaster(raster, size) {
+export function encodePngRaster(raster, width, height = width) {
   if (!(raster instanceof Uint8Array)) throw new Error("encodePngRaster: raster must be a Uint8Array");
-  if (!Number.isInteger(size) || size < 1) throw new Error("encodePngRaster: bad size");
-  if (raster.length !== size * size * 3) {
-    throw new Error(`encodePngRaster: expected ${size * size * 3} bytes, got ${raster.length}`);
+  if (!Number.isInteger(width) || width < 1) throw new Error("encodePngRaster: bad width");
+  if (!Number.isInteger(height) || height < 1) throw new Error("encodePngRaster: bad height");
+  if (raster.length !== width * height * 3) {
+    throw new Error(
+      `encodePngRaster: expected ${width * height * 3} bytes, got ${raster.length}`,
+    );
   }
 
-  const stride = size * 3;
-  const raw = Buffer.alloc(size * (1 + stride));
-  for (let y = 0; y < size; y++) {
+  const stride = width * 3;
+  const raw = Buffer.alloc(height * (1 + stride));
+  for (let y = 0; y < height; y++) {
     raw[y * (1 + stride)] = 0; // filter: none
     Buffer.from(raster.buffer, raster.byteOffset + y * stride, stride).copy(
       raw,
@@ -50,8 +53,8 @@ export function encodePngRaster(raster, size) {
   }
 
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 2; // colour type: truecolour RGB
 
