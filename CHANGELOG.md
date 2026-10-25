@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **One anchor per batch (hardening).** `anchorPending` read the pending set, awaited
+  the anchoring adapter, and only then committed — so two overlapping calls both read
+  the same batch and both committed it. Measured before the fix: two anchors, the same
+  root, the same publications in each, and two adapter submissions. Overlapping calls
+  now share a single anchor (same id, same root, one submission). The HTTP route had
+  hidden this because one keep-alive connection serializes requests, but the function
+  has two call sites and their interleaving was reachable. The anchoring suite goes
+  from 2 cases to 11 — concurrency, proof refusals, post-anchor tampering, restart
+  durability, root-vs-leaves recomputation, a dead rail, and threshold parsing — and
+  the guarantees are written into `docs/ARCHITECTURE.md`.
 - **Renditions are checked where they are attested (hardening).** The verifiers
   re-derive an AI artifact's picture from its commitment and reject a rendition
   that is not the function of it. Measured before the fix, four attacks were all

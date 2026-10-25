@@ -22,9 +22,39 @@ export function publicationLeaf(
   return sha256(canonicalize(leafPayload(publication, version)));
 }
 
-export async function anchorPending(
+/**
+ * One anchor at a time per store.
+ *
+ * `anchorPending` reads the pending set, awaits the adapter (a network hop for
+ * a real chain rail) and only then commits the anchor. Two overlapping calls
+ * therefore both read the same batch and both commit — measured: two anchors,
+ * same root, the same three publications in each. The HTTP route happens to
+ * serialize on one keep-alive connection, which is why this stayed invisible,
+ * but the function has two call sites (the automatic anchor-on-publish path and
+ * an explicit POST), and their interleaving is reachable.
+ *
+ * A second caller while one is in flight now shares the same result instead of
+ * anchoring the batch again: same anchor id, same root, one adapter submission.
+ */
+const inflight = new WeakMap<RarextStore, Promise<Anchor | null>>();
+
+export function anchorPending(
   store: RarextStore,
   registry: AdapterRegistry = createDefaultRegistry(),
+): Promise<Anchor | null> {
+  const running = inflight.get(store);
+  if (running) return running;
+
+  const attempt = commitAnchor(store, registry).finally(() => {
+    inflight.delete(store);
+  });
+  inflight.set(store, attempt);
+  return attempt;
+}
+
+async function commitAnchor(
+  store: RarextStore,
+  registry: AdapterRegistry,
 ): Promise<Anchor | null> {
   const pending = store.pendingPublications();
 

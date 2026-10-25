@@ -40,6 +40,35 @@ The store persists publications, profiles, identities, key rotations, delegation
 by default. `RAREXT_DATA=none` restores ephemeral behavior for tests and demos. Writes use a
 temp file plus rename so a crash cannot leave a half-written store.
 
+### Anchoring: what the commitment guarantees
+
+An anchor is the commitment every later verification leans on, so its properties are
+stated rather than implied.
+
+- **The root is the Merkle root of the leaves.** It is not merely stable across
+  nodes: an independent recomputation over the same publications, in the order the
+  anchor lists them, produces the anchored root. Order is part of the commitment, so
+  the same leaves in another order are a different root.
+- **A tampered publication fails its own proof.** Rewriting stored bytes after
+  anchoring makes the recomputed leaf miss the anchored root, and the proof reports
+  `valid: false` rather than staying quiet.
+- **A publication outside the anchor is refused, not reported unproven** (HTTP 409),
+  and an unknown anchor is 404 — an inconclusive proof and an absent one are
+  different answers.
+- **One anchor per batch.** Overlapping anchor calls share a single anchor (same id,
+  same root, one adapter submission) instead of committing the batch twice. Measured
+  before the fix: two concurrent calls produced two anchors for the same
+  publications, because the pending set was read before the adapter await and
+  committed after it. The HTTP route hid this — one keep-alive connection serializes
+  requests — but the function has two call sites (the automatic anchor-on-publish
+  path and an explicit `POST /v1/anchors`), and their interleaving was reachable.
+- **A dead rail does not lose the commitment.** If the anchoring adapter fails, the
+  anchor is still recorded locally (`adapter: "local"`, `reference: null`) and the
+  failure appears in the receipts, so a rail outage degrades the proof's *reach*
+  rather than its existence.
+- **Anchors survive restart.** Anchored publications are not pending again after a
+  restart, and a stored proof still verifies.
+
 Everything else is a stub with a README and an explicit plan.
 
 ## Registry, not a chain
