@@ -378,6 +378,55 @@ test("POST /v1/blobs returns 201 and GET returns the exact bytes", async () => {
   }
 });
 
+test("GET /v1/blobs/<hash>/raw serves bytes with the stored media type", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rarext-blobs-raw-"));
+  const store = new BlobStore(join(root, "blobs"));
+  const { RarextStore } = await import("../src/store.ts");
+  const { start, stop, post } = await import("./helpers.ts");
+  const { server, base } = await start(new RarextStore(), { blobs: store });
+
+  try {
+    const png = Buffer.from(
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+        "01f15c4890000000a49444154789c6300010000050001" +
+        "0d0a2db4",
+      "hex",
+    );
+    const put = await post(base, "/v1/blobs", {
+      content: png.toString("base64"),
+      encoding: "base64",
+      mediaType: "image/png",
+    });
+    assert.equal(put.status, 201);
+    const { hash } = (await put.json()) as { hash: string };
+
+    const raw = await fetch(`${base}/v1/blobs/${hash}/raw`);
+    assert.equal(raw.status, 200);
+    assert.equal(raw.headers.get("content-type"), "image/png");
+    assert.equal(raw.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    const bytes = Buffer.from(await raw.arrayBuffer());
+    assert.equal(bytes.toString("hex"), png.toString("hex"));
+
+    // A junk media type cannot become a header (no CRLF injection): the
+    // response falls back to octet-stream.
+    const junk = await post(base, "/v1/blobs", {
+      content: "x",
+      mediaType: "text/plain\r\nX-Evil: 1",
+    });
+    assert.equal(junk.status, 201);
+    const junkHash = (await junk.json()) as { hash: string };
+    const safe = await fetch(`${base}/v1/blobs/${junkHash.hash}/raw`);
+    assert.equal(safe.headers.get("content-type"), "application/octet-stream");
+    assert.equal(safe.headers.get("x-evil"), null);
+
+    const missing = await fetch(`${base}/v1/blobs/${"1".repeat(64)}/raw`);
+    assert.equal(missing.status, 404);
+  } finally {
+    await stop(server);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("repair with fewer than k shards live is refused before any write", async () => {
   const { holders, cleanup } = setup(8);
 

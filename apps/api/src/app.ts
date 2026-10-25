@@ -1916,10 +1916,38 @@ export function createApp(options: AppOptions = {}): AppServer {
       if (req.method === "GET" && pathname.startsWith("/v1/blobs/")) {
         const rest = pathname.slice("/v1/blobs/".length);
         const proofRequested = rest.endsWith("/proof");
-        const hash = proofRequested ? rest.slice(0, -"/proof".length) : rest;
+        const rawRequested = rest.endsWith("/raw");
+        const hash = proofRequested || rawRequested
+          ? rest.slice(0, -(proofRequested ? "/proof" : "/raw").length)
+          : rest;
 
         if (proofRequested) {
           send(res, 200, blobInclusionProof(hash));
+          return;
+        }
+
+        // Raw bytes with the stored media type: this is what a website's
+        // <img>/<audio>/<video> tags point at. A hash is immutable, so the
+        // response is safe to cache forever.
+        if (rawRequested) {
+          const raw = blobs.get(hash);
+          if (!raw) {
+            send(res, 404, { error: "blob not found" });
+            return;
+          }
+          // Loose sanity check: a media type is two token runs joined by a
+          // slash, with optional parameters. Anything else (CR/LF injection,
+          // junk) falls back to octet-stream, which browsers download
+          // instead of executing.
+          const type = /^[\w.+-]+\/[\w.+-]+(;[\w-]+=[\w.-]+)*$/.test(raw.record.mediaType)
+            ? raw.record.mediaType
+            : "application/octet-stream";
+          res.writeHead(200, {
+            "content-type": type,
+            "content-length": raw.bytes.length,
+            "cache-control": "public, max-age=31536000, immutable",
+          });
+          res.end(raw.bytes);
           return;
         }
 
