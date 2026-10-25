@@ -20,11 +20,15 @@ reviews the deployed bytecode and closes the open review items.
   to a chain you name explicitly.
 - `scripts/deploy-anchor-testnet.mjs` — guarded funded-testnet wrapper that runs
   the deploy script and writes a deployment record with audit flags.
+- `scripts/audit-package.mjs` — builds and verifies a deterministic auditor
+  package with source, tests, compiled artifacts, storage layout, and checksums.
 - `test/anchor.test.mjs` — local-EVM tests for publication, authorization,
   pausing, ownership, upgrades, the metadata bound, and the compatibility read
   and write shapes.
 - `test/anchor-deploy.test.mjs` — tests for the testnet chain guard and deployment
   record flags.
+- `test/audit-package.test.mjs` — tests for package contents, checksums, and
+  tamper detection.
 - `test/RarextAnchorV2.sol` — a test-only implementation used to prove that an
   upgrade preserves state.
 
@@ -64,6 +68,28 @@ npm run test:contracts
 
 The tests run against an in-process `@ethereumjs/vm` node. They do not need an
 RPC endpoint, a funded key, or a network. `npm test` includes them.
+
+## Audit package
+
+Build and verify the auditor package:
+
+```bash
+npm run audit:package
+npm run audit:package:verify -- dist/audit/rarext-anchor
+```
+
+The gitignored package contains the exact source, tests, scripts, runbooks, and
+relay file from an explicit allowlist; the compiled ABI, creation/runtime
+bytecode, and storage layout; a manifest; and `SHA256SUMS`. It records the commit
+and dirty state but is not an audit report. Regenerate from a clean commit before
+an external review. Include a valid testnet record with:
+
+```bash
+npm run audit:package -- --deployment path/to/anchor-testnet.json
+```
+
+The package and its limits are described in
+[`AUDIT.md`](AUDIT.md#audit-package).
 
 ## Funded testnet deployment
 

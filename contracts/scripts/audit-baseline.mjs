@@ -34,7 +34,7 @@ function packageVersion(path) {
 
 let cachedArtifacts = null;
 
-function anchorArtifacts() {
+export function anchorArtifacts() {
   cachedArtifacts ??= compileContracts({ includeTestFixture: false });
   return cachedArtifacts;
 }

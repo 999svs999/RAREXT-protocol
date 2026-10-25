@@ -54,6 +54,8 @@
     "example:trac-identity": "node --experimental-strip-types examples/trac-identity/main.ts",
     "test:contracts": "node --test contracts/test/*.test.mjs",
     "audit:baseline": "node contracts/scripts/audit-baseline.mjs",
+    "audit:package": "node contracts/scripts/audit-package.mjs",
+    "audit:package:verify": "node contracts/scripts/audit-package.mjs --verify",
     "verify:deployment": "node contracts/scripts/verify-deployment-record.mjs",
     "deploy:anchor": "node contracts/scripts/deploy-anchor.mjs",
     "deploy:anchor:testnet": "node contracts/scripts/deploy-anchor-testnet.mjs"

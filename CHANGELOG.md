@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Reproducible EVM anchor audit package.** `npm run audit:package` writes a
+  hash-verified package with the exact contract source, tests, scripts, runbooks,
+  relay file, ABI, creation/runtime bytecode, and storage layout, plus a manifest
+  and `SHA256SUMS`. `npm run audit:package:verify` checks every checksum, the
+  audit status flags, the source hash, and the compiled artifact hashes. A valid
+  testnet record can be bundled with `--deployment`. The package records whether
+  the tree was dirty and does not change the external-audit or live-deployment
+  gate.
+
 - **Storage rent quotes (v1 slice).** `GET /v1/storage/pricing` publishes the
   operator's public and sealed rates, and `GET /v1/storage/quote` returns a
   deterministic 30-day byte-month quote in integer microcredits. `/v1/storage/usage`

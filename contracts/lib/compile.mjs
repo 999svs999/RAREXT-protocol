@@ -55,7 +55,12 @@ export function compileContracts({ includeTestFixture = true } = {}) {
       evmVersion: "cancun",
       outputSelection: {
         "*": {
-          "*": ["abi", "evm.bytecode.object", "evm.deployedBytecode.object"],
+          "*": [
+            "abi",
+            "evm.bytecode.object",
+            "evm.deployedBytecode.object",
+            "storageLayout",
+          ],
         },
       },
     },

@@ -349,10 +349,43 @@ External auditor must complete and sign:
 - [ ] Record findings with severity, affected commit, and retest evidence.
 - [ ] Issue a signed report or a written no-findings statement covering this scope.
 
+## Audit package
+
+Build a self-contained, hash-verified package for the auditor:
+
+```bash
+npm run audit:package
+npm run audit:package:verify -- dist/audit/rarext-anchor
+```
+
+The package is written to the gitignored `dist/audit/rarext-anchor` directory. It
+contains a manifest, a generated README, the exact source, tests, scripts,
+runbooks, and relay file from an explicit allowlist, the compiled ABI, creation
+and runtime bytecode, the storage layout, and `SHA256SUMS`. It does not copy
+environment files, keys, deployment credentials, `node_modules`, or generated
+site data.
+
+The manifest records the source, bytecode, ABI, storage-layout hashes, toolchain,
+commit, and whether the working tree was dirty. A dirty package is an internal
+preview: regenerate from a clean commit before giving it to an external auditor.
+The verifier checks every checksum, the status flags, the source hash, the
+compiled artifact hashes, and that no extra files were added.
+
+When a funded testnet record exists, include it and validate it as part of the
+package:
+
+```bash
+npm run audit:package -- --deployment path/to/anchor-testnet.json
+```
+
+The package is evidence of the reviewed bytes, not an audit report. It does not
+change the deployment gate.
+
 ## External audit request
 
 An auditor engaged for this contract should receive:
 
+- the audit package above, including its `SHA256SUMS`;
 - the commit and source hash above;
 - `contracts/RarextAnchor.sol`, `contracts/lib/compile.mjs`, and
   `contracts/test/anchor.test.mjs`;

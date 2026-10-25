@@ -265,7 +265,10 @@ The EVM relay wire format is:
 `anchors(id)` is the read-back; `publish` and `anchor` are the write paths.
 
 Local tests: `npm run test:contracts`. Deployment and upgrade runbooks:
-[`contracts/README.md`](../contracts/README.md).
+[`contracts/README.md`](../contracts/README.md). `npm run audit:package` builds a
+hash-verified auditor package with the source, tests, ABI, bytecode, storage
+layout, and checksums; `npm run audit:package:verify` checks it. It is evidence of
+the reviewed bytes, not an audit report.
 
 ## What is still missing
 
