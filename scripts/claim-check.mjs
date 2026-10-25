@@ -174,8 +174,22 @@ if (process.argv.includes("--self-test")) {
     if (!changed) fail(`self-test: the ${label} fixture no longer changes its input (anchor rot)`);
     return changed;
   };
+  // And a throughput artifact that stops agreeing with the doc must be reported.
+  const beforeThroughput = failures;
+  const realThroughput = JSON.parse(readFileSync(new URL("bench/storage/THROUGHPUT.json", root), "utf8"));
+  const doctoredThroughput = {
+    ...realThroughput,
+    runs: realThroughput.runs.map((run) =>
+      run.mode === "stream" ? { ...run, peakRssMiB: 900 } : run,
+    ),
+  };
+  checkThroughputArtifact(doctoredThroughput);
+  const caughtThroughput = failures > beforeThroughput;
+  if (!caughtThroughput) fail("self-test: the checker accepted a throughput artifact that contradicts the doc");
+  caught = caught && caughtThroughput;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
+  assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -188,6 +202,7 @@ checkRepairRecord();
 checkRentClaims();
 checkRouteSurface();
 checkSoakLog();
+checkThroughputArtifact();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -249,6 +264,54 @@ function checkRentClaims(rateOverrides) {
     "  GiB-month at the sealed default: 1 credit | half month: 0.5 | 1 byte: 1 microcredit | public: free | override 2.5 credits: ok",
   );
 }
+
+/**
+ * The throughput claim: docs/STORAGE.md cites the 1 GiB memory probe — the
+ * in-memory path peaked at 3242.8 MiB, the streaming path at 392.6 MiB, "8.3x
+ * lower" — and bench/storage/THROUGHPUT.json is the committed artifact. The
+ * doc's numbers must be the artifact's numbers rounded for display, and the
+ * ratio must be the artifact's own arithmetic.
+ */
+function checkThroughputArtifact(artifactOverride) {
+  console.log(`throughput artifact (bench/storage/THROUGHPUT.json${artifactOverride ? ", DOCTORED" : ""}):`);
+  let artifact;
+  if (artifactOverride !== undefined) artifact = artifactOverride;
+  else {
+    try {
+      artifact = JSON.parse(readFileSync(new URL("bench/storage/THROUGHPUT.json", root), "utf8"));
+    } catch (error) {
+      fail(`THROUGHPUT.json is unreadable: ${error instanceof Error ? error.message : error}`);
+      return;
+    }
+  }
+
+  const runs = Array.isArray(artifact.runs) ? artifact.runs : [];
+  const memory = runs.find((run) => run.mode === "memory");
+  const streaming = runs.find((run) => run.mode === "stream");
+  if (!memory || !streaming) { fail("THROUGHPUT.json lacks the memory and streaming 1 GiB runs"); return; }
+  if (artifact.payloadBytes < 2 ** 30) fail(`THROUGHPUT.json's payload is ${(artifact.payloadBytes / 2 ** 30).toFixed(2)} GiB, not the 1 GiB the doc cites`);
+  if (!(memory.peakRssMiB > 0) || !(streaming.peakRssMiB > 0)) fail("a peak RSS is missing or implausible");
+  if (memory.exact !== true || streaming.exact !== true) fail("a 1 GiB run did not report an exact round trip");
+
+  const ratio = memory.peakRssMiB / streaming.peakRssMiB;
+  const doc = readFileSync(new URL("docs/STORAGE.md", root), "utf8");
+  // The doc rounds to one decimal; the artifact must agree to that rounding.
+  const round1 = (value) => Math.round(value * 10) / 10;
+  for (const [run, cited] of [[memory, "3242.8"], [streaming, "392.6"]]) {
+    if (String(round1(run.peakRssMiB)) !== cited) {
+      fail(`STORAGE.md cites ${cited} MiB but the artifact measures ${round1(run.peakRssMiB)}`);
+    }
+  }
+  const docRatio = Number(doc.match(/([0-9.]+)x lower/)?.[1]);
+  if (!docRatio || Math.abs(ratio - docRatio) > 0.05) {
+    fail(`STORAGE.md cites ${docRatio}x lower but the artifact's ratio is ${ratio.toFixed(2)}`);
+  }
+  if (!doc.includes("8.3x lower")) fail("STORAGE.md no longer states the 8.3x streaming-memory saving");
+  console.log(
+    `  memory ${round1(memory.peakRssMiB)} MiB vs streaming ${round1(streaming.peakRssMiB)} MiB = ${ratio.toFixed(1)}x lower, exact ${streaming.exact}`,
+  );
+}
+
 
 /**
  * The soak claim: the docs cite a dated chaos run, and its log is committed.
