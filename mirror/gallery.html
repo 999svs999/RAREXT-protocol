@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAREXT media gallery</title>
+    <meta name="description" content="Any media stored on RAREXT, shown to anyone who opens this page: content-addressed, hash-verified, served by the raw blob route." />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      body { margin: 0; padding: 32px; background: #080a0e; color: #e3eaf3;
+             font-family: -apple-system, "Segoe UI", sans-serif; }
+      h1 { font-size: 22px; margin: 0 0 6px; }
+      .lede { color: #8fa0b5; font-size: 14px; margin: 0 0 24px; max-width: 70ch; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+      .card { border: 1px solid #1b222c; border-radius: 10px; background: #0d1117; overflow: hidden; }
+      .media { background: #05070a; min-height: 120px; display: flex; align-items: center;
+               justify-content: center; }
+      .media img, .media video { max-width: 100%; max-height: 220px; display: block; }
+      .media audio { width: 100%; }
+      .media pre { color: #9fb0c3; font-size: 12px; padding: 14px; white-space: pre-wrap;
+                   word-break: break-all; max-height: 220px; overflow: auto; margin: 0; width: 100%; }
+      .meta { padding: 10px 12px; font-size: 11px; color: #8fa0b5; font-family: ui-monospace, monospace; }
+      .meta b { color: #e3eaf3; }
+      .meta code { color: #6ff0c4; word-break: break-all; }
+      .empty { color: #6c7a8b; padding: 30px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h1>Media stored on RAREXT</h1>
+    <p class="lede">
+      Every item below is a content-addressed blob in the RAREXT blob store. This page
+      renders it by pointing the media element at <code>/v1/blobs/<hash>/raw</code> —
+      the raw bytes with their stored media type — so anyone running RAREXT sees the same
+      content by opening this page. The hash in each caption is the address: change a byte
+      and the address changes.
+    </p>
+    <div class="grid" id="grid"></div>
+    <p class="empty" id="empty" hidden>No public blobs on this node yet.</p>
+    <script type="module">
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+
+      const family = (type) => {
+        if (type.startsWith("image/")) return "image";
+        if (type.startsWith("audio/")) return "audio";
+        if (type.startsWith("video/")) return "video";
+        if (type.startsWith("text/")) return "text";
+        return null;
+      };
+
+      // Mirror mode: blobs.json next to this page carries small blobs inline,
+      // so the gallery works with no server at all — a directory is enough.
+      // Live mode: fall back to the node's raw blob route.
+      let source = null;
+      try {
+        const mirror = await fetch("./blobs.json");
+        if (mirror.ok) {
+          const data = await mirror.json();
+          source = {
+            embedded: true,
+            records: (data.blobs ?? []).map((b) => ({
+              hash: b.hash,
+              mediaType: b.mediaType,
+              size: b.size,
+              tier: b.tier,
+              url: `data:${b.mediaType};base64,${b.content}`,
+            })),
+          };
+        }
+      } catch {
+        // fall through to live mode
+      }
+      if (!source) {
+        const records = await (await fetch("/v1/blobs")).json();
+        source = {
+          embedded: false,
+          records: (Array.isArray(records) ? records : []).map((r) => ({
+            ...r,
+            url: `/v1/blobs/${r.hash}/raw`,
+          })),
+        };
+      }
+
+      const render = (record) => {
+        const kind = family(record.mediaType ?? "");
+        if (!kind) return null;
+        const card = document.createElement("article");
+        card.className = "card";
+        let element;
+        if (kind === "image") {
+          element = `<img loading="lazy" alt="${record.mediaType}" src="${record.url}" />`;
+        } else if (kind === "audio") {
+          element = `<audio controls preload="none" src="${record.url}"></audio>`;
+        } else if (kind === "video") {
+          element = `<video controls preload="metadata" src="${record.url}"></video>`;
+        } else {
+          element = `<pre>loading text…</pre>`;
+        }
+        card.innerHTML = `
+          <div class="media">${element}</div>
+          <div class="meta">
+            <b>${record.mediaType}</b> · ${record.size} bytes · ${record.tier ?? "public"}<br />
+            <code>${record.hash}</code>
+          </div>`;
+        if (kind === "text") {
+          fetch(record.url)
+            .then((r) => r.text())
+            .then((text) => {
+              card.querySelector("pre").textContent = text.slice(0, 2000);
+            })
+            .catch(() => {
+              card.querySelector("pre").textContent = "(unavailable)";
+            });
+        }
+        return card;
+      };
+
+      const shown = source.records.map(render).filter(Boolean);
+      for (const card of shown) grid.appendChild(card);
+      if (shown.length === 0) empty.hidden = false;
+        </script>
+  </body>
+</html>
