@@ -11,6 +11,13 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The work-economy reward schedule is checked both ways.** Twelfth claim kind:
+  `docs/WORK.md`'s credit table (verify 10, store 1, mirror 25, relay 15, publish 5,
+  remix 20, report 50) is verified against the `base` values in
+  `apps/api/src/work.ts`'s exported `ACTIONS` — every published row must equal the
+  code's base for that action, and every action the code defines must appear in the
+  doc's schedule, so an undocumented reward cannot pay silently. The self-test doctored
+  verify's credit to 12 and the fixture-changed guard covers the new fixture.
 - **The chain-registry surface is checked like the API's.** Eleventh claim kind:
   `docs/CHAINS.md` publishes seven chain routes (`POST /chain/anchor`,
   `GET /chain/{state,head,key,proof,blocks/:height,audit}`) and a chains table; the

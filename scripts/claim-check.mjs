@@ -22,6 +22,7 @@ const das = await import(new URL("apps/api/src/das.ts", root).href);
 const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
 const coreAi = await import(new URL("packages/core/src/ai.ts", root).href);
 const storageConstants = await import(new URL("apps/api/src/storage.ts", root).href);
+const work = await import(new URL("apps/api/src/work.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const { samplesForMissingFraction, missProbability } = das;
 
@@ -243,6 +244,17 @@ if (process.argv.includes("--self-test")) {
   const caughtChain = failures > beforeChain;
   if (!caughtChain) fail("self-test: the checker accepted a published chain route the server does not handle");
   caught = caught && caughtChain;
+  // And a reward the code no longer pays must be reported.
+  const beforeReward = failures;
+  const originalWorkDoc = readFileSync(new URL("docs/WORK.md", root), "utf8");
+  const doctoredWorkDoc = originalWorkDoc.replace(
+    "| `verify` | per verified attestation | 10 |",
+    "| `verify` | per verified attestation | 12 |",
+  );
+  checkRewardTable(doctoredWorkDoc);
+  const caughtReward = failures > beforeReward;
+  if (!caughtReward) fail("self-test: the checker accepted a reward table the code contradicts");
+  caught = caught && caughtReward;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
@@ -251,6 +263,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
+  assertChanged(originalWorkDoc, doctoredWorkDoc, "reward-table");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -269,6 +282,7 @@ checkReplayBounds();
 checkOperationalDefaults();
 checkEvidenceCitations();
 checkChainSurface();
+checkRewardTable();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -609,6 +623,41 @@ function checkChainSurface(docOverride) {
   if (deploySize === 0) fail("CHAINS.md's evm row has no deployment path at contracts/scripts/deploy-anchor.mjs");
 
   console.log(`  ${published.length} chain route(s) published, ${unhandled === 0 ? "all handled" : `${unhandled} unhandled`}; trac adapter + anchor contract present`);
+}
+
+
+/**
+ * The reward table: docs/WORK.md publishes a credit schedule per work action —
+ * verify 10, store 1, mirror 25, relay 15, publish 5, remix 20, report 50 — and
+ * apps/api/src/work.ts exports ACTIONS with a base per id. Each published row
+ * must equal the code's base for that action, and the code must define no
+ * action the doc's schedule omits.
+ */
+function checkRewardTable(docOverride) {
+  console.log(`reward table (docs/WORK.md${docOverride ? ", DOCTORED" : ""} vs apps/api/src/work.ts):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/WORK.md", root), "utf8");
+
+  const published = new Map();
+  for (const match of doc.matchAll(/^\| `([a-z]+)` \|[^|]*\| (\d+) \|/gm)) {
+    published.set(match[1], Number(match[2]));
+  }
+  if (published.size === 0) fail("WORK.md's reward table has no parseable rows");
+
+  const code = new Map(work.ACTIONS.map((action) => [action.id, action.base]));
+  for (const [id, credits] of published) {
+    if (!code.has(id)) fail(`WORK.md rewards "${id}", which the code does not define`);
+    else if (code.get(id) !== credits) {
+      fail(`WORK.md rewards "${id}" at ${credits} credits; the code's base is ${code.get(id)}`);
+    }
+  }
+  for (const [id, base] of code) {
+    if (!published.has(id)) fail(`the code defines work action "${id}" (base ${base}) that WORK.md's schedule omits`);
+  }
+
+  console.log(
+    `  ${published.size} action(s) at parity: ` +
+      Array.from(published).map(([id, c]) => `${id}=${c}`).join(" "),
+  );
 }
 
 
