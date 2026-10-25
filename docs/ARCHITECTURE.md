@@ -210,6 +210,27 @@ Errors return `{ "error": "..." }` with status 400 (invalid input), 401 (bad sig
 unregistered signer), 404 (unknown route/task/challenge/app/publication), 409 (handle, key, nonce, link, or anchor
 conflict), or 422 (an artifact that does not pass its challenge, or a failed identity proof).
 
+The table above is the v0 core surface. The API has grown since, and `scripts/claim-check.mjs`
+verifies that every route this table publishes is still handled — so the table can be read as
+a promise, not a snapshot. Routes added after v0 are grouped below rather than row-by-row;
+each surface's own documentation lists its limits.
+
+| Surface | Routes | Documented in |
+| --- | --- | --- |
+| Storage economy | `GET /v1/storage/{pricing,quote,usage,tiers,retention,quota}`, `POST /v1/storage/gc` | [STORAGE-ECONOMY.md](STORAGE-ECONOMY.md) |
+| Durability | `GET /v1/durability`, `POST /v1/durability/{challenge,gc}` | [HARDENING.md](HARDENING.md) |
+| Signed placements | `GET /v1/placements`, `POST /v1/placements` | [STORAGE-SECURITY.md](STORAGE-SECURITY.md) |
+| Trac task registry | `GET /v1/tracregistry`, `GET /v1/tracregistry/:handle` | [OPERATIONS.md](OPERATIONS.md) |
+| Tournaments | `GET /v1/tournaments`, `POST /v1/tournaments`, `POST /v1/tournaments/:id/results` | [OPERATIONS.md](OPERATIONS.md) |
+| Verifier work | `GET /v1/verifier-operators`, `POST /v1/verifier-operators`, `GET /v1/work`, `GET /v1/work/earnings`, `POST /v1/verifications` | [OPERATOR.md](OPERATOR.md) |
+| Verifier modules | `GET /v1/verifiers`, `GET /v1/verifiers/:app/:hash.mjs` | [AI-VERIFICATION.md](AI-VERIFICATION.md) |
+| Revocations | `GET /v1/revocations`, `POST /v1/revocations` | [CRYPTO.md](CRYPTO.md) |
+| Blobs | `GET /v1/blobs`, `POST /v1/blobs`, `GET /v1/blobs/:hash`, `GET /v1/blobs/:hash/raw`, `GET /v1/blobs/:hash/proof` | [STORAGE.md](STORAGE.md) |
+| Media | `GET /mirror/gallery.html` on any node | the gallery page itself |
+| Chains, market, bundles, crypto, semantics, participants | `GET /v1/{chains,chains/status,market,market/aggregate,bundles,crypto,semantics,participants}` | [CHAINS.md](CHAINS.md), [MARKET.md](MARKET.md), [SEMANTICS.md](SEMANTICS.md) |
+
+Errors return
+
 Publishing requires a passing artifact. For logic, the server computes a canonical circuit hash and a trace hash over every table case. For external apps, it hashes the canonical artifact and the verifier proof. `POST /v1/verify` re-runs the app verifier and compares the attestation.
 
 Build search is a derived view. `reuses` counts direct children, and lineage walks the

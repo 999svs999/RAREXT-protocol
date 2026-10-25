@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
 const rfcPath = process.env.RAREXT_CLAIM_RFC ?? fileURLToPath(new URL("rfcs/0010-data-availability-sampling.md", root));
+const architecturePath = new URL("docs/ARCHITECTURE.md", root);
 
 const das = await import(new URL("apps/api/src/das.ts", root).href);
 const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
@@ -145,6 +146,17 @@ if (process.argv.includes("--self-test")) {
   const caughtPricing = failures > beforePricing;
   if (!caughtPricing) fail("self-test: the checker accepted an undocumented default rate");
   caught = caught && caughtPricing;
+  // And a route the docs publish but the code no longer handles must be caught.
+  const beforeRoutes = failures;
+  const originalArchitecture = readFileSync(architecturePath, "utf8");
+  // The health row is the table's first line, and it is `/health` — no /v1
+  // prefix, which is exactly the kind of detail a hand-written anchor gets wrong.
+  const doctoredDoc = originalArchitecture.replace(
+    "| GET | `/health` |",
+    "| GET | `/health` |\n| GET | `/v1/time-travel` |",
+  );
+  checkRouteSurface(doctoredDoc);
+  caught = caught && failures > beforeRoutes;
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
   process.exit(caught ? 0 : 1);
 }
@@ -153,6 +165,7 @@ checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
+checkRouteSurface();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -160,9 +173,13 @@ checkRentClaims();
  * GiB-month", prorated by the month, with rounding UP to a whole microcredit so
  * a tiny quote cannot become free by truncation.
  */
-function checkRentClaims(overrides) {
-  console.log(`rent pricing (docs/STORAGE-ECONOMY.md${overrides ? ", INJECTED" : ""}):`);
-  const defaults = overrides ?? rent.storagePricingFromEnv({});
+function checkRentClaims(rateOverrides) {
+  console.log(`rent pricing (docs/STORAGE-ECONOMY.md${rateOverrides ? ", INJECTED" : ""}):`);
+  // No argument: the documented defaults. An argument is an operator rate
+  // table, so the self-test can model a code change to the default rate.
+  const defaults = rateOverrides
+    ? rent.storagePricing(rateOverrides)
+    : rent.storagePricingFromEnv({});
   const GIB = 1024 ** 3;
   const from = new Date("2026-01-01T00:00:00.000Z");
   const month = 30 * 24 * 60 * 60 * 1000;
@@ -209,6 +226,51 @@ function checkRentClaims(overrides) {
   console.log(
     "  GiB-month at the sealed default: 1 credit | half month: 0.5 | 1 byte: 1 microcredit | public: free | override 2.5 credits: ok",
   );
+}
+
+/**
+ * The route-surface claim: every route docs/ARCHITECTURE.md publishes must be
+ * handled by the implementation. A reader treats that table as a promise, so a
+ * route removed from the code while still published is a broken promise, not a
+ * documentation bug.
+ */
+function checkRouteSurface(docOverride) {
+  console.log(`route surface (docs/ARCHITECTURE.md${docOverride ? ", DOCTORED" : ""} vs apps/api/src/app.ts):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+  const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+
+  const published = [];
+  for (const line of doc.split("\n")) {
+    const match = line.match(/^\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*`([^`]+)`\s*\|/);
+    if (match) published.push({ method: match[1], path: match[2].split("?")[0].replace(/\/$/, "") });
+  }
+
+  const guards = new Set();
+  let currentMethod = null;
+  for (const line of app.split("\n")) {
+    const method = line.match(/req\.method === "(\w+)"/);
+    if (method) currentMethod = method[1];
+    for (const match of line.matchAll(/pathname === "([^"]+)"/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+    for (const match of line.matchAll(/pathname\.startsWith\("([^"]+)"\)/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+  }
+
+  console.log(`  published routes: ${published.length} | implemented guards: ${guards.size}`);
+  let unhandled = 0;
+  for (const { method, path } of published) {
+    const key = `${method} ${path}`;
+    if (guards.has(key)) continue;
+    const byPrefix = Array.from(guards).some(
+      (guard) => guard.startsWith(`${method} `) && path.startsWith(guard.split(" ")[1] + "/"),
+    );
+    if (byPrefix) continue;
+    unhandled += 1;
+    fail(`the table publishes ${key}, but app.ts no longer handles it`);
+  }
+  console.log(`  every published route is handled: ${unhandled === 0 ? "yes" : `NO (${unhandled})`}`);
 }
 
 /** The measured claim: the repair bench records its own arithmetic in RESULTS.json. */
