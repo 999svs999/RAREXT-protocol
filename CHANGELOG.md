@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The chain-registry surface is checked like the API's.** Eleventh claim kind:
+  `docs/CHAINS.md` publishes seven chain routes (`POST /chain/anchor`,
+  `GET /chain/{state,head,key,proof,blocks/:height,audit}`) and a chains table; the
+  checker verifies every published route is handled by `apps/chain/src/server.ts`
+  (including the `/chain/blocks/` prefix form), that the table's `trac` row has its
+  adapter in `apps/api/src/anchorer.ts`, and that the `evm` row's backing artifacts —
+  `contracts/RarextAnchor.sol` and `contracts/scripts/deploy-anchor.mjs` — exist. The
+  self-test publishes a `POST /chain/rollback` route the server does not have and
+  asserts the mismatch is reported.
 - **The fault-limit tables' cited evidence is checked.** Tenth claim kind: the
   fault-limit tables in `docs/OPERATIONS.md` name 30 test files as the measurement for
   each published behaviour; `claim:check` now verifies every citation exists and is

@@ -232,6 +232,17 @@ if (process.argv.includes("--self-test")) {
   const caughtEvidence = failures > beforeEvidence;
   if (!caughtEvidence) fail("self-test: the checker accepted a citation to test evidence that does not exist");
   caught = caught && caughtEvidence;
+  // And a chain route the docs publish but the server drops must be reported.
+  const beforeChain = failures;
+  const originalChains = readFileSync(new URL("docs/CHAINS.md", root), "utf8");
+  const doctoredChains = originalChains.replace(
+    "GET  /chain/audit",
+    "GET  /chain/audit\nPOST /chain/rollback",
+  );
+  checkChainSurface(doctoredChains);
+  const caughtChain = failures > beforeChain;
+  if (!caughtChain) fail("self-test: the checker accepted a published chain route the server does not handle");
+  caught = caught && caughtChain;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
@@ -239,6 +250,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
+  assertChanged(originalChains, doctoredChains, "chain-surface");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -256,6 +268,7 @@ checkLimitsTable();
 checkReplayBounds();
 checkOperationalDefaults();
 checkEvidenceCitations();
+checkChainSurface();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -538,6 +551,64 @@ function checkEvidenceCitations(docOverride, testScriptOverride) {
   }
 
   console.log(`  ${cited.length} cited test file(s), all present; backup version ${codeVersion}`);
+}
+
+
+/**
+ * The chain surface: docs/CHAINS.md publishes the chain-registry API
+ * (POST /chain/anchor, GET /chain/{state,head,key,proof,blocks/:height,audit})
+ * and a chains table whose `trac` row is the operator webhook adapter and whose
+ * `evm` row is backed by the anchor contract and its deployment path. Every
+ * published chain route must be handled by apps/chain/src/server.ts, and both
+ * table rows must have their backing artifact in the tree.
+ */
+function checkChainSurface(docOverride) {
+  console.log(`chain surface (docs/CHAINS.md${docOverride ? ", DOCTORED" : ""} vs apps/chain/src/server.ts):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/CHAINS.md", root), "utf8");
+  const server = readFileSync(new URL("apps/chain/src/server.ts", root), "utf8");
+
+  const published = [];
+  for (const match of doc.matchAll(/^(GET|POST)\s+(\/chain\/[\w/:.-]+)/gm)) {
+    published.push({ method: match[1], path: match[2] });
+  }
+  const guards = new Set();
+  let currentMethod = null;
+  for (const line of server.split("\n")) {
+    const method = line.match(/req\.method === "(\w+)"/);
+    if (method) currentMethod = method[1];
+    for (const match of line.matchAll(/path === "([^"]+)"/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1]}`);
+    }
+    for (const match of line.matchAll(/path\.startsWith\("([^"]+)"\)/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1]}`);
+    }
+  }
+  let unhandled = 0;
+  for (const { method, path } of published) {
+    if (guards.has(`${method} ${path}`)) continue;
+    const byPrefix = Array.from(guards).some(
+      (guard) => guard.startsWith(`${method} `) && path.startsWith(guard.split(" ")[1]),
+    );
+    if (byPrefix) continue;
+    unhandled += 1;
+    fail(`CHAINS.md publishes ${method} ${path}, but the chain server no longer handles it`);
+  }
+
+  // The chains table's backing artifacts.
+  const anchorer = readFileSync(new URL("apps/api/src/anchorer.ts", root), "utf8");
+  if (!anchorer.includes('"trac"')) fail("CHAINS.md's trac row has no trac adapter in apps/api/src/anchorer.ts");
+  let solSize = 0;
+  try {
+    solSize = statSync(new URL("contracts/RarextAnchor.sol", root)).size;
+  } catch {}
+  if (solSize === 0) fail("CHAINS.md's evm row has no anchor contract at contracts/RarextAnchor.sol");
+  let deploySize = 0;
+  try {
+    deploySize = statSync(new URL("contracts/scripts/deploy-anchor.mjs", root)).size;
+  } catch {}
+  if (deploySize === 0) fail("CHAINS.md's evm row has no deployment path at contracts/scripts/deploy-anchor.mjs");
+
+  console.log(`  ${published.length} chain route(s) published, ${unhandled === 0 ? "all handled" : `${unhandled} unhandled`}; trac adapter + anchor contract present`);
 }
 
 
