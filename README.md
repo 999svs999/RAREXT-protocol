@@ -179,8 +179,11 @@ curl -s http://127.0.0.1:8787/v1/storage/usage
 
 The proof chains from a blob digest to a manifest root to an anchor root, so a holder of
 the bytes can check custody without trusting the operator. Read the
-[storage economy](docs/STORAGE-ECONOMY.md), [RFC 0004](rfcs/0004-storage-economy.md), and
-the one-page [storage status and limits](docs/STORAGE.md).
+[storage economy](docs/STORAGE-ECONOMY.md), [RFC 0004](rfcs/0004-storage-economy.md),
+[RFC 0018](rfcs/0018-storage-rent-settlement.md), and the one-page
+[storage status and limits](docs/STORAGE.md). `GET /v1/storage/pricing` publishes
+the operator rate card and `GET /v1/storage/quote` returns a byte-month price; a
+quote does not reserve bytes or charge credits.
 
 The public figures are measured, not projected: a 1 GiB file-backed encode/decode peaked
 at **394 MiB RSS** (latest rerun 393 MiB), and 1 GiB over raw holder HTTP peaked at

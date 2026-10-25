@@ -26,6 +26,7 @@ import type {
 } from "../../../packages/core/src/index.ts";
 
 import { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
+import { STORAGE_RENT_MONTH_MS } from "./storage-rent.ts";
 
 export const STORAGE_TIERS: StorageTier[] = ["public", "sealed"];
 
@@ -775,10 +776,29 @@ export class BlobStore {
         blobs: 0,
         bytes: 0,
         retainedUntil: null,
+        committedByteMonths: 0,
       };
 
       entry.blobs += 1;
       entry.bytes += record.size;
+
+      if (record.retentionUntil) {
+        const createdAt = Date.parse(record.createdAt);
+        const until = Date.parse(record.retentionUntil);
+
+        if (Number.isFinite(createdAt) && Number.isFinite(until) && until > createdAt) {
+          entry.committedByteMonths +=
+            (record.size * (until - createdAt)) / STORAGE_RENT_MONTH_MS;
+
+          if (
+            entry.retainedUntil === null ||
+            Date.parse(entry.retainedUntil) < until
+          ) {
+            entry.retainedUntil = record.retentionUntil;
+          }
+        }
+      }
+
       totals.set(record.tier, entry);
     }
 

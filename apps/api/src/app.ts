@@ -82,6 +82,12 @@ import {
   verifyManifestInclusion,
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
+import {
+  isStorageTier,
+  quoteStorageRent,
+  storagePricingFromEnv,
+  type StoragePricing,
+} from "./storage-rent.ts";
 import { ChainRegistry, loadChainConfigs } from "./chains/registry.ts";
 import {
   createConsensusService,
@@ -169,6 +175,8 @@ export interface AppOptions {
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
   blobs?: BlobStore;
+  /** Operator storage-rent policy; defaults to the environment. */
+  storagePricing?: StoragePricing;
   placements?: PlacementRegistry;
   durability?: DurabilityLedger;
   holders?: DurabilityHolder[];
@@ -838,6 +846,7 @@ export function createApp(options: AppOptions = {}): AppServer {
         ? Number(process.env.RAREXT_BLOB_QUOTA_BYTES)
         : undefined,
     });
+  const storagePricing = options.storagePricing ?? storagePricingFromEnv();
   const placements =
     options.placements ??
     new PlacementRegistry(process.env.RAREXT_PLACEMENTS_DIR ?? ".data/placements");
@@ -1758,6 +1767,40 @@ export function createApp(options: AppOptions = {}): AppServer {
 
       if (req.method === "GET" && pathname === "/v1/storage/tiers") {
         send(res, 200, storageTiers());
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/storage/pricing") {
+        send(res, 200, storagePricing);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/storage/quote") {
+        const rawBytes = url.searchParams.get("bytes") ?? "";
+        const tier = url.searchParams.get("tier") ?? "";
+        const until = url.searchParams.get("until") ?? "";
+
+        if (!/^\d+$/.test(rawBytes)) {
+          throw new Error("bytes must be a positive integer");
+        }
+
+        if (!isStorageTier(tier)) {
+          throw new Error("tier must be public or sealed");
+        }
+
+        send(
+          res,
+          200,
+          quoteStorageRent(
+            {
+              bytes: Number(rawBytes),
+              tier,
+              from: new Date(),
+              until: new Date(until),
+            },
+            storagePricing,
+          ),
+        );
         return;
       }
 

@@ -121,5 +121,7 @@ than the settlement layer. The RFC's stage-2 gate exists to resist it.
 The core is implemented: content-addressed blob storage with self-verifying names,
 storage manifests, a possession verifier that fails closed, inclusion proofs that
 chain from a digest to an anchor root, published tiers with their semantics
-binding, and metered usage. The RFC remains draft because the settlement layer,
-the retention proof, and the replication economics are unresolved.
+binding, and metered usage. Quote-only rent accounting is implemented in
+[RFC 0018](0018-storage-rent-settlement.md); the RFC remains draft because the
+settlement layer, the retention proof, and the replication economics are
+unresolved.

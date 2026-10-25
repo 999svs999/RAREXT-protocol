@@ -29,6 +29,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Semantic layer: versioned meaning bound to every claim, with drift detection
 - [x] Fair-launch app: policy as a pinned challenge, open verifier, public verdicts
 - [x] Storage economy: content-addressed blobs, proof of possession, open and sealed tiers, metered usage
+  - [x] Public rent rate card, deterministic byte-month quotes, and committed usage metering ([RFC 0018](rfcs/0018-storage-rent-settlement.md))
 - [x] Content-complete anchoring: the Merkle leaf commits to the whole publication, so mirrors are checkable
 - [x] Multi-chain anchoring with independent read-back confirmation
 - [x] RAREXT chain node: a signed, hash-linked log of anchor commitments with inclusion proofs

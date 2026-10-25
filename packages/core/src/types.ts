@@ -284,6 +284,8 @@ export interface StorageUsage {
   blobs: number;
   bytes: number;
   retainedUntil: string | null;
+  /** Bytes held for the committed term, measured in 30-day byte-months. */
+  committedByteMonths: number;
 }
 
 export interface StorageInclusionProof {

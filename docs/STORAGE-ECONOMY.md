@@ -109,6 +109,37 @@ Two other units will exist:
 Prices are set by policy, not by the protocol. The protocol's job is to make the
 metering public and the settlement verifiable.
 
+### Rent quotes (v1 slice)
+
+`GET /v1/storage/pricing` publishes the operator's current rates, and
+`GET /v1/storage/quote?bytes=<n>&tier=<public|sealed>&until=<iso-date>` returns a
+deterministic rent quote. The accounting month is 30 days
+(2,592,000,000 ms), and the formula is:
+
+```
+byteMonths          = bytes × (until − now) / 2,592,000,000
+GiB-months          = byteMonths / 2^30
+costMicroCredits    = ceil(GiB-months × rateMicroCreditsPerGiBMonth)
+costCredits         = costMicroCredits / 1,000,000
+```
+
+Rounding is up to a whole microcredit so a tiny quote cannot become free by
+truncation. The public tier defaults to a zero rate; the sealed tier defaults to
+1,000,000 microcredits (1 credit) per GiB-month as an illustrative policy. An
+operator can override either rate with
+`RAREXT_STORAGE_PUBLIC_MICROCREDITS_PER_GIB_MONTH` and
+`RAREXT_STORAGE_SEALED_MICROCREDITS_PER_GIB_MONTH`. The quote is an offer, not a
+reservation: it does not extend a retention term, lock a price, or move credits.
+Settlement is still ahead; see [RFC 0018](../rfcs/0018-storage-rent-settlement.md).
+
+`GET /v1/storage/usage` now reports `committedByteMonths` per tier and the latest
+`retainedUntil`, so the public ledger and the quote use the same unit. A blob with
+no retention term contributes only its current bytes and blob count; the open tier
+is still free.
+
+There is no protocol token here. Credits are an operator-scoped unit of account,
+and any transfer or chain settlement must be explicit and auditable.
+
 ## Why this is decentralised
 
 The storage node is one operator. The *proof* is not. Anyone can run a node, anyone

@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Storage rent quotes (v1 slice).** `GET /v1/storage/pricing` publishes the
+  operator's public and sealed rates, and `GET /v1/storage/quote` returns a
+  deterministic 30-day byte-month quote in integer microcredits. `/v1/storage/usage`
+  now reports `committedByteMonths` and the latest `retainedUntil`. The public tier
+  defaults to free and the sealed rate is operator-configurable. A quote is not a
+  reservation and does not charge; settlement remains in
+  [RFC 0018](rfcs/0018-storage-rent-settlement.md).
+
 - **Repair-path hardening.** `DurabilityLedger.repair` now reads another survivor when
   a holder drops between the presence probe and `get`, and tries the next free spare
   when a target rejects `put`/`putFile`; streamed repair follows the same rules. A repair
