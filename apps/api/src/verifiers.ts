@@ -33,7 +33,7 @@ export interface AppVerifier extends AppInfo {
   verify(artifact: Artifact, challenge: Challenge): Promise<Attestation>;
 }
 
-interface ExternalVerifierConfig {
+export interface ExternalVerifierConfig {
   app: string;
   name?: string;
   version?: string;
@@ -41,6 +41,41 @@ interface ExternalVerifierConfig {
   url: string;
   artifactKinds?: string[];
   manifest?: unknown;
+}
+
+export interface VerifierRegistryOptions {
+  /** Timeout for one external verifier request, including its response body. */
+  timeoutMs?: number;
+  /** Explicit verifier configuration, mainly for tests and embedded deployments. */
+  configs?: ExternalVerifierConfig[];
+}
+
+export const DEFAULT_EXTERNAL_VERIFIER_TIMEOUT_MS = 10_000;
+const MAX_EXTERNAL_VERIFIER_TIMEOUT_MS = 300_000;
+
+function externalVerifierTimeout(value: number | string | undefined): number {
+  if (value === undefined || value === "") return DEFAULT_EXTERNAL_VERIFIER_TIMEOUT_MS;
+
+  const timeoutMs = Number(value);
+
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    timeoutMs > MAX_EXTERNAL_VERIFIER_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `verifier timeout must be an integer between 1 and ${MAX_EXTERNAL_VERIFIER_TIMEOUT_MS} ms`,
+    );
+  }
+
+  return timeoutMs;
+}
+
+function isTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
 }
 
 function sha256(value: string): string {
@@ -121,6 +156,7 @@ function logicVerifier(semantics: SemanticsRegistry | null): AppVerifier {
 function externalVerifier(
   config: ExternalVerifierConfig,
   requestFetch: typeof fetch,
+  timeoutMs: number,
 ): AppVerifier {
   let url: URL;
 
@@ -150,17 +186,37 @@ function externalVerifier(
         config.artifactKinds.length === 0 ||
         config.artifactKinds.includes(artifact.kind)),
     verify: async (artifact, challenge) => {
-      const response = await requestFetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ artifact, challenge }),
-        signal: AbortSignal.timeout(10_000),
-      });
+      let response: Response;
+      let text: string;
 
-      const payload = (await response.json()) as VerificationOutput & {
-        error?: string;
-        manifest?: unknown;
-      };
+      try {
+        response = await requestFetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ artifact, challenge }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        text = await response.text();
+      } catch (error) {
+        if (isTimeout(error)) {
+          throw new Error(
+            `verifier ${config.app} timed out after ${timeoutMs}ms`,
+          );
+        }
+        throw error;
+      }
+
+      let payload: VerificationOutput & { error?: string; manifest?: unknown };
+      try {
+        payload = JSON.parse(text) as VerificationOutput & {
+          error?: string;
+          manifest?: unknown;
+        };
+      } catch {
+        throw new Error(
+          `verifier ${config.app} returned invalid JSON (status ${response.status})`,
+        );
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -258,14 +314,23 @@ export interface VerifierRegistry {
     artifact: Artifact,
     challenge: Challenge,
     attestation: Attestation,
-  ): Promise<{ valid: boolean; attestation: Attestation; recomputed: Attestation }>;
+  ): Promise<{
+    valid: boolean;
+    reason: string | null;
+    attestation: Attestation;
+    recomputed: Attestation;
+  }>;
 }
 
 export function createVerifierRegistry(
   requestFetch: typeof fetch = fetch,
   semantics: SemanticsRegistry | null = null,
+  options: VerifierRegistryOptions = {},
 ): VerifierRegistry {
   const verifiers = new Map<string, AppVerifier>();
+  const timeoutMs = externalVerifierTimeout(
+    options.timeoutMs ?? process.env.RAREXT_VERIFIER_TIMEOUT_MS,
+  );
   const logic = logicVerifier(semantics);
   verifiers.set(logic.id, logic);
 
@@ -275,8 +340,8 @@ export function createVerifierRegistry(
   const bounded = boundedVerifier(semantics);
   verifiers.set(bounded.id, bounded);
 
-  for (const config of configuredVerifiers()) {
-    const verifier = externalVerifier(config, requestFetch);
+  for (const config of options.configs ?? configuredVerifiers()) {
+    const verifier = externalVerifier(config, requestFetch, timeoutMs);
     verifiers.set(verifier.id, verifier);
   }
 
@@ -334,17 +399,29 @@ export function createVerifierRegistry(
           recomputed.claimKind === attestation.claimKind &&
           recomputed.verifierHash === attestation.verifierHash);
 
-      const valid =
-        recomputed.app === storedApp &&
-        recomputed.challengeId === storedChallengeId &&
-        recomputed.circuitHash === attestation.circuitHash &&
-        recomputed.traceHash === attestation.traceHash &&
-        recomputed.score === attestation.score &&
-        recomputed.gateCount === attestation.gateCount &&
-        recomputed.correct === attestation.correct &&
-        semanticsMatch;
+      const checks: [string, boolean][] = [
+        ["app", recomputed.app === storedApp],
+        ["challenge", recomputed.challengeId === storedChallengeId],
+        ["artifact", recomputed.circuitHash === attestation.circuitHash],
+        ["trace", recomputed.traceHash === attestation.traceHash],
+        ["score", recomputed.score === attestation.score],
+        ["gate count", recomputed.gateCount === attestation.gateCount],
+        ["verdict", recomputed.correct === attestation.correct],
+        ["representation", recomputed.representation === attestation.representation],
+        ["metric name", recomputed.metricName === attestation.metricName],
+        ["metric value", recomputed.metricValue === attestation.metricValue],
+        ["proof kind", recomputed.proofKind === attestation.proofKind],
+        ["verifier name", recomputed.verifier === attestation.verifier],
+        ["semantics", semanticsMatch],
+      ];
+      const mismatch = checks.find(([, ok]) => !ok)?.[0] ?? null;
 
-      return { valid, attestation, recomputed };
+      return {
+        valid: mismatch === null,
+        reason: mismatch === null ? null : `attestation does not match ${mismatch}`,
+        attestation,
+        recomputed,
+      };
     },
   };
 }

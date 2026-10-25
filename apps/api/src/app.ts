@@ -162,6 +162,9 @@ export interface AppOptions {
   onChallengeEvent?: (event: ChallengeEvent) => void | Promise<void>;
   challengeEventUrl?: string | null;
   verifiers?: VerifierRegistry;
+  /** Timeout for one external verifier request; defaults to 10 s. */
+  verifierTimeoutMs?: number;
+  verifierModules?: VerifierModuleRegistry;
   operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
@@ -819,7 +822,10 @@ export function createApp(options: AppOptions = {}): AppServer {
     options.challengeEventUrl ?? process.env.RAREXT_CHALLENGE_EVENT_URL?.trim() ?? null;
   const semantics = options.semantics ?? createSemanticsRegistry(() => challenges.list());
   const verifiers =
-    options.verifiers ?? createVerifierRegistry(options.fetch, semantics);
+    options.verifiers ??
+    createVerifierRegistry(options.fetch, semantics, {
+      timeoutMs: options.verifierTimeoutMs,
+    });
   const operators =
     options.operators ??
     new VerifierOperatorRegistry(
@@ -863,7 +869,8 @@ export function createApp(options: AppOptions = {}): AppServer {
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const consensus = createConsensusService(store, options.consensus);
   const tournaments = options.tournaments ?? new TournamentService();
-  const verifierModules = new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
+  const verifierModules =
+    options.verifierModules ?? new VerifierModuleRegistry(VERIFIER_MODULES_DIR);
 
   async function publish(input: PublishInput): Promise<PublishResult> {
     const challenge = challenges.get(input.challengeId);
@@ -1363,7 +1370,7 @@ export function createApp(options: AppOptions = {}): AppServer {
         }
 
         const hash = file.slice(0, -".mjs".length);
-        const found = verifierModules.bytesFor(id, hash, VERIFIER_MODULES_DIR);
+        const found = verifierModules.bytesFor(id, hash);
 
         if (!found) {
           send(res, 404, { error: "no module with that hash" });

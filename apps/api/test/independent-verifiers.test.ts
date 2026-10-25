@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import type {
   Artifact,
@@ -16,8 +22,12 @@ import {
   createAgentKeyfile,
   generateAgentKeypair,
 } from "../../../packages/agent-sdk/src/index.ts";
+import { VerifierModuleRegistry } from "../src/verifierModules.ts";
+import { createVerifierRegistry } from "../src/verifiers.ts";
 import { VerifierOperatorRegistry, signOperator } from "../src/verifier-operators.ts";
 import { post, start, stop } from "./helpers.ts";
+
+const SCRATCH = fileURLToPath(new URL("../../../.data/", import.meta.url));
 
 const challenge: Challenge = {
   id: "echo-1",
@@ -284,6 +294,68 @@ test("operator attestations are refused when any binding is wrong", async () => 
   }
 });
 
+test("two operators may disagree, but a publication binds to exactly one verdict", async () => {
+  const owner = signer();
+  const other = signer();
+  const operators = new VerifierOperatorRegistry();
+
+  operators.register(signOperator({ name: "Passing Echo", apps: ["echo-lab"] }, owner));
+  operators.register(signOperator({ name: "Failing Echo", apps: ["echo-lab"] }, other));
+
+  const passing = signedBy(owner, attestationFor(owner));
+  const failing = signedBy(
+    other,
+    attestationFor(other, artifact, { correct: false, score: 0 }),
+  );
+
+  const { server, base } = await start(undefined, {
+    challenges: challenges(),
+    operators,
+  });
+
+  try {
+    const refused = await post(base, "/v1/artifacts", {
+      author: "alice",
+      title: "Echo build",
+      challengeId: challenge.id,
+      artifact,
+      operatorAttestation: failing,
+    });
+
+    assert.equal(refused.status, 422);
+    assert.match(
+      ((await refused.json()) as { error: string }).error,
+      /did not attest/,
+    );
+
+    const accepted = await post(base, "/v1/artifacts", {
+      author: "alice",
+      title: "Echo build",
+      challengeId: challenge.id,
+      artifact,
+      operatorAttestation: passing,
+    });
+
+    assert.equal(accepted.status, 201);
+    const publication = (await accepted.json()) as Publication;
+
+    assert.equal(publication.attestationKeyId, owner.keyId);
+    assert.equal(publication.attestation.correct, true);
+
+    const verified = (await (await post(base, "/v1/verify", {
+      publicationId: publication.id,
+    })).json()) as {
+      valid: boolean;
+      operator: { keyId: string } | null;
+    };
+
+    assert.equal(verified.valid, true);
+    assert.equal(verified.operator!.keyId, owner.keyId);
+  } finally {
+    await stop(server);
+  }
+});
+
 test("a publication without an operator or a local verifier is still refused", async () => {
   const { server, base } = await start(undefined, { challenges: challenges() });
 
@@ -298,5 +370,156 @@ test("a publication without an operator or a local verifier is still refused", a
     assert.equal(response.status, 404);
   } finally {
     await stop(server);
+  }
+});
+
+test("the public module catalogue advertises only byte-exact verifier shards", async () => {
+  mkdirSync(SCRATCH, { recursive: true });
+  const root = mkdtempSync(join(SCRATCH, "modules-"));
+
+  try {
+    const directory = join(root, "echo");
+    const dist = join(directory, "dist", "echo.mjs");
+    mkdirSync(join(directory, "dist"), { recursive: true });
+
+    const bytes = Buffer.from("export const verify = () => true;\n");
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    writeFileSync(dist, bytes);
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "echo",
+        app: "echo-lab",
+        kind: "echo.signal",
+        format: "es-module",
+        entry: "echo.mjs",
+        abi: "rarext.verifier.v1",
+        hash,
+        bytes: bytes.length,
+        description: "Echo module",
+      }),
+    );
+
+    const bad = join(root, "bad");
+    const badDist = join(bad, "dist", "bad.mjs");
+    mkdirSync(join(bad, "dist"), { recursive: true });
+    writeFileSync(badDist, "export const verify = () => false;\n");
+    writeFileSync(
+      join(bad, "manifest.json"),
+      JSON.stringify({
+        id: "bad",
+        app: "bad",
+        kind: "bad.artifact",
+        format: "es-module",
+        entry: "bad.mjs",
+        abi: "rarext.verifier.v1",
+        hash: "0".repeat(64),
+        bytes: 37,
+        description: "Hash does not match the shard",
+      }),
+    );
+
+    const escape = join(root, "escape");
+    mkdirSync(join(escape, "dist"), { recursive: true });
+    writeFileSync(
+      join(escape, "manifest.json"),
+      JSON.stringify({
+        id: "escape",
+        app: "escape",
+        kind: "escape.artifact",
+        format: "es-module",
+        entry: "../outside.mjs",
+        abi: "rarext.verifier.v1",
+        hash,
+        bytes: bytes.length,
+        description: "Entry must stay inside dist",
+      }),
+    );
+
+    const registry = new VerifierModuleRegistry(root);
+
+    assert.deepEqual(registry.list().map((module) => module.app), ["echo-lab"]);
+    assert.equal(registry.get("bad"), null);
+    assert.equal(registry.get("escape"), null);
+    assert.equal(
+      registry.bytesFor("echo-lab", hash)?.bytes.toString("utf8"),
+      bytes.toString("utf8"),
+    );
+    assert.equal(registry.bytesFor("echo-lab", "0".repeat(64)), null);
+
+    const { server, base } = await start(undefined, { verifierModules: registry });
+
+    try {
+      const catalogue = (await (await fetch(`${base}/v1/verifiers`)).json()) as {
+        verifiers: { app: string; url: string }[];
+      };
+      assert.deepEqual(catalogue.verifiers.map((module) => module.app), ["echo-lab"]);
+
+      const served = await fetch(`${base}${catalogue.verifiers[0]!.url}`);
+      assert.equal(served.status, 200);
+      assert.equal(await served.text(), bytes.toString("utf8"));
+
+      writeFileSync(dist, "export const verify = () => null;\n");
+
+      const after = (await (await fetch(`${base}/v1/verifiers`)).json()) as {
+        verifiers: unknown[];
+      };
+      assert.equal(after.verifiers.length, 0);
+      assert.equal(registry.list().length, 0);
+      assert.equal(registry.get("echo-lab"), null);
+      assert.equal(registry.bytesFor("echo-lab", hash), null);
+
+      const stale = await fetch(`${base}${catalogue.verifiers[0]!.url}`);
+      assert.equal(stale.status, 404);
+    } finally {
+      await stop(server);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an external verifier that never answers times out loudly", async () => {
+  const server = createServer(() => undefined);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+
+  try {
+    const registry = createVerifierRegistry(fetch, null, {
+      timeoutMs: 25,
+      configs: [
+        {
+          app: "slow-lab",
+          url: `http://127.0.0.1:${port}/verify`,
+        },
+      ],
+    });
+
+    const slowChallenge = {
+      ...challenge,
+      id: "slow-1",
+      app: "slow-lab",
+    };
+    const slowArtifact = {
+      app: "slow-lab",
+      kind: "slow-lab.artifact",
+      version: 1,
+      mediaType: "application/json",
+      body: { value: 1 },
+    } as const;
+
+    await assert.rejects(
+      () =>
+        registry.verifyAttestation(
+          slowArtifact,
+          slowChallenge,
+          attestationFor(signer(), slowArtifact),
+        ),
+      /verifier slow-lab timed out after 25ms/,
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

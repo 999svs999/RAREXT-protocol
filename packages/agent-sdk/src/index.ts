@@ -545,6 +545,7 @@ export async function removeAgentKeyfile(path = agentKeyPath()): Promise<void> {
 
 export interface VerifyResult {
   valid: boolean;
+  reason?: string | null;
   attestation: Attestation;
   recomputed: Attestation;
 }

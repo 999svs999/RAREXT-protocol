@@ -56,6 +56,24 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 | Operator key revocation | a revocation signed by the operator key is posted to `/v1/verifier-operators/:keyId/revocation` | the old key's attestations reject `operator <name> key is revoked`; the revoked `keyId` cannot re-register; revocation survives a registry reload |
 | Unauthenticated operator revocation | the body must be a signed revocation whose `keyId` matches the path | a wrong key, bad signature, or mismatched path is refused before the revoked set changes |
 
+### Verifier modules and aggregate consistency
+
+The public module catalogue (`GET /v1/verifiers`, `/v1/verifiers/<app>/<hash>.mjs`,
+and the verifier references in `/v1/work`), external HTTP verifiers, and operator
+attestations are bounded by `apps/api/test/claim-verify.test.ts`,
+`apps/api/test/independent-verifiers.test.ts`, and
+`apps/api/test/sponsored-challenge.test.ts`:
+
+| Check | Limit / behaviour | What happens at the limit |
+| --- | --- | --- |
+| External verifier request | one POST per verification; default timeout `DEFAULT_EXTERNAL_VERIFIER_TIMEOUT_MS` = **10 s (10,000 ms)**, covering response headers and body. `RAREXT_VERIFIER_TIMEOUT_MS` or `AppOptions.verifierTimeoutMs` accepts an integer of 1–300,000 ms | the request aborts and the verifier rejects `verifier <app> timed out after <n>ms`; `POST /v1/artifacts` returns 422 and `POST /v1/verify` returns 400 with that error. A timeout is never converted to `valid:false`, an empty attestation, or an inconclusive verdict |
+| External verifier response | must be JSON with a boolean `correct` and a finite numeric `score`; a non-2xx response fails after its error body is parsed | malformed JSON rejects `verifier <app> returned invalid JSON (status <n>)`; a missing/incorrect verdict field rejects; no publication is stored |
+| Published module manifest | `manifest.json` must name an app and a `.mjs` entry that is a basename inside `dist/`, with a 64-hex SHA-256 and an exact byte count | malformed manifests, unsafe entry names, duplicate apps, missing entries, or a hash/byte-count mismatch are omitted at load and never advertised |
+| Module bytes at read time | `GET /v1/verifiers/<app>/<hash>.mjs` re-hashes the file and checks its length against the manifest | a changed, truncated, or substituted shard returns 404 `no module with that hash`; `list`/`get` drop it, so the catalogue does not keep advertising a stale URL |
+| Recomputed attestation | app, challenge, artifact hash, trace hash, score, gate count, verdict, representation, metric name/value, proof kind, verifier name, and semantic binding must all equal the stored attestation | `POST /v1/verify` returns `valid:false` with `attestation does not match <field>`; it does not average, choose a quorum, or accept the closest verdict |
+| Operator verdict | one publication embeds one signed operator attestation; the operator must be registered, authorised, unrevoked, and match the semantics, algorithm/profile, artifact, challenge, and a `correct:true` verdict | an opposite verdict is refused at publish time (`operator did not attest that the artifact is correct`); two operators may disagree, but a publication cannot combine them into a quorum |
+| Operator payload | the signature covers the entire operator attestation payload | a changed score, algorithm, or other field that passes the binding checks rejects `operator signature does not verify`; a changed artifact/challenge/semantics binding is refused by its own binding check before the signature is examined |
+
 Streamed decode verifies every selected shard before it opens the output file,
 then writes to a unique `.tmp` sibling and renames only after the full payload hash
 matches. A failed decode therefore leaves no partial destination; an existing file

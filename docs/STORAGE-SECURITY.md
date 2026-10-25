@@ -25,6 +25,10 @@ In scope:
 - a verifier that signs an audit under a key other than the operator key the reader
   expects, omits a holder it never challenged, reuses a challenge nonce, or presents a
   transcript outside the verification window;
+- a public verifier catalogue that advertises a module hash which does not match the
+  served shard, or a manifest whose entry escapes `dist/`;
+- an external verifier that stalls past its deadline or returns malformed output, and
+  two independent operators that reach opposite conclusions about the same artifact;
 - local pin metadata or content that was modified outside the service;
 - an unauthenticated network client reaching a holder or pin service that was exposed
   without a token.
@@ -35,10 +39,14 @@ Out of scope, and not claimed:
 - traffic analysis, including shard size and request timing;
 - a holder that keeps the Merkle leaves and discards the bytes (see issue
   [#7](https://github.com/999svs999/RAREXT-protocol/issues/7));
-- a trusted verifier that lies about when a challenge ran, or replays an old valid
-  leaf/proof as a new challenge. The attestation carries a verifier-signed timestamp,
-  not a holder-signed timestamp, and there is no public challenge log (see issue
+- a trusted verifier that lies about when a challenge ran, fabricates a challenge
+  response without contacting the holder, or replays an old valid leaf/proof as a new
+  challenge. The attestation carries a verifier-signed timestamp, not a holder-signed
+  timestamp, and there is no public challenge log (see issue
   [#9](https://github.com/999svs999/RAREXT-protocol/issues/9));
+- a writer with filesystem access to the verifier build directory that replaces both a
+  manifest and its shard consistently. The manifest hash is a build-time integrity
+  check, not a signature, and the module directory is trusted deployment input;
 - confidentiality of stored bytes against a determined holder or host attacker. The
   opt-in sealed path is wired and holders receive only ciphertext, but its key envelope
   is unreviewed and has no wrapping, associated-data binding, or per-tenant isolation;
@@ -99,6 +107,59 @@ from that key, including ones issued before the revocation. This is a fail-close
 historical invalidation, not a "valid at signing time" model. Revoked ids persist in
 `operators.json` and cannot re-register. Rotation alone never rewrites or invalidates
 old attestations.
+
+### Verifier modules and external verifiers
+
+`VerifierModuleRegistry` admits a public module only when all of these hold:
+
+- `manifest.json` names a safe id and app, plus an `entry` that is a basename ending in
+  `.mjs` inside `dist/` (no path traversal);
+- the declared `hash` is 64 lowercase SHA-256 hex and `bytes` is a safe non-negative
+  integer;
+- the file exists, its SHA-256 equals the declared hash, and its length equals the
+  declared byte count;
+- no earlier manifest already claims the app.
+
+The catalogue re-reads and re-hashes a module on every `list`, `get`, and
+`/v1/verifiers/<app>/<hash>.mjs` request. A shard changed after load therefore stops
+being advertised and its URL returns `404 no module with that hash`; it cannot keep
+serving a URL whose hash no longer matches the bytes. The route also requires the URL
+hash to equal the manifest hash. This is content addressing, not a signature: an
+attacker who can rewrite both manifest and shard consistently is out of scope.
+
+External HTTP verifiers are bounded by a single request deadline: **10 s (10,000 ms)**
+by default, covering response headers and body. The deadline can be set to an integer
+of 1–300,000 ms with `RAREXT_VERIFIER_TIMEOUT_MS` or `AppOptions.verifierTimeoutMs`.
+A timeout aborts the request and fails the verification with
+`verifier <app> timed out after <n>ms`; it is never converted into a negative or
+inconclusive verdict. A malformed or non-JSON response, a missing boolean `correct`,
+or a non-finite `score` also fails before any attestation is stored. A non-2xx
+response is reported with its error body and status.
+
+After a local recomputation, `/v1/verify` compares every meaningful aggregate field:
+app, challenge, artifact and trace hashes, score, gate count, verdict, representation,
+metric name and value, proof kind, verifier name, and the semantic binding. A stored
+attestation that disagrees with the recomputed evidence is rejected with
+`attestation does not match <field>`; there is no averaging or quorum.
+
+Operator attestations are independent verdicts, not shares in a quorum. One
+publication binds to one registered operator key and one signed payload. Two operators
+may sign opposite conclusions for the same artifact; the publish path accepts only the
+attestation that says `correct:true`, and `/v1/verify` re-checks that publication's
+operator, bindings, algorithm/profile, and full signature. Changing a score or another
+field that passes the binding checks breaks the signature; a changed artifact,
+challenge, or semantics binding is refused by its binding check before the signature
+is examined. A reader does not combine separate operator verdicts, so disagreement
+cannot silently become a pass.
+
+Audit transcripts remain bounded by the checks in the storage table: every placement
+shard needs a `verified:true` entry, a unique fresh nonce, a response that recomputes
+against the shard, and timestamps inside the 15-minute window (5 minutes of future
+clock skew). These checks prove that the transcript is internally consistent; they do
+not prove that a holder was contacted, because holder possession is not signed. That
+residual trust is the public-challenge-log gap in issue
+[#9](https://github.com/999svs999/RAREXT-protocol/issues/9), not a claim the registry
+can make from a transcript alone.
 
 ### HTTP holders
 

@@ -23,6 +23,7 @@ import {
   signOperatorRevocation,
   verifyOperatorAttestation,
 } from "../src/verifier-operators.ts";
+import { createVerifierRegistry } from "../src/verifiers.ts";
 import { post, start, stop } from "./helpers.ts";
 
 const SCRATCH = fileURLToPath(new URL("../../../.data/", import.meta.url));
@@ -137,6 +138,37 @@ test("a published claim verifies against the recomputed meaning", async () => {
   } finally {
     await stop(server);
   }
+});
+
+test("a stored verdict that disagrees with the recomputed evidence is refused", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const recomputed = await registry.verify(artifact, halfAdder);
+
+  assert.equal(recomputed.correct, true);
+  assert.equal(recomputed.representation, undefined);
+
+  const flipped = await registry.verifyAttestation(artifact, halfAdder, {
+    ...recomputed,
+    correct: false,
+  });
+
+  assert.equal(flipped.valid, false);
+  assert.match(flipped.reason ?? "", /verdict/);
+
+  const relabelled = await registry.verifyAttestation(artifact, halfAdder, {
+    ...recomputed,
+    representation: "bounded",
+    metricName: "maxAbsError",
+    metricValue: 0,
+  });
+
+  assert.equal(relabelled.valid, false);
+  assert.match(relabelled.reason ?? "", /representation/);
+
+  const accepted = await registry.verifyAttestation(artifact, halfAdder, recomputed);
+
+  assert.equal(accepted.valid, true);
+  assert.equal(accepted.reason, null);
 });
 
 test("operator claims bind to the registered key and revocation invalidates old claims", () => {
