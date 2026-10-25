@@ -5,6 +5,29 @@ up, how to restore it, and what happens when a snapshot is older or newer than t
 build you are running. The wire protocol is in [`APP-PROTOCOL.md`](APP-PROTOCOL.md);
 the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 
+## Public testnet rehearsal
+
+`npm run testnet:rehearsal` runs the local half of the public-testnet handoff. It
+starts a chain node, three token-protected holders, a token-protected pin service,
+and the API over self-signed HTTPS on loopback, then:
+
+- rejects unauthenticated API writes, holder reads, and pin reads;
+- registers an external agent over the public SDK, publishes, verifies, discovers,
+  anchors, and checks the inclusion proof and chain read-back;
+- writes, challenges, audits, and reconstructs a signed storage placement;
+- builds a static mirror and verifies its bundle against the anchored root;
+- restarts the chain and API on the same state and rechecks the head, publication,
+  anchor, and placement;
+- backs up and restores the registry state, then verifies the mirror with the API
+  stopped.
+
+The work directory is under gitignored `.data/` and is removed on success. Pass
+`--keep` to inspect it, `--verbose` for service logs, or `--no-tls` to skip the
+self-signed certificate. `openssl` is needed for the HTTPS path; without it the
+script falls back to HTTP and says so. This proves the process and data paths on
+one host, not DNS, a public certificate, firewall rules, a real chain, or off-host
+monitoring. Run it again on the target host behind the real proxy and certificate.
+
 ## Storage hardening limits
 
 The storage endpoints (`PUT`/`GET /v1/blobs`, the durability challenge, audit, and

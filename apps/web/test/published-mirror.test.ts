@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { verifyBundle, type Bundle } from "../src/verify.ts";
+import {
+  verifyBundle,
+  type Bundle,
+  type ChallengeIndex,
+} from "../src/verify.ts";
 
 const site = fileURLToPath(new URL("../../../site/registry", import.meta.url));
 
@@ -29,7 +33,7 @@ test("the published mirror verifies against its pinned root and media", async ()
 
   const challenges = Object.fromEntries(
     (bundle.challenges ?? []).map((challenge) => [challenge.id, challenge.spec ?? {}]),
-  );
+  ) as ChallengeIndex;
   const media = Object.fromEntries(
     blobFile.blobs
       .filter((blob) => typeof blob.hash === "string" && typeof blob.content === "string")

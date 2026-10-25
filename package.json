@@ -50,6 +50,7 @@
     "dev:chess": "node apps/verifiers/chess/server.ts",
     "pin": "node apps/api/src/pin-server.ts",
     "net": "node scripts/run-storage-net.mjs",
+    "testnet:rehearsal": "node scripts/testnet-rehearsal.mjs",
     "example:trac-identity": "node --experimental-strip-types examples/trac-identity/main.ts",
     "test:contracts": "node --test contracts/test/*.test.mjs",
     "audit:baseline": "node contracts/scripts/audit-baseline.mjs",

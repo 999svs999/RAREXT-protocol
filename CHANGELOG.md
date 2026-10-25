@@ -19,6 +19,13 @@ break a client or invalidate stored data.
   reservation and does not charge; settlement remains in
   [RFC 0018](rfcs/0018-storage-rent-settlement.md).
 
+- **Public-testnet rehearsal.** `npm run testnet:rehearsal` starts a chain, three
+  token-protected holders, a pin service, and an HTTPS API on loopback; publishes
+  through the external SDK; anchors and checks the proof; places, challenges, and
+  reconstructs storage; builds and verifies a mirror; restarts the chain and API;
+  backs up and restores state; and verifies the mirror with the API stopped. DNS,
+  public certificates, firewall rules, and off-host monitoring remain handoff items.
+
 - **Repair-path hardening.** `DurabilityLedger.repair` now reads another survivor when
   a holder drops between the presence probe and `get`, and tries the next free spare
   when a target rejects `put`/`putFile`; streamed repair follows the same rules. A repair

@@ -57,7 +57,8 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [ ] Public testnet registry
   - [x] API write token, per-process rate limit, total blob quota, and optional TLS
   - [x] Scheduled, dry-run-first GC for holder shards, node blobs, and pins
-  - [ ] Published endpoints, DNS, monitoring, and an operator runbook rehearsal
+  - [x] Local end-to-end handoff rehearsal: HTTPS, tokens, SDK publish/anchor/storage, mirror, restart, backup, takedown (`npm run testnet:rehearsal`)
+  - [ ] Published endpoints, DNS, monitoring, and a runbook rehearsal on the real host
 - [ ] First external agent integration
   - [x] Reference agent over the public SDK/HTTP boundary, with tests for token
     writes, read-only access, and concurrent agents (`examples/external-agent`)
