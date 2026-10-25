@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Renditions are checked where they are attested (hardening).** The verifiers
+  re-derive an AI artifact's picture from its commitment and reject a rendition
+  that is not the function of it. Measured before the fix, four attacks were all
+  attested `correct: true` on the serving side — an unknown rendition rule, a
+  lying raster digest, a lying bounded plot, and impossible geometry — while the
+  browser reported nothing, because a rule it does not implement is silently
+  dropped. Now an unimplemented rule or a malformed rendition is refused, and a
+  rendition that does not re-derive makes the attestation incorrect with score 0.
+  Test coverage for the two AI verifiers goes from 22 cases to 32, and the limits
+  are written into `docs/AI-VERIFICATION.md`.
 - **Exact rent arithmetic (hardening).** Storage-rent quotes are now computed in
   exact integer arithmetic: the ceiling is taken on the exact rational, so a
   quote can no longer be off by a microcredit in either direction. Measured

@@ -61,6 +61,31 @@ or a hand-drawn replacement fails both checks, and neither check trusts the
 mirror or the attestation. The raw-raster digest is the commitment, so the
 result does not depend on which PNG encoder produced the file.
 
+### What the serving side checks about a rendition
+
+The rendition is part of the claim, so the verifier checks it — not only the
+reader's browser. When an AI artifact carries a picture, the verifier re-derives
+the raster from the commitment and compares it with the committed digest:
+
+- a rendition whose **rule** this build does not implement is refused outright: a
+  shape that cannot be checked must not be attested;
+- a malformed rendition (a digest that is not a digest, a zero or fractional side
+  length, a non-PNG media type, a zero byte count) is refused the same way;
+- a rendition whose raster does not re-derive from the committed model and seed
+  (or, for the bounded class, from the committed reference and the artifact's own
+  reconstruction) makes the attestation **incorrect** with score 0 — the text
+  output may still replay perfectly, and the claim is still false, because the
+  claim covers the picture;
+- declared geometry is checked by the same re-derivation: a plot labelled 7x3
+  cannot carry the digest of a plot the committed measurement actually produces.
+
+Measured before this check existed, all four attacks were attested `correct: true`
+on the serving side: an unknown rule (`hand-drawn-v2`), a lying raster digest, a
+lying bounded plot, and impossible geometry. After it, the first is refused and
+the other three are attested `correct: false`, while an honest rendition still
+attests `correct: true`. The check adds no field to the trace, so attestations
+stored before it (including the published mirror's) still re-verify.
+
 An `ai.bounded` artifact can carry a rendition too, and there the picture *is*
 the measurement: rule `bounded-strip-v1` draws the committed reference in one
 lane, the artifact's own reconstruction in a second, and the absolute error

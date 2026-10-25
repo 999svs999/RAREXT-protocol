@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createHash } from "node:crypto";
+
 import type { Artifact, Challenge } from "../../../packages/core/src/index.ts";
+import { RASTER_RULE, renderRaster } from "../../../packages/core/src/index.ts";
 import {
   MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
@@ -180,4 +183,103 @@ test("replay is pure and independent of the verifier instance", () => {
   assert.equal(a.correct, true);
   assert.equal(a.digest, b.digest);
   assert.equal(a.expected, b.expected);
+});
+
+// ---------------------------------------------------------------------------
+// Hardening round: the rendition. An attested claim covers the picture beside
+// its output, so the serving side checks that picture against the commitment
+// instead of blessing a byte count while the image is anything at all.
+// ---------------------------------------------------------------------------
+
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const committedRasterDigest = sha256(renderRaster(model, 42, 64));
+
+function rendition(overrides: Record<string, unknown> = {}) {
+  return {
+    mediaType: "image/png",
+    rule: RASTER_RULE,
+    blob: "a".repeat(64),
+    raster: committedRasterDigest,
+    size: 64,
+    bytes: 1234,
+    ...overrides,
+  };
+}
+
+test("mechanism: rendition — an honest picture is not the reason a claim fails", async () => {
+  // Positive control: the check must not break the feature it guards.
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    artifactFor(validOutput, { media: rendition() }),
+    challenge,
+  );
+
+  assert.equal(attestation.correct, true);
+  assert.equal(attestation.score, 100);
+});
+
+test("mechanism: rendition — a picture that is not the function of the commitment fails the claim", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    artifactFor(validOutput, { media: rendition({ raster: "f".repeat(64) }) }),
+    challenge,
+  );
+
+  assert.equal(attestation.correct, false);
+  assert.equal(attestation.score, 0);
+  // The text output itself still replays — it is the CLAIM that is false,
+  // because the claim covers the rendition as well as the text.
+  assert.equal(
+    verifyGenerativeReplay({ model, seed: 42, output: validOutput }, { steps: 32 }).correct,
+    true,
+  );
+});
+
+test("mechanism: rendition — a wrong side length cannot hide behind a valid digest", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    artifactFor(validOutput, { media: rendition({ size: 32 }) }),
+    challenge,
+  );
+
+  assert.equal(attestation.correct, false);
+});
+
+test("mechanism: rendition — a rule this build does not implement is refused, not attested", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  await assert.rejects(
+    () =>
+      registry.verify(
+        artifactFor(validOutput, { media: rendition({ rule: "hand-drawn-v2" }) }),
+        challenge,
+      ),
+    /media must be a committed rendition/,
+  );
+});
+
+test("mechanism: rendition — a malformed rendition shape is refused", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+
+  for (const bad of [
+    { raster: "not-a-digest" },
+    { blob: "short" },
+    { size: 0 },
+    { size: 1.5 },
+    { bytes: 0 },
+    { mediaType: "image/svg+xml" },
+  ]) {
+    await assert.rejects(
+      () => registry.verify(artifactFor(validOutput, { media: rendition(bad) }), challenge),
+      /media must be a committed rendition/,
+      `malformed rendition ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+});
+
+test("mechanism: rendition — an artifact with no picture is unaffected", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(artifactFor(validOutput), challenge);
+
+  assert.equal(attestation.correct, true);
+  assert.equal(attestation.score, 100);
 });

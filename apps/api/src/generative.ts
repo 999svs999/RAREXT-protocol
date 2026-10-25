@@ -5,7 +5,9 @@ import { canonicalize } from "../../../packages/core/src/index.ts";
 import {
   generate,
   isGenerativeBody,
+  isGenerativeMedia,
   isGenerativeSpec,
+  renderRaster,
   MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
   MAX_GENERATIVE_TOKEN_LENGTH,
@@ -53,6 +55,26 @@ export function modelDigest(model: XorshiftModel): string {
  * about the text being good. Larger model classes slot in later through the
  * `bounded` representation kind; this path proves the generative plumbing.
  */
+
+/**
+ * Does the rendition in this body hold up against the commitment? `null` means
+ * no rendition was shipped. A malformed one throws: a shape that cannot be
+ * checked must not be attested. A rendition whose raster does not re-derive
+ * from the committed model and seed returns false — it is not this model's
+ * picture, whatever the blob beside it happens to contain.
+ */
+function generativeRenditionHolds(body: GenerativeBody): boolean | null {
+  if (body.media === undefined) return null;
+
+  if (!isGenerativeMedia(body.media)) {
+    throw new Error(
+      "ai.generative media must be a committed rendition: { mediaType: image/png, rule, blob, raster, size, bytes }",
+    );
+  }
+
+  const raster = renderRaster(body.model, body.seed, body.media.size);
+  return createHash("sha256").update(raster).digest("hex") === body.media.raster;
+}
 
 const GENERATIVE_APP = "ai-generative";
 const GENERATIVE_KIND = "ai.generative";
@@ -110,6 +132,15 @@ export function generativeVerifier(
 
       const body = artifact.body;
       const replay = verifyGenerativeReplay(body, challenge.spec);
+
+      // An artifact may ship a picture of its own output. That picture is a
+      // function of the commitment, so the serving side has to check it too:
+      // otherwise the attestation blesses a byte count while the image beside
+      // it is anything at all. A malformed rendition is refused outright; a
+      // rendition that is not the function of its own model makes the claim
+      // false, because the claim covers the rendition as well as the text.
+      const rendition = generativeRenditionHolds(body);
+
       const bound = semantics
         ? semanticsForChallenge(semantics, challenge)
         : null;
@@ -129,8 +160,8 @@ export function generativeVerifier(
         taskId: challenge.id,
         circuitHash: hashValue(artifact),
         traceHash: hashValue(trace),
-        correct: replay.correct,
-        score: replay.correct ? 100 : 0,
+        correct: replay.correct && rendition !== false,
+        score: replay.correct && rendition !== false ? 100 : 0,
         gateCount: challenge.spec.steps,
         semanticsId: bound?.id ?? `${GENERATIVE_APP}/${challenge.id}`,
         semanticsVersion: bound?.version ?? 1,

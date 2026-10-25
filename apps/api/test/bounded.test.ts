@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createHash } from "node:crypto";
+
 import type { Artifact, Challenge } from "../../../packages/core/src/index.ts";
+import {
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  BOUNDED_RASTER_SCALE,
+  renderBoundedRaster,
+} from "../../../packages/core/src/index.ts";
 import {
   boundedScore,
   boundedVerifierHash,
@@ -163,4 +171,85 @@ test("reconstruction quality is visible in the trace digest", async () => {
 
   assert.notEqual(good.traceHash, better.traceHash);
   assert.ok((better.metricValue ?? 1) < (good.metricValue ?? 0));
+});
+
+// ---------------------------------------------------------------------------
+// Hardening round: the plotted rendition. The picture is a function of the
+// committed reference and this artifact's own reconstruction, so the serving
+// side checks it — a plot taken from elsewhere makes the claim false.
+// ---------------------------------------------------------------------------
+
+const plottedValues = reference.map((value) => Math.min(255, value + 2));
+const plottedWidth = reference.length * BOUNDED_RASTER_SCALE;
+const honestPlotDigest = createHash("sha256")
+  .update(renderBoundedRaster(reference, plottedValues, plottedWidth, BOUNDED_RASTER_HEIGHT))
+  .digest("hex");
+
+function plotted(overrides: Record<string, unknown> = {}) {
+  return {
+    mediaType: "image/png",
+    rule: BOUNDED_RASTER_RULE,
+    blob: "b".repeat(64),
+    raster: honestPlotDigest,
+    width: plottedWidth,
+    height: BOUNDED_RASTER_HEIGHT,
+    bytes: 512,
+    ...overrides,
+  };
+}
+
+function plottedArtifact(media: Record<string, unknown>): Artifact {
+  return {
+    app: "ai-bounded",
+    kind: "ai.bounded",
+    version: 1,
+    mediaType: "application/json",
+    body: { values: plottedValues, codec: "int8-quantized", media },
+  };
+}
+
+test("mechanism: rendition — an honest plot is not the reason a claim fails", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(plottedArtifact(plotted()), challenge);
+
+  assert.equal(attestation.correct, true);
+  assert.ok(attestation.score > 0);
+});
+
+test("mechanism: rendition — a plot that is not this measurement's picture fails the claim", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    plottedArtifact(plotted({ raster: "e".repeat(64) })),
+    challenge,
+  );
+
+  assert.equal(attestation.correct, false);
+  assert.equal(attestation.score, 0);
+});
+
+test("mechanism: rendition — impossible geometry cannot hide behind a valid digest", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+  const attestation = await registry.verify(
+    plottedArtifact(plotted({ width: 7, height: 3 })),
+    challenge,
+  );
+
+  assert.equal(attestation.correct, false);
+});
+
+test("mechanism: rendition — an unknown rule or a malformed plot is refused", async () => {
+  const registry = createVerifierRegistry(fetch, null);
+
+  await assert.rejects(
+    () => registry.verify(plottedArtifact(plotted({ rule: "bounded-strip-v2" })), challenge),
+    /media must be a committed rendition/,
+  );
+
+  for (const bad of [{ raster: "zz" }, { width: 0 }, { height: -1 }, { bytes: 0 }]) {
+    await assert.rejects(
+      () => registry.verify(plottedArtifact(plotted(bad)), challenge),
+      /media must be a committed rendition/,
+      `malformed plot ${JSON.stringify(bad)} must be refused`,
+    );
+  }
 });
