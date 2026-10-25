@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-23T04:01:04.688Z",
+  "updatedAt": "2026-10-25T06:08:42.548Z",
   "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
-  "bundleRoot": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+  "bundleRoot": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
   "registries": [
     {
       "id": "apesdaily",
@@ -23,7 +23,7 @@
       "id": "github-pages",
       "url": "https://999svs999.github.io/RAREXT-protocol/registry/",
       "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
-      "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+      "root": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
       "operator": "999svs999",
       "note": "Static copy of the latest anchored bundle on GitHub Pages; verify the root."
     }

@@ -93,19 +93,27 @@ amount of protocol language changes that.
 
 ## The published copy
 
-A static copy of the latest anchored bundle and its seed list is published with the
-project site:
+A static copy of the latest anchored bundle, its seed list, and a browser-verifiable
+mirror are published with the project site:
 
 - <https://999svs999.github.io/RAREXT-protocol/registry/bundle.json>
 - <https://999svs999.github.io/RAREXT-protocol/registry/seed.json>
+- <https://999svs999.github.io/RAREXT-protocol/registry/mirror/>
+- <https://999svs999.github.io/RAREXT-protocol/registry/mirror/verify.html>
 
 The seed names the reference registry and the GitHub Pages mirror, and records the
 bundle root. It is a copy, not a live registry: it carries the bundle that was
-anchored when it was built and does not learn about later publications. The committed
-test reads both files back over HTTP and runs `verifyBundle` against them:
+anchored when it was built and does not learn about later publications. The mirror's
+verify page accepts `?root=<root>`; the published index links to it with the current
+root pinned, so the browser rejects a copy whose recomputed root differs.
+
+`npm run publish:proof` copies a locally verified `.ai-proof` result into
+`site/registry` and updates the seed. It never generates a proof or contacts a
+network. The committed tests read the files back over HTTP and verify the bundle,
+the pinned root, the inline blobs, and the AI rendition:
 
 ```bash
-node --test apps/api/test/published-bundle.test.ts
+node --test apps/api/test/published-bundle.test.ts apps/web/test/published-mirror.test.ts
 ```
 
 ## The next step

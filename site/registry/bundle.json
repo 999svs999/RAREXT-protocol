@@ -1,253 +1,205 @@
 {
   "manifest": {
     "version": 1,
-    "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
-    "leafVersion": 1,
-    "anchorId": "7ccdf4b6-b387-4a9f-98f3-e9af75ae952d",
-    "anchorRoot": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
-    "createdAt": "2026-10-21T11:18:04.120Z",
+    "root": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
+    "leafVersion": 4,
+    "anchorId": "dbd58db8-ddba-4c10-8463-0197653948a4",
+    "anchorRoot": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
+    "createdAt": "2026-10-25T05:54:06.917Z",
     "publications": [
       {
-        "id": "e0093bef-4b68-4431-94e1-d09444aeeb3b",
-        "leaf": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e"
+        "id": "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
+        "leaf": "2abfdc52ce2c49e28da0ed4e08a2343f6a5f55195e44572749d7f07941fe720f"
+      },
+      {
+        "id": "3a668276-f1ea-455d-9e8e-5320ec2025ba",
+        "leaf": "0fa45ddfc3cc19a117202ca51588bc98bf29e6e420405af128d671901e32a88a"
       }
     ],
     "counts": {
-      "publications": 1,
-      "anchors": 2,
-      "challenges": 3,
-      "semantics": 3
+      "publications": 2,
+      "anchors": 1,
+      "challenges": 5,
+      "semantics": 5
     }
   },
   "publications": [
     {
-      "id": "e0093bef-4b68-4431-94e1-d09444aeeb3b",
-      "author": "e2e_mvi0qapy",
-      "authorKey": "b54f7a8c132dfaa7412e8255325339b65a61a41b8a684c14eb9eac6645ed7676",
-      "title": "A tiny adding machine",
-      "body": "A simple build for people who are new to this.",
-      "taskId": "half-adder",
-      "circuit": {
-        "components": [
-          {
-            "id": "a",
-            "type": "INPUT"
-          },
-          {
-            "id": "b",
-            "type": "INPUT"
-          },
-          {
-            "id": "n1",
-            "type": "NAND",
-            "inputs": [
-              "a",
-              "b"
-            ]
-          },
-          {
-            "id": "n2",
-            "type": "NAND",
-            "inputs": [
-              "a",
-              "n1"
-            ]
-          },
-          {
-            "id": "n3",
-            "type": "NAND",
-            "inputs": [
-              "b",
-              "n1"
-            ]
-          },
-          {
-            "id": "n5",
-            "type": "NAND",
-            "inputs": [
-              "n1",
-              "n1"
-            ]
-          },
-          {
-            "id": "xor",
-            "type": "NAND",
-            "inputs": [
-              "n2",
-              "n3"
-            ]
-          },
-          {
-            "id": "sum",
-            "type": "OUTPUT",
-            "inputs": [
-              "xor"
-            ]
-          },
-          {
-            "id": "carry",
-            "type": "OUTPUT",
-            "inputs": [
-              "n5"
-            ]
-          }
-        ]
-      },
-      "parentId": "c56674e5-6ad0-4b0d-a8f3-1724bb899879",
-      "source": {
-        "kind": "github",
-        "repo": "octocat/Hello-World",
-        "url": "https://github.com/octocat/Hello-World",
-        "ref": "master",
-        "path": null,
-        "commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
-        "license": null
-      },
-      "createdAt": "2026-10-21T11:18:03.570Z",
-      "attestedAt": "2026-10-21T11:18:03.574Z",
-      "verified": true,
-      "signature": "o3b2o/1gArxqGZg2RaGpxVtdh8GcD+QOgl7lEnz9yfss0O3wyuK6CWlVJVUtRtr2ID8xrm8RNa4bzDHUCfrPKQ==",
-      "nonce": "f82938f5-0ca4-43e3-8c93-e9a12ce79411",
-      "attestation": {
-        "id": "4652e417-8db3-4168-95e0-ae790556c11e",
-        "verifier": "fabric-v0",
-        "taskId": "half-adder",
-        "circuitHash": "ec1dc8d56981360647158f92618282d158025c3ed7fdf735e95db690475ef348",
-        "traceHash": "f13efb4445a17cb38ab9f5aceba3b0aa436391659e339033623a0b33642c214a",
-        "correct": true,
-        "score": 1000,
-        "gateCount": 5,
-        "createdAt": "2026-10-21T11:18:03.574Z"
-      },
-      "app": "logic",
-      "challengeId": "half-adder",
+      "id": "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
+      "author": "ai-proof",
+      "authorKey": "964d66afa15f5201ae8fff1a564f0e0a8edfd349616e2cd114e44114214efcfb",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "Replay of the committed starter model (32 steps)",
+      "body": "Generated on this node by the digest-bound xorshift32 starter model from seed 42; replay it yourself.",
+      "app": "ai-generative",
+      "challengeId": "gen-starter",
       "artifact": {
-        "app": "logic",
-        "kind": "logic.netlist",
+        "app": "ai-generative",
+        "kind": "ai.generative",
         "version": 1,
         "mediaType": "application/json",
         "body": {
-          "components": [
-            {
-              "id": "a",
-              "type": "INPUT"
+          "model": {
+            "kind": "xorshift32",
+            "params": {
+              "a": 13,
+              "b": 17,
+              "c": 5
             },
-            {
-              "id": "b",
-              "type": "INPUT"
-            },
-            {
-              "id": "n1",
-              "type": "NAND",
-              "inputs": [
-                "a",
-                "b"
-              ]
-            },
-            {
-              "id": "n2",
-              "type": "NAND",
-              "inputs": [
-                "a",
-                "n1"
-              ]
-            },
-            {
-              "id": "n3",
-              "type": "NAND",
-              "inputs": [
-                "b",
-                "n1"
-              ]
-            },
-            {
-              "id": "n5",
-              "type": "NAND",
-              "inputs": [
-                "n1",
-                "n1"
-              ]
-            },
-            {
-              "id": "xor",
-              "type": "NAND",
-              "inputs": [
-                "n2",
-                "n3"
-              ]
-            },
-            {
-              "id": "sum",
-              "type": "OUTPUT",
-              "inputs": [
-                "xor"
-              ]
-            },
-            {
-              "id": "carry",
-              "type": "OUTPUT",
-              "inputs": [
-                "n5"
-              ]
-            }
+            "vocab": [
+              "alpha",
+              "beta",
+              "gamma",
+              "delta"
+            ]
+          },
+          "seed": 42,
+          "output": "alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadeltaalphaalphabetabetaalphaalphadeltagammabetadeltaalphagammaalphadeltaalphadeltabetabetagammagamma",
+          "media": {
+            "mediaType": "image/png",
+            "rule": "xorshift32-image-v1",
+            "blob": "28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253",
+            "raster": "cb9a5c2defbe4d7c720aa181e911f0d723a6e28c25d63f8583a3d8ba4242688c",
+            "size": 64,
+            "bytes": 12420
+          }
+        }
+      },
+      "taskId": "gen-starter",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-10-25T05:54:06.903Z",
+      "attestedAt": "2026-10-25T05:54:06.907Z",
+      "verified": true,
+      "signature": "6IvPjLf+71WFgpbiUOE9tuIBJL8H9Rr84716WPLLaPOPelXe3ih8uKBY8rgLxSbH6RhLFbgkuVWI/8Sowd6/VA==",
+      "nonce": "29a6415f-3368-4aab-a250-3fa0cfb8d721",
+      "attestation": {
+        "id": "9f3c14a0-9571-4a29-9c22-06eabf9aa231",
+        "verifier": "xorshift32-replay",
+        "app": "ai-generative",
+        "challengeId": "gen-starter",
+        "taskId": "gen-starter",
+        "circuitHash": "7dce90a5dfbec33634b60ab651251dd3b4f4556c7b29c3f66a4126d1d6f3e7f8",
+        "traceHash": "ee29cd38c1586b0ceb280712a25aaa451b45f36c25619c0d9fa267034ed36ba5",
+        "correct": true,
+        "score": 100,
+        "gateCount": 32,
+        "semanticsId": "ai-generative/gen-starter",
+        "semanticsVersion": 1,
+        "semanticsHash": "a7e0a656caba5a3aee85e281d37591f96f994f1e3a561d6390aeef9d1eefa8af",
+        "claimKind": "generative",
+        "representation": "generative",
+        "scope": null,
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
+        "createdAt": "2026-10-25T05:54:06.907Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "3a668276-f1ea-455d-9e8e-5320ec2025ba",
+      "author": "ai-proof",
+      "authorKey": "964d66afa15f5201ae8fff1a564f0e0a8edfd349616e2cd114e44114214efcfb",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
+      "body": "An int8-quantized reconstruction within the committed bound; recompute the metric yourself.",
+      "app": "ai-bounded",
+      "challengeId": "bounded-starter",
+      "artifact": {
+        "app": "ai-bounded",
+        "kind": "ai.bounded",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "values": [
+            12,
+            22,
+            32,
+            42,
+            202,
+            255,
+            2,
+            130
           ]
         }
       },
+      "taskId": "bounded-starter",
       "visibility": "public",
       "artifactCommitment": null,
-      "delegatedBy": null,
-      "signatureAlgorithm": "ecdsa-p256"
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-10-25T05:54:06.909Z",
+      "attestedAt": "2026-10-25T05:54:06.911Z",
+      "verified": true,
+      "signature": "9ygVDh959N+UrEuc3DbjVH/XlSTYsVTrBclewkM0mItq8cpbX7wxYOniZd3L6/584NGv3setCDDLKPnUItOJgQ==",
+      "nonce": "e39ff120-2c4b-4f33-836e-e11cfeaae1aa",
+      "attestation": {
+        "id": "d95984ee-ebc5-4b8e-b8f6-97d1aea65606",
+        "verifier": "bounded-metric-replay",
+        "app": "ai-bounded",
+        "challengeId": "bounded-starter",
+        "taskId": "bounded-starter",
+        "circuitHash": "ae187a2f382ca631b5242f1ca285e0ee830db7208f950fd92860b8c95753181e",
+        "traceHash": "0bca78180b1e5906b8e889c68fb306dea6d37db83e289a357e9b2505a01ace6e",
+        "correct": true,
+        "score": 50,
+        "gateCount": 8,
+        "semanticsId": "ai-bounded/bounded-starter",
+        "semanticsVersion": 1,
+        "semanticsHash": "c7e17067abac1bc8581bf8842a3003308d811d215c202a16453aeffa96f3e43e",
+        "claimKind": "bounded",
+        "representation": "bounded",
+        "metricName": "maxAbsError",
+        "metricValue": 2,
+        "scope": null,
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
+        "createdAt": "2026-10-25T05:54:06.911Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
     }
   ],
   "anchors": [
     {
-      "id": "7ccdf4b6-b387-4a9f-98f3-e9af75ae952d",
-      "root": "7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e",
+      "id": "dbd58db8-ddba-4c10-8463-0197653948a4",
+      "root": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
       "publicationIds": [
-        "e0093bef-4b68-4431-94e1-d09444aeeb3b"
+        "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
+        "3a668276-f1ea-455d-9e8e-5320ec2025ba"
       ],
-      "leafCount": 1,
-      "createdAt": "2026-10-21T11:18:04.120Z",
+      "leafCount": 2,
+      "leafVersion": 4,
+      "createdAt": "2026-10-25T05:54:06.917Z",
       "adapter": "local",
-      "reference": "local:7089bdf32272858d",
+      "reference": "local:c8b18c861d65edc1",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:7089bdf32272858d"
+          "reference": "local:c8b18c861d65edc1"
         },
         {
           "adapter": "trac",
           "status": "skipped",
           "reference": null,
           "error": "Trac Network is not configured"
-        }
-      ]
-    },
-    {
-      "id": "c177c9c6-cff5-4366-bbc3-0766dd1424b8",
-      "root": "fd8535c794670e9e63ad9d481c8eae04329cf6a961e4820f67b33c0a8e663974",
-      "publicationIds": [
-        "7842297c-280d-43f7-a6b6-8e66dd4d76b7",
-        "adabe0e9-66a8-493d-93a5-f4cf4ec2c56b",
-        "bd9dc7c8-dc54-4ec7-a641-1ebc0e5490da",
-        "c56674e5-6ad0-4b0d-a8f3-1724bb899879"
-      ],
-      "leafCount": 4,
-      "createdAt": "2026-10-21T11:17:52.167Z",
-      "adapter": "local",
-      "reference": "local:fd8535c794670e9e",
-      "receipts": [
-        {
-          "adapter": "local",
-          "status": "ok",
-          "reference": "local:fd8535c794670e9e"
         },
         {
-          "adapter": "trac",
-          "status": "skipped",
-          "reference": null,
-          "error": "Trac Network is not configured"
+          "adapter": "content",
+          "status": "ok",
+          "reference": "cid:bafkreifj75tazbmb5mlswv44vjjo5zirfe4w3ma5mtz7brx2bjbahesbua"
         }
       ]
     }
@@ -389,7 +341,9 @@
       },
       "semanticsId": "logic/half-adder",
       "semanticsVersion": 1,
-      "createdAt": "2026-01-01T00:00:00.000Z"
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "status": "seed",
+      "sponsor": null
     },
     {
       "id": "majority",
@@ -495,7 +449,9 @@
       },
       "semanticsId": "logic/majority",
       "semanticsVersion": 1,
-      "createdAt": "2026-01-01T00:00:00.000Z"
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "status": "seed",
+      "sponsor": null
     },
     {
       "id": "mux2",
@@ -601,7 +557,92 @@
       },
       "semanticsId": "logic/mux2",
       "semanticsVersion": 1,
-      "createdAt": "2026-01-01T00:00:00.000Z"
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "status": "seed",
+      "sponsor": null
+    },
+    {
+      "id": "gen-starter",
+      "app": "ai-generative",
+      "title": "Generate from the committed starter model",
+      "description": "Replay the digest-bound starter model from the seed and match its output exactly.",
+      "version": 1,
+      "spec": {
+        "steps": 32
+      },
+      "sampleArtifact": {
+        "app": "ai-generative",
+        "kind": "ai.generative",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "model": {
+            "kind": "xorshift32",
+            "params": {
+              "a": 13,
+              "b": 17,
+              "c": 5
+            },
+            "vocab": [
+              "alpha",
+              "beta",
+              "gamma",
+              "delta"
+            ]
+          },
+          "seed": 42,
+          "output": "alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadeltaalphaalphabetabetaalphaalphadeltagammabetadeltaalphagammaalphadeltaalphadeltabetabetagammagamma"
+        }
+      },
+      "semanticsId": "ai-generative/gen-starter",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "status": "seed",
+      "sponsor": null
+    },
+    {
+      "id": "bounded-starter",
+      "app": "ai-bounded",
+      "title": "Reconstruct within the starter bound",
+      "description": "Return a reconstruction of the committed reference vector whose maxAbsError stays within 4.",
+      "version": 1,
+      "spec": {
+        "metric": "maxAbsError",
+        "bound": 4,
+        "reference": [
+          10,
+          20,
+          30,
+          40,
+          200,
+          255,
+          0,
+          128
+        ]
+      },
+      "sampleArtifact": {
+        "app": "ai-bounded",
+        "kind": "ai.bounded",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "values": [
+            12,
+            22,
+            32,
+            42,
+            202,
+            255,
+            2,
+            130
+          ]
+        }
+      },
+      "semanticsId": "ai-bounded/bounded-starter",
+      "semanticsVersion": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "status": "seed",
+      "sponsor": null
     }
   ],
   "semantics": [
@@ -671,6 +712,55 @@
       ],
       "interpretation": {
         "doc": "https://rarext.build/semantics/logic/mux2@1",
+        "owner": "rarext",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "rarext",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "ai-generative/gen-starter",
+      "app": "ai-generative",
+      "version": 1,
+      "claimKind": "generative",
+      "title": "Output of the committed starter model",
+      "summary": "The attested output is exactly what the digest-bound xorshift32 starter model generates from the committed seed.",
+      "specHash": "bf2f754113f0c32835ea5b1e6f88f7d694d3a00a9a0ca772c12a7c796de1b6a3",
+      "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
+      "inputs": [
+        "model",
+        "seed"
+      ],
+      "outputs": [
+        "output"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/ai-generative/gen-starter@1",
+        "owner": "rarext",
+        "reviewedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "owner": "rarext",
+      "origin": "declared",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "ai-bounded/bounded-starter",
+      "app": "ai-bounded",
+      "version": 1,
+      "claimKind": "bounded",
+      "title": "Reconstruction within the committed bound",
+      "summary": "The attested reconstruction stays within the committed metric bound of the committed reference — a graded, metric-scoped satisfaction, not a quality judgment.",
+      "specHash": "f60f26388d166de74bb596ba449f96a135490c3a690584cb05031a8cf51c8b1f",
+      "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
+      "inputs": [
+        "values"
+      ],
+      "outputs": [
+        "metricValue"
+      ],
+      "interpretation": {
+        "doc": "https://rarext.build/semantics/ai-bounded/bounded-starter@1",
         "owner": "rarext",
         "reviewedAt": "2026-01-01T00:00:00.000Z"
       },

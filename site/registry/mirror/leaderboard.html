@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leaderboard — ApesDaily</title>
+    <meta name="description" content="Ranked verifiable builds, filtered by app and challenge, plus capability-based discovery of unlisted work." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      main { height: auto; min-height: calc(100vh - var(--topbar-h)); }
+      .leaders { max-width: 1100px; margin: 0 auto; padding: 32px 18px 64px; }
+      .leaders h1 { margin: 6px 0 8px; font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.03em; }
+      .leaders .lede { max-width: 65ch; margin: 0 0 26px; color: var(--text-dim); line-height: 1.6; }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 18px; }
+      .controls label { display: grid; gap: 5px; font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+      .controls select, .controls input { min-width: 180px; }
+      .board { max-height: none; }
+      .board td a { color: var(--brand); text-decoration: none; }
+      .board td a:hover { text-decoration: underline; }
+      .score { color: var(--brand); }
+      .status { min-height: 18px; margin: 10px 0 0; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+      .status.error { color: var(--danger); }
+      .discover { margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .discover .row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .discover input { flex: 1 1 260px; }
+      .discover pre { margin: 0; max-height: 380px; overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); font-size: 11px; }
+      .note { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+      .note a { color: var(--brand); }
+      @media (max-width: 720px) { .topbar-extra { display: none; } }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="ApesDaily">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M9.5 9.5h13M9.5 22.5h13M9.5 9.5v13M22.5 9.5v13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".38" />
+            <rect x="3.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" />
+            <rect x="16.5" y="3.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="3.5" y="16.5" width="12" height="12" rx="3.5" fill="currentColor" opacity=".42" />
+            <rect x="16.5" y="16.5" width="12" height="12" rx="3.5" fill="var(--brand-accent)" />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">ApesDaily</span>
+          <span class="badge"><i></i>pre-alpha</span>
+        </span>
+      </a>
+      <nav class="tabs" aria-label="Views">
+        <a class="tab" href="/">Play</a>
+        <a class="tab active" href="/leaderboard.html" aria-current="page">Leaderboard</a>
+      </nav>
+      <div class="topbar-extra">
+        <span class="tagline">Ranked by verified score. Not by follower count.</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="leaders">
+        <p class="eyebrow">Verifiable builds</p>
+        <h1>Leaderboard</h1>
+        <p class="lede">
+          Every row is a publication with an attestation the registry recomputed. Filter by
+          app or challenge, open a build to inspect it, or use a capability to discover an
+          unlisted artifact that was shared with you.
+        </p>
+
+        <div class="controls">
+          <label>App<select id="app-filter"><option value="">All apps</option></select></label>
+          <label>Challenge<select id="challenge-filter"><option value="">All challenges</option></select></label>
+          <button id="refresh" class="primary" type="button">Refresh</button>
+        </div>
+
+        <div class="table-wrap board">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Build</th><th>Author</th><th>App</th><th>Challenge</th><th>Score</th><th>Gates</th><th>Published</th></tr>
+            </thead>
+            <tbody id="board-body">
+              <tr><td colspan="8" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="status" class="status" role="status"></p>
+
+        <section class="discover panel-section">
+          <h2>Capability-based discovery</h2>
+          <p class="note">
+            An unlisted publication is invisible without a capability. Paste the artifact id
+            and the capability token you were given; the registry checks the grant against the
+            publication id before it returns anything. The token is never sent to a third
+            party by this page.
+          </p>
+          <div class="row">
+            <input id="artifact-id" placeholder="artifact id" autocomplete="off" />
+            <input id="capability" placeholder="capability token" autocomplete="off" spellcheck="false" />
+            <button id="open-capability" class="ghost" type="button">Open</button>
+          </div>
+          <p id="discovery-status" class="status" role="status"></p>
+          <pre id="discovery-result" class="hidden" aria-live="polite"></pre>
+        </section>
+
+        <p class="note" style="margin-top: 28px">
+          A score is a mechanical result under a named challenge, not a claim that a build is
+          useful or safe. The trust model is in <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/rfcs/0007-trust-model.md">RFC 0007</a>;
+          the envelope and endpoints are in <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/APP-PROTOCOL.md">APP-PROTOCOL</a>.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const appFilter = document.getElementById("app-filter");
+      const challengeFilter = document.getElementById("challenge-filter");
+      const boardBody = document.getElementById("board-body");
+      const statusEl = document.getElementById("status");
+      const discoveryStatus = document.getElementById("discovery-status");
+      const discoveryResult = document.getElementById("discovery-result");
+      const artifactInput = document.getElementById("artifact-id");
+      const capabilityInput = document.getElementById("capability");
+
+      let challenges = [];
+
+      function setStatus(message, error = false) {
+        statusEl.textContent = message;
+        statusEl.classList.toggle("error", error);
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        })[char]);
+      }
+
+      function readParams() {
+        const params = new URLSearchParams(location.search);
+        const app = params.get("app") ?? "";
+        const challenge = params.get("challengeId") ?? "";
+        const artifact = params.get("artifact") ?? "";
+        const capability = params.get("capability") ?? "";
+
+        if (app) appFilter.value = app;
+        if (challenge) challengeFilter.value = challenge;
+        if (artifact) artifactInput.value = artifact;
+        if (capability) capabilityInput.value = capability;
+      }
+
+      function writeParams() {
+        const params = new URLSearchParams();
+        if (appFilter.value) params.set("app", appFilter.value);
+        if (challengeFilter.value) params.set("challengeId", challengeFilter.value);
+        if (artifactInput.value) params.set("artifact", artifactInput.value);
+        history.replaceState(null, "", `${location.pathname}${params.toString() ? `?${params}` : ""}`);
+      }
+
+      async function loadFilters() {
+        try {
+          const [apps, list] = await Promise.all([
+            fetch("/v1/apps").then((response) => response.json()),
+            fetch("/v1/challenges").then((response) => response.json()),
+          ]);
+
+          for (const app of apps) {
+            const option = document.createElement("option");
+            option.value = app.id;
+            option.textContent = app.name || app.id;
+            appFilter.append(option);
+          }
+
+          challenges = list;
+          renderChallenges();
+        } catch (error) {
+          setStatus(`Could not load apps and challenges: ${error.message}`, true);
+        }
+      }
+
+      function renderChallenges() {
+        const current = challengeFilter.value;
+        challengeFilter.innerHTML = '<option value="">All challenges</option>';
+
+        for (const challenge of challenges) {
+          if (appFilter.value && challenge.app !== appFilter.value) continue;
+          const option = document.createElement("option");
+          option.value = challenge.id;
+          option.textContent = challenge.title ? `${challenge.title} (${challenge.id})` : challenge.id;
+          challengeFilter.append(option);
+        }
+
+        if ([...challengeFilter.options].some((option) => option.value === current)) {
+          challengeFilter.value = current;
+        }
+      }
+
+      async function loadBoard() {
+        const params = new URLSearchParams({ limit: "50" });
+        if (appFilter.value) params.set("app", appFilter.value);
+        if (challengeFilter.value) params.set("challengeId", challengeFilter.value);
+
+        setStatus("Loading leaderboard…");
+
+        try {
+          const response = await fetch(`/v1/leaderboard?${params}`);
+          const entries = await response.json();
+
+          if (!response.ok) throw new Error(entries.error || `status ${response.status}`);
+          if (entries.length === 0) {
+            boardBody.innerHTML = '<tr><td colspan="8" class="muted">No verified builds match this filter yet.</td></tr>';
+            setStatus("0 builds. Publish a passing artifact to appear here.");
+            return;
+          }
+
+          boardBody.innerHTML = entries.map((entry) => `
+            <tr>
+              <td>${entry.rank}</td>
+              <td><a href="/v1/publications/${encodeURIComponent(entry.buildId)}" title="Open the signed envelope">${escapeHtml(entry.buildId.slice(0, 12))}…</a></td>
+              <td>${escapeHtml(entry.author)}</td>
+              <td>${escapeHtml(entry.app)}</td>
+              <td>${escapeHtml(entry.challengeId)}</td>
+              <td class="score">${entry.score}</td>
+              <td>${entry.gateCount}</td>
+              <td>${escapeHtml(entry.createdAt.slice(0, 10))}</td>
+            </tr>`).join("");
+
+          setStatus(`${entries.length} verified build${entries.length === 1 ? "" : "s"}.`);
+        } catch (error) {
+          boardBody.innerHTML = "";
+          setStatus(`Could not load the leaderboard: ${error.message}`, true);
+        }
+      }
+
+      function showDiscovery(message, error = false) {
+        discoveryStatus.textContent = message;
+        discoveryStatus.classList.toggle("error", error);
+      }
+
+      async function openCapability() {
+        const id = artifactInput.value.trim();
+        const capability = capabilityInput.value.trim();
+
+        if (!id || !capability) {
+          showDiscovery("An artifact id and a capability are both required.", true);
+          return;
+        }
+
+        showDiscovery("Opening…");
+        discoveryResult.classList.add("hidden");
+        writeParams();
+
+        try {
+          const response = await fetch(
+            `/v1/publications/${encodeURIComponent(id)}?capability=${encodeURIComponent(capability)}`,
+          );
+          const payload = await response.json();
+
+          if (!response.ok) {
+            showDiscovery(payload.error || `Opening failed with status ${response.status}.`, true);
+            return;
+          }
+
+          showDiscovery(`Opened “${payload.title}” by ${payload.author}.`);
+          discoveryResult.textContent = JSON.stringify(payload, null, 2);
+          discoveryResult.classList.remove("hidden");
+        } catch (error) {
+          showDiscovery(`Opening failed: ${error.message}`, true);
+        }
+      }
+
+      appFilter.addEventListener("change", () => {
+        renderChallenges();
+        writeParams();
+        void loadBoard();
+      });
+      challengeFilter.addEventListener("change", () => {
+        writeParams();
+        void loadBoard();
+      });
+      document.getElementById("refresh").addEventListener("click", () => void loadBoard());
+      document.getElementById("open-capability").addEventListener("click", () => void openCapability());
+
+      readParams();
+      void loadFilters().then(() => loadBoard());
+
+      if (artifactInput.value && capabilityInput.value) void openCapability();
+    </script>
+  </body>
+</html>

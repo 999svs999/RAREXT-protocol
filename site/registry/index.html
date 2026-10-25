@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RAREXT registry bundle</title>
-    <meta name="description" content="A static copy of the latest anchored RAREXT registry bundle, with its seed list and Merkle root." />
+    <meta name="description" content="A static copy of the latest anchored RAREXT registry bundle, with its seed list, mirror, and Merkle root." />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="../styles.css" />
   </head>
@@ -21,11 +21,15 @@
         <div class="facts">
           <div>
             <strong>Root</strong>
-            <span><code>7089bdf32272858d5cc31d2fca0b9ae94d3c32273e194acc805ef1ecc319428e</code></span>
+            <span><code>c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9</code></span>
           </div>
           <div>
             <strong>Contents</strong>
-            <span>1 anchored publication · 3 challenges · 3 semantics · 1 anchor</span>
+            <span>2 anchored publications · 5 challenges · 5 semantics · 1 anchor</span>
+          </div>
+          <div>
+            <strong>AI representations</strong>
+            <span>generative, bounded</span>
           </div>
           <div>
             <strong>Bundle</strong>
@@ -35,11 +39,20 @@
             <strong>Seed list</strong>
             <span><a href="./seed.json">seed.json</a></span>
           </div>
+          <div>
+            <strong>Mirror</strong>
+            <span><a href="./mirror/">workbench</a> · <a href="./mirror/gallery.html">gallery</a></span>
+          </div>
+          <div>
+            <strong>Verify</strong>
+            <span><a href="./mirror/verify.html?root=c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9">run the pinned verifier</a></span>
+          </div>
         </div>
         <p class="small">
-          The verifier is the same one used by the registry and the mirror page. The
-          committed test reads these files over HTTP and checks the root:
-          <code>node --test apps/api/test/published-bundle.test.ts</code>.
+          The verifier is the same one used by the registry and the mirror page. It
+          re-derives AI renditions from the committed model and seed, checks the embedded
+          blob bytes, and compares the recomputed root with the pinned root above:
+          <code>node --test apps/api/test/published-bundle.test.ts apps/web/test/published-mirror.test.ts</code>.
         </p>
         <p class="small">
           <a href="../">Back to RAREXT</a>
