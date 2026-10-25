@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Exact rent arithmetic (hardening).** Storage-rent quotes are now computed in
+  exact integer arithmetic: the ceiling is taken on the exact rational, so a
+  quote can no longer be off by a microcredit in either direction. Measured
+  before the fix, a sweep of 25,800 legal quotes disagreed with exact arithmetic
+  88 times (including undercharges at TB-scale multi-year terms); the same sweep
+  now agrees on every quote that produces a price, and a cost beyond the exact
+  range is refused instead of approximated. A pricing object whose policy,
+  monthMs, or creditScale drifts from the committed constants is refused rather
+  than quoted. Test coverage for the money path goes from 7 cases to 20, one per
+  mechanism, with measured limits written into `docs/STORAGE-ECONOMY.md`.
 - **Deterministic site deploy.** `npm run deploy:site` projects the committed
   `site/` tree onto `gh-pages`, publishes the mirror at `/mirror/`, refuses to
   write when the seed, bundle, and mirror roots differ or a published byte does

@@ -123,6 +123,17 @@ costMicroCredits    = ceil(GiB-months × rateMicroCreditsPerGiBMonth)
 costCredits         = costMicroCredits / 1,000,000
 ```
 
+The price is computed in **exact integer arithmetic**, and the ceiling is taken
+on the exact rational — not on a rounded float. That distinction is load-bearing:
+the intermediate product reaches 1e27 for legal inputs (a max-safe-integer byte
+count held for the ten-year cap), which double precision cannot represent, and a
+float ceiling then rounds in *either* direction. Measured before the fix: a sweep
+of 25,800 legal quotes disagreed with exact arithmetic 88 times, including
+undercharges of tens of microcredits at TB-scale multi-year terms. A quote is
+committed and a tenant may pay it, so "approximately the right price" is not a
+price. After the fix the same sweep agrees on all 25,736 quotes that produce a
+price.
+
 Rounding is up to a whole microcredit so a tiny quote cannot become free by
 truncation. The public tier defaults to a zero rate; the sealed tier defaults to
 1,000,000 microcredits (1 credit) per GiB-month as an illustrative policy. An
@@ -139,6 +150,40 @@ is still free.
 
 There is no protocol token here. Credits are an operator-scoped unit of account,
 and any transfer or chain settlement must be explicit and auditable.
+
+### Measured limits of the rent quote
+
+What is **refused** rather than approximated:
+
+- a byte count that is not a positive safe integer, an unknown tier, an invalid
+  date, a non-positive term, or a term past the ten-year cap;
+- a rate that is not a non-negative safe integer, from an argument or from the
+  environment — a malformed `RAREXT_STORAGE_*` value throws instead of pricing at
+  zero, because silently free storage for whoever can set an env var is the worst
+  available failure mode. An empty or whitespace value is *absent* and takes the
+  documented default;
+- a cost beyond `Number.MAX_SAFE_INTEGER`, where a quote could no longer carry the
+  price exactly;
+- a pricing object whose `policy`, `monthMs`, or `creditScale` is not the
+  committed `storage-rent-v1` constant. A quote reports those fields and computes
+  with them, so a drifted object would publish numbers that do not describe its own
+  arithmetic.
+
+What is **exact**: `costMicroCredits` (an integer, the exact rational ceiling),
+`byteMonths` at the byte level for whole terms, and the month arithmetic — a term
+of *n* months charges exactly *n* months, and doubling the term doubles the price.
+
+What is **presentation only**: `gibMonths` and the reported decimals are truncated
+at the micro-credit scale, so a term one millisecond short of a month reports just
+under one month while still costing a full one. The integer price is authoritative.
+
+What is **not enforced**: the ordering between tiers. The shipped defaults put the
+sealed rate above the open one and the open tier at zero, and that is asserted, but
+an operator may set any non-negative integers — pricing is policy.
+
+What this still does **not do**: charge, refund, renew, or move a balance. It
+prices. There is no settlement path on a balance yet; see
+[RFC 0018](../rfcs/0018-storage-rent-settlement.md).
 
 ## Why this is decentralised
 
