@@ -11,6 +11,12 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Deploys verify the AI renditions live.** `scripts/deploy-site.mjs`'s post-deploy
+  `verifyLive` stage now ends with the AI recomputation smoke check:
+  `scripts/verify-live-ai.mjs` runs against the just-deployed mirror URL, re-deriving
+  both renditions from the commitments alone and matching the served PNG bytes — the
+  same verification a stranger runs — and a non-zero exit fails the deploy. Spawned
+  asynchronously (the `spawnSync`-blocks-the-event-loop lesson applied forward).
 - **`npm run demo:ai` — the one-command, third-party proof that AI lives on RAREXT.**
   The claim axis had made the docs provable to CI; this makes the vision demonstrable
   to a person. The demo composes the repo's existing gated pieces: it publishes real

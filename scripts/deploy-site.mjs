@@ -408,6 +408,35 @@ async function verifyLive(files, seed, root, sourceCommit) {
   console.log(`live roots equal ${root}`);
   console.log(`live renditions ${[...byRepresentation.keys()].sort().join(", ")}`);
   console.log(`live links checked ${links}`);
+
+  // The last smoke check: re-derive the AI renditions from the live mirror's
+  // bytes alone, the same verification a stranger runs with
+  // scripts/verify-live-ai.mjs. Spawned asynchronously on purpose — a blocking
+  // spawn would freeze this process's own pending fetches.
+  const { spawn } = await import("node:child_process");
+  const verifyAi = await new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      ["scripts/verify-live-ai.mjs", base + "mirror"],
+      { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), 2 * 60 * 1000);
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+  const aiSummary = verifyAi.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
+  if (verifyAi.code !== 0) {
+    console.error(`live AI recomputation failed (${verifyAi.code}): ${aiSummary || verifyAi.stderr.trim()}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`live AI ${aiSummary.trim()}`);
+  }
 }
 
 async function main() {
