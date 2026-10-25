@@ -1,19 +1,19 @@
 {
   "manifest": {
     "version": 1,
-    "root": "a8d7cf836656faefce7e3f7922eec5e11ed8ad1aa2950e637a4cfd389f995d17",
+    "root": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
     "leafVersion": 4,
-    "anchorId": "eea89787-6a18-4312-acc8-6258ca1899c1",
-    "anchorRoot": "a8d7cf836656faefce7e3f7922eec5e11ed8ad1aa2950e637a4cfd389f995d17",
-    "createdAt": "2026-10-25T02:38:23.926Z",
+    "anchorId": "bc43a0d1-d9b2-4a79-8b1b-a54142199ec6",
+    "anchorRoot": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
+    "createdAt": "2026-10-25T02:43:28.573Z",
     "publications": [
       {
-        "id": "5dea5536-77a3-4a7a-8297-c2c794fb077c",
-        "leaf": "302e4dbd4e537e1bb24eb58194b8e27f26bdecd89188eab02c5333f7a248ea6e"
+        "id": "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
+        "leaf": "2130282e223c3a1f5a6ccc619199d905b0e0656b769bf24964c44059ae8fe953"
       },
       {
-        "id": "2efc4d6b-ff53-4796-a733-b80edbcfdf62",
-        "leaf": "80d1f2ae89dd5f667a0b5d4849d5d9d773f22ee5dd12e95e7db6c82b2a86932b"
+        "id": "4f12efac-c7ab-48b5-8d41-982a02a7340a",
+        "leaf": "13122c2aa026f9c27ca98296c4af2ab41be24681de734b20b4f0b64c69978813"
       }
     ],
     "counts": {
@@ -25,9 +25,9 @@
   },
   "publications": [
     {
-      "id": "5dea5536-77a3-4a7a-8297-c2c794fb077c",
+      "id": "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
       "author": "ai-proof",
-      "authorKey": "482449a95e0a8a793d332e95a7d7748278f63766133b2469993a381d7cb3467b",
+      "authorKey": "83bae63382931f7a38b6eb03be0683fc6d0c8319042319e9fc882ad549829b1c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -63,13 +63,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T02:38:23.910Z",
-      "attestedAt": "2026-10-25T02:38:23.915Z",
+      "createdAt": "2026-10-25T02:43:28.558Z",
+      "attestedAt": "2026-10-25T02:43:28.562Z",
       "verified": true,
-      "signature": "wqc6ajpNpkbmQfF13FzvoE1v0yjxGU5zOGwxyhLbPK3WyAssiym1ByzeidJpNqSkg/fbT3MSIvrm3P8x+3apKg==",
-      "nonce": "a29343f2-9d06-4765-935c-89582645db38",
+      "signature": "IeQ7X09X5RrWXL+Yk7mW32+4IWp9UuyeMmEIkwUHzKnIhSlsGZ18sqEc6COm0mHlUtrDLGqx67UBN+TbbVtMkA==",
+      "nonce": "c534b9e6-3c93-42f2-97ae-5ed4214cbb7c",
       "attestation": {
-        "id": "ba6578fa-9638-4f63-951c-c2b01143fb72",
+        "id": "13a8fb27-432f-4edc-8652-8fd66dfbcc56",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -89,16 +89,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-25T02:38:23.915Z"
+        "createdAt": "2026-10-25T02:43:28.562Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "2efc4d6b-ff53-4796-a733-b80edbcfdf62",
+      "id": "4f12efac-c7ab-48b5-8d41-982a02a7340a",
       "author": "ai-proof",
-      "authorKey": "482449a95e0a8a793d332e95a7d7748278f63766133b2469993a381d7cb3467b",
+      "authorKey": "83bae63382931f7a38b6eb03be0683fc6d0c8319042319e9fc882ad549829b1c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -128,13 +128,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T02:38:23.917Z",
-      "attestedAt": "2026-10-25T02:38:23.920Z",
+      "createdAt": "2026-10-25T02:43:28.564Z",
+      "attestedAt": "2026-10-25T02:43:28.567Z",
       "verified": true,
-      "signature": "yxuT5os4GIZQAeMyRzn8kA2B8ReRhWPWdp8Od1yeKwcj6WpKqcqDLmZGhn+42EeMj2X1Rg2wV+vqtwD3Qr9wpw==",
-      "nonce": "72dd1ea0-f314-4944-800d-557c1e67f9d8",
+      "signature": "0yyOJt+VXJEGCca+sZo/A6nyv0N2kspBbo7RydvB/tnMyf4nzyvRXIY2MV1AIIYO6Jy0xOxoEwkotvOndcofAQ==",
+      "nonce": "b26eca15-7c93-41c5-987a-e9fd7106b7a5",
       "attestation": {
-        "id": "632aaca6-1d22-43b8-89c4-3583bda32372",
+        "id": "d8875aaa-46eb-48cf-b471-d34cc310e7b8",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -156,7 +156,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-25T02:38:23.920Z"
+        "createdAt": "2026-10-25T02:43:28.567Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -165,22 +165,22 @@
   ],
   "anchors": [
     {
-      "id": "eea89787-6a18-4312-acc8-6258ca1899c1",
-      "root": "a8d7cf836656faefce7e3f7922eec5e11ed8ad1aa2950e637a4cfd389f995d17",
+      "id": "bc43a0d1-d9b2-4a79-8b1b-a54142199ec6",
+      "root": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
       "publicationIds": [
-        "5dea5536-77a3-4a7a-8297-c2c794fb077c",
-        "2efc4d6b-ff53-4796-a733-b80edbcfdf62"
+        "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
+        "4f12efac-c7ab-48b5-8d41-982a02a7340a"
       ],
       "leafCount": 2,
       "leafVersion": 4,
-      "createdAt": "2026-10-25T02:38:23.926Z",
+      "createdAt": "2026-10-25T02:43:28.573Z",
       "adapter": "local",
-      "reference": "local:a8d7cf836656faef",
+      "reference": "local:b3f86f93a42dedbf",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:a8d7cf836656faef"
+          "reference": "local:b3f86f93a42dedbf"
         },
         {
           "adapter": "trac",
@@ -191,7 +191,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreib4f3u4rdqhkkohwfh2q2fioj7rf5ky52qzp2dofpjb4fzhyk36me"
+          "reference": "cid:bafkreicbdtqy7z2oqa2ipsoyuitibvci4vou32ybnlr5ugqahxeftx4jf4"
         }
       ]
     }
