@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The published limits are checked against the exported constants.** A programmatic
+  sweep found 393 numeric claim lines across 21 docs; the limits table in
+  `docs/OPERATIONS.md` cites named constants, so `claim:check` now verifies
+  `MAX_BLOB_BYTES` = 32 MiB and `MAX_BODY_BYTES` = 1,000,000 bytes (the doc's "1 MiB" is
+  a rounded label, noted where checked), `MAX_GENERATIVE_STEPS` = 100,000 and
+  `MAX_VOCAB` = 4,096 — doc values parsed from the markdown, code values imported from
+  `apps/api/src/storage.ts`, `apps/api/src/app.ts` (module-local, read from source), and
+  `packages/core/src/ai.ts`. The self-test injects a limits table the code outgrows
+  (`MAX_VOCAB` = 8,192) and asserts the mismatch is reported. Seventh claim kind.
 - **The soak claims are re-derived and artifact-backed.** The 10-minute chaos run was
   re-run against its published numbers: 5,991 puts at 100%, 5,991 retrievals at 100%,
   148 repairs at 100% with 148 re-audits passing, 22 holder kills, 2 transient put

@@ -20,6 +20,8 @@ const architecturePath = new URL("docs/ARCHITECTURE.md", root);
 
 const das = await import(new URL("apps/api/src/das.ts", root).href);
 const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
+const coreAi = await import(new URL("packages/core/src/ai.ts", root).href);
+const storageConstants = await import(new URL("apps/api/src/storage.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const { samplesForMissingFraction, missProbability } = das;
 
@@ -149,6 +151,8 @@ if (process.argv.includes("--self-test")) {
   // And a route the docs publish but the code no longer handles must be caught.
   const beforeRoutes = failures;
   const originalArchitecture = readFileSync(architecturePath, "utf8");
+  const originalOperations = readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  const appSource = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
   // The health row is the table's first line, and it is `/health` — no /v1
   // prefix, which is exactly the kind of detail a hand-written anchor gets wrong.
   const doctoredDoc = originalArchitecture.replace(
@@ -187,9 +191,20 @@ if (process.argv.includes("--self-test")) {
   const caughtThroughput = failures > beforeThroughput;
   if (!caughtThroughput) fail("self-test: the checker accepted a throughput artifact that contradicts the doc");
   caught = caught && caughtThroughput;
+  // And a limits table the code outgrew must be reported.
+  const beforeLimits = failures;
+  const doctoredLimitsDoc = originalOperations.replace(
+    "`MAX_VOCAB` = 4,096",
+    "`MAX_VOCAB` = 8,192",
+  );
+  checkLimitsTable(doctoredLimitsDoc);
+  const caughtLimits = failures > beforeLimits;
+  if (!caughtLimits) fail("self-test: the checker accepted a limits table the code contradicts");
+  caught = caught && caughtLimits;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
+  assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -203,6 +218,7 @@ checkRentClaims();
 checkRouteSurface();
 checkSoakLog();
 checkThroughputArtifact();
+checkLimitsTable();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -309,6 +325,42 @@ function checkThroughputArtifact(artifactOverride) {
   if (!doc.includes("8.3x lower")) fail("STORAGE.md no longer states the 8.3x streaming-memory saving");
   console.log(
     `  memory ${round1(memory.peakRssMiB)} MiB vs streaming ${round1(streaming.peakRssMiB)} MiB = ${ratio.toFixed(1)}x lower, exact ${streaming.exact}`,
+  );
+}
+
+
+/**
+ * The limits-table claim: docs/OPERATIONS.md publishes named constants —
+ * `MAX_BLOB_BYTES` = 32 MiB, `MAX_BODY_BYTES` = 1 MiB (the code's 1,000,000
+ * bytes, labelled loosely), `MAX_GENERATIVE_STEPS` = 100,000, `MAX_VOCAB` =
+ * 4,096. Each must equal what the implementation actually exports.
+ */
+function checkLimitsTable(docOverride) {
+  console.log(`limits table (docs/OPERATIONS.md${docOverride ? ", DOCTORED" : ""} vs exported constants):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+
+  const blobCap = Number(doc.match(/`MAX_BLOB_BYTES` = (\d+) MiB/)?.[1]);
+  if (blobCap !== 32) fail(`OPERATIONS.md no longer states MAX_BLOB_BYTES = 32 MiB (says ${blobCap})`);
+  if (storageConstants.MAX_BLOB_BYTES !== 32 * 1024 * 1024) {
+    fail(`the code's MAX_BLOB_BYTES is ${storageConstants.MAX_BLOB_BYTES}, not 32 MiB`);
+  }
+
+  // app.ts keeps the body cap module-local, so read its source line directly.
+  const bodyCap = Number(app.match(/const MAX_BODY_BYTES = ([\d_]+);/)?.[1]?.replaceAll("_", ""));
+  if (bodyCap !== 1_000_000) fail(`app.ts's MAX_BODY_BYTES is ${bodyCap}, not 1,000,000`);
+  if (!doc.includes("`MAX_BODY_BYTES` = 1 MiB")) fail("OPERATIONS.md no longer cites the 1 MiB JSON body cap");
+
+  const steps = Number(doc.match(/`MAX_GENERATIVE_STEPS` = ([\d,]+)/)?.[1]?.replaceAll(",", ""));
+  if (steps !== 100_000) fail(`OPERATIONS.md no longer states MAX_GENERATIVE_STEPS = 100,000 (says ${steps})`);
+  if (coreAi.MAX_GENERATIVE_STEPS !== 100_000) fail(`the code's MAX_GENERATIVE_STEPS is ${coreAi.MAX_GENERATIVE_STEPS}, not 100,000`);
+
+  const vocab = Number(doc.match(/`MAX_VOCAB` = ([\d,]+)/)?.[1]?.replaceAll(",", ""));
+  if (vocab !== 4_096) fail(`OPERATIONS.md no longer states MAX_VOCAB = 4,096 (says ${vocab})`);
+  if (coreAi.MAX_VOCAB !== 4_096) fail(`the code's MAX_VOCAB is ${coreAi.MAX_VOCAB}, not 4,096`);
+
+  console.log(
+    `  blob ${storageConstants.MAX_BLOB_BYTES / 2 ** 20} MiB | body ${bodyCap} B | steps ${coreAi.MAX_GENERATIVE_STEPS} | vocab ${coreAi.MAX_VOCAB}`,
   );
 }
 
