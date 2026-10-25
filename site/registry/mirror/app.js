@@ -139,6 +139,9 @@ function verifyAiArtifact(artifact, challenge) {
   }
   return { error: `artifact kind ${artifact.kind} is not a locally verifiable AI claim` };
 }
+var BOUNDED_RASTER_LANE = 48;
+var BOUNDED_RASTER_GUTTER = 4;
+var BOUNDED_RASTER_HEIGHT = 3 * BOUNDED_RASTER_LANE + 2 * BOUNDED_RASTER_GUTTER;
 
 // packages/core/src/simulator.ts
 var MAX_ITERATIONS = 64;

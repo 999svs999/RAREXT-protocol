@@ -98,14 +98,16 @@ mirror are published with the project site:
 
 - <https://999svs999.github.io/RAREXT-protocol/registry/bundle.json>
 - <https://999svs999.github.io/RAREXT-protocol/registry/seed.json>
-- <https://999svs999.github.io/RAREXT-protocol/registry/mirror/>
-- <https://999svs999.github.io/RAREXT-protocol/registry/mirror/verify.html>
+- <https://999svs999.github.io/RAREXT-protocol/mirror/>
+- <https://999svs999.github.io/RAREXT-protocol/mirror/verify.html>
 
 The seed names the reference registry and the GitHub Pages mirror, and records the
 bundle root. It is a copy, not a live registry: it carries the bundle that was
 anchored when it was built and does not learn about later publications. The mirror's
 verify page accepts `?root=<root>`; the published index links to it with the current
-root pinned, so the browser rejects a copy whose recomputed root differs.
+root pinned, so the browser rejects a copy whose recomputed root differs. The
+canonical mirror path is `/mirror/`; `npm run deploy:site` projects the committed
+`site/` tree onto `gh-pages` and checks the live bytes, roots, and links afterwards.
 
 `npm run publish:proof` copies a locally verified `.ai-proof` result into
 `site/registry` and updates the seed. It never generates a proof or contacts a

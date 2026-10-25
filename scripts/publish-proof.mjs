@@ -43,8 +43,14 @@ if (ai.length !== 2) {
 const media = ai
   .map((publication) => publication.artifact?.body?.media)
   .filter((entry) => entry !== undefined && entry !== null);
-if (media.length !== 1) {
-  throw new Error(`expected one media rendition, got ${media.length}`);
+if (media.length !== ai.length) {
+  throw new Error(`expected one rendition per AI representation, got ${media.length} for ${ai.length}`);
+}
+const representations = new Set(ai.map((publication) => publication.attestation.representation));
+for (const expected of ["generative", "bounded"]) {
+  if (!representations.has(expected)) {
+    throw new Error(`expected a ${expected} AI representation`);
+  }
 }
 
 const encoded = new Map(
@@ -102,7 +108,7 @@ for (const mirror of seed.mirrors ?? []) {
 
 writeFileSync(seedPath, `${JSON.stringify(seed, null, 2)}\n`);
 
-const rootUrl = "https://999svs999.github.io/RAREXT-protocol/registry";
+const rootUrl = "https://999svs999.github.io/RAREXT-protocol";
 const proofUrl = `${rootUrl}/mirror/verify.html?root=${bundle.manifest.root}`;
 const publications = bundle.manifest.publications.length;
 const challengeCount = bundle.challenges?.length ?? 0;
@@ -154,11 +160,11 @@ writeFileSync(
           </div>
           <div>
             <strong>Mirror</strong>
-            <span><a href="./mirror/">workbench</a> · <a href="./mirror/gallery.html">gallery</a></span>
+            <span><a href="../mirror/">workbench</a> · <a href="../mirror/gallery.html">gallery</a></span>
           </div>
           <div>
             <strong>Verify</strong>
-            <span><a href="./mirror/verify.html?root=${bundle.manifest.root}">run the pinned verifier</a></span>
+            <span><a href="../mirror/verify.html?root=${bundle.manifest.root}">run the pinned verifier</a></span>
           </div>
         </div>
         <p class="small">
@@ -179,5 +185,5 @@ writeFileSync(
 
 console.log(`published proof ${bundle.manifest.root}`);
 console.log(`  ${publications} publications, ${ai.length} AI representations, ${media.length} rendition`);
-console.log(`  ${rootUrl}/bundle.json`);
+console.log(`  ${rootUrl}/registry/bundle.json`);
 console.log(`  ${proofUrl}`);

@@ -26,6 +26,7 @@
     "version:all": "node scripts/sync-version.mjs",
     "mirror:build": "node scripts/build-mirror.mjs",
     "publish:proof": "node scripts/publish-proof.mjs",
+    "deploy:site": "node scripts/deploy-site.mjs",
     "backup:create": "node scripts/backup.mjs create",
     "backup:verify": "node scripts/backup.mjs verify",
     "backup:restore": "node scripts/backup.mjs restore",

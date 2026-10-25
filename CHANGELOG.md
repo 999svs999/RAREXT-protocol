@@ -11,6 +11,12 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Deterministic site deploy.** `npm run deploy:site` projects the committed
+  `site/` tree onto `gh-pages`, publishes the mirror at `/mirror/`, refuses to
+  write when the seed, bundle, and mirror roots differ or a published byte does
+  not match its repo source, and verifies the live bytes, roots, links, and both
+  AI renditions after pushing.
+
 - **Reproducible EVM anchor audit package.** `npm run audit:package` writes a
   hash-verified package with the exact contract source, tests, scripts, runbooks,
   relay file, ABI, creation/runtime bytecode, and storage layout, plus a manifest

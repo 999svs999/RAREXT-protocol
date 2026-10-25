@@ -52,8 +52,13 @@ test("the published mirror verifies against its pinned root and media", async ()
   const ai = result.aiClaims.filter((claim) => claim.representation);
   assert.equal(ai.length, 2);
 
-  const rendition = ai.find((claim) => claim.media !== null);
-  assert.ok(rendition?.media);
-  assert.equal(rendition.media.matches, true);
-  assert.equal(rendition.media.blobMatches, true);
+  const renditions = new Map(
+    ai.map((claim) => [claim.representation, claim.media]),
+  );
+  for (const representation of ["generative", "bounded"] as const) {
+    const media = renditions.get(representation);
+    assert.ok(media, `${representation} rendition is missing`);
+    assert.equal(media.matches, true);
+    assert.equal(media.blobMatches, true);
+  }
 });
