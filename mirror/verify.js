@@ -163,6 +163,74 @@ function renderRaster(model, seed, size) {
   }
   return out;
 }
+var BOUNDED_RASTER_RULE = "bounded-strip-v1";
+var BOUNDED_RASTER_SCALE = 16;
+var BOUNDED_RASTER_LANE = 48;
+var BOUNDED_RASTER_GUTTER = 4;
+var BOUNDED_RASTER_GAIN = 32;
+var MAX_BOUNDED_RASTER_WIDTH = 4096;
+function isBoundedMedia(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value;
+  return media.mediaType === "image/png" && media.rule === BOUNDED_RASTER_RULE && typeof media.blob === "string" && /^[0-9a-f]{64}$/.test(media.blob) && typeof media.raster === "string" && /^[0-9a-f]{64}$/.test(media.raster) && Number.isInteger(media.width) && media.width >= 1 && media.width <= MAX_BOUNDED_RASTER_WIDTH && Number.isInteger(media.height) && media.height >= 1 && media.height <= MAX_BOUNDED_RASTER_WIDTH && Number.isInteger(media.bytes) && media.bytes >= 1;
+}
+var BOUNDED_RASTER_HEIGHT = 3 * BOUNDED_RASTER_LANE + 2 * BOUNDED_RASTER_GUTTER;
+function renderBoundedRaster(reference, reconstruction, width, height = BOUNDED_RASTER_HEIGHT) {
+  if (!Array.isArray(reference) || reference.length < 1) {
+    throw new Error("renderBoundedRaster: reference must be a non-empty array");
+  }
+  if (!Array.isArray(reconstruction) || reconstruction.length !== reference.length) {
+    throw new Error("renderBoundedRaster: reconstruction must match the reference length");
+  }
+  if (reference.length > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: at most ${MAX_BOUNDED_RASTER_WIDTH} values`);
+  }
+  const w = width ?? reference.length * BOUNDED_RASTER_SCALE;
+  if (!Number.isInteger(w) || w < 1 || w > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: width must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+  if (!Number.isInteger(height) || height < 1 || height > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: height must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+  const raster = new Uint8Array(w * height * 3);
+  const lane = BOUNDED_RASTER_LANE;
+  const gutter = BOUNDED_RASTER_GUTTER;
+  const laneStarts = [0, lane + gutter, 2 * (lane + gutter)];
+  for (let x = 0; x < w; x++) {
+    const index = Math.min(
+      reference.length - 1,
+      Math.floor(x * reference.length / w)
+    );
+    const grey = clampByte(reference[index]);
+    const reconstructionGrey = clampByte(reconstruction[index]);
+    const error = clampByte(Math.abs(reference[index] - reconstruction[index]) * BOUNDED_RASTER_GAIN);
+    for (let y = 0; y < height; y++) {
+      const offset = (y * w + x) * 3;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      if (y < lane) {
+        r = g = b = grey;
+      } else if (y < lane + gutter) {
+      } else if (y < laneStarts[1] + lane) {
+        r = g = b = reconstructionGrey;
+      } else if (y < laneStarts[1] + lane + gutter) {
+      } else if (y < laneStarts[2] + lane) {
+        r = error;
+      }
+      raster[offset] = r;
+      raster[offset + 1] = g;
+      raster[offset + 2] = b;
+    }
+  }
+  return raster;
+}
+function clampByte(value) {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  if (value >= 255) return 255;
+  return Math.round(value);
+}
 
 // packages/core/src/leaf.ts
 var PUBLICATION_LEAF_VERSION = 4;
@@ -320,22 +388,53 @@ function localAiCheck(publication, spec) {
   }
   return null;
 }
-async function mediaFor(publication, blobBytes) {
+async function mediaFor(publication, spec, blobBytes) {
   const body = publication.artifact?.body;
-  if (!body || typeof body.seed !== "number" || !isGenerativeMedia(body.media)) {
-    return null;
+  if (!body) return null;
+  let raster = null;
+  let geometry = {
+    size: null,
+    width: null,
+    height: null
+  };
+  let media = null;
+  if (typeof body.seed === "number" && isGenerativeMedia(body.media)) {
+    media = body.media;
+    geometry = { size: body.media.size, width: body.media.size, height: body.media.size };
+    try {
+      raster = renderRaster(
+        body.model,
+        body.seed,
+        body.media.size
+      );
+    } catch {
+      raster = null;
+    }
+  } else if (isBoundedMedia(body.media)) {
+    media = body.media;
+    geometry = { size: null, width: body.media.width, height: body.media.height };
+    const reference = spec?.reference;
+    if (Array.isArray(reference) && Array.isArray(body.values)) {
+      try {
+        raster = renderBoundedRaster(
+          reference,
+          body.values,
+          body.media.width,
+          body.media.height
+        );
+      } catch {
+        raster = null;
+      }
+    }
   }
-  const media = body.media;
+  if (!media) return null;
   let reDerived = null;
-  try {
-    const raster = renderRaster(
-      body.model,
-      body.seed,
-      media.size
-    );
-    reDerived = await sha256BytesHex(raster);
-  } catch {
-    reDerived = null;
+  if (raster) {
+    try {
+      reDerived = await sha256BytesHex(raster);
+    } catch {
+      reDerived = null;
+    }
   }
   let blobMatches = null;
   if (blobBytes) {
@@ -344,7 +443,9 @@ async function mediaFor(publication, blobBytes) {
   return {
     blob: media.blob,
     raster: media.raster,
-    size: media.size,
+    size: geometry.size,
+    width: geometry.width,
+    height: geometry.height,
     reDerived,
     matches: reDerived === null ? null : reDerived === media.raster,
     blobMatches
@@ -377,7 +478,11 @@ async function aiClaimsFor(bundle, challenges, media) {
       if (typeof hash === "string") {
         const encoded = media?.[hash];
         const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : void 0;
-        mediaEvidence = await mediaFor(publication, bytes);
+        mediaEvidence = await mediaFor(
+          publication,
+          spec,
+          bytes
+        );
       }
     }
     claims.push({
