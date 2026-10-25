@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The fault-limit tables' cited evidence is checked.** Tenth claim kind: the
+  fault-limit tables in `docs/OPERATIONS.md` name 30 test files as the measurement for
+  each published behaviour; `claim:check` now verifies every citation exists and is
+  non-empty in the tree, that the gate's test glob (`apps/api/test/*.test.ts`) is broad
+  enough to run them, that the doc cites evidence at all, and that the `BACKUP_VERSION`
+  contract the backup-fault section pins (version 1) matches `apps/api/src/backup.ts`.
+  The self-test rewrites one citation to a file that does not exist and asserts the
+  mismatch is reported — a doc that cites evidence the CI never runs is drift.
 - **The operational defaults are checked against the source that reads them.** Ninth
   claim kind: `docs/OPERATOR.md`'s retention/GC defaults — the challenge scheduler "every
   6 hours", storage and pin GC loops "both 24h, `0` disables", and the 24-hour blob GC

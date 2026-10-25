@@ -11,7 +11,7 @@
 //
 // Everything here is in-repo: no network, no fixtures, no bench run.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
@@ -222,12 +222,23 @@ if (process.argv.includes("--self-test")) {
   const caughtDefaults = failures > beforeDefaults;
   if (!caughtDefaults) fail("self-test: the checker accepted an operational default the code contradicts");
   caught = caught && caughtDefaults;
+  // And a doc citing test evidence that is not in the tree must be reported.
+  const beforeEvidence = failures;
+  const doctoredOperationsDoc2 = originalOperations.replace(
+    "apps/api/test/holder-fault.test.ts",
+    "apps/api/test/holder-fault-removed.test.ts",
+  );
+  checkEvidenceCitations(doctoredOperationsDoc2);
+  const caughtEvidence = failures > beforeEvidence;
+  if (!caughtEvidence) fail("self-test: the checker accepted a citation to test evidence that does not exist");
+  caught = caught && caughtEvidence;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
+  assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -244,6 +255,7 @@ checkThroughputArtifact();
 checkLimitsTable();
 checkReplayBounds();
 checkOperationalDefaults();
+checkEvidenceCitations();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -483,6 +495,49 @@ function checkOperationalDefaults(docOverride) {
   console.log(
     `  challenges ${challengeMs / HOUR} h | storage GC ${storageGcMs / HOUR} h | pin GC ${pinGcMs / HOUR} h | grace ${graceMs / HOUR} h`,
   );
+}
+
+
+/**
+ * The evidence citations: docs/OPERATIONS.md's fault-limit tables name the test
+ * files that measure each published behaviour ("Limits are measured by
+ * apps/api/test/....test.ts"). Every cited file must exist and be non-empty,
+ * and the gate's own test glob must be broad enough to run it — otherwise the
+ * doc cites evidence the CI never executes.
+ */
+function checkEvidenceCitations(docOverride, testScriptOverride) {
+  console.log(`evidence citations (docs/OPERATIONS.md${docOverride ? ", DOCTORED" : ""} vs the tree):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
+  const testScript = testScriptOverride ?? pkg.scripts.test;
+
+  const cited = Array.from(new Set(doc.match(/apps\/api\/test\/[a-z-]+\.test\.ts/g) ?? []));
+  let missing = 0;
+  for (const rel of cited) {
+    let size = 0;
+    try {
+      size = statSync(new URL("./" + rel, root)).size;
+    } catch {
+      missing += 1;
+      fail(`OPERATIONS.md cites ${rel}, which does not exist in the tree`);
+      continue;
+    }
+    if (size === 0) fail(`OPERATIONS.md cites ${rel}, which is empty`);
+  }
+  if (!testScript.includes("apps/api/test/*.test.ts")) {
+    fail("the gate's test script does not glob apps/api/test, so cited evidence may not run in CI");
+  }
+  if (cited.length === 0) fail("OPERATIONS.md cites no test evidence at all");
+
+  // The backup version the doc pins must be the code's.
+  const backup = readFileSync(new URL("apps/api/src/backup.ts", root), "utf8");
+  const docVersion = Number(doc.match(/`BACKUP_VERSION` \((\d+)\)/)?.[1]);
+  const codeVersion = Number(backup.match(/export const BACKUP_VERSION = (\d+);/)?.[1]);
+  if (docVersion !== 1 || codeVersion !== 1) {
+    fail(`the backup version contract drifted: doc ${docVersion}, code ${codeVersion}, both must be 1`);
+  }
+
+  console.log(`  ${cited.length} cited test file(s), all present; backup version ${codeVersion}`);
 }
 
 
