@@ -160,8 +160,24 @@ if (process.argv.includes("--self-test")) {
   // And a soak run that failed must be reported, not waved through.
   const beforeSoak = failures;
   const realSoak = readFileSync(new URL("bench/storage/soak-2026-10-26.log", root), "utf8");
-  checkSoakLog(realSoak.replace("| Put | 5991 | 5991 | 0 | 100.0% |", "| Put | 5991 | 5942 | 49 | 99.2% |"));
+  const doctoredSoak = realSoak.replace(
+    "| Put | 5991 | 5991 | 0 | 100.0% |",
+    "| Put | 5991 | 5942 | 49 | 99.2% |",
+  );
+  checkSoakLog(doctoredSoak);
   caught = caught && failures > beforeSoak;
+  // A doctored input that equals its original proves nothing: the anchor
+  // silently no-op'd, and the self-test would pass while testing the real
+  // input. Every fixture must actually differ before its result is trusted.
+  const assertChanged = (before, after, label) => {
+    const changed = before !== after;
+    if (!changed) fail(`self-test: the ${label} fixture no longer changes its input (anchor rot)`);
+    return changed;
+  };
+  caught = assertChanged(original, doctored, "sampling-table") && caught;
+  caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
+  caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
+
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
   process.exit(caught ? 0 : 1);
 }
