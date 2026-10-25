@@ -49,19 +49,51 @@
         return null;
       };
 
+      // Mirror mode: blobs.json next to this page carries small blobs inline,
+      // so the gallery works with no server at all — a directory is enough.
+      // Live mode: fall back to the node's raw blob route.
+      let source = null;
+      try {
+        const mirror = await fetch("./blobs.json");
+        if (mirror.ok) {
+          const data = await mirror.json();
+          source = {
+            embedded: true,
+            records: (data.blobs ?? []).map((b) => ({
+              hash: b.hash,
+              mediaType: b.mediaType,
+              size: b.size,
+              tier: b.tier,
+              url: `data:${b.mediaType};base64,${b.content}`,
+            })),
+          };
+        }
+      } catch {
+        // fall through to live mode
+      }
+      if (!source) {
+        const records = await (await fetch("/v1/blobs")).json();
+        source = {
+          embedded: false,
+          records: (Array.isArray(records) ? records : []).map((r) => ({
+            ...r,
+            url: `/v1/blobs/${r.hash}/raw`,
+          })),
+        };
+      }
+
       const render = (record) => {
         const kind = family(record.mediaType ?? "");
         if (!kind) return null;
-        const url = `/v1/blobs/${record.hash}/raw`;
         const card = document.createElement("article");
         card.className = "card";
         let element;
         if (kind === "image") {
-          element = `<img loading="lazy" alt="${record.mediaType}" src="${url}" />`;
+          element = `<img loading="lazy" alt="${record.mediaType}" src="${record.url}" />`;
         } else if (kind === "audio") {
-          element = `<audio controls preload="none" src="${url}"></audio>`;
+          element = `<audio controls preload="none" src="${record.url}"></audio>`;
         } else if (kind === "video") {
-          element = `<video controls preload="metadata" src="${url}"></video>`;
+          element = `<video controls preload="metadata" src="${record.url}"></video>`;
         } else {
           element = `<pre>loading text…</pre>`;
         }
@@ -72,7 +104,7 @@
             <code>${record.hash}</code>
           </div>`;
         if (kind === "text") {
-          fetch(url)
+          fetch(record.url)
             .then((r) => r.text())
             .then((text) => {
               card.querySelector("pre").textContent = text.slice(0, 2000);
@@ -84,12 +116,9 @@
         return card;
       };
 
-      const records = await (await fetch("/v1/blobs")).json();
-      const shown = (Array.isArray(records) ? records : [])
-        .map(render)
-        .filter(Boolean);
+      const shown = source.records.map(render).filter(Boolean);
       for (const card of shown) grid.appendChild(card);
       if (shown.length === 0) empty.hidden = false;
-    </script>
+        </script>
   </body>
 </html>
