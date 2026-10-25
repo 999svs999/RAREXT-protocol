@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The Trac task registry enforces what it publishes (hardening).** `register`
+  checked truthiness only, so the registry accepted and then *served* values its own
+  type forbids: an unknown status, a numeric `app`, an object `challengeId`, an
+  unparseable `createdAt`, a whitespace handle, and an array handle — the last being
+  an entry that appears in `list()` and cannot be fetched by handle at all, because a
+  `Map` keys by identity. `get` and `list` also returned the live record, so one
+  in-process reader's edit changed the status every other reader saw. Entries are now
+  validated field by field, and readers get frozen copies. The task-registry suite
+  goes from 3 cases to 9, and the limits are written into `docs/OPERATIONS.md`.
 - **An invalid verification clock no longer disables the freshness window (hardening).**
   Every freshness comparison in the audit verifier is numeric, and `NaN` fails all of
   them — so passing `now: NaN` did not narrow the window, it removed it. Measured
