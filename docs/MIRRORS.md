@@ -26,7 +26,10 @@ publication.
 
 The bundle verifies itself: recompute each publication's leaf, rebuild the Merkle
 root, and it has to land on the root the chain holds. A mirror that alters a title
-rebuilds a different root, and the difference is visible.
+rebuilds a different root, and the difference is visible. Pin the verifier to the
+chain root with `verify.html?root=<root>` when you need more than internal
+consistency: the page then rejects a bundle whose recomputed root differs from
+the root you supplied.
 
 ## The mirror
 
@@ -41,12 +44,17 @@ A mirror is a directory:
 - `index.html`, `app.js`, `styles.css` — the workbench, answering its reads from
   the bundle instead of a server.
 - `verify.html` — a page that recomputes the root in the browser and tells you
-  whether this copy is faithful.
+  whether this copy is faithful. Open it with `?root=<chain root>` to pin the
+  bundle to a root obtained from the chain or another trusted source; without a
+  pin it checks internal consistency only, because a mirror can rewrite both its
+  bundle and the root inside it.
 - `blobs.json` — small public blobs embedded for `gallery.html`. The gallery
   re-hashes every embedded blob in the browser and skips any whose bytes, size,
-  or hash disagree; it never renders unverified metadata. When no embedded
-  copy exists, the page falls back to document-relative `./v1/blobs/...` paths
-  so it also works under a subpath such as GitHub Pages.
+  or hash disagree; it never renders unverified metadata. AI renditions carry
+  the originating publication's representation label beside the bytes, and the
+  mirror verifier re-derives their raster from the commitment. When no
+  embedded copy exists, the page falls back to document-relative
+  `./v1/blobs/...` paths so it also works under a subpath such as GitHub Pages.
 
 It has no server behind it. Serve it from a static host, a bucket, a NAS, a USB
 stick, or a mirror node. The proof it carries is the root.

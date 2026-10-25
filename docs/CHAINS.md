@@ -27,7 +27,7 @@ never `ok`.
 
 | Chain | Family | How the root is carried | How it is read back |
 | --- | --- | --- | --- |
-| **RAREXT** | `rarext` | a block in our own chain | the block, its Merkle proof, and the hash link |
+| **RAREXT** | `rarext` | a block in our own chain | the block and a locally checked Merkle proof; `/chain/audit` walks the hash links and signatures |
 | **Base, OP, Arbitrum, Polygon, zkSync** | `evm` | a call to an anchor contract | `eth_call` on the contract, comparing the stored root |
 | **Solana** | `solana` | a memo transaction | the transaction's log messages, base58-decoded |
 | **Bitcoin** | `bitcoin` | an `OP_RETURN` output | the raw transaction, searched for the root |
@@ -50,10 +50,15 @@ chain ids. An operator sets `RAREXT_CHAINS` to that file, or to their own.
 It is a **hash-linked, signed log of anchor commitments**:
 
 - each block carries the roots anchored in it, a Merkle root over them, the
-  previous block's hash, a height, a timestamp, and the signer's key id;
-- every block is signed by the node's key, and the hash covers the whole block;
+  previous block's hash, a height, a timestamp, the signer's key id, and the
+  registry publication ids that produced those roots;
+- every block is signed by the node's key, and the hash covers the whole block,
+  including the publication ids when present;
 - a reader can walk the history, check every link and every signature, and prove
-  that a particular root is in a particular block.
+  that a particular root is in a particular block;
+- a restart restores the saved blocks exactly. The node verifies every hash,
+  signature, height, Merkle root, and parent link before serving them, and
+  refuses to start on a tampered log instead of re-signing a new history.
 
 ```bash
 npm run chain:node        # http://127.0.0.1:8790
@@ -62,10 +67,16 @@ npm run chain:node        # http://127.0.0.1:8790
 ```
 POST /chain/anchor   { root, publicationIds }  -> { height, hash }
 GET  /chain/state                              -> { chainId, height, head }
+GET  /chain/head                               -> the current block
+GET  /chain/key                                -> the node's public signing key
 GET  /chain/proof?root=...                    -> an inclusion proof
 GET  /chain/blocks/:height
 GET  /chain/audit                              -> a walk of the whole history
 ```
+
+`publicationIds` are part of the signed block, so the chain can name the
+registry records behind a root even when the registry is gone. The roots still
+commit to the publication leaves; the ids are the readable index beside them.
 
 ### What it is not, yet
 

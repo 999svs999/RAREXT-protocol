@@ -7,6 +7,7 @@
 //   POST /chain/anchor   { root, publicationIds } -> { height, hash }
 //   GET  /chain/head     the current head
 //   GET  /chain/state    { chainId, height, head }
+//   GET  /chain/key      the node's public signing key
 //   GET  /chain/proof?root=...   an inclusion proof for a root
 //   GET  /chain/blocks/:height
 //   GET  /chain/audit    a walk of the whole history
@@ -14,7 +15,9 @@
 //
 // The node is a notary with a chain's interface. It signs every block with its
 // key and links the blocks by hash, so the history is verifiable without
-// trusting the node. A consensus network implements the same interface.
+// trusting the node. On restart it restores the saved blocks only after
+// verifying every signature and link; a tampered log stops the node. A
+// consensus network implements the same interface.
 
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -40,19 +43,30 @@ function loadKey(): ChainKey {
 }
 
 function loadChain(key: ChainKey): AnchorChain {
-  const chain = new AnchorChain(CHAIN_ID, key);
+  if (!existsSync(LOG_PATH)) return new AnchorChain(CHAIN_ID, key);
 
-  if (existsSync(LOG_PATH)) {
-    const saved = JSON.parse(readFileSync(LOG_PATH, "utf8")) as {
-      blocks?: { roots: string[] }[];
-    };
+  const saved = JSON.parse(readFileSync(LOG_PATH, "utf8")) as {
+    chainId?: unknown;
+    blocks?: unknown;
+  };
 
-    for (const block of saved.blocks ?? []) {
-      chain.append(block.roots);
-    }
+  if (typeof saved.chainId === "string" && saved.chainId !== CHAIN_ID) {
+    throw new Error(
+      `chain log belongs to ${saved.chainId}, not ${CHAIN_ID}`,
+    );
   }
 
-  return chain;
+  if (!Array.isArray(saved.blocks)) {
+    throw new Error("chain log has no blocks array");
+  }
+
+  try {
+    return AnchorChain.restore(CHAIN_ID, key, saved.blocks);
+  } catch (error) {
+    throw new Error(
+      `refusing to load the chain log: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 const key = loadKey();
@@ -109,6 +123,11 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "GET" && path === "/chain/key") {
+    send(200, { keyId: key.keyId, publicKey: JSON.parse(key.publicKey) });
+    return;
+  }
+
   if (req.method === "GET" && path === "/chain/audit") {
     send(200, chain.audit());
     return;
@@ -148,14 +167,24 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && path === "/chain/anchor") {
     try {
-      const body = (await readJson(req)) as { root?: string; publicationIds?: string[] };
+      const body = (await readJson(req)) as { root?: string; publicationIds?: unknown };
 
       if (typeof body.root !== "string" || !/^[0-9a-f]{64}$/.test(body.root)) {
         send(400, { error: "root must be a sha256 hex digest" });
         return;
       }
 
-      const block = chain.append([body.root]);
+      const publicationIds = body.publicationIds ?? [];
+
+      if (
+        !Array.isArray(publicationIds) ||
+        !publicationIds.every((id) => typeof id === "string" && id.length > 0)
+      ) {
+        send(400, { error: "publicationIds must be an array of non-empty strings" });
+        return;
+      }
+
+      const block = chain.append([body.root], publicationIds);
       persist();
 
       send(201, {
@@ -163,7 +192,7 @@ const server = createServer(async (req, res) => {
         hash: block.hash,
         root: block.root,
         chainId: CHAIN_ID,
-        publicationIds: body.publicationIds ?? [],
+        publicationIds: block.publicationIds,
       });
     } catch (error) {
       send(400, {

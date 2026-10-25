@@ -5,7 +5,7 @@ import type {
 
 import { statusFor } from "../adapters/types.ts";
 import type { RarextAdapter } from "../adapters/types.ts";
-import { merkleRoot } from "../merkle.ts";
+import { merkleRoot, verifyProof } from "../merkle.ts";
 import type { ChainConfig, ChainReceipt } from "./relay.ts";
 
 interface ChainState {
@@ -37,9 +37,9 @@ interface InclusionProof {
  * The RAREXT chain adapter.
  *
  * Unlike the relay chains, this one does not take the chain's word for
- * anything: it reads the block, checks that the block's Merkle root really
- * contains the anchor, and checks the block's hash link back to its parent. A
- * node that lies about anchoring gets a receipt with no confirmation.
+ * anything: it reads the block back, checks that the block's Merkle root really
+ * contains the anchor, and verifies inclusion proofs locally. A node that lies
+ * about anchoring gets a receipt with no confirmation.
  */
 export class RarextChainAdapter implements RarextAdapter {
   private readonly config: ChainConfig;
@@ -199,7 +199,7 @@ export class RarextChainAdapter implements RarextAdapter {
     };
   }
 
-  /** Ask the node for a proof that a root is in the chain. */
+  /** Ask the node for a proof that a root is in the chain, and check it. */
   async proof(root: string): Promise<InclusionProof | null> {
     if (!this.config.rpc) return null;
 
@@ -210,7 +210,49 @@ export class RarextChainAdapter implements RarextAdapter {
       );
 
       if (!response.ok) return null;
-      return (await response.json()) as InclusionProof;
+
+      const proof = (await response.json()) as Partial<InclusionProof>;
+
+      if (
+        proof.root !== root ||
+        typeof proof.height !== "number" ||
+        !Number.isSafeInteger(proof.height) ||
+        proof.height < 1 ||
+        typeof proof.blockHash !== "string" ||
+        typeof proof.index !== "number" ||
+        !Number.isSafeInteger(proof.index) ||
+        proof.index < 0 ||
+        !Array.isArray(proof.path) ||
+        !proof.path.every(
+          (step) =>
+            typeof step === "object" &&
+            step !== null &&
+            typeof step.hash === "string" &&
+            (step.side === "left" || step.side === "right"),
+        )
+      ) {
+        return null;
+      }
+
+      const block = await this.readBlock(proof.height);
+
+      if (
+        !block ||
+        block.height !== proof.height ||
+        block.hash !== proof.blockHash ||
+        block.root !== merkleRoot(block.roots) ||
+        block.roots[proof.index] !== root ||
+        !verifyProof(
+          root,
+          proof.path.map((step) => step.hash),
+          block.root,
+          proof.index,
+        )
+      ) {
+        return null;
+      }
+
+      return proof as InclusionProof;
     } catch {
       return null;
     }

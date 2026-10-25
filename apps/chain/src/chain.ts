@@ -26,6 +26,13 @@ export interface ChainBlock {
   root: string;
   signer: string;
   signature: string;
+  /**
+   * The registry publications whose leaves produced this block's roots. The
+   * roots already commit the leaves; these ids make the block readable as a
+   * registry record too. Older logs omit this field, so it is optional and is
+   * only covered by the hash when present.
+   */
+  publicationIds?: string[];
 }
 
 export interface ChainInclusionProof {
@@ -113,6 +120,9 @@ export function blockHash(block: Omit<ChainBlock, "hash" | "signature">): string
         roots: block.roots,
         root: block.root,
         signer: block.signer,
+        ...(block.publicationIds === undefined
+          ? {}
+          : { publicationIds: block.publicationIds }),
       }),
     )
     .digest("hex");
@@ -124,21 +134,28 @@ export interface ChainKey {
   keyId: string;
 }
 
+export function chainKeyId(publicKeyJwk: string): string {
+  const jwk = JSON.parse(publicKeyJwk) as Record<string, string>;
+
+  return createHash("sha256")
+    .update(canonicalize({ kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }))
+    .digest("hex");
+}
+
 export function generateChainKey(): ChainKey {
   const pair = generateKeyPairSync("ec", { namedCurve: "P-256" });
   const jwk = pair.privateKey.export({ format: "jwk" }) as Record<string, string>;
+  const publicKey = JSON.stringify({
+    kty: jwk.kty,
+    crv: jwk.crv,
+    x: jwk.x,
+    y: jwk.y,
+  });
 
   return {
-    publicKey: JSON.stringify({
-      kty: jwk.kty,
-      crv: jwk.crv,
-      x: jwk.x,
-      y: jwk.y,
-    }),
+    publicKey,
     privateKey: JSON.stringify(jwk),
-    keyId: createHash("sha256")
-      .update(canonicalize({ kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }))
-      .digest("hex"),
+    keyId: chainKeyId(publicKey),
   };
 }
 
@@ -162,6 +179,9 @@ export function signBlock(
 
 export function verifyBlock(block: ChainBlock, publicKeyJwk: string): boolean {
   try {
+    if (block.signer !== chainKeyId(publicKeyJwk)) return false;
+    if (block.root !== merkleRoot(block.roots)) return false;
+
     const expected = blockHash(block);
 
     if (expected !== block.hash) return false;
@@ -186,6 +206,31 @@ export interface ChainState {
   chainId: string;
   height: number;
   head: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isChainBlock(value: unknown): value is ChainBlock {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const block = value as Partial<ChainBlock>;
+
+  return (
+    Number.isSafeInteger(block.height) &&
+    (block.height ?? 0) > 0 &&
+    typeof block.hash === "string" &&
+    typeof block.prevHash === "string" &&
+    typeof block.timestamp === "string" &&
+    isStringArray(block.roots) &&
+    typeof block.root === "string" &&
+    typeof block.signer === "string" &&
+    typeof block.signature === "string" &&
+    (block.publicationIds === undefined || isStringArray(block.publicationIds))
+  );
 }
 
 export class AnchorChain {
@@ -214,7 +259,59 @@ export class AnchorChain {
     };
   }
 
-  append(roots: string[]): ChainBlock {
+  /**
+   * Rebuild a chain from its saved blocks without re-signing anything. The
+   * saved hash and signature must verify against the current key, and every
+   * height and parent link must be exact. This is what makes a restart keep
+   * the history a reader already has instead of silently minting a new one.
+   */
+  static restore(
+    chainId: string,
+    key: ChainKey,
+    saved: readonly unknown[],
+  ): AnchorChain {
+    const chain = new AnchorChain(chainId, key);
+    let previous = GENESIS_HASH;
+
+    for (const [index, value] of saved.entries()) {
+      if (!isChainBlock(value)) {
+        throw new Error(`saved block ${index + 1} is not a chain block`);
+      }
+
+      if (value.height !== index + 1) {
+        throw new Error(
+          `saved block ${index + 1} has height ${value.height}, expected ${index + 1}`,
+        );
+      }
+
+      if (value.prevHash !== previous) {
+        throw new Error(`saved block ${value.height} does not link to its parent`);
+      }
+
+      if (!verifyBlock(value, key.publicKey)) {
+        throw new Error(`saved block ${value.height} has a bad hash or signature`);
+      }
+
+      chain.blocks.push({
+        height: value.height,
+        hash: value.hash,
+        prevHash: value.prevHash,
+        timestamp: value.timestamp,
+        roots: [...value.roots],
+        root: value.root,
+        signer: value.signer,
+        signature: value.signature,
+        ...(value.publicationIds === undefined
+          ? {}
+          : { publicationIds: [...value.publicationIds] }),
+      });
+      previous = value.hash;
+    }
+
+    return chain;
+  }
+
+  append(roots: string[], publicationIds: string[] = []): ChainBlock {
     const previous = this.head();
     const height = this.blocks.length + 1;
 
@@ -225,6 +322,7 @@ export class AnchorChain {
       roots,
       root: merkleRoot(roots),
       signer: this.key.keyId,
+      publicationIds,
     };
 
     const { hash, signature } = signBlock(draft, this.key.privateKey);
@@ -267,8 +365,8 @@ export class AnchorChain {
   } {
     let previous = GENESIS_HASH;
 
-    for (const block of this.blocks) {
-      if (block.prevHash !== previous) {
+    for (const [index, block] of this.blocks.entries()) {
+      if (block.height !== index + 1 || block.prevHash !== previous) {
         return { valid: false, height: this.blocks.length, brokenAt: block.height };
       }
 

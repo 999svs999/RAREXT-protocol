@@ -42,6 +42,20 @@ test("a block hash covers the block, and the signature covers the hash", () => {
   );
 });
 
+test("a block must name the key that signed it", () => {
+  const draft = {
+    height: 1,
+    prevHash: GENESIS_HASH,
+    timestamp: "2026-10-22T00:00:00.000Z",
+    roots: ["a".repeat(64)],
+    root: merkleRoot(["a".repeat(64)]),
+    signer: "f".repeat(64),
+  };
+  const { hash, signature } = signBlock(draft, key.privateKey);
+
+  assert.equal(verifyBlock({ ...draft, hash, signature }, key.publicKey), false);
+});
+
 test("a block signed by another key does not verify", () => {
   const other = generateChainKey();
   const draft = {
@@ -68,6 +82,84 @@ test("blocks are linked by hash", () => {
   assert.equal(second.prevHash, first.hash);
   assert.equal(log.height, 2);
   assert.equal(log.state().head, second.hash);
+});
+
+test("publication ids are committed by the block hash", () => {
+  const log = chain();
+  const root = "a".repeat(64);
+  const block = log.append([root], ["pub-1", "pub-2"]);
+
+  assert.deepEqual(block.publicationIds, ["pub-1", "pub-2"]);
+  assert.equal(verifyBlock(block, key.publicKey), true);
+
+  const tampered = { ...block, publicationIds: ["pub-3"] };
+  assert.equal(verifyBlock(tampered, key.publicKey), false);
+});
+
+test("restoring a saved log keeps every hash, signature, and publication id", () => {
+  const original = chain();
+  original.append(["a".repeat(64)], ["pub-1"]);
+  original.append(["b".repeat(64)], ["pub-2", "pub-3"]);
+
+  const saved = JSON.parse(JSON.stringify(original.list())) as unknown[];
+  const restored = AnchorChain.restore("rarex-test-1", key, saved);
+
+  assert.deepEqual(restored.list(), original.list());
+  assert.deepEqual(restored.audit(), { valid: true, height: 2, brokenAt: null });
+  assert.equal(restored.state().head, original.state().head);
+});
+
+test("restore rejects a tampered block instead of re-signing it", () => {
+  const original = chain();
+  original.append(["a".repeat(64)], ["pub-1"]);
+
+  const changedTimestamp = JSON.parse(JSON.stringify(original.list()));
+  changedTimestamp[0].timestamp = "2026-10-22T00:00:00.000Z";
+  assert.throws(
+    () => AnchorChain.restore("rarex-test-1", key, changedTimestamp),
+    /bad hash or signature/,
+  );
+
+  const changedIds = JSON.parse(JSON.stringify(original.list()));
+  changedIds[0].publicationIds = ["pub-2"];
+  assert.throws(
+    () => AnchorChain.restore("rarex-test-1", key, changedIds),
+    /bad hash or signature/,
+  );
+
+  const changedParent = JSON.parse(JSON.stringify(original.list()));
+  changedParent[0].prevHash = "0".repeat(64);
+  changedParent[0].height = 2;
+  assert.throws(
+    () => AnchorChain.restore("rarex-test-1", key, changedParent),
+    /height 2, expected 1/,
+  );
+
+  const wrongKey = generateChainKey();
+  assert.throws(
+    () => AnchorChain.restore("rarex-test-1", wrongKey, original.list()),
+    /bad hash or signature/,
+  );
+});
+
+test("restore accepts a legacy block that predates publication ids", () => {
+  const draft = {
+    height: 1,
+    prevHash: GENESIS_HASH,
+    timestamp: "2026-10-22T00:00:00.000Z",
+    roots: ["a".repeat(64)],
+    root: merkleRoot(["a".repeat(64)]),
+    signer: key.keyId,
+  };
+  const { hash, signature } = signBlock(draft, key.privateKey);
+
+  const restored = AnchorChain.restore("rarex-test-1", key, [
+    { ...draft, hash, signature },
+  ]);
+
+  assert.equal(restored.height, 1);
+  assert.equal(restored.head()!.publicationIds, undefined);
+  assert.deepEqual(restored.audit(), { valid: true, height: 1, brokenAt: null });
 });
 
 test("the whole history audits clean, and a tampered link breaks it", () => {
