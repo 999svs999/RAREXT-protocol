@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The operator and placement gates are pinned branch by branch (hardening).** A sweep
+  for store-shaped methods with no in-body type check produced four candidates; all four
+  are gated before they store anything, so the sweep found no defect and is recorded as a
+  negative result in `docs/HARDENING.md`. What it did change: `verifyOperator` and
+  `verifyPlacement` decide who is paid for verifier work and what repair reads, and each
+  had four test cases. The operator gate now pins the 17 named refusals it can return and
+  the placement gate 16, each with a positive control, and the placement gate asserts
+  `digest` is `null` on every refusal so a refused record cannot be handed back as a
+  valid chain link.
 - **The Trac task registry enforces what it publishes (hardening).** `register`
   checked truthiness only, so the registry accepted and then *served* values its own
   type forbids: an unknown status, a numeric `app`, an object `challengeId`, an

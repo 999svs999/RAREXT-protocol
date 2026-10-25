@@ -40,6 +40,31 @@ The GB-scale measurement is in [`bench/repair`](../bench/repair/README.md).
 | Concurrent anchoring of one batch | The pending set was read before the adapter await and committed after it, so two overlapping calls both anchored. An in-flight attempt per store is now reused, so overlapping callers share one anchor and make one adapter submission. | Measured before the fix: two anchors, the same root, the same publications in each. `anchors.test.ts` forces the interleaving with a slow rail (the shape of a real network adapter) and asserts one anchor, shared, with one submission. |
 | Fields beside a signed audit | The signature covers the fields the verifier reads. A field added beside them is neither signed nor surfaced, so no consumer may treat it as attested. | Pinned explicitly: adding or rewriting an unsigned field changes no verdict, while editing a field the verifier reads (`timestamp`) invalidates the signature. |
 
+## Swept and found already guarded
+
+A sweep for store-shaped methods whose body has no runtime type check produced four
+candidates, and all four are gated before they store anything — so the honest result
+for that sweep is *no defect found*. It is recorded here because the next pass should
+start from it rather than repeat it:
+
+| Method | What gates it | Sweep result |
+| --- | --- | --- |
+| `VerifierOperatorRegistry.register` | `verifyOperator` — kind, version, signature type, name (present, non-blank, ≤80), public key, algorithm, `keyId` = digest of the key, apps (non-empty, unique, string members), url (http(s) or null), `createdAt` ISO, then the signature | guarded; every branch now pinned by name |
+| `PlacementRegistry.put` | `verifyPlacement` — kind, version, signature type, sequence (non-negative integer), backwards links, steward key id and key agreement, steward algorithm, `placementProblem`, `createdAt` ISO, then the signature | guarded; every branch now pinned by name |
+| `RarextStore.addPublication` | route-level validation before the call | guarded |
+| `DurabilityLedger.put` | the holder protocol, which passes bytes it has already checked | guarded |
+
+What the sweep *did* change: the two gates above decide who is paid for verifier work
+and what repair reads, and each had four test cases. The operator gate now pins the 17
+named refusals it can return and the placement gate 16, each with a positive control so
+the suite cannot pass by refusing everything indiscriminately. The placement gate
+delegates the placement body itself to `placementProblem`, whose own branch set is wider
+than these cases enumerate — the three delegated entry points are pinned here, and the
+rest are exercised through it rather than claimed as covered.
+`verifyOperator` and `verifyPlacement` also produce a `digest` — the placement gate
+asserts it is `null` on every refusal, so a refused record cannot be handed back as a
+valid chain link.
+
 ## Guarantees by path
 
 | Path | Guarantees | Does not guarantee |
