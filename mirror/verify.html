@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mirror verification — AI claims included</title>
+    <style>
+      body { margin: 0; padding: 40px; background: #080a0e; color: #e3eaf3;
+             font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      h1 { font-size: 20px; margin: 0 0 18px; }
+      h2 { font-size: 14px; margin: 26px 0 8px; color: #9fb0c3; }
+      .row { display: flex; justify-content: space-between; gap: 20px;
+             padding: 8px 0; border-bottom: 1px solid #1b222c; font-size: 13px; }
+      .ok { color: #6ff0c4; } .bad { color: #ff7d90; } .dim { color: #6c7a8b; }
+      button { margin-top: 18px; padding: 8px 14px; border-radius: 7px;
+               border: 1px solid #2d3846; background: #141922; color: #e3eaf3;
+               font: inherit; cursor: pointer; }
+      code { word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h1>This mirror is a copy. Here is whether it is a faithful one — and whether its AI claims replay.</h1>
+    <div id="out"></div>
+    <button id="check">Re-verify</button>
+    <script type="module">
+      import { verifyBundle } from "./verify.js";
+      const out = document.getElementById("out");
+
+      async function run() {
+        const bundle = await (await fetch("./bundle.json")).json();
+        // The bundle carries every challenge spec, so this page can replay the
+        // generative claims and recompute the bounded metrics itself.
+        const challenges = Object.fromEntries(
+          (bundle.challenges ?? []).map((c) => [c.id, c.spec ?? {}]),
+        );
+        const result = await verifyBundle(bundle, challenges);
+
+        const row = (label, value, cls) =>
+          '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
+
+        const sections = [
+          row("Publications", String(result.publications)),
+          row("Anchored root", "<code>" + result.root + "</code>"),
+          row("Recomputed root", "<code>" + result.computedRoot + "</code>"),
+          row("This copy is faithful", result.valid ? "yes" : "no", result.valid ? "ok" : "bad"),
+          result.reason ? row("Why not", result.reason, "bad") : "",
+        ];
+
+        const ai = (result.aiClaims ?? []).filter((c) => c.representation);
+        if (ai.length) {
+          sections.push("<h2>AI claims — verified in your browser</h2>");
+          for (const claim of ai) {
+            const title = (bundle.publications.find((p) => p.id === claim.publicationId) ?? {}).title ?? claim.publicationId;
+            sections.push(row(title.slice(0, 60), "representation: " + claim.representation, "dim"));
+            if (claim.representation === "bounded") {
+              sections.push(row("committed metric", claim.metricName + " = " + claim.metricValue + " (bound " + claim.bound + ")",
+                claim.withinBound === false ? "bad" : "ok"));
+            }
+            if (claim.local) {
+              let detail = "local check: " + (claim.local.correct ? "PASSES" : "FAILS");
+              if (claim.local.metricValue !== undefined) {
+                const committed = claim.metricValue;
+                const agrees = committed === null || committed === claim.local.metricValue;
+                detail += " · recomputed metric " + claim.local.metricValue +
+                  (agrees ? " (matches attestation)" : " (MISMATCHES attested " + committed + ")");
+                sections.push(row(title.slice(0, 60), detail, agrees ? "ok" : "bad"));
+              } else {
+                sections.push(row(title.slice(0, 60), detail, claim.local.correct ? "ok" : "bad"));
+              }
+            } else {
+              sections.push(row(title.slice(0, 60), "local check: not run (spec unavailable)", "dim"));
+            }
+          }
+        }
+
+        out.innerHTML = sections.join("");
+      }
+
+      document.getElementById("check").addEventListener("click", run);
+      run();
+    </script>
+  </body>
+</html>

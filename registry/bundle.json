@@ -1,19 +1,19 @@
 {
   "manifest": {
     "version": 1,
-    "root": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
+    "root": "79737f5d5481dd792ba5a0d681f276b76b5fda43f8b987feb09216fcfc2cf4a7",
     "leafVersion": 4,
-    "anchorId": "bc43a0d1-d9b2-4a79-8b1b-a54142199ec6",
-    "anchorRoot": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
-    "createdAt": "2026-10-25T02:43:28.573Z",
+    "anchorId": "f4f2cc4c-29ae-402f-ad7b-c7724972b2c3",
+    "anchorRoot": "79737f5d5481dd792ba5a0d681f276b76b5fda43f8b987feb09216fcfc2cf4a7",
+    "createdAt": "2026-10-25T02:47:55.819Z",
     "publications": [
       {
-        "id": "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
-        "leaf": "2130282e223c3a1f5a6ccc619199d905b0e0656b769bf24964c44059ae8fe953"
+        "id": "b3f8efaa-24b4-426e-bd0c-0fb1363cedcf",
+        "leaf": "58ac17df1f440dee2248536d028459492b70a528ae1de7d9e34cff7bc8889fda"
       },
       {
-        "id": "4f12efac-c7ab-48b5-8d41-982a02a7340a",
-        "leaf": "13122c2aa026f9c27ca98296c4af2ab41be24681de734b20b4f0b64c69978813"
+        "id": "0a845f37-fe57-425e-b30d-0e399689f6fc",
+        "leaf": "10073a0a89333d0ab16a4952d4328e5c5c6796e7fc7d99934214153394ef2dfd"
       }
     ],
     "counts": {
@@ -25,9 +25,9 @@
   },
   "publications": [
     {
-      "id": "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
+      "id": "b3f8efaa-24b4-426e-bd0c-0fb1363cedcf",
       "author": "ai-proof",
-      "authorKey": "83bae63382931f7a38b6eb03be0683fc6d0c8319042319e9fc882ad549829b1c",
+      "authorKey": "2c15497dfc4577c254df5cc391a00e23d841c0c39817facc741808da1acfc739",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -63,13 +63,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T02:43:28.558Z",
-      "attestedAt": "2026-10-25T02:43:28.562Z",
+      "createdAt": "2026-10-25T02:47:55.803Z",
+      "attestedAt": "2026-10-25T02:47:55.808Z",
       "verified": true,
-      "signature": "IeQ7X09X5RrWXL+Yk7mW32+4IWp9UuyeMmEIkwUHzKnIhSlsGZ18sqEc6COm0mHlUtrDLGqx67UBN+TbbVtMkA==",
-      "nonce": "c534b9e6-3c93-42f2-97ae-5ed4214cbb7c",
+      "signature": "Rt5eV1pl/heKkWC8plG6n+DmI8GDb8Eyy1bUrjWxqRQ4q07wEYPXgCGqurZIlPUkK1c2OQ9bfvjnT837NnOrOw==",
+      "nonce": "0e4119d0-ad25-4f76-b38c-f0a3134f0285",
       "attestation": {
-        "id": "13a8fb27-432f-4edc-8652-8fd66dfbcc56",
+        "id": "b997a138-bf6f-4d9d-a09f-a3622355b8af",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -89,16 +89,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-25T02:43:28.562Z"
+        "createdAt": "2026-10-25T02:47:55.808Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "4f12efac-c7ab-48b5-8d41-982a02a7340a",
+      "id": "0a845f37-fe57-425e-b30d-0e399689f6fc",
       "author": "ai-proof",
-      "authorKey": "83bae63382931f7a38b6eb03be0683fc6d0c8319042319e9fc882ad549829b1c",
+      "authorKey": "2c15497dfc4577c254df5cc391a00e23d841c0c39817facc741808da1acfc739",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -128,13 +128,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T02:43:28.564Z",
-      "attestedAt": "2026-10-25T02:43:28.567Z",
+      "createdAt": "2026-10-25T02:47:55.809Z",
+      "attestedAt": "2026-10-25T02:47:55.813Z",
       "verified": true,
-      "signature": "0yyOJt+VXJEGCca+sZo/A6nyv0N2kspBbo7RydvB/tnMyf4nzyvRXIY2MV1AIIYO6Jy0xOxoEwkotvOndcofAQ==",
-      "nonce": "b26eca15-7c93-41c5-987a-e9fd7106b7a5",
+      "signature": "nG2+I8bd2oxCJykSfaeTs+h5QkS2d0IJ7KhEDfSW1Lhz4XBtGa0CiXc9uaYvWKVSdhpzlRQlANuaGBoqZOJxPw==",
+      "nonce": "49e94535-4151-4d48-8070-295fe520ac41",
       "attestation": {
-        "id": "d8875aaa-46eb-48cf-b471-d34cc310e7b8",
+        "id": "8e3e0045-adda-47cc-8cd1-cb4a34e54034",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -156,7 +156,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-25T02:43:28.567Z"
+        "createdAt": "2026-10-25T02:47:55.813Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -165,22 +165,22 @@
   ],
   "anchors": [
     {
-      "id": "bc43a0d1-d9b2-4a79-8b1b-a54142199ec6",
-      "root": "b3f86f93a42dedbf2d648594602642fa05484d980e0c46c389005dff347cc21e",
+      "id": "f4f2cc4c-29ae-402f-ad7b-c7724972b2c3",
+      "root": "79737f5d5481dd792ba5a0d681f276b76b5fda43f8b987feb09216fcfc2cf4a7",
       "publicationIds": [
-        "ab6d71dc-fbf4-4ffb-acd7-a3649d1421d3",
-        "4f12efac-c7ab-48b5-8d41-982a02a7340a"
+        "b3f8efaa-24b4-426e-bd0c-0fb1363cedcf",
+        "0a845f37-fe57-425e-b30d-0e399689f6fc"
       ],
       "leafCount": 2,
       "leafVersion": 4,
-      "createdAt": "2026-10-25T02:43:28.573Z",
+      "createdAt": "2026-10-25T02:47:55.819Z",
       "adapter": "local",
-      "reference": "local:b3f86f93a42dedbf",
+      "reference": "local:79737f5d5481dd79",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:b3f86f93a42dedbf"
+          "reference": "local:79737f5d5481dd79"
         },
         {
           "adapter": "trac",
@@ -191,7 +191,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreicbdtqy7z2oqa2ipsoyuitibvci4vou32ybnlr5ugqahxeftx4jf4"
+          "reference": "cid:bafkreibyqej7y4uaqxps4yizutpn25sgmp6kajjawqnrgw3vxaj5qnvjhm"
         }
       ]
     }
