@@ -23,6 +23,7 @@
       .meta { padding: 10px 12px; font-size: 11px; color: #8fa0b5; font-family: ui-monospace, monospace; }
       .meta b { color: #e3eaf3; }
       .meta code { color: #6ff0c4; word-break: break-all; }
+      .meta .ai { color: #c8b6ff; margin-top: 4px; }
       .empty { color: #6c7a8b; padding: 30px; text-align: center; }
     </style>
   </head>
@@ -30,16 +31,23 @@
     <h1>Media stored on RAREXT</h1>
     <p class="lede">
       Every item below is a content-addressed blob in the RAREXT blob store. This page
-      renders it by pointing the media element at <code>/v1/blobs/<hash>/raw</code> —
-      the raw bytes with their stored media type — so anyone running RAREXT sees the same
-      content by opening this page. The hash in each caption is the address: change a byte
-      and the address changes.
+      renders it from the node's raw blob route — the raw bytes with their stored media
+      type. On a static mirror, blobs embedded in <code>blobs.json</code> are SHA-256
+      checked in this browser before they are shown. The hash in each caption is the
+      address: change a byte and the address changes.
     </p>
     <div class="grid" id="grid"></div>
     <p class="empty" id="empty" hidden>No public blobs on this node yet.</p>
     <script type="module">
       const grid = document.getElementById("grid");
       const empty = document.getElementById("empty");
+      const HASH = /^[0-9a-f]{64}$/;
+      const MEDIA_TYPE = /^[\w.+-]+\/[\w.+-]+(;[\w-]+=[\w.-]+)*$/;
+
+      const safeType = (type) =>
+        typeof type === "string" && MEDIA_TYPE.test(type)
+          ? type
+          : "application/octet-stream";
 
       const family = (type) => {
         if (type.startsWith("image/")) return "image";
@@ -49,76 +57,191 @@
         return null;
       };
 
-      // Mirror mode: blobs.json next to this page carries small blobs inline,
-      // so the gallery works with no server at all — a directory is enough.
-      // Live mode: fall back to the node's raw blob route.
+      const hex = (buffer) =>
+        [...new Uint8Array(buffer)]
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+
+      const safeText = (value, max = 120) =>
+        typeof value === "string" ? value.slice(0, max) : null;
+
+      // Optional claim metadata from the mirror builder. It never controls
+      // rendering or bytes; it only labels a rendition so a reader can see
+      // which AI claim the picture belongs to.
+      const safeAi = (ai) => {
+        if (!ai || typeof ai !== "object") return null;
+        return {
+          app: safeText(ai.app),
+          representation: safeText(ai.representation),
+          publicationId: safeText(ai.publicationId),
+          challengeId: safeText(ai.challengeId),
+          title: safeText(ai.title, 160),
+          raster: typeof ai.raster === "string" && HASH.test(ai.raster) ? ai.raster : null,
+          size: Number.isSafeInteger(ai.size) ? ai.size : null,
+        };
+      };
+
+      const decode = (content) => {
+        if (
+          typeof content !== "string" ||
+          content.length === 0 ||
+          !/^[A-Za-z0-9+/]+={0,2}$/.test(content) ||
+          content.length % 4 !== 0
+        ) {
+          return null;
+        }
+        try {
+          return Uint8Array.from(atob(content), (char) => char.charCodeAt(0));
+        } catch {
+          return null;
+        }
+      };
+
+      // Mirror mode: blobs.json next to this page carries small blobs inline.
+      // Every embedded record is re-hashed before it reaches the DOM, so a
+      // tampered mirror cannot turn its metadata or bytes into a render.
+      const embeddedRecord = async (record) => {
+        if (!record || typeof record !== "object") return null;
+        const hash = record.hash;
+        const size = record.size;
+        if (typeof hash !== "string" || !HASH.test(hash)) return null;
+        if (!Number.isSafeInteger(size) || size < 0) return null;
+
+        const bytes = decode(record.content);
+        if (!bytes || bytes.length !== size) return null;
+        const digest = hex(await crypto.subtle.digest("SHA-256", bytes));
+        if (digest !== hash) return null;
+
+        const mediaType = safeType(record.mediaType);
+        return {
+          hash,
+          mediaType,
+          size,
+          tier: record.tier === "sealed" ? "sealed" : "public",
+          url: `data:${mediaType};base64,${record.content}`,
+          ai: safeAi(record.ai),
+        };
+      };
+
+      // Live mode: point at the node's raw blob route with document-relative
+      // paths, so the page also works under a GitHub Pages subpath.
+      const liveRecord = (record) => {
+        if (!record || typeof record !== "object") return null;
+        const hash = record.hash;
+        if (typeof hash !== "string" || !HASH.test(hash)) return null;
+        if (!Number.isSafeInteger(record.size) || record.size < 0) return null;
+        return {
+          hash,
+          mediaType: safeType(record.mediaType),
+          size: record.size,
+          tier: record.tier === "sealed" ? "sealed" : "public",
+          url: `./v1/blobs/${encodeURIComponent(hash)}/raw`,
+          ai: safeAi(record.ai),
+        };
+      };
+
       let source = null;
       try {
         const mirror = await fetch("./blobs.json");
         if (mirror.ok) {
           const data = await mirror.json();
+          const records = Array.isArray(data.blobs) ? data.blobs : [];
           source = {
-            embedded: true,
-            records: (data.blobs ?? []).map((b) => ({
-              hash: b.hash,
-              mediaType: b.mediaType,
-              size: b.size,
-              tier: b.tier,
-              url: `data:${b.mediaType};base64,${b.content}`,
-            })),
+            records: (await Promise.all(records.map(embeddedRecord))).filter(Boolean),
           };
         }
       } catch {
         // fall through to live mode
       }
       if (!source) {
-        const records = await (await fetch("/v1/blobs")).json();
-        source = {
-          embedded: false,
-          records: (Array.isArray(records) ? records : []).map((r) => ({
-            ...r,
-            url: `/v1/blobs/${r.hash}/raw`,
-          })),
-        };
+        try {
+          const response = await fetch("./v1/blobs");
+          const records = response.ok ? await response.json() : [];
+          source = {
+            records: (Array.isArray(records) ? records : [])
+              .map(liveRecord)
+              .filter(Boolean),
+          };
+        } catch {
+          source = { records: [] };
+        }
       }
 
       const render = (record) => {
-        const kind = family(record.mediaType ?? "");
+        const kind = family(record.mediaType);
         if (!kind) return null;
+
         const card = document.createElement("article");
         card.className = "card";
+
+        const media = document.createElement("div");
+        media.className = "media";
+
         let element;
         if (kind === "image") {
-          element = `<img loading="lazy" alt="${record.mediaType}" src="${record.url}" />`;
+          element = document.createElement("img");
+          element.loading = "lazy";
+          element.alt = record.mediaType;
+          element.src = record.url;
         } else if (kind === "audio") {
-          element = `<audio controls preload="none" src="${record.url}"></audio>`;
+          element = document.createElement("audio");
+          element.controls = true;
+          element.preload = "none";
+          element.src = record.url;
         } else if (kind === "video") {
-          element = `<video controls preload="metadata" src="${record.url}"></video>`;
+          element = document.createElement("video");
+          element.controls = true;
+          element.preload = "metadata";
+          element.src = record.url;
         } else {
-          element = `<pre>loading text…</pre>`;
+          element = document.createElement("pre");
+          element.textContent = "loading text…";
         }
-        card.innerHTML = `
-          <div class="media">${element}</div>
-          <div class="meta">
-            <b>${record.mediaType}</b> · ${record.size} bytes · ${record.tier ?? "public"}<br />
-            <code>${record.hash}</code>
-          </div>`;
+        media.appendChild(element);
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const label = document.createElement("b");
+        label.textContent = record.mediaType;
+        meta.append(
+          label,
+          document.createTextNode(` · ${record.size} bytes · ${record.tier}`),
+          document.createElement("br"),
+        );
+        const code = document.createElement("code");
+        code.textContent = record.hash;
+        meta.appendChild(code);
+
+        if (record.ai) {
+          const ai = document.createElement("div");
+          ai.className = "ai";
+          const kind = [record.ai.representation, record.ai.app].filter(Boolean).join(" · ");
+          ai.textContent =
+            "AI rendition" +
+            (kind ? ` · ${kind}` : "") +
+            (record.ai.title ? ` — ${record.ai.title}` : "");
+          meta.appendChild(ai);
+        }
+
+        card.append(media, meta);
+
         if (kind === "text") {
           fetch(record.url)
-            .then((r) => r.text())
+            .then((response) => response.text())
             .then((text) => {
-              card.querySelector("pre").textContent = text.slice(0, 2000);
+              element.textContent = text.slice(0, 2000);
             })
             .catch(() => {
-              card.querySelector("pre").textContent = "(unavailable)";
+              element.textContent = "(unavailable)";
             });
         }
+
         return card;
       };
 
       const shown = source.records.map(render).filter(Boolean);
       for (const card of shown) grid.appendChild(card);
       if (shown.length === 0) empty.hidden = false;
-        </script>
+    </script>
   </body>
 </html>

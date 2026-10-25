@@ -27,13 +27,24 @@
       const out = document.getElementById("out");
 
       async function run() {
-        const bundle = await (await fetch("./bundle.json")).json();
+        const [bundle, blobFile] = await Promise.all([
+          (await fetch("./bundle.json")).json(),
+          fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] }),
+        ]);
         // The bundle carries every challenge spec, so this page can replay the
-        // generative claims and recompute the bounded metrics itself.
+        // generative claims and recompute the bounded metrics itself. The
+        // mirror's inline blobs let it check the rendition bytes as well.
         const challenges = Object.fromEntries(
           (bundle.challenges ?? []).map((c) => [c.id, c.spec ?? {}]),
         );
-        const result = await verifyBundle(bundle, challenges);
+        const media = Object.fromEntries(
+          (Array.isArray(blobFile.blobs) ? blobFile.blobs : [])
+            .filter((blob) => typeof blob.hash === "string" && typeof blob.content === "string")
+            .map((blob) => [blob.hash, blob.content]),
+        );
+        const requested = new URLSearchParams(location.search).get("root");
+        const pinned = requested && /^[0-9a-f]{64}$/.test(requested) ? requested : null;
+        const result = await verifyBundle(bundle, challenges, pinned ?? undefined, media);
 
         const row = (label, value, cls) =>
           '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
@@ -69,6 +80,18 @@
               }
             } else {
               sections.push(row(title.slice(0, 60), "local check: not run (spec unavailable)", "dim"));
+            }
+            if (claim.media) {
+              sections.push(row("rendition", claim.media.matches === true
+                ? "raster re-derived from the commitment"
+                : claim.media.matches === false ? "raster MISMATCH" : "not checked",
+                claim.media.matches === true ? "ok" : "bad"));
+              if (claim.media.blobMatches !== null) {
+                sections.push(row("rendition bytes", claim.media.blobMatches
+                  ? "blob digest matches the mirror copy"
+                  : "blob MISMATCH",
+                  claim.media.blobMatches ? "ok" : "bad"));
+              }
             }
           }
         }

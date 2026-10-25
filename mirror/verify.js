@@ -14,18 +14,29 @@ function canonicalize(value) {
 // packages/core/src/ai.ts
 var MAX_GENERATIVE_STEPS = 1e5;
 var MAX_VOCAB = 4096;
+var MAX_GENERATIVE_TOKEN_LENGTH = 256;
+var MAX_GENERATIVE_OUTPUT_LENGTH = 1 << 20;
+function replayOutputBound(model, steps) {
+  let longest = 0;
+  for (const token of model.vocab) {
+    if (token.length > longest) longest = token.length;
+  }
+  return longest * steps;
+}
 function isXorshiftModel(value) {
   if (typeof value !== "object" || value === null) return false;
   const model = value;
   if (model.kind !== "xorshift32") return false;
   const params = model.params;
   if (!params) return false;
-  return Number.isInteger(params.a) && params.a >= 1 && params.a <= 31 && Number.isInteger(params.b) && params.b >= 1 && params.b <= 31 && Number.isInteger(params.c) && params.c >= 1 && params.c <= 31 && Array.isArray(model.vocab) && model.vocab.length >= 1 && model.vocab.length <= MAX_VOCAB && model.vocab.every((token) => typeof token === "string" && token.length > 0);
+  return Number.isInteger(params.a) && params.a >= 1 && params.a <= 31 && Number.isInteger(params.b) && params.b >= 1 && params.b <= 31 && Number.isInteger(params.c) && params.c >= 1 && params.c <= 31 && Array.isArray(model.vocab) && model.vocab.length >= 1 && model.vocab.length <= MAX_VOCAB && model.vocab.every(
+    (token) => typeof token === "string" && token.length > 0 && token.length <= MAX_GENERATIVE_TOKEN_LENGTH
+  );
 }
 function isGenerativeBody(value) {
   if (typeof value !== "object" || value === null) return false;
   const body = value;
-  return isXorshiftModel(body.model) && Number.isInteger(body.seed) && body.seed >= 0 && body.seed <= 4294967295 && typeof body.output === "string";
+  return isXorshiftModel(body.model) && Number.isInteger(body.seed) && body.seed >= 0 && body.seed <= 4294967295 && typeof body.output === "string" && body.output.length <= MAX_GENERATIVE_OUTPUT_LENGTH;
 }
 function isGenerativeSpec(value) {
   if (typeof value !== "object" || value === null) return false;
@@ -46,6 +57,12 @@ function generate(model, seed, steps) {
   return out;
 }
 function verifyGenerativeReplay(body, spec) {
+  if (!isGenerativeBody(body) || !isGenerativeSpec(spec)) {
+    return { correct: false, expected: "" };
+  }
+  if (replayOutputBound(body.model, spec.steps) > MAX_GENERATIVE_OUTPUT_LENGTH) {
+    return { correct: false, expected: "" };
+  }
   const expected = generate(body.model, body.seed, spec.steps);
   return { correct: expected === body.output, expected };
 }
@@ -121,6 +138,30 @@ function verifyAiArtifact(artifact, challenge) {
     };
   }
   return { error: `artifact kind ${artifact.kind} is not a locally verifiable AI claim` };
+}
+var RASTER_RULE = "xorshift32-image-v1";
+var MAX_RASTER_SIZE = 512;
+function isGenerativeMedia(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value;
+  return media.mediaType === "image/png" && media.rule === RASTER_RULE && typeof media.blob === "string" && /^[0-9a-f]{64}$/.test(media.blob) && typeof media.raster === "string" && /^[0-9a-f]{64}$/.test(media.raster) && Number.isInteger(media.size) && media.size >= 1 && media.size <= MAX_RASTER_SIZE && Number.isInteger(media.bytes) && media.bytes >= 1;
+}
+function renderRaster(model, seed, size) {
+  if (!isXorshiftModel(model)) throw new Error("renderRaster: malformed model");
+  if (!Number.isInteger(size) || size < 1 || size > MAX_RASTER_SIZE) {
+    throw new Error(`renderRaster: size must be 1..${MAX_RASTER_SIZE}`);
+  }
+  const { a, b, c } = model.params;
+  let state = seed >>> 0;
+  const out = new Uint8Array(size * size * 3);
+  for (let i = 0; i < out.length; i++) {
+    state ^= state << a >>> 0;
+    state ^= state >>> b;
+    state ^= state << c >>> 0;
+    state >>>= 0;
+    out[i] = state & 255;
+  }
+  return out;
 }
 
 // packages/core/src/leaf.ts
@@ -199,9 +240,18 @@ function leafPayload(publication, version = PUBLICATION_LEAF_VERSION) {
 }
 
 // apps/web/src/verify.ts
+function localVerdict(serverValid, local) {
+  return serverValid && (local?.correct ?? true);
+}
 async function sha256Hex(value) {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function sha256BytesHex(bytes) {
+  const view = new Uint8Array(bytes.length);
+  view.set(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", view);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 async function hashPair(left, right) {
@@ -270,27 +320,81 @@ function localAiCheck(publication, spec) {
   }
   return null;
 }
-function aiClaimsFor(bundle, challenges) {
-  return bundle.publications.map((publication) => {
+async function mediaFor(publication, blobBytes) {
+  const body = publication.artifact?.body;
+  if (!body || typeof body.seed !== "number" || !isGenerativeMedia(body.media)) {
+    return null;
+  }
+  const media = body.media;
+  let reDerived = null;
+  try {
+    const raster = renderRaster(
+      body.model,
+      body.seed,
+      media.size
+    );
+    reDerived = await sha256BytesHex(raster);
+  } catch {
+    reDerived = null;
+  }
+  let blobMatches = null;
+  if (blobBytes) {
+    blobMatches = await sha256BytesHex(blobBytes) === media.blob;
+  }
+  return {
+    blob: media.blob,
+    raster: media.raster,
+    size: media.size,
+    reDerived,
+    matches: reDerived === null ? null : reDerived === media.raster,
+    blobMatches
+  };
+}
+function base64ToBytes(value) {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return void 0;
+  }
+}
+async function aiClaimsFor(bundle, challenges, media) {
+  const committed = bundle.manifest.leafVersion >= 4;
+  const claims = [];
+  for (const publication of bundle.publications) {
     const attestation = publication.attestation;
-    const representation = attestation.representation ?? null;
+    const representation = committed ? attestation.representation ?? null : null;
     const spec = challenges?.[publication.challengeId];
     const bound = typeof spec?.bound === "number" ? spec.bound : null;
-    const metricValue = typeof attestation.metricValue === "number" ? attestation.metricValue : null;
-    const local = localAiCheck(publication, spec);
-    return {
+    const metricValue = committed && typeof attestation.metricValue === "number" ? attestation.metricValue : null;
+    const local = committed ? localAiCheck(publication, spec) : null;
+    let mediaEvidence = null;
+    if (committed) {
+      const body = publication.artifact?.body;
+      const hash = body?.media?.blob;
+      if (typeof hash === "string") {
+        const encoded = media?.[hash];
+        const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : void 0;
+        mediaEvidence = await mediaFor(publication, bytes);
+      }
+    }
+    claims.push({
       publicationId: publication.id,
       representation,
-      correct: attestation.correct === true,
-      metricName: attestation.metricName ?? null,
+      correct: committed && attestation.correct === true,
+      metricName: committed ? attestation.metricName ?? null : null,
       metricValue,
       bound,
       withinBound: representation === "bounded" && metricValue !== null && bound !== null ? metricValue <= bound : null,
-      local
-    };
-  });
+      local,
+      media: mediaEvidence
+    });
+  }
+  return claims;
 }
-async function verifyBundle(bundle, challenges) {
+async function verifyBundle(bundle, challenges, pinnedRoot, media) {
   const leaves = [];
   for (const publication of bundle.publications) {
     leaves.push(
@@ -309,7 +413,7 @@ async function verifyBundle(bundle, challenges) {
       computedRoot,
       publications: leaves.length,
       reason: "the publications in this bundle do not rebuild the anchored root",
-      aiClaims: aiClaimsFor(bundle, challenges)
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
     };
   }
   if (!listMatches) {
@@ -319,7 +423,17 @@ async function verifyBundle(bundle, challenges) {
       computedRoot,
       publications: leaves.length,
       reason: "the manifest leaf list does not match the publications",
-      aiClaims: aiClaimsFor(bundle, challenges)
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
+    };
+  }
+  if (pinnedRoot && computedRoot !== pinnedRoot) {
+    return {
+      valid: false,
+      root: bundle.manifest.root,
+      computedRoot,
+      publications: leaves.length,
+      reason: "the bundle root does not match the pinned chain root",
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
     };
   }
   return {
@@ -328,10 +442,11 @@ async function verifyBundle(bundle, challenges) {
     computedRoot,
     publications: leaves.length,
     reason: null,
-    aiClaims: aiClaimsFor(bundle, challenges)
+    aiClaims: await aiClaimsFor(bundle, challenges, media)
   };
 }
 export {
+  localVerdict,
   verifyBundle
 };
 //# sourceMappingURL=verify.js.map

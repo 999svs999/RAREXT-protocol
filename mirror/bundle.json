@@ -1,19 +1,19 @@
 {
   "manifest": {
     "version": 1,
-    "root": "855cb72685957b2b0bae199bc317c42ba8db0b7916d3ee306a346d43feafaf07",
+    "root": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
     "leafVersion": 4,
-    "anchorId": "835ed735-6e91-4611-94c4-99ea66bf2297",
-    "anchorRoot": "855cb72685957b2b0bae199bc317c42ba8db0b7916d3ee306a346d43feafaf07",
-    "createdAt": "2026-10-25T03:42:36.240Z",
+    "anchorId": "dbd58db8-ddba-4c10-8463-0197653948a4",
+    "anchorRoot": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
+    "createdAt": "2026-10-25T05:54:06.917Z",
     "publications": [
       {
-        "id": "f3083f29-afbd-461a-a93c-91621b5f2393",
-        "leaf": "857cb84845813273f5bf38809bfcd1e635a456a934368e02f7e48cf255e1b039"
+        "id": "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
+        "leaf": "2abfdc52ce2c49e28da0ed4e08a2343f6a5f55195e44572749d7f07941fe720f"
       },
       {
-        "id": "efb1f94e-1f4c-4930-af50-ad0ad79d0d4b",
-        "leaf": "59956be79757a8c77d16407f9fe19bd456ec35dc001193fca56926d44943389f"
+        "id": "3a668276-f1ea-455d-9e8e-5320ec2025ba",
+        "leaf": "0fa45ddfc3cc19a117202ca51588bc98bf29e6e420405af128d671901e32a88a"
       }
     ],
     "counts": {
@@ -25,9 +25,9 @@
   },
   "publications": [
     {
-      "id": "f3083f29-afbd-461a-a93c-91621b5f2393",
+      "id": "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
       "author": "ai-proof",
-      "authorKey": "3432ed98c7e08cff679296eb8a79c2b8ce48c1729242e0a7fdea07f6b3a305d1",
+      "authorKey": "964d66afa15f5201ae8fff1a564f0e0a8edfd349616e2cd114e44114214efcfb",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -55,7 +55,15 @@
             ]
           },
           "seed": 42,
-          "output": "alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadeltaalphaalphabetabetaalphaalphadeltagammabetadeltaalphagammaalphadeltaalphadeltabetabetagammagamma"
+          "output": "alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadeltaalphaalphabetabetaalphaalphadeltagammabetadeltaalphagammaalphadeltaalphadeltabetabetagammagamma",
+          "media": {
+            "mediaType": "image/png",
+            "rule": "xorshift32-image-v1",
+            "blob": "28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253",
+            "raster": "cb9a5c2defbe4d7c720aa181e911f0d723a6e28c25d63f8583a3d8ba4242688c",
+            "size": 64,
+            "bytes": 12420
+          }
         }
       },
       "taskId": "gen-starter",
@@ -63,18 +71,18 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T03:42:36.225Z",
-      "attestedAt": "2026-10-25T03:42:36.230Z",
+      "createdAt": "2026-10-25T05:54:06.903Z",
+      "attestedAt": "2026-10-25T05:54:06.907Z",
       "verified": true,
-      "signature": "s8LXMUfr8ReaupOvyEQVR9AHfINQs21SptXLTQpMFBBV7tR1BRZsbS1LvIj/aqEL4BTJf7IpDusI6z6O425gyw==",
-      "nonce": "e690570b-5442-43be-b495-ca1b2b527b59",
+      "signature": "6IvPjLf+71WFgpbiUOE9tuIBJL8H9Rr84716WPLLaPOPelXe3ih8uKBY8rgLxSbH6RhLFbgkuVWI/8Sowd6/VA==",
+      "nonce": "29a6415f-3368-4aab-a250-3fa0cfb8d721",
       "attestation": {
-        "id": "51bc8f8f-5d30-431a-b7b9-87405bb4b5a1",
+        "id": "9f3c14a0-9571-4a29-9c22-06eabf9aa231",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
         "taskId": "gen-starter",
-        "circuitHash": "6181629478fd33a0a5824c92387f6b539d2047d0c36cb193a6369b42aa32d20f",
+        "circuitHash": "7dce90a5dfbec33634b60ab651251dd3b4f4556c7b29c3f66a4126d1d6f3e7f8",
         "traceHash": "ee29cd38c1586b0ceb280712a25aaa451b45f36c25619c0d9fa267034ed36ba5",
         "correct": true,
         "score": 100,
@@ -89,16 +97,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-25T03:42:36.230Z"
+        "createdAt": "2026-10-25T05:54:06.907Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "efb1f94e-1f4c-4930-af50-ad0ad79d0d4b",
+      "id": "3a668276-f1ea-455d-9e8e-5320ec2025ba",
       "author": "ai-proof",
-      "authorKey": "3432ed98c7e08cff679296eb8a79c2b8ce48c1729242e0a7fdea07f6b3a305d1",
+      "authorKey": "964d66afa15f5201ae8fff1a564f0e0a8edfd349616e2cd114e44114214efcfb",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -128,13 +136,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T03:42:36.232Z",
-      "attestedAt": "2026-10-25T03:42:36.234Z",
+      "createdAt": "2026-10-25T05:54:06.909Z",
+      "attestedAt": "2026-10-25T05:54:06.911Z",
       "verified": true,
-      "signature": "ItC3N/gHDjLgbnEbArFkaq19UsvuMv9LOL7vlCLfGXUNxGUvH8/UVOzkQEzMZYP4ha+TgID3tg2JOtGs1vuXUA==",
-      "nonce": "8b2d4db6-96bc-4c71-85d4-afcd54885869",
+      "signature": "9ygVDh959N+UrEuc3DbjVH/XlSTYsVTrBclewkM0mItq8cpbX7wxYOniZd3L6/584NGv3setCDDLKPnUItOJgQ==",
+      "nonce": "e39ff120-2c4b-4f33-836e-e11cfeaae1aa",
       "attestation": {
-        "id": "3e8ffa06-3cee-4851-9119-cef33484a4c3",
+        "id": "d95984ee-ebc5-4b8e-b8f6-97d1aea65606",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -156,7 +164,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-25T03:42:36.234Z"
+        "createdAt": "2026-10-25T05:54:06.911Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -165,22 +173,22 @@
   ],
   "anchors": [
     {
-      "id": "835ed735-6e91-4611-94c4-99ea66bf2297",
-      "root": "855cb72685957b2b0bae199bc317c42ba8db0b7916d3ee306a346d43feafaf07",
+      "id": "dbd58db8-ddba-4c10-8463-0197653948a4",
+      "root": "c8b18c861d65edc15d44be65423aa86ff8dd34e75a7a96ca3198e65c67075ce9",
       "publicationIds": [
-        "f3083f29-afbd-461a-a93c-91621b5f2393",
-        "efb1f94e-1f4c-4930-af50-ad0ad79d0d4b"
+        "cf1ee038-9896-4d5a-aa53-d8990b563f6f",
+        "3a668276-f1ea-455d-9e8e-5320ec2025ba"
       ],
       "leafCount": 2,
       "leafVersion": 4,
-      "createdAt": "2026-10-25T03:42:36.240Z",
+      "createdAt": "2026-10-25T05:54:06.917Z",
       "adapter": "local",
-      "reference": "local:855cb72685957b2b",
+      "reference": "local:c8b18c861d65edc1",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:855cb72685957b2b"
+          "reference": "local:c8b18c861d65edc1"
         },
         {
           "adapter": "trac",
@@ -191,7 +199,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreihanzzcv37std3khmejubqplw6wi3uzskjolwsvdoqct6decaurxa"
+          "reference": "cid:bafkreifj75tazbmb5mlswv44vjjo5zirfe4w3ma5mtz7brx2bjbahesbua"
         }
       ]
     }

@@ -14,18 +14,29 @@ function canonicalize(value) {
 // packages/core/src/ai.ts
 var MAX_GENERATIVE_STEPS = 1e5;
 var MAX_VOCAB = 4096;
+var MAX_GENERATIVE_TOKEN_LENGTH = 256;
+var MAX_GENERATIVE_OUTPUT_LENGTH = 1 << 20;
+function replayOutputBound(model, steps) {
+  let longest = 0;
+  for (const token of model.vocab) {
+    if (token.length > longest) longest = token.length;
+  }
+  return longest * steps;
+}
 function isXorshiftModel(value) {
   if (typeof value !== "object" || value === null) return false;
   const model = value;
   if (model.kind !== "xorshift32") return false;
   const params = model.params;
   if (!params) return false;
-  return Number.isInteger(params.a) && params.a >= 1 && params.a <= 31 && Number.isInteger(params.b) && params.b >= 1 && params.b <= 31 && Number.isInteger(params.c) && params.c >= 1 && params.c <= 31 && Array.isArray(model.vocab) && model.vocab.length >= 1 && model.vocab.length <= MAX_VOCAB && model.vocab.every((token) => typeof token === "string" && token.length > 0);
+  return Number.isInteger(params.a) && params.a >= 1 && params.a <= 31 && Number.isInteger(params.b) && params.b >= 1 && params.b <= 31 && Number.isInteger(params.c) && params.c >= 1 && params.c <= 31 && Array.isArray(model.vocab) && model.vocab.length >= 1 && model.vocab.length <= MAX_VOCAB && model.vocab.every(
+    (token) => typeof token === "string" && token.length > 0 && token.length <= MAX_GENERATIVE_TOKEN_LENGTH
+  );
 }
 function isGenerativeBody(value) {
   if (typeof value !== "object" || value === null) return false;
   const body = value;
-  return isXorshiftModel(body.model) && Number.isInteger(body.seed) && body.seed >= 0 && body.seed <= 4294967295 && typeof body.output === "string";
+  return isXorshiftModel(body.model) && Number.isInteger(body.seed) && body.seed >= 0 && body.seed <= 4294967295 && typeof body.output === "string" && body.output.length <= MAX_GENERATIVE_OUTPUT_LENGTH;
 }
 function isGenerativeSpec(value) {
   if (typeof value !== "object" || value === null) return false;
@@ -46,6 +57,12 @@ function generate(model, seed, steps) {
   return out;
 }
 function verifyGenerativeReplay(body, spec) {
+  if (!isGenerativeBody(body) || !isGenerativeSpec(spec)) {
+    return { correct: false, expected: "" };
+  }
+  if (replayOutputBound(body.model, spec.steps) > MAX_GENERATIVE_OUTPUT_LENGTH) {
+    return { correct: false, expected: "" };
+  }
   const expected = generate(body.model, body.seed, spec.steps);
   return { correct: expected === body.output, expected };
 }
@@ -2592,6 +2609,11 @@ async function runWork(options) {
   return results;
 }
 
+// apps/web/src/verify.ts
+function localVerdict(serverValid, local) {
+  return serverValid && (local?.correct ?? true);
+}
+
 // apps/web/src/main.ts
 var NODE_WIDTH = 144;
 var NODE_HEIGHT = 64;
@@ -4052,11 +4074,17 @@ function localAiEvidence(publication) {
   });
   if ("error" in result) return null;
   if (result.representation === "generative") {
-    return `replay ${result.correct ? "ok" : "fail"} \xB7 steps ${result.steps ?? "?"}`;
+    return {
+      text: `replay ${result.correct ? "ok" : "fail"} \xB7 steps ${result.steps ?? "?"}`,
+      correct: result.correct
+    };
   }
   const value = typeof result.metricValue === "number" ? result.metricValue : "?";
   const bound = typeof result.bound === "number" ? result.bound : "?";
-  return `metric ${value} ${result.correct ? "\u2264" : ">"} ${bound}`;
+  return {
+    text: `metric ${value} ${result.correct ? "\u2264" : ">"} ${bound}`,
+    correct: result.correct
+  };
 }
 async function verifyPublication(publication) {
   try {
@@ -4068,8 +4096,9 @@ async function verifyPublication(publication) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? t("err.check"));
-    const verdict = payload.valid ? t("toast.verified") : t("toast.mismatch");
-    toast(local ? `${verdict} \xB7 ${local}` : verdict, !payload.valid);
+    const valid = localVerdict(Boolean(payload.valid), local);
+    const verdict = valid ? t("toast.verified") : t("toast.mismatch");
+    toast(local ? `${verdict} \xB7 ${local.text}` : verdict, !valid);
   } catch (error) {
     toast(error instanceof Error ? error.message : t("err.check"), true);
   }
