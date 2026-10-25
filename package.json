@@ -60,7 +60,8 @@
     "audit:package:verify": "node contracts/scripts/audit-package.mjs --verify",
     "verify:deployment": "node contracts/scripts/verify-deployment-record.mjs",
     "deploy:anchor": "node contracts/scripts/deploy-anchor.mjs",
-    "deploy:anchor:testnet": "node contracts/scripts/deploy-anchor-testnet.mjs"
+    "deploy:anchor:testnet": "node contracts/scripts/deploy-anchor-testnet.mjs",
+    "demo:ai": "node scripts/demo-ai-on-rarext.mjs"
   },
   "engines": {
     "node": ">=22.18"

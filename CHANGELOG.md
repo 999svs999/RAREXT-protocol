@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **`npm run demo:ai` — the one-command, third-party proof that AI lives on RAREXT.**
+  The claim axis had made the docs provable to CI; this makes the vision demonstrable
+  to a person. The demo composes the repo's existing gated pieces: it publishes real
+  signed generative + bounded AI publications through the live API flow
+  (`scripts/publish-ai-proof.mjs`), serves the resulting mirror over loopback HTTP,
+  re-derives both AI renditions from the commitments alone
+  (`scripts/verify-live-ai.mjs` against the local server), and checks the anchor pins
+  the published root and covers the publications — a phase-by-phase receipt, exit
+  non-zero on any broken link, writes only to the gitignored `.ai-proof/`.
+  Verified 4/4: publish → serve → recompute (2 renditions) → pin. One build
+  mistake, recorded: the first version ran the verifier with `spawnSync` while its own
+  HTTP server lived in the same process — `spawnSync` blocks the event loop, so the
+  server could not accept connections and the child's fetches hung until the timeout
+  killed them. The demo now runs children with async `spawn`.
 - **The work-economy reward schedule is checked both ways.** Twelfth claim kind:
   `docs/WORK.md`'s credit table (verify 10, store 1, mirror 25, relay 15, publish 5,
   remix 20, report 50) is verified against the `base` values in
