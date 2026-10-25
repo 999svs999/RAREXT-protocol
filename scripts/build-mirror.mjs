@@ -10,8 +10,10 @@
 // The mirror has no server behind it. It is a directory.
 
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
+import { writeMirrorBlobs } from "./mirror-blobs.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const publicDir = join(root, "apps/web/public");
@@ -45,12 +47,15 @@ writeFileSync(
 
 cpSync(join(root, "apps/web/public"), out, { recursive: true });
 
+const blobs = await writeMirrorBlobs({ base: api, mirrorDir: out });
+console.log(`  embedded ${blobs.count} blob(s), ${blobs.total} bytes`);
+
 // The mirror's page loads the bundle before the app, so the workbench answers
 // its reads from the bundle instead of a server.
 const indexPath = join(out, "index.html");
 const index = readFileSync(indexPath, "utf8").replace(
   '<script type="module" src="/app.js"></script>',
-  '<script src="/bundle.js"></script>\n    <script type="module" src="/app.js"></script>',
+  '<script src="./bundle.js"></script>\n    <script type="module" src="./app.js"></script>',
 );
 
 writeFileSync(indexPath, index);
@@ -82,11 +87,11 @@ writeFileSync(
     <div id="out"></div>
     <button id="check">Re-verify</button>
     <script type="module">
-      import { verifyBundle } from "/verify.js";
+      import { verifyBundle } from "./verify.js";
       const out = document.getElementById("out");
 
       async function run() {
-        const bundle = await (await fetch("/bundle.json")).json();
+        const bundle = await (await fetch("./bundle.json")).json();
         const result = await verifyBundle(bundle);
 
         const row = (label, value, cls) =>
@@ -108,6 +113,18 @@ writeFileSync(
 </html>
 `,
 );
+
+// Keep the mirror portable under a subpath (GitHub Pages serves this repo at
+// /RAREXT-protocol/). Assets and the bundle must resolve next to the page.
+for (const name of readdirSync(out)) {
+  if (!name.endsWith(".html")) continue;
+  const path = join(out, name);
+  const html = readFileSync(path, "utf8");
+  const fixed = html
+    .replace(/(src|href)="\/(bundle|app|verify)\.(js|json)"/g, '$1="./$2.$3"')
+    .replace(/href="\/(styles\.css|favicon\.svg)"/g, 'href="./$1"');
+  if (fixed !== html) writeFileSync(path, fixed);
+}
 
 console.log(`mirror written to ${out}`);
 console.log(`  root ${bundle.manifest.root}`);

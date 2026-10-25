@@ -42,6 +42,11 @@ A mirror is a directory:
   the bundle instead of a server.
 - `verify.html` — a page that recomputes the root in the browser and tells you
   whether this copy is faithful.
+- `blobs.json` — small public blobs embedded for `gallery.html`. The gallery
+  re-hashes every embedded blob in the browser and skips any whose bytes, size,
+  or hash disagree; it never renders unverified metadata. When no embedded
+  copy exists, the page falls back to document-relative `./v1/blobs/...` paths
+  so it also works under a subpath such as GitHub Pages.
 
 It has no server behind it. Serve it from a static host, a bucket, a NAS, a USB
 stick, or a mirror node. The proof it carries is the root.

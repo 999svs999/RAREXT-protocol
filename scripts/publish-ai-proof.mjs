@@ -5,6 +5,8 @@ import { once } from "node:events";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { writeMirrorBlobs } from "./mirror-blobs.mjs";
+
 const root = new URL("..", import.meta.url).pathname;
 const OUT = join(root, ".ai-proof");
 
@@ -256,34 +258,8 @@ const verifyHtml = `<!doctype html>
 `;
 writeFileSync(join(mirrorDir, "verify.html"), verifyHtml);
 
-// Embed small public blobs so the gallery works on the static mirror with no
-// server. Caps keep the deploy lean: 512 KiB per blob, 4 MiB total.
-const EMBED_PER_BLOB = 512 * 1024;
-const EMBED_TOTAL = 4 * 1024 * 1024;
-const blobListResponse = await fetch(`${base}/v1/blobs`);
-const blobList = blobListResponse.ok ? (await blobListResponse.json()) : [];
-const embedded = [];
-let embeddedTotal = 0;
-for (const record of blobList) {
-  if ((record.size ?? 0) > EMBED_PER_BLOB) continue;
-  if (embeddedTotal + (record.size ?? 0) > EMBED_TOTAL) break;
-  const detail = await fetch(`${base}/v1/blobs/${record.hash}`);
-  if (!detail.ok) continue;
-  const full = await detail.json();
-  embedded.push({
-    hash: full.hash,
-    mediaType: full.mediaType,
-    size: full.size,
-    tier: full.tier ?? "public",
-    content: full.content,
-  });
-  embeddedTotal += full.size ?? 0;
-}
-writeFileSync(
-  join(mirrorDir, "blobs.json"),
-  JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), blobs: embedded }, null, 2),
-);
-console.log(`  embedded ${embedded.length} blob(s), ${embeddedTotal} bytes`);
+const blobs = await writeMirrorBlobs({ base, mirrorDir });
+console.log(`  embedded ${blobs.count} blob(s), ${blobs.total} bytes`);
 console.log("MIRROR BUILT AT", mirrorDir);
 
 console.log("PROOF BUNDLE WRITTEN TO", OUT);
