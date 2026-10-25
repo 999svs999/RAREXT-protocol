@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The operational defaults are checked against the source that reads them.** Ninth
+  claim kind: `docs/OPERATOR.md`'s retention/GC defaults — the challenge scheduler "every
+  6 hours", storage and pin GC loops "both 24h, `0` disables", and the 24-hour blob GC
+  grace — are verified against the actual `??` fallbacks in `apps/api/src/server.ts`,
+  `apps/api/src/pin-server.ts`, and `apps/api/src/durability.ts` (6 h, 24 h, 24 h, 24 h).
+  The doc's "21600s" rendering and the gracePeriodMs-0 delete-on-first-scan note are
+  anchored too. The self-test injects a doctored OPERATOR.md (scheduler "every 12
+  hours") and asserts the mismatch is reported.
 - **The AI replay bounds are checked functionally, not just as constants.** Eighth claim
   kind: `docs/OPERATIONS.md`'s replay-bounds table states `MAX_GENERATIVE_TOKEN_LENGTH` =
   256 and `MAX_GENERATIVE_OUTPUT_LENGTH` = 1 MiB, and the behavioural claim that a replay

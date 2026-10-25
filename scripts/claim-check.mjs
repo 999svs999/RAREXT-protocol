@@ -152,6 +152,7 @@ if (process.argv.includes("--self-test")) {
   const beforeRoutes = failures;
   const originalArchitecture = readFileSync(architecturePath, "utf8");
   const originalOperations = readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  const originalOperatorDoc = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
   const appSource = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
   // The health row is the table's first line, and it is `/health` — no /v1
   // prefix, which is exactly the kind of detail a hand-written anchor gets wrong.
@@ -211,11 +212,22 @@ if (process.argv.includes("--self-test")) {
   const caughtReplay = failures > beforeReplay;
   if (!caughtReplay) fail("self-test: the checker accepted an AI bounds row the code contradicts");
   caught = caught && caughtReplay;
+  // And an operational default the code contradicts must be reported.
+  const beforeDefaults = failures;
+  const doctoredOperatorDoc = originalOperatorDoc.replace(
+    "every 6 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)",
+    "every 12 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)",
+  );
+  checkOperationalDefaults(doctoredOperatorDoc);
+  const caughtDefaults = failures > beforeDefaults;
+  if (!caughtDefaults) fail("self-test: the checker accepted an operational default the code contradicts");
+  caught = caught && caughtDefaults;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
+  assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -231,6 +243,7 @@ checkSoakLog();
 checkThroughputArtifact();
 checkLimitsTable();
 checkReplayBounds();
+checkOperationalDefaults();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -424,6 +437,51 @@ function checkReplayBounds(docOverride) {
 
   console.log(
     `  token cap ${coreAi.MAX_GENERATIVE_TOKEN_LENGTH} | output bound ${coreAi.MAX_GENERATIVE_OUTPUT_LENGTH} | exact replay correct | 256x4097 rejected empty`,
+  );
+}
+
+
+/**
+ * The operational defaults: docs/OPERATOR.md states the retention scheduler
+ * runs "every 6 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)" — its log renders
+ * "every 21600s" — the storage and pin GC loops are "both 24h, `0` disables",
+ * and production blob GC "defaults to a 24 h" grace period. Each default must
+ * be what the source actually reads.
+ */
+function checkOperationalDefaults(docOverride) {
+  console.log(`operational defaults (docs/OPERATOR.md${docOverride ? ", DOCTORED" : ""} vs source):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
+  const server = readFileSync(new URL("apps/api/src/server.ts", root), "utf8");
+  const pinServer = readFileSync(new URL("apps/api/src/pin-server.ts", root), "utf8");
+  const durability = readFileSync(new URL("apps/api/src/durability.ts", root), "utf8");
+
+  const HOUR = 60 * 60 * 1000;
+  const readDefault = (source, env) =>
+    Number(source.match(new RegExp(`${env} \\?\\? ([\\d *]+)\\)`))?.[1]?.replaceAll(/[^0-9]/g, " ").trim().split(/ +/).reduce((a, b) => a * Number(b), 1));
+
+  const challengeMs = readDefault(server, "RAREXT_CHALLENGE_INTERVAL_MS");
+  if (challengeMs !== 6 * HOUR) fail(`the challenge scheduler default is ${challengeMs} ms, not 6 h`);
+  if (!doc.includes("every 6 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)")) {
+    fail("OPERATOR.md no longer states the 6-hour retention scheduler");
+  }
+  if (!doc.includes("every 21600s")) fail("OPERATOR.md no longer renders the scheduler as 21600s");
+
+  const storageGcMs = readDefault(server, "RAREXT_GC_INTERVAL_MS");
+  const pinGcMs = readDefault(pinServer, "RAREXT_PIN_GC_INTERVAL_MS");
+  if (storageGcMs !== 24 * HOUR || pinGcMs !== 24 * HOUR) {
+    fail(`the GC loops default to ${storageGcMs} / ${pinGcMs} ms, not 24 h each`);
+  }
+  if (!doc.includes("both 24h, `0` disables")) fail("OPERATOR.md no longer states the GC loops are 24h with a 0 disable");
+
+  const graceMs = Number(durability.match(/gracePeriodMs = options\.gracePeriodMs \?\? ([\d *]+);/)?.[1]?.replaceAll(/[^0-9]/g, " ").trim().split(/ +/).reduce((a, b) => a * Number(b), 1));
+  if (graceMs !== 24 * HOUR) fail(`the blob GC grace default is ${graceMs} ms, not 24 h`);
+  if (!doc.includes("24-hour grace period")) fail("OPERATOR.md no longer states the 24-hour grace period");
+  if (!doc.includes("`\"gracePeriodMs\":0` deletes on the first scan")) {
+    fail("OPERATOR.md no longer documents gracePeriodMs 0 as delete-on-first-scan");
+  }
+
+  console.log(
+    `  challenges ${challengeMs / HOUR} h | storage GC ${storageGcMs / HOUR} h | pin GC ${pinGcMs / HOUR} h | grace ${graceMs / HOUR} h`,
   );
 }
 
