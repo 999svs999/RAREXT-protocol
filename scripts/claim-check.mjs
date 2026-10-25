@@ -201,10 +201,21 @@ if (process.argv.includes("--self-test")) {
   const caughtLimits = failures > beforeLimits;
   if (!caughtLimits) fail("self-test: the checker accepted a limits table the code contradicts");
   caught = caught && caughtLimits;
+  // And an AI bounds row the code outgrows must be reported.
+  const beforeReplay = failures;
+  const doctoredOperationsDoc = originalOperations.replace(
+    "`MAX_GENERATIVE_TOKEN_LENGTH` = 256 UTF-16 code units",
+    "`MAX_GENERATIVE_TOKEN_LENGTH` = 128 UTF-16 code units",
+  );
+  checkReplayBounds(doctoredOperationsDoc);
+  const caughtReplay = failures > beforeReplay;
+  if (!caughtReplay) fail("self-test: the checker accepted an AI bounds row the code contradicts");
+  caught = caught && caughtReplay;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
+  assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -219,6 +230,7 @@ checkRouteSurface();
 checkSoakLog();
 checkThroughputArtifact();
 checkLimitsTable();
+checkReplayBounds();
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a
@@ -361,6 +373,57 @@ function checkLimitsTable(docOverride) {
 
   console.log(
     `  blob ${storageConstants.MAX_BLOB_BYTES / 2 ** 20} MiB | body ${bodyCap} B | steps ${coreAi.MAX_GENERATIVE_STEPS} | vocab ${coreAi.MAX_VOCAB}`,
+  );
+}
+
+
+/**
+ * The AI replay bounds: docs/OPERATIONS.md publishes MAX_GENERATIVE_TOKEN_LENGTH
+ * = 256 and MAX_GENERATIVE_OUTPUT_LENGTH = 1 MiB (1,048,576 code units), and the
+ * behavioural claim that a replay whose longest token times steps would exceed
+ * the bound is rejected without generating. The positive control — a true
+ * replay verifies correct — guards the check against passing vacuously.
+ */
+function checkReplayBounds(docOverride) {
+  console.log(`AI replay bounds (docs/OPERATIONS.md${docOverride ? ", DOCTORED" : ""} vs packages/core/src/ai.ts):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+
+  const tokenCap = Number(doc.match(/`MAX_GENERATIVE_TOKEN_LENGTH` = (\d+)/)?.[1]);
+  if (tokenCap !== 256) fail(`OPERATIONS.md no longer states MAX_GENERATIVE_TOKEN_LENGTH = 256 (says ${tokenCap})`);
+  if (coreAi.MAX_GENERATIVE_TOKEN_LENGTH !== 256) {
+    fail(`the code's MAX_GENERATIVE_TOKEN_LENGTH is ${coreAi.MAX_GENERATIVE_TOKEN_LENGTH}, not 256`);
+  }
+  const outCap = Number(doc.match(/`MAX_GENERATIVE_OUTPUT_LENGTH` = 1 MiB \(([\d,]+) code units\)/)?.[1]?.replaceAll(",", ""));
+  if (outCap !== 1_048_576) fail(`OPERATIONS.md no longer states the 1 MiB output bound as 1,048,576 (says ${outCap})`);
+  if (coreAi.MAX_GENERATIVE_OUTPUT_LENGTH !== 1 << 20) {
+    fail(`the code's MAX_GENERATIVE_OUTPUT_LENGTH is ${coreAi.MAX_GENERATIVE_OUTPUT_LENGTH}, not ${1 << 20}`);
+  }
+
+  // Positive control: an exact small replay verifies correct.
+  const model = { kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["0", "1"] };
+  const trueOutput = coreAi.generate(model, 7, 100);
+  const okReplay = coreAi.verifyGenerativeReplay(
+    { model, seed: 7, output: trueOutput },
+    { steps: 100 },
+  );
+  if (okReplay.correct !== true || okReplay.expected !== trueOutput) {
+    fail("the positive control failed: an exact replay did not verify correct");
+  }
+
+  // The published behaviour: longest token (256) x steps over the 1 MiB bound
+  // is rejected without materializing anything. 256 x 4097 = 1,048,832 > 2^20.
+  const bigToken = "x".repeat(256);
+  const oversized = coreAi.verifyGenerativeReplay(
+    { model: { kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: [bigToken] }, seed: 1, output: "" },
+    { steps: 4097 },
+  );
+  if (oversized.correct !== false || oversized.expected !== "") {
+    fail(`an over-bound replay must return { correct: false, expected: "" }; got correct ${oversized.correct}, expected length ${oversized.expected.length}`);
+  }
+  if (oversized.expected.length > 0) fail("an over-bound replay materialized an output it should not have");
+
+  console.log(
+    `  token cap ${coreAi.MAX_GENERATIVE_TOKEN_LENGTH} | output bound ${coreAi.MAX_GENERATIVE_OUTPUT_LENGTH} | exact replay correct | 256x4097 rejected empty`,
   );
 }
 

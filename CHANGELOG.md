@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The AI replay bounds are checked functionally, not just as constants.** Eighth claim
+  kind: `docs/OPERATIONS.md`'s replay-bounds table states `MAX_GENERATIVE_TOKEN_LENGTH` =
+  256 and `MAX_GENERATIVE_OUTPUT_LENGTH` = 1 MiB, and the behavioural claim that a replay
+  whose longest token times steps exceeds the bound is rejected without generating.
+  `claim:check` verifies the constants against `packages/core/src/ai.ts`, runs a positive
+  control (an exact 100-step replay verifies correct — guarding against the check passing
+  because the function always returns false), and asserts the published rejection
+  behaviour at the arithmetic boundary the doc implies: 256 x 4,097 = 1,048,832 > 2^20 is
+  returned as `{ correct: false, expected: "" }`, while 1 MiB / 256 = 4,096 is exactly
+  the largest step count that still replays. The self-test injects a doctored bounds row.
 - **The published limits are checked against the exported constants.** A programmatic
   sweep found 393 numeric claim lines across 21 docs; the limits table in
   `docs/OPERATIONS.md` cites named constants, so `claim:check` now verifies
