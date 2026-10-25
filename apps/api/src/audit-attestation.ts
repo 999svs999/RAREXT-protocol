@@ -201,6 +201,14 @@ export function verifyAuditAttestation(
   if (!Number.isFinite(windowMs) || windowMs <= 0) {
     return invalid("verification window must be positive");
   }
+  // The clock is validated for the same reason the window is: every freshness
+  // comparison below is a numeric comparison, and NaN fails all of them. An
+  // unusable clock would therefore not narrow the window — it would remove it,
+  // and an expired audit would verify. Measured before the fix: `now: NaN`
+  // accepted an attestation a millisecond past its window.
+  if (!Number.isFinite(now)) {
+    return invalid("verification clock must be a finite timestamp");
+  }
   if (now - attestationTime > windowMs) {
     return invalid("audit attestation has expired");
   }

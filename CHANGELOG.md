@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **An invalid verification clock no longer disables the freshness window (hardening).**
+  Every freshness comparison in the audit verifier is numeric, and `NaN` fails all of
+  them — so passing `now: NaN` did not narrow the window, it removed it. Measured
+  before the fix: an attestation a millisecond past its window verified. The clock is
+  now validated exactly as `windowMs` already was. The audit suite goes from 3 cases to
+  12, one per mechanism (clock, signature transplant, key substitution, expected
+  verifier, algorithm, forged and self-admitted transcript entries, out-of-range leaf
+  index, malformed shapes by name, and the unsigned-field bound), and the mechanisms
+  are recorded in `docs/HARDENING.md`.
 - **One anchor per batch (hardening).** `anchorPending` read the pending set, awaited
   the anchoring adapter, and only then committed — so two overlapping calls both read
   the same batch and both committed it. Measured before the fix: two anchors, the same
