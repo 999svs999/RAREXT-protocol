@@ -38,6 +38,18 @@ export interface GenerativeSpec {
 
 export const MAX_GENERATIVE_STEPS = 100_000;
 export const MAX_VOCAB = 4096;
+/** Longest single vocabulary token admitted to a committed model. */
+export const MAX_GENERATIVE_TOKEN_LENGTH = 256;
+/** Largest output a replay may materialize, in UTF-16 code units. */
+export const MAX_GENERATIVE_OUTPUT_LENGTH = 1 << 20;
+
+function replayOutputBound(model: XorshiftModel, steps: number): number {
+  let longest = 0;
+  for (const token of model.vocab) {
+    if (token.length > longest) longest = token.length;
+  }
+  return longest * steps;
+}
 
 export function isXorshiftModel(value: unknown): value is XorshiftModel {
   if (typeof value !== "object" || value === null) return false;
@@ -52,7 +64,12 @@ export function isXorshiftModel(value: unknown): value is XorshiftModel {
     Array.isArray(model.vocab) &&
     model.vocab.length >= 1 &&
     model.vocab.length <= MAX_VOCAB &&
-    model.vocab.every((token) => typeof token === "string" && token.length > 0)
+    model.vocab.every(
+      (token) =>
+        typeof token === "string" &&
+        token.length > 0 &&
+        token.length <= MAX_GENERATIVE_TOKEN_LENGTH,
+    )
   );
 }
 
@@ -64,7 +81,8 @@ export function isGenerativeBody(value: unknown): value is GenerativeBody {
     Number.isInteger(body.seed) &&
     body.seed! >= 0 &&
     body.seed! <= 0xffffffff &&
-    typeof body.output === "string"
+    typeof body.output === "string" &&
+    body.output.length <= MAX_GENERATIVE_OUTPUT_LENGTH
   );
 }
 
@@ -109,6 +127,17 @@ export function verifyGenerativeReplay(
   body: GenerativeBody,
   spec: GenerativeSpec,
 ): GenerativeReplay {
+  // Reject malformed or oversized inputs before replay materializes anything.
+  // The token cap in the body validator and this output bound are what keep a
+  // single request from turning a tiny model into an arbitrarily large string.
+  if (!isGenerativeBody(body) || !isGenerativeSpec(spec)) {
+    return { correct: false, expected: "" };
+  }
+
+  if (replayOutputBound(body.model, spec.steps) > MAX_GENERATIVE_OUTPUT_LENGTH) {
+    return { correct: false, expected: "" };
+  }
+
   const expected = generate(body.model, body.seed, spec.steps);
   return { correct: expected === body.output, expected };
 }

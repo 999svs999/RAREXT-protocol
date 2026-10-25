@@ -5,7 +5,7 @@ import test from "node:test";
 import { canonicalize, generate, leafPayload } from "@rarext/core";
 import type { Publication } from "@rarext/core";
 
-import { verifyBundle, type Bundle } from "../src/verify.ts";
+import { localVerdict, verifyBundle, type Bundle } from "../src/verify.ts";
 
 /**
  * The mirror verifier is what a stranger runs when the operator is gone, so it
@@ -91,7 +91,7 @@ function root(leaves: string[]): string {
   return level[0]!;
 }
 
-function bundle(publications: Publication[], leafVersion = 3): Bundle {
+function bundle(publications: Publication[], leafVersion = 4): Bundle {
   const leaves = publications.map((entry) =>
     hex(canonicalize(leafPayload(entry, leafVersion))),
   );
@@ -232,6 +232,25 @@ test("an over-bound committed metric is reported as violating the bound", async 
   assert.equal(claim.withinBound, false);
 });
 
+test("pre-v4 leaves do not surface uncommitted AI fields", async () => {
+  const result = await verifyBundle(bundle([aiPublication("ai-v3")], 3), {
+    "bounded-starter": {
+      metric: "maxAbsError",
+      bound: 4,
+      reference: [10, 20, 30, 40, 200, 255, 0, 128],
+    },
+  });
+
+  assert.equal(result.valid, true, result.reason ?? "");
+  const claim = result.aiClaims[0]!;
+  assert.equal(claim.representation, null);
+  assert.equal(claim.correct, false);
+  assert.equal(claim.metricName, null);
+  assert.equal(claim.metricValue, null);
+  assert.equal(claim.withinBound, null);
+  assert.equal(claim.local, null);
+});
+
 test("legacy publications surface as representation null", async () => {
   const result = await verifyBundle(
     bundle([publication("p1"), aiPublication("ai-1")]),
@@ -327,6 +346,13 @@ test("a locally recomputed metric that disagrees with the attestation is exposed
   assert.equal(claim.metricValue, 9);
   assert.notEqual(claim.local!.metricValue, claim.metricValue);
   assert.equal(claim.withinBound, false);
+});
+
+test("a local AI failure overrides a server pass", () => {
+  assert.equal(localVerdict(true, null), true);
+  assert.equal(localVerdict(true, { correct: true }), true);
+  assert.equal(localVerdict(true, { correct: false }), false);
+  assert.equal(localVerdict(false, { correct: true }), false);
 });
 
 test("without a usable spec the local check stays null, not a guess", async () => {

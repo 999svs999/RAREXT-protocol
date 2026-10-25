@@ -24,6 +24,7 @@ import { initI18n, localeTag, t } from "./i18n.ts";
 import { bemReadout, parseBemStatus } from "./bem.ts";
 import type { BemStatus } from "./bem.ts";
 import { runWork, type WorkBoard } from "./work.ts";
+import { localVerdict } from "./verify.ts";
 
 const NODE_WIDTH = 144;
 const NODE_HEIGHT = 64;
@@ -1938,7 +1939,9 @@ function openPublication(publication: Publication, mode: "load" | "remix"): void
  * replays the generative model or recomputes the bounded metric itself.
  * The suffix is protocol literals, not prose, so it needs no translation.
  */
-function localAiEvidence(publication: Publication): string | null {
+function localAiEvidence(
+  publication: Publication,
+): { text: string; correct: boolean } | null {
   const representation = publication.attestation.representation;
   if (representation !== "generative" && representation !== "bounded") return null;
 
@@ -1960,12 +1963,18 @@ function localAiEvidence(publication: Publication): string | null {
   if ("error" in result) return null;
 
   if (result.representation === "generative") {
-    return `replay ${result.correct ? "ok" : "fail"} · steps ${result.steps ?? "?"}`;
+    return {
+      text: `replay ${result.correct ? "ok" : "fail"} · steps ${result.steps ?? "?"}`,
+      correct: result.correct,
+    };
   }
 
   const value = typeof result.metricValue === "number" ? result.metricValue : "?";
   const bound = typeof result.bound === "number" ? result.bound : "?";
-  return `metric ${value} ${result.correct ? "≤" : ">"} ${bound}`;
+  return {
+    text: `metric ${value} ${result.correct ? "≤" : ">"} ${bound}`,
+    correct: result.correct,
+  };
 }
 
 async function verifyPublication(publication: Publication): Promise<void> {
@@ -1981,8 +1990,9 @@ async function verifyPublication(publication: Publication): Promise<void> {
     const payload = (await response.json()) as { valid?: boolean; error?: string };
 
     if (!response.ok) throw new Error(payload.error ?? t("err.check"));
-    const verdict = payload.valid ? t("toast.verified") : t("toast.mismatch");
-    toast(local ? `${verdict} · ${local}` : verdict, !payload.valid);
+    const valid = localVerdict(Boolean(payload.valid), local);
+    const verdict = valid ? t("toast.verified") : t("toast.mismatch");
+    toast(local ? `${verdict} · ${local.text}` : verdict, !valid);
   } catch (error) {
     toast(error instanceof Error ? error.message : t("err.check"), true);
   }

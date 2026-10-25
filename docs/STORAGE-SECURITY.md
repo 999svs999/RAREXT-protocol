@@ -149,8 +149,10 @@ attestation that says `correct:true`, and `/v1/verify` re-checks that publicatio
 operator, bindings, algorithm/profile, and full signature. Changing a score or another
 field that passes the binding checks breaks the signature; a changed artifact,
 challenge, or semantics binding is refused by its binding check before the signature
-is examined. A reader does not combine separate operator verdicts, so disagreement
-cannot silently become a pass.
+is examined. For the built-in AI apps, `/v1/verify` also replays the artifact locally
+and compares the operator's verdict, representation, metric name, and metric value, so
+a signed-but-wrong AI claim cannot hide behind the operator path. A reader does not
+combine separate operator verdicts, so disagreement cannot silently become a pass.
 
 Audit transcripts remain bounded by the checks in the storage table: every placement
 shard needs a `verified:true` entry, a unique fresh nonce, a response that recomputes

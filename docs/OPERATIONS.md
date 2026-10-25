@@ -56,6 +56,19 @@ regression tests in `apps/api/test/storage-hardening.test.ts`,
 | Operator key revocation | a revocation signed by the operator key is posted to `/v1/verifier-operators/:keyId/revocation` | the old key's attestations reject `operator <name> key is revoked`; the revoked `keyId` cannot re-register; revocation survives a registry reload |
 | Unauthenticated operator revocation | the body must be a signed revocation whose `keyId` matches the path | a wrong key, bad signature, or mismatched path is refused before the revoked set changes |
 
+### AI replay bounds
+
+The generative verifier (`ai-generative`) validates an artifact body before it
+materializes the expected output. Limits are measured by
+`packages/core/test/ai.test.ts` and `apps/api/test/generative.test.ts`:
+
+| Check | Limit / behaviour | What happens at the limit |
+| --- | --- | --- |
+| Vocabulary token | `MAX_GENERATIVE_TOKEN_LENGTH` = 256 UTF-16 code units | `isXorshiftModel` / `isGenerativeBody` reject the artifact before replay |
+| Claimed output | `MAX_GENERATIVE_OUTPUT_LENGTH` = 1 MiB (1,048,576 code units) | the body is rejected; no expected string is generated |
+| Expected replay length | longest vocabulary token × `spec.steps` must fit the same 1 MiB output bound | `verifyGenerativeReplay` returns `{ correct: false, expected: "" }` without generating; steps remain capped at `MAX_GENERATIVE_STEPS` = 100,000 and vocabulary at `MAX_VOCAB` = 4,096 |
+| Malformed body/spec | shape, seed range, step range, and finite numbers are checked first | the verifier rejects or returns an incorrect replay rather than attempting the work |
+
 ### Verifier modules and aggregate consistency
 
 The public module catalogue (`GET /v1/verifiers`, `/v1/verifiers/<app>/<hash>.mjs`,
@@ -73,6 +86,7 @@ attestations are bounded by `apps/api/test/claim-verify.test.ts`,
 | Recomputed attestation | app, challenge, artifact hash, trace hash, score, gate count, verdict, representation, metric name/value, proof kind, verifier name, and semantic binding must all equal the stored attestation | `POST /v1/verify` returns `valid:false` with `attestation does not match <field>`; it does not average, choose a quorum, or accept the closest verdict |
 | Operator verdict | one publication embeds one signed operator attestation; the operator must be registered, authorised, unrevoked, and match the semantics, algorithm/profile, artifact, challenge, and a `correct:true` verdict | an opposite verdict is refused at publish time (`operator did not attest that the artifact is correct`); two operators may disagree, but a publication cannot combine them into a quorum |
 | Operator payload | the signature covers the entire operator attestation payload | a changed score, algorithm, or other field that passes the binding checks rejects `operator signature does not verify`; a changed artifact/challenge/semantics binding is refused by its own binding check before the signature is examined |
+| Operator AI verdict | built-in `ai-generative` and `ai-bounded` publications are replayed/recomputed by the local verifier at `/v1/verify` even when the publication carries an operator attestation; app, challenge, artifact, verdict, representation, metric name, and metric value must agree | a signed operator verdict that disagrees with the local replay is returned as `valid:false` with `operator attestation does not match local <field>`; apps with no local verifier remain independent operator verdicts |
 
 Streamed decode verifies every selected shard before it opens the output file,
 then writes to a unique `.tmp` sibling and renames only after the full payload hash

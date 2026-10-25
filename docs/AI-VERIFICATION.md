@@ -38,6 +38,13 @@ digest or the output and fails the replay. The attestation is about
 *provenance* — that this output came from that model — not about the text
 being good.
 
+Replay is bounded before it materializes anything: a vocabulary token is at most
+256 UTF-16 code units, a claimed output is at most 1 MiB, and the installed
+model's longest token multiplied by the challenge's step count must also fit
+within that output bound. A malformed or oversized body/spec is refused instead
+of being replayed, so one request cannot turn a tiny model into an arbitrarily
+large string.
+
 ## Bounded: lossy reconstructions with a promise
 
 Real model classes — quantized weights, compressed embeddings, neural codec
@@ -62,7 +69,9 @@ all committed before the artifact is verified.
   Merkle leaf, so the anchor commits the AI claim itself: a mirror cannot strip
   a representation or inflate a metric without breaking the root. v2/v3 leaves
   keep their exact old shape, and old anchors verify at the leaf version their
-  manifest records.
+  manifest records. The browser mirror only surfaces AI evidence when
+  `manifest.leafVersion >= 4`; the same fields on a pre-v4 publication are
+  outside the leaf and are ignored.
 - **Semantics binding** still applies: the spec hash pins the challenge the
   meaning was written against, so the reference vector or replay target cannot
   change underneath a published claim.

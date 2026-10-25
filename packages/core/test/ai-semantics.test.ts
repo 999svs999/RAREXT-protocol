@@ -39,6 +39,9 @@ test("a bounded claim derives a recomputable proof kind", () => {
   const record = AI_SEMANTICS[1]!;
   const attestation = {
     claimKind: "bounded",
+    representation: "bounded",
+    metricName: "maxAbsError",
+    metricValue: 2,
     circuitHash: "c".repeat(64),
     traceHash: "t".repeat(64),
     semanticsHash: record.specHash,
@@ -51,6 +54,9 @@ test("a bounded claim derives a recomputable proof kind", () => {
   const claim = claimFromAttestation(attestation, record, "bounded-starter");
   assert.equal(claim.kind, "bounded");
   assert.equal(claim.proofKind, "recomputable");
+  assert.equal(claim.representation, "bounded");
+  assert.equal(claim.metricName, "maxAbsError");
+  assert.equal(claim.metricValue, 2);
 });
 
 test("the pinned spec hash matches the gen-starter spec", () => {
@@ -65,6 +71,7 @@ test("a generative claim derives a recomputable proof kind", () => {
   const record = AI_SEMANTICS[0]!;
   const attestation = {
     claimKind: "generative",
+    representation: "generative",
     circuitHash: "c".repeat(64),
     traceHash: "t".repeat(64),
     semanticsHash: record.specHash,
@@ -77,6 +84,7 @@ test("a generative claim derives a recomputable proof kind", () => {
   const claim = claimFromAttestation(attestation, record, "gen-starter");
   assert.equal(claim.kind, "generative");
   assert.equal(claim.proofKind, "recomputable");
+  assert.equal(claim.representation, "generative");
   assert.equal(claim.predicate, `${record.id}@${record.version} (gen-starter)`);
 });
 

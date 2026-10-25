@@ -130,6 +130,7 @@ export interface Claim {
   verifierHash: string;
   createdAt: string;
   metricName?: string;
+  metricValue?: number;
   metricBound?: number;
   modelDigest?: string;
   seed?: string;

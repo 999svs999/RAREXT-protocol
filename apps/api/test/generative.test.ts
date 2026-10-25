@@ -3,7 +3,9 @@ import test from "node:test";
 
 import type { Artifact, Challenge } from "../../../packages/core/src/index.ts";
 import {
+  MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
+  MAX_GENERATIVE_TOKEN_LENGTH,
   generate,
   generativeVerifierHash,
   isGenerativeBody,
@@ -140,6 +142,22 @@ test("malformed artifacts and specs are rejected", () => {
   assert.equal(isGenerativeBody({ model: { ...model, kind: "transformer" }, seed: 1, output: "" }), false);
   assert.equal(isGenerativeBody({ model, seed: -1, output: "" }), false);
   assert.equal(isGenerativeBody({ model, seed: 42, output: 7 }), false);
+  assert.equal(
+    isGenerativeBody({
+      model: { ...model, vocab: ["x".repeat(MAX_GENERATIVE_TOKEN_LENGTH + 1)] },
+      seed: 42,
+      output: "",
+    }),
+    false,
+  );
+  assert.equal(
+    isGenerativeBody({
+      model,
+      seed: 42,
+      output: "x".repeat(MAX_GENERATIVE_OUTPUT_LENGTH + 1),
+    }),
+    false,
+  );
   assert.equal(isGenerativeSpec({ steps: 0 }), false);
   assert.equal(isGenerativeSpec({ steps: MAX_GENERATIVE_STEPS + 1 }), false);
   assert.equal(isGenerativeSpec({ steps: 1 }), true);

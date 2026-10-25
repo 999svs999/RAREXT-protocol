@@ -63,6 +63,18 @@ export interface AiClaimSummary {
 }
 
 /**
+ * The server's verdict and the browser's own AI check must agree. A local
+ * replay or metric failure is never hidden by a server that still says valid,
+ * and a server rejection is never overridden by a local pass.
+ */
+export function localVerdict(
+  serverValid: boolean,
+  local: { correct: boolean } | null,
+): boolean {
+  return serverValid && (local?.correct ?? true);
+}
+
+/**
  * Challenge specs a reader can supply alongside a bundle: bounded claims use
  * `bound` (+ optionally the full spec with `metric` and `reference` for local
  * recomputation), generative claims use `steps` for a local replay.
@@ -177,6 +189,12 @@ function aiClaimsFor(
   bundle: Bundle,
   challenges?: ChallengeIndex,
 ): AiClaimSummary[] {
+  // The AI evidence is only meaningful when the anchor actually committed it.
+  // Leaf v4 added representation/metric fields; on v2/v3 the same fields can
+  // still appear on the JSON object, but they are outside the Merkle leaf, so
+  // a mirror could edit them without changing the root. Do not surface them.
+  const committed = bundle.manifest.leafVersion >= 4;
+
   return bundle.publications.map((publication) => {
     const attestation = publication.attestation as {
       representation?: "exact" | "bounded" | "generative";
@@ -185,18 +203,22 @@ function aiClaimsFor(
       correct?: boolean;
     };
 
-    const representation = attestation.representation ?? null;
+    const representation = committed ? (attestation.representation ?? null) : null;
     const spec = challenges?.[publication.challengeId];
     const bound = typeof spec?.bound === "number" ? spec.bound : null;
     const metricValue =
-      typeof attestation.metricValue === "number" ? attestation.metricValue : null;
-    const local = localAiCheck(publication, spec as Record<string, unknown> | undefined);
+      committed && typeof attestation.metricValue === "number"
+        ? attestation.metricValue
+        : null;
+    const local = committed
+      ? localAiCheck(publication, spec as Record<string, unknown> | undefined)
+      : null;
 
     return {
       publicationId: publication.id,
       representation,
-      correct: attestation.correct === true,
-      metricName: attestation.metricName ?? null,
+      correct: committed && attestation.correct === true,
+      metricName: committed ? (attestation.metricName ?? null) : null,
       metricValue,
       bound,
       withinBound:

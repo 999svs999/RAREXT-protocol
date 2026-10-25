@@ -6,7 +6,9 @@ import {
   generate,
   isGenerativeBody,
   isGenerativeSpec,
+  MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
+  MAX_GENERATIVE_TOKEN_LENGTH,
   MAX_VOCAB,
   verifyGenerativeReplay as replayGenerative,
   type GenerativeBody,
@@ -31,7 +33,9 @@ export {
   generate,
   isGenerativeBody,
   isGenerativeSpec,
+  MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
+  MAX_GENERATIVE_TOKEN_LENGTH,
   MAX_VOCAB,
 };
 export type { GenerativeBody, GenerativeSpec, XorshiftModel };

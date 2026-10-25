@@ -22,6 +22,7 @@ import {
   createAgentKeyfile,
   generateAgentKeypair,
 } from "../../../packages/agent-sdk/src/index.ts";
+import { createChallengeRegistry } from "../src/challenges.ts";
 import { VerifierModuleRegistry } from "../src/verifierModules.ts";
 import { createVerifierRegistry } from "../src/verifiers.ts";
 import { VerifierOperatorRegistry, signOperator } from "../src/verifier-operators.ts";
@@ -368,6 +369,87 @@ test("a publication without an operator or a local verifier is still refused", a
     });
 
     assert.equal(response.status, 404);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("an operator AI verdict is replayed again before /v1/verify accepts it", async () => {
+  const browse = createChallengeRegistry();
+  const generative = browse.get("gen-starter");
+  if (!generative?.sampleArtifact) throw new Error("gen-starter sample missing");
+  const sample = generative.sampleArtifact;
+
+  const owner = signer();
+  const operators = new VerifierOperatorRegistry();
+  operators.register(
+    signOperator({ name: "AI replay operator", apps: ["ai-generative"] }, owner),
+  );
+
+  const aiAttestation = (target: Artifact, overrides: Partial<Attestation> = {}) =>
+    attestationFor(owner, target, {
+      challengeId: generative.id,
+      taskId: generative.id,
+      semanticsId: generative.semanticsId,
+      semanticsVersion: generative.semanticsVersion,
+      representation: "generative",
+      verifier: "operator-generative",
+      ...overrides,
+    });
+
+  const { server, base } = await start(undefined, {
+    challenges: browse,
+    operators,
+  });
+
+  try {
+    const accepted = await post(base, "/v1/artifacts", {
+      author: "alice",
+      title: "Operator replay",
+      challengeId: generative.id,
+      artifact: sample,
+      operatorAttestation: signedBy(owner, aiAttestation(sample)),
+    });
+    assert.equal(accepted.status, 201);
+    const publication = (await accepted.json()) as Publication;
+
+    const verified = (await (await post(base, "/v1/verify", {
+      publicationId: publication.id,
+    })).json()) as {
+      valid: boolean;
+      reason: string | null;
+      recomputed: Attestation | null;
+    };
+
+    assert.equal(verified.valid, true, verified.reason ?? "");
+    assert.equal(verified.recomputed?.representation, "generative");
+    assert.equal(verified.recomputed?.correct, true);
+
+    const tamperedBody = JSON.parse(JSON.stringify(sample.body)) as { output: string };
+    tamperedBody.output =
+      tamperedBody.output.slice(0, -1) +
+      (tamperedBody.output.endsWith("a") ? "b" : "a");
+    const tampered: Artifact = { ...sample, body: tamperedBody };
+
+    const bogus = await post(base, "/v1/artifacts", {
+      author: "alice",
+      title: "Operator replay that lies",
+      challengeId: generative.id,
+      artifact: tampered,
+      operatorAttestation: signedBy(
+        owner,
+        aiAttestation(tampered, { correct: true, score: 100 }),
+      ),
+    });
+    assert.equal(bogus.status, 201);
+    const bogusPublication = (await bogus.json()) as Publication;
+
+    const caught = (await (await post(base, "/v1/verify", {
+      publicationId: bogusPublication.id,
+    })).json()) as { valid: boolean; reason: string | null };
+
+    assert.equal(caught.valid, false);
+    assert.match(caught.reason ?? "", /local verdict/);
   } finally {
     await stop(server);
   }

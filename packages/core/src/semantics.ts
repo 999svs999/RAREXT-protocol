@@ -201,6 +201,9 @@ export function claimFromAttestation(
   return {
     kind: attestation.claimKind,
     subject: attestation.circuitHash,
+    representation: attestation.representation,
+    metricName: attestation.metricName,
+    metricValue: attestation.metricValue,
     semanticsId: semantics.id,
     semanticsVersion: semantics.version,
     semanticsHash: attestation.semanticsHash,

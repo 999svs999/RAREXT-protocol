@@ -866,6 +866,71 @@ export function createApp(options: AppOptions = {}): AppServer {
 
     return observation ? { ...publication, durability: observation } : publication;
   }
+
+  /**
+   * An operator may attest for an app we also verify locally. For the built-in
+   * AI apps, replay the claim anyway and compare the evidence the operator
+   * signed. This stops a signed-but-wrong verdict from hiding behind the
+   * operator path, while leaving apps without local verifiers independent.
+   */
+  async function crossCheckOperatorAi(
+    publication: Publication,
+    challenge: Challenge,
+  ): Promise<{
+    valid: boolean;
+    reason: string | null;
+    recomputed: Attestation | null;
+  } | null> {
+    if (publication.app !== "ai-generative" && publication.app !== "ai-bounded") {
+      return null;
+    }
+
+    const verifier = verifiers.get(publication.app);
+    if (
+      !verifier ||
+      verifier.verifier !== "builtin" ||
+      !verifier.supports(publication.artifact, challenge)
+    ) {
+      return null;
+    }
+
+    let recomputed: Attestation;
+    try {
+      recomputed = await verifier.verify(publication.artifact, challenge);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "verification failed";
+      return {
+        valid: false,
+        reason: `local replay failed: ${message}`,
+        recomputed: null,
+      };
+    }
+
+    const stored = publication.attestation;
+    const checks: [string, boolean][] = [
+      ["app", recomputed.app === stored.app],
+      [
+        "challenge",
+        recomputed.challengeId === (stored.challengeId ?? stored.taskId),
+      ],
+      ["artifact", recomputed.circuitHash === stored.circuitHash],
+      ["verdict", recomputed.correct === stored.correct],
+      ["representation", recomputed.representation === stored.representation],
+      ["metric name", recomputed.metricName === stored.metricName],
+      ["metric value", recomputed.metricValue === stored.metricValue],
+    ];
+    const mismatch = checks.find(([, ok]) => !ok)?.[0] ?? null;
+
+    return {
+      valid: mismatch === null,
+      reason:
+        mismatch === null
+          ? null
+          : `operator attestation does not match local ${mismatch}`,
+      recomputed,
+    };
+  }
+
   const chainRegistry = options.chains ?? new ChainRegistry(loadChainConfigs(), options.fetch);
   const consensus = createConsensusService(store, options.consensus);
   const tournaments = options.tournaments ?? new TournamentService();
@@ -2923,11 +2988,19 @@ export function createApp(options: AppOptions = {}): AppServer {
             publication.artifact,
           );
 
+          const local = await crossCheckOperatorAi(publication, challenge);
+          const valid = checked.ok && (local?.valid ?? true);
+          const reason = !checked.ok
+            ? checked.reason
+            : local && !local.valid
+              ? local.reason
+              : null;
+
           send(res, 200, {
-            valid: checked.ok,
-            reason: checked.reason,
+            valid,
+            reason,
             attestation: publication.attestation,
-            recomputed: null,
+            recomputed: local?.recomputed ?? null,
             operator: checked.operator,
           });
           return;

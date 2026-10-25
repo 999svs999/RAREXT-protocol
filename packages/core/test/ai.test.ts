@@ -11,6 +11,8 @@ import {
   isGenerativeBody,
   isGenerativeSpec,
   maxAbsError,
+  MAX_GENERATIVE_OUTPUT_LENGTH,
+  MAX_GENERATIVE_TOKEN_LENGTH,
   meanAbsError,
   verifyAiArtifact,
   verifyBoundedReconstruction,
@@ -56,6 +58,33 @@ test("core owns the generative replay math", () => {
   assert.equal(isGenerativeBody({ model, seed: 42, output }), true);
   assert.equal(isGenerativeSpec({ steps: 32 }), true);
   assert.equal(isGenerativeSpec({ steps: 0 }), false);
+});
+
+test("replay refuses oversized tokens and outputs before generating", () => {
+  const longToken = "x".repeat(MAX_GENERATIVE_TOKEN_LENGTH + 1);
+  assert.equal(
+    isGenerativeBody({ model: { ...model, vocab: [longToken] }, seed: 42, output: "" }),
+    false,
+  );
+
+  const output = generate(model, 42, 32);
+  assert.equal(
+    isGenerativeBody({
+      model,
+      seed: 42,
+      output: "x".repeat(MAX_GENERATIVE_OUTPUT_LENGTH + 1),
+    }),
+    false,
+  );
+
+  // A model whose longest token multiplied by the step count exceeds the output
+  // bound is refused without materializing the string.
+  const wide = { ...model, vocab: ["x".repeat(MAX_GENERATIVE_TOKEN_LENGTH)] };
+  const replay = verifyGenerativeReplay(
+    { model: wide, seed: 42, output },
+    { steps: MAX_GENERATIVE_OUTPUT_LENGTH / MAX_GENERATIVE_TOKEN_LENGTH + 1 },
+  );
+  assert.deepEqual(replay, { correct: false, expected: "" });
 });
 
 test("core owns the bounded metric math", () => {
