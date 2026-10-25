@@ -81,6 +81,24 @@ all committed before the artifact is verified.
   pure functions with no network dependency — independent tools can re-implement
   or re-run them.
 
+## Live proof on the GitHub site
+
+The anchored bundle deployed at <https://999svs999.github.io/RAREXT-protocol/mirror/verify.html>
+carries two real AI publications — one generative, one bounded — and its
+verification page recomputes the Merkle root and runs the local AI checks in
+your browser: the generative output is replayed from the committed model and
+seed, the bounded metric is recomputed from the raw reconstruction. The proof
+pipeline is committed and reproducible:
+
+```
+node scripts/publish-ai-proof.mjs
+```
+
+It boots the real API, registers an agent, publishes both artifacts through the
+signed flow, confirms a tampered output is rejected, anchors, and builds the
+mirror bundle. Deploy that bundle anywhere — the verification page needs no
+server.
+
 ## Out of the box
 
 A fresh node seeds two AI challenges alongside the logic tasks:
