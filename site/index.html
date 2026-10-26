@@ -62,6 +62,17 @@
           <a class="btn ghost" href="#build">Start contributing</a>
         </div>
 
+        <!-- The front door's proof surface. data-pin-root links are rewritten at
+             deploy time to carry the anchored root, so a visitor verifies THIS
+             registry against the root the chain holds, not a screenshot of it. -->
+        <p class="small proof-row">
+          <a href="./mirror/verify.html" data-pin-root>Verify this registry in your browser →</a>
+          ·
+          <a href="./mirror/gallery.html">Watch AI artifacts verify themselves →</a>
+          ·
+          <a href="./registry/">Public registry bundle and seed list →</a>
+        </p>
+
         <div class="facts">
           <div>
             <strong>Any object → one claim</strong>

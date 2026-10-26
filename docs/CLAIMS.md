@@ -22,7 +22,7 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/SEMANTICS.md` | semantics doc | record fields, binding statuses, routes, claim kinds, and the scope rule through `bindClaim` |
 | `docs/STORAGE-SECURITY.md` | audit window | the nonce bound and the verifier-timeout range |
 | `docs/WORK.md` | reward table | every action's credit rate, both directions |
-| `docs/MIRRORS.md` | mirrors doc | bundle routes, named npm scripts, the takedown test's CI sentence, and the published copy's artifacts |
+| `docs/MIRRORS.md` | mirrors doc | bundle routes, named npm scripts, the takedown test's CI sentence, the published copy's artifacts, and the front door's pinned proof links |
 | `docs/APP-PROTOCOL.md` | app protocol | every `RAREXT_*` name read by the implementation, and the published route list |
 | `docs/CRYPTO.md` | crypto doc | the runtime floor against `engines.node`, the leaf-version floor, and the suite derivation through `suiteOf` |
 | `scripts/` | artifact sources | the inline bundle (`bundle.js`) and proof page (`verify.html`) each live in one module; generators delegate to them and keep no private copies |

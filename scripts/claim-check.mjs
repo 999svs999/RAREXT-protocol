@@ -302,6 +302,15 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a front door that lost its proof link must be reported — a landing
+  // page that only describes the proof is the failure this check exists for.
+  const beforeFrontDoor = failures;
+  const originalLanding = readFileSync(new URL("site/index.html", root), "utf8");
+  const doctoredLanding = originalLanding.replace(/ data-pin-root/g, "");
+  checkFrontDoor(undefined, doctoredLanding);
+  const caughtFrontDoor = failures > beforeFrontDoor;
+  if (!caughtFrontDoor) fail("self-test: the checker accepted a front door without its pinned proof link");
+  caught = caught && caughtFrontDoor;
   // And a generator that keeps its own inline copy of a shared artifact must
   // be reported — the fixture names a second holder of the inline bundle.
   const beforeSources = failures;
@@ -388,6 +397,7 @@ if (process.argv.includes("--self-test")) {
     doctoredScripts.map((f) => f.text).join("\n"),
     "artifact-sources",
   );
+  assertChanged(originalLanding, doctoredLanding, "front-door");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -407,6 +417,7 @@ checkAppProtocol();
 checkCryptoDoc();
 checkClaimsCoverage();
 checkArtifactSources();
+checkFrontDoor();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -438,6 +449,35 @@ checkRewardTable();
  * prevent the whole class: the inline forms live in exactly one module, and
  * every generator delegates to it.
  */
+/**
+ * The front door: the landing page is where a visitor decides whether this
+ * project is a promise or a proof, so it must LINK the proof — the pinned
+ * verifier and the gallery — and the deploy must pin those links with the
+ * anchored root. The doc states the contract; this check holds both sides to
+ * it.
+ */
+function checkFrontDoor(docOverride, indexOverride) {
+  console.log(`front door (site/index.html${indexOverride ? ", DOCTORED" : ""} vs docs/MIRRORS.md):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+  const index = indexOverride ?? readFileSync(new URL("site/index.html", root), "utf8");
+
+  if (!doc.includes("data-pin-root")) {
+    fail("MIRRORS.md no longer documents the landing page's pinned proof links");
+  }
+
+  if (!index.includes("data-pin-root")) {
+    fail("the landing page marks no data-pin-root proof link — the front door must carry the pinned verifier");
+  }
+  if (!index.includes("./mirror/verify.html")) {
+    fail("the landing page does not link the mirror verifier");
+  }
+  if (!index.includes("./mirror/gallery.html")) {
+    fail("the landing page does not link the gallery — the AI artifacts that verify themselves are invisible from the front door");
+  }
+
+  console.log("  pinned verifier, gallery, and registry linked | deploy pins data-pin-root links");
+}
+
 function checkArtifactSources(filesOverride) {
   console.log(`artifact sources (scripts/${filesOverride ? ", DOCTORED" : ""}):`);
   const names = filesOverride

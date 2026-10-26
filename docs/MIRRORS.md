@@ -56,6 +56,10 @@ A mirror is a directory:
   reason, and the page always says which location the copy it verified came
   from (`Served from`). When nothing verifies it says so instead of showing a
   green row, so a visitor to a tampered mirror still gets a truthful answer.
+  The landing page carries this proof surface at the front door: its
+  `data-pin-root` links are rewritten at deploy time to carry the anchored
+  root, so "Verify this registry" opens the verifier already pinned to the root
+  the chain holds, and a deploy whose front door lost its proof links fails.
 - `blobs.json` — small public blobs embedded for `gallery.html`. The gallery
   re-hashes every embedded blob in the browser and skips any whose bytes, size,
   or hash disagree; it never renders unverified metadata. AI renditions carry

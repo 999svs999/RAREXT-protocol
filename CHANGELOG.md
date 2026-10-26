@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The front door now links the proof, and the deploy pins it.** The landing page — where a
+  visitor decides whether this project is a promise or a proof — linked only the registry
+  listing; the pinned verifier and the gallery (the AI artifacts that verify themselves) were
+  two clicks deep. The hero now carries "Verify this registry in your browser" and "Watch AI
+  artifacts verify themselves", and the deploy rewrites every `data-pin-root` link to carry the
+  anchored root, so the verifier opens already pinned to the root the chain holds — the front
+  door verifies THIS registry, not a screenshot of one. The pinning is loud in both directions:
+  a marker that fails to rewrite fails the deploy, and a landing page with no marker fails it
+  too (a proof link that silently stayed unpinned is precisely the quiet degradation this
+  protocol exists to prevent). MIRRORS.md states the contract and claim:check holds both sides
+  to it — the landing page must carry the marker, the verifier link, and the gallery link, and
+  the self-test removes the marker and requires the mismatch.
 - **A sweep for duplicated generated artifacts found the inline bundle written three times.**
   After fixing the proof page's twin generators in the previous cycle, a sweep across all of
   `scripts/*.mjs` found the same pattern live in the bundle itself: `build-mirror.mjs` and

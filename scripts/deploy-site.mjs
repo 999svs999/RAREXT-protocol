@@ -183,6 +183,55 @@ function removeWorktree() {
   }
 }
 
+/**
+ * The front door must not just describe the proof — it must BE one. Any link
+ * marked data-pin-root on the landing page is rewritten to carry the anchored
+ * root, so a visitor who clicks "Verify this registry" lands on the verifier
+ * with the chain's root already in the URL, not a link they have to pin
+ * themselves.
+ *
+ * A marker that fails to rewrite is a deploy failure, not a warning: a proof
+ * link that silently stayed unpinned would be exactly the kind of quiet
+ * degradation this protocol exists to prevent. And a landing page with NO
+ * marker fails too — the front door must carry the proof surface.
+ */
+function pinFrontDoor(files, root) {
+  const index = files.find((file) => file.target === "index.html");
+  if (!index) fail("the deploy has no index.html — there is no front door to pin");
+
+  const html = index.bytes.toString("utf8");
+  const anchors = html.match(/<a\b[^>]*\bdata-pin-root\b[^>]*>/g) ?? [];
+  if (anchors.length === 0) {
+    fail("the landing page marks no data-pin-root proof link — the front door must carry one");
+  }
+
+  let pinned = 0;
+  const rewritten = html.replace(
+    /(<a\b[^>]*\bdata-pin-root\b[^>]*href=")([^"]*)(")/g,
+    (whole, before, href, after) => {
+      if (href.includes(`root=${root}`)) {
+        pinned += 1;
+        return whole;
+      }
+      const joined = href + (href.includes("?") ? "&" : "?") + `root=${root}`;
+      if (!/^(https?:\/\/|\.\/|\/)/.test(href)) {
+        fail(`the pinned proof link has an unusable href: "${href}"`);
+      }
+      pinned += 1;
+      return `${before}${joined}${after}`;
+    },
+  );
+
+  if (pinned !== anchors.length) {
+    fail(`pinned ${pinned} of ${anchors.length} data-pin-root link(s) — every marker must resolve`);
+  }
+
+  const bytes = Buffer.from(rewritten, "utf8");
+  index.bytes = bytes;
+  index.sha256 = sha256(bytes);
+  console.log(`front door pinned: ${pinned} proof link(s) carry root ${root.slice(0, 12)}…`);
+}
+
 function prepareWorktree() {
   git(["fetch", "origin", BRANCH]);
   removeWorktree();
@@ -463,6 +512,7 @@ async function main() {
   const roots = checkRoots();
   const files = collectFiles();
   checkCommittedSources(files);
+  pinFrontDoor(files, roots.root);
 
   const sourceCommit = git(["rev-parse", "HEAD"]).trim();
   console.log(`source ${sourceCommit}`);
