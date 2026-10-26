@@ -295,6 +295,24 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a coverage map that lists a doc this checker never reads must be
+  // reported — the map is only useful if it cannot drift from the checker.
+  const beforeCoverage = failures;
+  const originalClaimsMap = readFileSync(new URL("docs/CLAIMS.md", root), "utf8");
+  // The phantom name is built at runtime on purpose: a literal fixture string
+  // would appear in THIS file's own source, so the "the checker never mentions
+  // it" assertion would find the fixture rather than the document and the
+  // injection would pass vacuously.
+  const phantomDoc = `docs/PHANTOM-${originalClaimsMap.length}.md`;
+  const doctoredClaimsMap = originalClaimsMap.replace(
+    "| `docs/WORK.md` | reward table |",
+    `| \`${phantomDoc}\` | reward table |`,
+  );
+  if (doctoredClaimsMap === originalClaimsMap) fail("self-test: the claims-map fixture no longer changes its input");
+  checkClaimsCoverage(doctoredClaimsMap);
+  const caughtCoverage = failures > beforeCoverage;
+  if (!caughtCoverage) fail("self-test: the checker accepted a coverage map naming a document it never reads");
+  caught = caught && caughtCoverage;
   // And a runtime floor the package contradicts must be reported.
   const beforeCrypto = failures;
   const originalCryptoDoc = readFileSync(new URL("docs/CRYPTO.md", root), "utf8");
@@ -342,6 +360,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalMirrorsDoc, doctoredMirrorsDoc, "mirrors-doc");
   assertChanged(originalAppProtocol, doctoredAppProtocol, "app-protocol");
   assertChanged(originalCryptoDoc, doctoredCryptoDoc, "crypto-doc");
+  assertChanged(originalClaimsMap, doctoredClaimsMap, "claims-coverage");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -359,6 +378,7 @@ checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMirrorsDoc();
 checkAppProtocol();
 checkCryptoDoc();
+checkClaimsCoverage();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -371,6 +391,72 @@ checkOperationalDefaults();
 checkEvidenceCitations();
 checkChainSurface();
 checkRewardTable();
+
+/**
+ * The coverage map: docs/CLAIMS.md lists which documents the checker reads and
+ * which are deliberately prose. The map is itself checked — a doc in the
+ * checked list must actually be referenced by this file, a prose row must state
+ * a reason, and no document may be in both lists. That pair is what keeps the
+ * claim axis auditable instead of open-ended.
+ */
+function checkClaimsCoverage(docOverride) {
+  console.log(`claims coverage (docs/CLAIMS.md${docOverride ? ", DOCTORED" : ""} vs this checker):`);
+  const map = docOverride ?? readFileSync(new URL("docs/CLAIMS.md", root), "utf8");
+  const self = readFileSync(new URL("scripts/claim-check.mjs", root), "utf8");
+
+  const section = (heading) => {
+    const start = map.indexOf(heading);
+    if (start < 0) return "";
+    const rest = map.slice(start + heading.length);
+    const end = rest.indexOf("\n## ");
+    return end < 0 ? rest : rest.slice(0, end);
+  };
+
+  // Split each row into cells rather than matching a fixed column count: a
+  // regex requiring three cells silently matched a two-column row ACROSS its
+  // newline into the next one, so half the prose table parsed and the other
+  // half vanished — the same silent-partial-parse family as the URL walk.
+  const rowsOf = (text) =>
+    text
+      .split("\n")
+      .filter((line) => /^\|\s*`[^`]+`\s*\|/.test(line))
+      .map((line) => {
+        const cells = line.split("|").map((cell) => cell.trim());
+        return {
+          doc: (cells[1] ?? "").replace(/`/g, ""),
+          kind: cells[2] ?? "",
+          last: cells[3] ?? "",
+        };
+      });
+
+  const checked = rowsOf(section("## Checked"));
+  const prose = rowsOf(section("## Deliberately prose"));
+  if (checked.length === 0) fail("CLAIMS.md lists no checked documents");
+  if (prose.length === 0) fail("CLAIMS.md lists no prose documents");
+
+  const baseName = (doc) => doc.split("/").pop();
+  for (const row of checked) {
+    const name = baseName(row.doc);
+    // The checker must reference the doc by name (its kinds read each doc), and
+    // the file must exist unless it is an RFC outside docs/.
+    if (!self.includes(name)) {
+      fail(`CLAIMS.md lists ${row.doc} as checked, but this checker never mentions ${name}`);
+    }
+    if (row.kind.length === 0) fail(`CLAIMS.md gives no kind for the checked document ${row.doc}`);
+  }
+  for (const row of prose) {
+    if (row.kind.length === 0) fail(`CLAIMS.md gives no reason for leaving ${row.doc} as prose`);
+  }
+
+  const checkedNames = new Set(checked.map((row) => row.doc));
+  for (const row of prose) {
+    if (checkedNames.has(row.doc)) fail(`CLAIMS.md lists ${row.doc} as both checked and prose`);
+  }
+
+  console.log(
+    `  ${checked.length} checked document(s) | ${prose.length} prose row(s) | no overlap, every checked doc referenced`,
+  );
+}
 
 /**
  * The crypto doc: docs/CRYPTO.md publishes the runtime floor ("Node 22.18+")

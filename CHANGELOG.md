@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The claim axis is closed with a checked coverage map (kind 20).** `docs/CLAIMS.md`
+  records which documents `claim:check` mechanically verifies (15, with the kind that
+  reads each) and which are deliberately prose (8, each with its reason). The map is
+  itself checked: every document listed as checked must be referenced by the checker, every
+  prose row must state a reason, and no document may appear in both lists — so the axis is
+  an auditable boundary rather than an open-ended sweep. Three parser lessons, recorded
+  because each failed silently: a fixed three-column regex matched a two-column row ACROSS
+  its newline (half the prose table parsed, the rest vanished — cells are now split, not
+  matched); `OPERATOR.md` was listed as both checked and prose (the overlap check caught
+  it); and a self-test fixture that names a phantom document in the checker's own source
+  satisfies "the checker never mentions it" vacuously, so the phantom is now built at
+  runtime from the file's length.
 - **The crypto doc's runtime floor, leaf versions, and suites are checked (kind 19).**
   `docs/CRYPTO.md` publishes the runtime floor ("Node 22.18+"), the leaf-version history
   ("Leaf version 3 added the profile"), and the suite set (ECDSA P-256, ML-DSA).
