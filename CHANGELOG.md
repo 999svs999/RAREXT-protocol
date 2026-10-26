@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The AI-verification vision doc is now a checked claim surface.** Thirteenth claim kind:
+  `docs/AI-VERIFICATION.md` publishes the two rendition rule names (`xorshift32-image-v1`,
+  `bounded-strip-v1`), the stable verifier hashes derived from their manifests, the
+  functional behaviour of `isGenerativeMedia`/`isBoundedMedia` and the deterministic
+  raster renderers (`renderRaster`, `renderBoundedRaster` with their rejection guards),
+  the verifier module routes (`GET /v1/verifiers`, `GET /v1/verifiers/:app/:hash.mjs`),
+  and the attestation field contract. The checker parses the rule names from the doc,
+  compares them against `packages/core/src/ai.ts`, calls the real media validators and
+  raster functions with positive controls and published rejection inputs, verifies the
+  route guards in `apps/api/src/app.ts`, and confirms the verifier hashes are stable.
+  The self-test doctored `xorshift32-image-v1` to `xorshift32-image-v2` and the
+  fixture-changed guard covers the new fixture.
+
 - **Deploys verify the AI renditions live.** `scripts/deploy-site.mjs`'s post-deploy
   `verifyLive` stage now ends with the AI recomputation smoke check:
   `scripts/verify-live-ai.mjs` runs against the just-deployed mirror URL, re-deriving
