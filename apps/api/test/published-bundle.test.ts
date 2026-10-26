@@ -50,7 +50,20 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
     assert.equal(verification.computedRoot, bundle.manifest.root);
     assert.equal(seed.bundleRoot, bundle.manifest.root);
     assert.equal(seed.bundle, "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json");
-    assert.ok(seed.mirrors.some((mirror) => mirror.bundle === seed.bundle && mirror.root === seed.bundleRoot));
+    // A mirror entry must be a genuinely separate location that pins the same
+    // root, and there must be at least one. This assertion previously required
+    // mirror.bundle === seed.bundle — it ENCODED the duplication that made
+    // "find mirrors" meaningless, and it stayed green for exactly as long as
+    // the seed named one location twice. A test can hold a bug in place as
+    // firmly as it can catch one.
+    assert.ok(
+      seed.mirrors.length >= 1,
+      "the seed must name at least one mirror",
+    );
+    for (const mirror of seed.mirrors) {
+      assert.equal(mirror.root, seed.bundleRoot, `mirror ${mirror.bundle} must pin the seed's root`);
+      assert.notEqual(mirror.bundle, seed.bundle, `mirror ${mirror.bundle} merely repeats the seed's own location`);
+    }
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

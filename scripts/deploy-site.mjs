@@ -352,6 +352,26 @@ async function verifyLive(files, seed, root, sourceCommit) {
     }
   }
 
+  // A mirror list that names one location twice is not a mirror list: a client
+  // failing over between copies of the same file has failed over to nothing.
+  // The seed must point at genuinely separate locations. This is the assertion
+  // that was missing when the seed's only mirror entry pointed back at the
+  // registry's own bundle URL — every root still matched, so the deploy was
+  // green while the federation promise was empty.
+  const candidates = new Set(
+    [seedLive?.bundle, ...(Array.isArray(seedLive?.mirrors) ? seedLive.mirrors.map((entry) => entry?.bundle) : [])]
+      .filter((url) => typeof url === "string" && url.length > 0),
+  );
+  if (candidates.size < 2) {
+    fail(`the live seed names ${candidates.size} distinct location(s) — a mirror list needs at least two`);
+  }
+  // And the mirror the seed names must be the one that was just published.
+  const mirrorEntry = Array.isArray(seedLive?.mirrors) ? seedLive.mirrors[0] : undefined;
+  if (typeof mirrorEntry?.bundle === "string" && !mirrorEntry.bundle.endsWith("/mirror/bundle.json")) {
+    console.log(`  note: the seed's mirror entry is ${mirrorEntry.bundle}`);
+  }
+  console.log(`  seed names ${candidates.size} distinct locations`);
+
   const blobFile = parseJsonBytes(live.get("mirror/blobs.json"), "mirror/blobs.json");
   const media = Object.fromEntries(
     (Array.isArray(blobFile?.blobs) ? blobFile.blobs : [])

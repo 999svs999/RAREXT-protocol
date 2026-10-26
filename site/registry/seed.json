@@ -20,12 +20,12 @@
   ],
   "mirrors": [
     {
-      "id": "github-pages",
-      "url": "https://999svs999.github.io/RAREXT-protocol/registry/",
-      "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
+      "id": "github-pages-mirror",
+      "url": "https://999svs999.github.io/RAREXT-protocol/mirror/",
+      "bundle": "https://999svs999.github.io/RAREXT-protocol/mirror/bundle.json",
       "root": "793915a94988fdc2a756e531a3c7fc2f6f44fcaae6c13a91a5c97c8ab8878497",
       "operator": "999svs999",
-      "note": "Static copy of the latest anchored bundle on GitHub Pages; verify the root."
+      "note": "The static mirror, published on its own path so a client can fail over between this copy and the registry's; both must rebuild the pinned root."
     }
   ]
 }

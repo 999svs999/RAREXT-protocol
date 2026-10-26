@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The seed's mirror list was a mirror list in name only, and a test held it there.**
+  Checking the published seed against the live network — before writing any new code —
+  showed its single `mirrors[]` entry pointed back at the registry's own bundle URL, so the
+  seed named one location twice and `bundleFromSeed` had nothing to fail over between. The
+  deploy was green the whole time because every root matched; a mirror that is a copy of
+  the seed is indistinguishable from a mirror by root alone. `scripts/verify-seed-mirrors.mjs`
+  is the check that was missing: it fetches the seed, requires at least two DISTINCT
+  locations, and requires each to rebuild the pinned root (a merely unreachable location is
+  reported, not fatal, while another verifies — mirrors exist to be redundant). It failed on
+  the live seed exactly as predicted, then passed once the seed named the mirror tree at
+  `/mirror/`, which is a genuinely separate copy that rebuilds the same root. The deploy now
+  asserts distinctness too, so this cannot recur. The obsolete assertion in
+  `apps/api/test/published-bundle.test.ts` required `mirror.bundle === seed.bundle` — it
+  encoded the bug and stayed green for precisely as long as the bug existed; a test can hold
+  a defect in place as firmly as it can catch one.
 - **Federation's first step, implemented: a client finds the mirror that verifies.**
   `docs/MIRRORS.md` names mirror discovery as the next step; `bundleFromSeed`
   (`apps/api/src/bundle.ts`) is its first half, and it is the half that carries the trust:
