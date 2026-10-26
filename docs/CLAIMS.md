@@ -25,6 +25,7 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/MIRRORS.md` | mirrors doc | bundle routes, named npm scripts, the takedown test's CI sentence, and the published copy's artifacts |
 | `docs/APP-PROTOCOL.md` | app protocol | every `RAREXT_*` name read by the implementation, and the published route list |
 | `docs/CRYPTO.md` | crypto doc | the runtime floor against `engines.node`, the leaf-version floor, and the suite derivation through `suiteOf` |
+| `scripts/` | artifact sources | the inline bundle (`bundle.js`) and proof page (`verify.html`) each live in one module; generators delegate to them and keep no private copies |
 
 ## Deliberately prose
 

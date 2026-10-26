@@ -16,6 +16,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
+// The checker's own source names every marker it enforces, so it is never
+// treated as a generator of the artifacts it inspects. This was found by the
+// check itself on its first run, and it is the same shape as a self-test
+// fixture whose phantom document name appears in the file asserting that the
+// document is not mentioned anywhere.
+const isGeneratorScript = (name) => name.endsWith(".mjs") && name !== "claim-check.mjs";
+
 const rfcPath = process.env.RAREXT_CLAIM_RFC ?? fileURLToPath(new URL("rfcs/0010-data-availability-sampling.md", root));
 const architecturePath = new URL("docs/ARCHITECTURE.md", root);
 
@@ -295,6 +302,21 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a generator that keeps its own inline copy of a shared artifact must
+  // be reported — the fixture names a second holder of the inline bundle.
+  const beforeSources = failures;
+  const realScripts = readdirSync(new URL("scripts", root))
+    .filter(isGeneratorScript)
+    .map((name) => ({ name, text: readFileSync(new URL(`scripts/${name}`, root), "utf8") }));
+  const doctoredScripts = realScripts.map((file) =>
+    file.name === "build-mirror.mjs"
+      ? { ...file, text: file.text + "\nconst stray = `window.__RAREXT_BUNDLE__ = {};`;\n" }
+      : file,
+  );
+  checkArtifactSources(doctoredScripts);
+  const caughtSources = failures > beforeSources;
+  if (!caughtSources) fail("self-test: the checker accepted a generator keeping its own inline copy");
+  caught = caught && caughtSources;
   // And a coverage map that lists a doc this checker never reads must be
   // reported — the map is only useful if it cannot drift from the checker.
   const beforeCoverage = failures;
@@ -361,6 +383,11 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalAppProtocol, doctoredAppProtocol, "app-protocol");
   assertChanged(originalCryptoDoc, doctoredCryptoDoc, "crypto-doc");
   assertChanged(originalClaimsMap, doctoredClaimsMap, "claims-coverage");
+  assertChanged(
+    realScripts.map((f) => f.text).join("\n"),
+    doctoredScripts.map((f) => f.text).join("\n"),
+    "artifact-sources",
+  );
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -379,6 +406,7 @@ checkMirrorsDoc();
 checkAppProtocol();
 checkCryptoDoc();
 checkClaimsCoverage();
+checkArtifactSources();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -399,6 +427,63 @@ checkRewardTable();
  * a reason, and no document may be in both lists. That pair is what keeps the
  * claim axis auditable instead of open-ended.
  */
+/**
+ * Generated artifacts have ONE source each.
+ *
+ * A sweep for duplicated generated artifacts found the proof page and the
+ * bundle each written twice — by build-mirror.mjs for the dev tree and by
+ * publish-ai-proof.mjs for the published tree — and they had already drifted
+ * (one injected "./bundle.js", the other "/bundle.js"). A failover fix had
+ * gone into the copy nobody publishes. This check holds the invariants that
+ * prevent the whole class: the inline forms live in exactly one module, and
+ * every generator delegates to it.
+ */
+function checkArtifactSources(filesOverride) {
+  console.log(`artifact sources (scripts/${filesOverride ? ", DOCTORED" : ""}):`);
+  const names = filesOverride
+    ? filesOverride.map((file) => file.name)
+    : readdirSync(new URL("scripts", root)).filter(isGeneratorScript);
+  const sources = new Map(
+    filesOverride
+      ? filesOverride.map((file) => [file.name, file.text])
+      : names.map((name) => [name, readFileSync(new URL(`scripts/${name}`, root), "utf8")]),
+  );
+
+  const rules = [
+    {
+      marker: "window.__RAREXT_BUNDLE__",
+      allowed: ["mirror-artifacts.mjs"],
+      why: "the inline bundle must be written in one place",
+    },
+    {
+      marker: "<!doctype html>",
+      allowed: ["mirror-verify-page.mjs", "publish-proof.mjs"],
+      why: "the proof page must have one source (publish-proof.mjs generates the landing page, a different artifact)",
+    },
+  ];
+  for (const rule of rules) {
+    const holders = [...sources].filter(([, text]) => text.includes(rule.marker)).map(([name]) => name);
+    const strays = holders.filter((name) => !rule.allowed.includes(name));
+    if (strays.length > 0) {
+      fail(`${rule.why}, but "${rule.marker}" appears in ${strays.join(", ")}`);
+    }
+  }
+
+  const generators = ["build-mirror.mjs", "publish-ai-proof.mjs"];
+  const shared = ["mirror-artifacts.mjs", "mirror-verify-page.mjs"];
+  for (const generator of generators) {
+    const text = sources.get(generator);
+    if (text === undefined) fail(`the expected generator scripts/${generator} is gone`);
+    for (const module of shared) {
+      if (!text.includes(module)) fail(`scripts/${generator} does not delegate to ${module}`);
+    }
+  }
+
+  console.log(
+    `  the inline bundle and the proof page each live in one module | ${generators.length} generators delegate to them`,
+  );
+}
+
 function checkClaimsCoverage(docOverride) {
   console.log(`claims coverage (docs/CLAIMS.md${docOverride ? ", DOCTORED" : ""} vs this checker):`);
   const map = docOverride ?? readFileSync(new URL("docs/CLAIMS.md", root), "utf8");

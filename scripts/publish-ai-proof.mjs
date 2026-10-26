@@ -1,6 +1,7 @@
 // Publishes real AI publications through the live API flow, anchors them,
 // and saves the resulting bundle — the proof that AI lives on RAREXT.
 import { createHash } from "node:crypto";
+import { injectBundleScript, writeBundleFiles } from "./mirror-artifacts.mjs";
 import { mirrorVerifyPage } from "./mirror-verify-page.mjs";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -194,11 +195,7 @@ console.log("anchor:", anchor.id ?? JSON.stringify(anchor).slice(0, 80));
 const bundleResponse = await fetch(`${base}/v1/bundles/latest`);
 if (!bundleResponse.ok) throw new Error(`no bundle: ${bundleResponse.status}`);
 const bundle = await bundleResponse.json();
-writeFileSync(join(OUT, "bundle.json"), JSON.stringify(bundle, null, 2));
-writeFileSync(
-  join(OUT, "bundle.js"),
-  `window.__RAREXT_BUNDLE__ = ${JSON.stringify(bundle)};\n`,
-);
+writeBundleFiles(OUT, bundle);
 
 const pubs = bundle.publications ?? [];
 const aiPubs = pubs.filter((p) => p.attestation?.representation);
@@ -216,24 +213,14 @@ import { resolve } from "node:path";
 const mirrorDir = join(OUT, "mirror");
 rmSync(mirrorDir, { recursive: true, force: true });
 mkdirSync(mirrorDir, { recursive: true });
-writeFileSync(join(mirrorDir, "bundle.json"), JSON.stringify(bundle, null, 2));
-writeFileSync(
-  join(mirrorDir, "bundle.js"),
-  `window.__RAREXT_BUNDLE__ = ${JSON.stringify(bundle)};\n`,
-);
+writeBundleFiles(mirrorDir, bundle);
 const publicDir = join(root, "apps/web/public");
 if (!existsSync(join(publicDir, "verify.js"))) throw new Error("web app not built");
 cpSync(publicDir, mirrorDir, { recursive: true });
 
-// Bundle before app, as build-mirror.mjs does.
+// Bundle before the app, through the one implementation of that edit.
 const indexPath = join(mirrorDir, "index.html");
-writeFileSync(
-  indexPath,
-  readFileSync(indexPath, "utf8").replace(
-    '<script type="module" src="/app.js"></script>',
-    '<script src="/bundle.js"></script>\n    <script type="module" src="/app.js"></script>',
-  ),
-);
+writeFileSync(indexPath, injectBundleScript(readFileSync(indexPath, "utf8"), { appSrc: "/app.js" }));
 
 // GitHub Pages serves this repo under /RAREXT-protocol/, so root-relative
 // asset paths must become document-relative for the mirror to work there.

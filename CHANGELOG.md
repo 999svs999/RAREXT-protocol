@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A sweep for duplicated generated artifacts found the inline bundle written three times.**
+  After fixing the proof page's twin generators in the previous cycle, a sweep across all of
+  `scripts/*.mjs` found the same pattern live in the bundle itself: `build-mirror.mjs` and
+  `publish-ai-proof.mjs` each wrote `bundle.js` with the same inline one-liner
+  (`window.__RAREXT_BUNDLE__ = ...`), and publish-ai-proof's own comment admitted it: it built
+  "the same way scripts/build-mirror.mjs does". The twins had already diverged: one injected
+  `./bundle.js` into the workbench and the other `/bundle.js`, relying on a later pass to
+  reconcile them. That pair now lives in `scripts/mirror-artifacts.mjs` (`writeBundleFiles`,
+  `injectBundleScript`), and the injection throws loudly if the needle is absent rather than
+  silently no-op'ing. A twenty-first claim kind (`checkArtifactSources`) now asserts the
+  inline bundle and the proof page each live in exactly one module and that every generator
+  delegates to them — so the whole class of "the edit landed in the copy nobody publishes" is
+  structurally impossible to reintroduce. The checker caught two errors of its own while being
+  wired: it initially flagged itself for mentioning the markers it enforces (it is now
+  excluded with the reason recorded), and `isGeneratorScript` was referenced before its const
+  was initialized — both caught by the self-test before any commit.
 - **The published proof page was a second implementation, and the failover landed in the copy
   nobody published.** After adding mirror failover to the generated page, the live page had no
   trace of it: `build-mirror.mjs` writes the local dev tree, while the PUBLISHED page comes from

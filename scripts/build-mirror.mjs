@@ -11,6 +11,7 @@
 
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { injectBundleScript, writeBundleFiles } from "./mirror-artifacts.mjs";
 import { mirrorVerifyPage } from "./mirror-verify-page.mjs";
 import { join, resolve } from "node:path";
 
@@ -40,11 +41,7 @@ if (!response.ok) {
 
 const bundle = await response.json();
 
-writeFileSync(join(out, "bundle.json"), JSON.stringify(bundle, null, 2));
-writeFileSync(
-  join(out, "bundle.js"),
-  `window.__RAREXT_BUNDLE__ = ${JSON.stringify(bundle)};\n`,
-);
+writeBundleFiles(out, bundle);
 
 cpSync(join(root, "apps/web/public"), out, { recursive: true });
 
@@ -77,10 +74,10 @@ console.log(`  embedded ${blobs.count} blob(s), ${blobs.total} bytes`);
 // The mirror's page loads the bundle before the app, so the workbench answers
 // its reads from the bundle instead of a server.
 const indexPath = join(out, "index.html");
-const index = readFileSync(indexPath, "utf8").replace(
-  '<script type="module" src="/app.js"></script>',
-  '<script src="./bundle.js"></script>\n    <script type="module" src="./app.js"></script>',
-);
+const index = injectBundleScript(readFileSync(indexPath, "utf8"), {
+  appSrc: "/app.js",
+  newAppSrc: "./app.js",
+});
 
 writeFileSync(indexPath, index);
 
