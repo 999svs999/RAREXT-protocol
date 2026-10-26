@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The published proof page now fails over between copies, and says which one it used.**
+  A visitor who opened a mirror's `verify.html` had no recourse if that mirror's own copy was
+  tampered or missing: the page fetched `./bundle.json` and stopped. It now applies the same
+  rule as `bundleFromSeed` in the browser — this mirror's copy, then the sibling registry copy
+  (whichever relative form the tree is published in), then the locations the seed names —
+  accepting the first candidate that verifies **and rebuilds the pinned root**, and printing
+  `Served from` plus every rejection with its reason. Proved against a local server in a real
+  browser: a tampered mirror page reports `Rejected ./bundle.json: the publications in this
+  bundle do not rebuild the anchored root` and serves the faithful sibling copy (roots equal,
+  AI renditions re-derived); with both copies tampered it reports "No copy verified" instead of
+  a green row; and with a WRONG pin the honest copy is refused with "the bundle root does not
+  match the pinned chain root", so the pin really gates client-side. The doc's claim about the
+  page is now checked against its generator (build-mirror.mjs), so it cannot rot.
 - **The seed's mirror list was a mirror list in name only, and a test held it there.**
   Checking the published seed against the live network — before writing any new code —
   showed its single `mirrors[]` entry pointed back at the registry's own bundle URL, so the

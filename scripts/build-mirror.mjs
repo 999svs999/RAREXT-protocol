@@ -114,13 +114,56 @@ writeFileSync(
       import { verifyBundle } from "./verify.js";
       const out = document.getElementById("out");
 
+      // Fail over between copies the way a client should: try this mirror's own
+      // bundle, then the sibling registry copy (whichever relative form this
+      // tree is published in), then whatever the seed names. A candidate is
+      // accepted only if it verifies AND rebuilds the pinned root — a tampered
+      // copy fails the first test, and a copy of a DIFFERENT bundle fails the
+      // second. Every rejection is kept, and the page says which location the
+      // copy it verified actually came from.
+      async function loadBundle(pinned) {
+        const candidates = ["./bundle.json", "../registry/bundle.json", "../bundle.json"];
+        for (const seedUrl of ["./seed.json", "../registry/seed.json"]) {
+          try {
+            const seed = await (await fetch(seedUrl)).json();
+            if (typeof seed.bundle === \"string\") candidates.push(seed.bundle);
+            for (const mirror of seed.mirrors ?? []) if (mirror && mirror.bundle) candidates.push(mirror.bundle);
+          } catch (error) { /* no seed reachable from here; the relative copies still apply */ }
+        }
+        const seen = new Set();
+        const refusals = [];
+        for (const url of candidates) {
+          if (seen.has(url)) continue;
+          seen.add(url);
+          try {
+            const response = await fetch(url);
+            if (!response.ok) { refusals.push(url + ': HTTP ' + response.status); continue; }
+            const value = await response.json();
+            const probe = await verifyBundle(value, undefined, pinned ?? undefined);
+            if (!probe.valid) { refusals.push(url + ': ' + (probe.reason ?? 'does not verify')); continue; }
+            return { bundle: value, source: url, refusals };
+          } catch (error) {
+            refusals.push(url + ': ' + (error && error.message ? error.message : 'unreachable'));
+          }
+        }
+        return { bundle: null, source: null, refusals };
+      }
+
       async function run() {
-        const [bundle, blobFile] = await Promise.all([
-          (await fetch("./bundle.json")).json(),
-          fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] }),
-        ]);
+        const blobFile = await fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] });
         const requested = new URLSearchParams(location.search).get("root");
         const pinned = requested && /^[0-9a-f]{64}$/.test(requested) ? requested : null;
+        const loaded = await loadBundle(pinned);
+        const bundle = loaded.bundle;
+        // Built with plain HTML rather than row(): row() is declared further
+        // down, and calling it here would read a const before initialisation.
+        const htmlRow = (label, value, cls) =>
+          '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
+        if (!bundle) {
+          out.innerHTML = htmlRow("No copy verified", "every location this page could reach was rejected or unreachable", "bad")
+            + loaded.refusals.map((refusal) => htmlRow("Tried", "<code>" + refusal + "</code>", "dim")).join("");
+          return;
+        }
         const challenges = Object.fromEntries(
           (bundle.challenges ?? []).map((challenge) => [challenge.id, challenge.spec ?? {}]),
         );
@@ -139,6 +182,10 @@ writeFileSync(
           : row("Pinned chain root", "not supplied (open with ?root=...)", "dim");
 
         const sections = [
+          row("Served from", "<code>" + loaded.source + "</code>", loaded.refusals.length ? "" : "dim"),
+          ...(loaded.refusals.length
+            ? loaded.refusals.map((refusal) => row("Rejected", "<code>" + refusal + "</code>", "dim"))
+            : []),
           row("Publications", String(result.publications)),
           row("Anchored root", "<code>" + result.root + "</code>"),
           row("Recomputed root", "<code>" + result.computedRoot + "</code>"),

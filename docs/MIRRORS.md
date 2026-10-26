@@ -48,6 +48,14 @@ A mirror is a directory:
   bundle to a root obtained from the chain or another trusted source; without a
   pin it checks internal consistency only, because a mirror can rewrite both its
   bundle and the root inside it.
+  The page itself fails over: it tries this mirror's copy, then the sibling
+  registry copy (whichever relative form the tree is published in), then the
+  locations the seed names, and accepts the first candidate that verifies **and
+  rebuilds the pinned root** — a tampered copy fails the first test, and a copy
+  of a different bundle fails the second. Every rejection is shown with its
+  reason, and the page always says which location the copy it verified came
+  from (`Served from`). When nothing verifies it says so instead of showing a
+  green row, so a visitor to a tampered mirror still gets a truthful answer.
 - `blobs.json` — small public blobs embedded for `gallery.html`. The gallery
   re-hashes every embedded blob in the browser and skips any whose bytes, size,
   or hash disagree; it never renders unverified metadata. AI renditions carry

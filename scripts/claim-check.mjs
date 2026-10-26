@@ -629,6 +629,19 @@ function checkAppProtocol(docOverride) {
 function checkMirrorsDoc(docOverride) {
   console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""} vs tree):`);
   const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+  // The doc says the proof page fails over and reports the location it
+  // verified ("Served from"). That claim lives in build-mirror.mjs, which
+  // writes the page — so the generator is checked, not a built artefact that
+  // only exists after a build.
+  const builder = readFileSync(new URL("scripts/build-mirror.mjs", root), "utf8");
+  if (!doc.includes("Served from")) {
+    fail("MIRRORS.md no longer describes the page reporting which location it verified");
+  }
+  for (const marker of ["Served from", "../registry/bundle.json", "loadBundle"]) {
+    if (!builder.includes(marker)) {
+      fail(`MIRRORS.md says the proof page fails over, but build-mirror.mjs has no "${marker}"`);
+    }
+  }
   const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
   const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
   const ci = readFileSync(new URL("scripts/ci.sh", root), "utf8");
@@ -692,7 +705,7 @@ function checkMirrorsDoc(docOverride) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it`,
   );
 }
 
