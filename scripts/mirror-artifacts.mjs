@@ -22,12 +22,24 @@ export function bundleScript(bundle) {
 }
 
 /**
+ * The canonical published serialization: pretty-printed, one trailing newline.
+ * There is exactly one of these, because the seed pins the bundle's CID over
+ * its exact bytes — the registry copy and every mirror copy must be the SAME
+ * bytes, and this check exists because they were not: one generator wrote the
+ * trailing newline and the other did not, so two copies of the same artifact
+ * differed by a byte and only a hash could see it.
+ */
+export function bundleJson(bundle) {
+  return `${JSON.stringify(bundle, null, 2)}\n`;
+}
+
+/**
  * Write the bundle pair into a mirror tree: `bundle.json` (for the verifiers,
  * which parse it) and `bundle.js` (for the workbench, which cannot fetch a
  * relative file when opened from disk).
  */
 export function writeBundleFiles(dir, bundle) {
-  writeFileSync(join(dir, "bundle.json"), JSON.stringify(bundle, null, 2));
+  writeFileSync(join(dir, "bundle.json"), bundleJson(bundle));
   writeFileSync(join(dir, "bundle.js"), bundleScript(bundle));
 }
 

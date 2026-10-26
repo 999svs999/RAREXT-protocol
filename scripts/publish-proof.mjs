@@ -96,7 +96,8 @@ for (const name of mirrorFiles) {
 // bundle's CID (a CIDv1 over the raw sha2-256 multihash), so a mirror pointer
 // is a hash rather than a URL and any copy can be checked against it without
 // trusting whoever served it.
-const bundleBytes = Buffer.from(`${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+const { bundleJson } = await import(join(root, "scripts/mirror-artifacts.mjs"));
+const bundleBytes = Buffer.from(bundleJson(bundle), "utf8");
 const { cidV1Raw } = await import(join(root, "apps/api/src/adapters/content.ts"));
 const bundleCid = cidV1Raw(bundleBytes);
 
