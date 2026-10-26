@@ -29,6 +29,8 @@ const bounded = await import(new URL("apps/api/src/bounded.ts", root).href);
 const verifiersModule = await import(new URL("apps/api/src/verifiers.ts", root).href);
 const semanticsModule = await import(new URL("apps/api/src/semantics.ts", root).href);
 const coreSemanticsModule = await import(new URL("packages/core/src/semantics.ts", root).href);
+const migrations = await import(new URL("apps/api/src/migrations.ts", root).href);
+const gameState = await import(new URL("apps/api/src/game-state-migration.ts", root).href);
 const { samplesForMissingFraction, missProbability } = das;
 
 const UNITS = 9216; // the 36 MiB photo slice in 4 KiB chunks, as the RFC states
@@ -280,7 +282,17 @@ if (process.argv.includes("--self-test")) {
   const caughtSemantics = failures > beforeSemantics;
   if (!caughtSemantics) fail("self-test: the checker accepted a doctored semantics field name");
   caught = caught && caughtSemantics;
-  caught = assertChanged(original, doctored, "sampling-table") && caught;
+  // And the snapshot/migration doc — a published version the code no longer
+  // supports must be caught.
+  const beforeSnapshot = failures;
+  const doctoredSnapshotDoc = originalOperations.replace(
+    "Snapshot version 2 is current.",
+    "Snapshot version 3 is current.",
+  );
+  checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  const caughtSnapshot = failures > beforeSnapshot;
+  if (!caughtSnapshot) fail("self-test: the checker accepted a snapshot version the code contradicts");
+  caught = caught && caughtSnapshot;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
@@ -291,6 +303,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalWorkDoc, doctoredWorkDoc, "reward-table");
   assertChanged(originalAiDoc, doctoredAiDoc, "ai-verification");
   assertChanged(originalSemanticsDoc, doctoredSemanticsDoc, "semantics-doc");
+  assertChanged(originalOperations, doctoredSnapshotDoc, "snapshot-migration");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -993,6 +1006,7 @@ function checkAiVerificationDoc(docOverride, appOverride) {
 
 checkAiVerificationDoc();
 checkSemanticsDoc();
+checkSnapshotMigrationDoc();
 
 /**
  * The semantics doc: docs/SEMANTICS.md publishes concrete claims about the
@@ -1131,6 +1145,170 @@ function checkSemanticsDoc(docOverride, appOverride) {
     `  ${fields.length} record fields vs the validator | ${expectedStatuses.length} binding statuses | ` +
       `${semanticsRoutes.length} route(s) handled | ${kinds.length} claim kind(s) | ` +
       `specHash ${halfAdder.specHash.slice(0, 8)}… (stable) | scope rule enforced through bindClaim`,
+  );
+}
+
+/**
+ * The snapshot/migration claims in docs/OPERATIONS.md: the "Snapshots and
+ * migrations" section publishes CURRENT_SNAPSHOT_VERSION = 2, the 1 → 2
+ * migration that adds empty rotations and delegations arrays, the load-time
+ * refusal of a newer snapshot, and the "publications must be an array"
+ * validation; the "Game-native state migration" section publishes the plan's
+ * kind/version, its status/mode, the eight durable collections, and the
+ * refusal of --execute/--cutover. Every published constant and behaviour must
+ * be what the modules actually do.
+ */
+function checkSnapshotMigrationDoc(docOverride) {
+  console.log(`snapshot/migration doc (docs/OPERATIONS.md${docOverride ? ", DOCTORED" : ""} vs code):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+
+  // 1. The published version number.
+  const version = Number(doc.match(/Snapshot version (\d+) is current/)?.[1]);
+  if (version !== migrations.CURRENT_SNAPSHOT_VERSION) {
+    fail(`OPERATIONS.md states snapshot version ${version} is current; the code's CURRENT_SNAPSHOT_VERSION is ${migrations.CURRENT_SNAPSHOT_VERSION}`);
+  }
+
+  // 2. The 1 → 2 migration: it adds empty rotations and delegations arrays,
+  // and a v1 store that never rotated a key loads unchanged otherwise.
+  const oneTwo = migrations.snapshotMigrations.find((m) => m.from === 1 && m.to === 2);
+  if (!oneTwo) fail("the 1 → 2 migration is missing from snapshotMigrations");
+  const v1 = { version: 1, publications: [{ id: "p1" }] };
+  const migrated = migrations.migrateSnapshot(v1);
+  if (!Array.isArray(migrated.snapshot.rotations) || migrated.snapshot.rotations.length !== 0) {
+    fail("the 1 → 2 migration did not add an empty rotations array");
+  }
+  if (!Array.isArray(migrated.snapshot.delegations) || migrated.snapshot.delegations.length !== 0) {
+    fail("the 1 → 2 migration did not add an empty delegations array");
+  }
+  if (!Array.isArray(migrated.snapshot.publications) || migrated.snapshot.publications.length !== 1) {
+    fail("the 1 → 2 migration did not preserve the existing publications array");
+  }
+  if (migrated.snapshot.version !== 2) fail("the 1 → 2 migration did not advance the version to 2");
+  if (!doc.includes("adds empty") || !doc.includes("rotations")) {
+    fail("OPERATIONS.md no longer states the 1 → 2 migration adds empty rotations");
+  }
+
+  // 3. A current-version snapshot loads unchanged (positive control).
+  const v2 = { version: 2, publications: [] };
+  const r2 = migrations.migrateSnapshot(v2);
+  if (r2.from !== 2 || r2.snapshot.version !== 2 || r2.applied.length !== 0) {
+    fail("a current-version snapshot was not loaded unchanged");
+  }
+
+  // 4. A newer snapshot is refused with the published message.
+  let caught = false;
+  try {
+    migrations.migrateSnapshot({ version: migrations.CURRENT_SNAPSHOT_VERSION + 1, publications: [] });
+  } catch (error) {
+    caught = /newer than this build supports/.test(error.message);
+  }
+  if (!caught) fail("a newer snapshot was not refused with the 'newer than this build' message");
+  if (!doc.includes("newer than the running build")) {
+    fail("OPERATIONS.md no longer states that a newer snapshot is refused");
+  }
+
+  // 5. A broken migration chain is refused (no gap can silently load).
+  caught = false;
+  try {
+    migrations.migrateSnapshot({ version: 1, publications: [] }, [], 3);
+  } catch (error) {
+    caught = /no snapshot migration from version/.test(error.message);
+  }
+  if (!caught) fail("a broken migration chain was not refused");
+  if (!doc.includes("An older snapshot without a full chain")) {
+    fail("OPERATIONS.md no longer states that a broken chain is refused");
+  }
+
+  // 6. The "publications must be an array" validation lives in the store's
+  // load path; the doc names it, and the store source must still carry it.
+  const storeSource = readFileSync(new URL("apps/api/src/store.ts", root), "utf8");
+  if (!storeSource.includes("publications must be an array")) {
+    fail("the store no longer validates that publications is an array");
+  }
+  if (!doc.includes("validates that `publications` is an array")) {
+    fail("OPERATIONS.md no longer states that publications must be an array");
+  }
+
+  // 7. The corrupt-file refusal: the store stops the process with
+  // "could not load …" instead of starting from an empty store.
+  if (!storeSource.includes("could not load")) {
+    fail("the store no longer reports 'could not load' for a corrupt snapshot");
+  }
+  if (!doc.includes("could not load")) {
+    fail("OPERATIONS.md no longer names the 'could not load' refusal");
+  }
+
+  // 8. Game-state plan: the published kind/version/status/mode constants.
+  const plan = gameState.buildGameStateMigrationPlan(
+    { version: 2, publications: [] },
+    { source: "source.json", generatedAt: "2026-01-01T00:00:00.000Z" },
+  );
+  if (plan.kind !== "rarext.game-state-migration") {
+    fail(`the plan's kind is ${plan.kind}, not the published rarext.game-state-migration`);
+  }
+  if (plan.version !== 1) fail(`the plan's version is ${plan.version}, not the published 1`);
+  if (plan.status !== "deferred") {
+    fail(`the plan's status is ${plan.status}, not the published "deferred"`);
+  }
+  if (plan.mode !== "no-op") {
+    fail(`the plan's mode is ${plan.mode}, not the published "no-op"`);
+  }
+  if (!doc.includes('"deferred"') || !doc.includes('"no-op"')) {
+    fail("OPERATIONS.md no longer states the plan is status deferred and mode no-op");
+  }
+
+  // 9. The plan copies every durable collection; the published list must
+  // match the module's.
+  const publishedCollections = [
+    "publications", "identities", "anchors", "identityLinks",
+    "revocations", "credits", "rotations", "delegations",
+  ];
+  const moduleCollections = plan.collections.map((c) => c.name);
+  for (const name of publishedCollections) {
+    if (!moduleCollections.includes(name)) {
+      fail(`the plan no longer carries the durable collection ${name}`);
+    }
+  }
+  if (moduleCollections.length !== publishedCollections.length) {
+    fail(`the plan carries ${moduleCollections.length} collections; the doc publishes ${publishedCollections.length}`);
+  }
+
+  // 10. The command refuses --execute and --cutover.
+  const scriptSource = readFileSync(new URL("scripts/plan-game-state-migration.mjs", root), "utf8");
+  if (!scriptSource.includes("--execute") || !scriptSource.includes("--cutover")) {
+    fail("the plan command no longer parses --execute/--cutover");
+  }
+  if (!scriptSource.includes("cutover execution is not implemented")) {
+    fail("the plan command no longer refuses cutover execution");
+  }
+  if (!doc.includes("--execute") || !doc.includes("--cutover")) {
+    fail("OPERATIONS.md no longer states the command refuses --execute and --cutover");
+  }
+
+  // 11. The bundle copies every durable snapshot record AND extension fields —
+  // the doc's "copies every durable snapshot record and extension field" claim
+  // must be what buildGameStateMigrationBundle actually does.
+  const extensionSnapshot = { version: 2, publications: [], customExtension: "kept" };
+  const bundle = gameState.buildGameStateMigrationBundle(extensionSnapshot, {
+    generatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  if (bundle.snapshot.customExtension !== "kept") {
+    fail("the bundle did not copy the extension field customExtension");
+  }
+  if (!bundle.unmanagedTopLevelFields.includes("customExtension")) {
+    fail("the bundle did not report customExtension as an unmanaged top-level field");
+  }
+  if (!doc.includes("The bundle copies every durable snapshot")) {
+    fail("OPERATIONS.md no longer states the bundle copies every durable snapshot record and extension field");
+  }
+
+  console.log(
+    `  snapshot version ${migrations.CURRENT_SNAPSHOT_VERSION} current | ` +
+      `1 → 2 adds empty rotations+delegations, preserves publications | ` +
+      `newer snapshot refused | broken chain refused | ` +
+      `publications array validated | 'could not load' on corrupt file | ` +
+      `plan: kind rarext.game-state-migration v1, status deferred, mode no-op | ` +
+      `${publishedCollections.length} durable collections | --execute/--cutover refused`,
   );
 }
 

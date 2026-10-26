@@ -11,6 +11,30 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The snapshot/migration claims in the operations doc are checked.** Fifteenth
+  claim kind: `docs/OPERATIONS.md`'s "Snapshots and migrations" and "Game-native
+  state migration" sections publish the current snapshot version (2), the 1 → 2
+  migration that adds empty `rotations`/`delegations` arrays and preserves the
+  existing `publications` array, the load-time refusal of a newer snapshot
+  ("newer than this build supports"), the broken-chain refusal, the
+  "publications must be an array" validation, the "could not load …" refusal on a
+  corrupt file, the game-state plan's kind (`rarext.game-state-migration`),
+  version (1), status (`deferred`), mode (`no-op`), its eight durable
+  collections, the bundle's copying of extension fields, and the command's
+  refusal of `--execute`/`--cutover`. The checker parses the version out of the
+  doc and compares it against `CURRENT_SNAPSHOT_VERSION`; runs `migrateSnapshot`
+  with a v1 snapshot as a positive control (empty rotations/delegations,
+  preserved publications); exercises the newer-snapshot and broken-chain
+  refusals through the real `migrateSnapshot` with the published rejection
+  messages; confirms the store's load path still carries "publications must be
+  an array" and "could not load"; builds a plan through
+  `buildGameStateMigrationPlan` and re-derives its kind/version/status/mode and
+  collection list from `apps/api/src/game-state-migration.ts`; builds a bundle
+  through `buildGameStateMigrationBundle` with an extension field and requires
+  it to appear in both the snapshot copy and `unmanagedTopLevelFields`; and
+  confirms the script source still refuses cutover. The self-test doctored
+  "Snapshot version 2 is current." to "Snapshot version 3 is current." and the
+  fixture-changed guard covers the new fixture.
 - **The semantics doc's claims are checked against the real validator.** Fourteenth
   claim kind: `docs/SEMANTICS.md` publishes the `Semantics` record's fourteen named
   fields, its two hash fields (`specHash`, `semanticsHash`), the four binding-status
