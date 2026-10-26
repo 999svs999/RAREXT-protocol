@@ -27,5 +27,6 @@
       "operator": "999svs999",
       "note": "The static mirror, published on its own path so a client can fail over between this copy and the registry's; both must rebuild the pinned root."
     }
-  ]
+  ],
+  "bundleCid": "bafkreicxpd7btoo3vxytxk7gv4rzkks4qhmaekzh2tgc7vnxjvnhh3vqj4"
 }

@@ -8,6 +8,7 @@ import type {
 
 import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
 import { merkleRoot } from "./merkle.ts";
+import { cidV1Raw } from "./adapters/content.ts";
 import type { RarextStore } from "./store.ts";
 
 export const BUNDLE_VERSION = 1;
@@ -148,6 +149,13 @@ export function bundleSummary(bundle: Bundle): string {
 export interface SeedDocument {
   bundle: string;
   bundleRoot: string;
+  /**
+   * The bundle's content address, when the publisher pins it: a CIDv1 over the
+   * raw sha2-256 of the EXACT published bytes. When present it is authoritative
+   * — a mirror that re-serializes the same bundle with different whitespace
+   * serves different bytes, and different bytes are a different artifact.
+   */
+  bundleCid?: string;
   mirrors?: Array<{ bundle: string; root: string }>;
 }
 
@@ -193,7 +201,21 @@ export async function bundleFromSeed(
         refusals.push(`${url}: HTTP ${response.status}`);
         continue;
       }
-      value = await response.json();
+      // Read the bytes, not a parsed shape: when the seed pins a CID, the hash
+      // is taken over exactly what the mirror served. A re-serialized copy of
+      // the same bundle fails here, which is the point — the pointer is a
+      // hash, and a hash cannot be re-serialized into being.
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (seed.bundleCid) {
+        const served = cidV1Raw(bytes);
+        if (served !== seed.bundleCid) {
+          refusals.push(
+            `${url}: serves ${served}, the seed pins ${seed.bundleCid}`,
+          );
+          continue;
+        }
+      }
+      value = JSON.parse(new TextDecoder().decode(bytes));
     } catch (error) {
       refusals.push(`${url}: ${error instanceof Error ? error.message : "fetch failed"}`);
       continue;

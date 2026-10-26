@@ -509,6 +509,7 @@ function checkArtifactSources(filesOverride) {
     }
   }
 
+
   const generators = ["build-mirror.mjs", "publish-ai-proof.mjs"];
   const shared = ["mirror-artifacts.mjs", "mirror-verify-page.mjs"];
   for (const generator of generators) {
@@ -770,6 +771,26 @@ function checkMirrorsDoc(docOverride) {
     }
   }
   const generators = ["scripts/build-mirror.mjs", "scripts/publish-ai-proof.mjs"];
+  // The doc says the seed pins the bundle's content address and every client
+  // path verifies it. That claim spans four files; each must carry its half.
+  if (!doc.includes("bundleCid")) {
+    fail("MIRRORS.md no longer documents the seed's content-address pin");
+  }
+  const publishProof = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
+  if (!publishProof.includes("seed.bundleCid = bundleCid")) {
+    fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs writes no bundleCid");
+  }
+  const bundleModule = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+  for (const marker of ["bundleCid", "cidV1Raw"]) {
+    if (!bundleModule.includes(marker)) {
+      fail(`MIRRORS.md says clients verify the CID, but bundle.ts has no "${marker}"`);
+    }
+  }
+  const seedVerifier = readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
+  if (!seedVerifier.includes("cidV1Raw")) {
+    fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
+  }
+
   for (const generator of generators) {
     const source = readFileSync(new URL(generator, root), "utf8");
     if (!source.includes("mirror-verify-page.mjs")) {

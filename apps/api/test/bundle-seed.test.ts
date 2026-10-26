@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { bundleFromSeed, verifyBundle, type Bundle } from "../src/bundle.ts";
+import { cidV1Raw } from "../src/adapters/content.ts";
 
 /**
  * Federation's first step, exercised against hostile copies: the client tries
@@ -116,6 +117,42 @@ test("a client finds the mirror whose copy rebuilds the seed's pinned root", asy
     await assert.rejects(
       () => bundleFromSeed({ bundle: "", bundleRoot: pinnedRoot }),
       /names no bundle or mirror/,
+    );
+
+    // THE CONTENT ADDRESS: when the seed pins a CID, the client hashes the
+    // bytes it received. The server serves compact JSON, so the pin is computed
+    // over exactly those bytes — the positive control.
+    const servedBytes = Buffer.from(JSON.stringify(committed), "utf8");
+    const cid = cidV1Raw(servedBytes);
+    const withCid = await bundleFromSeed({
+      bundle: `${base}/mirror/bundle.json`,
+      bundleRoot: pinnedRoot,
+      bundleCid: cid,
+    });
+    assert.equal(withCid.source, `${base}/mirror/bundle.json`);
+
+    // And a mirror serving a bundle that verifies perfectly and rebuilds the
+    // pinned root, but whose BYTES hash elsewhere, is refused: the pointer is
+    // a hash, and a hash cannot be re-serialized into being. The re-serialized
+    // copy below is semantically the same bundle with different whitespace —
+    // the published shape (pretty-printed with a trailing newline), which this
+    // test's server does not serve.
+    const reserialized = Buffer.from(JSON.stringify(committed, null, 2) + "\n", "utf8");
+    const otherCid = cidV1Raw(reserialized);
+    assert.notEqual(otherCid, cid, "the fixture must serve different bytes");
+    await assert.rejects(
+      () =>
+        bundleFromSeed({
+          bundle: `${base}/mirror/bundle.json`,
+          bundleRoot: pinnedRoot,
+          bundleCid: otherCid,
+        }),
+      (error: Error) => {
+        assert.match(error.message, /serves .* the seed pins /);
+        assert.match(error.message, new RegExp(cid.slice(0, 12)));
+        return true;
+      },
+      "a re-serialized copy of the same bundle must be refused by the CID pin",
     );
   } finally {
     server.closeAllConnections();

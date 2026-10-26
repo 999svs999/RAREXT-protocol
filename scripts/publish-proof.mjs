@@ -92,15 +92,21 @@ for (const name of mirrorFiles) {
   cpSync(join(mirrorSource, name), join(mirrorTarget, name));
 }
 
-writeFileSync(
-  join(site, "bundle.json"),
-  `${JSON.stringify(bundle, null, 2)}\n`,
-);
+// The published bytes are serialized once and hashed once: the seed pins the
+// bundle's CID (a CIDv1 over the raw sha2-256 multihash), so a mirror pointer
+// is a hash rather than a URL and any copy can be checked against it without
+// trusting whoever served it.
+const bundleBytes = Buffer.from(`${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+const { cidV1Raw } = await import(join(root, "apps/api/src/adapters/content.ts"));
+const bundleCid = cidV1Raw(bundleBytes);
+
+writeFileSync(join(site, "bundle.json"), bundleBytes);
 
 const seedPath = join(site, "seed.json");
 const seed = JSON.parse(readFileSync(seedPath, "utf8"));
 seed.updatedAt = new Date().toISOString();
 seed.bundleRoot = bundle.manifest.root;
+seed.bundleCid = bundleCid;
 
 for (const mirror of seed.mirrors ?? []) {
   mirror.root = bundle.manifest.root;

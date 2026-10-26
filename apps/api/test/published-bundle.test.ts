@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { verifyBundle, type Bundle } from "../src/bundle.ts";
+import { cidV1Raw } from "../src/adapters/content.ts";
 
 const site = fileURLToPath(new URL("../../../site", import.meta.url));
 
@@ -38,10 +39,13 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
 
   try {
     const base = `http://127.0.0.1:${port}`;
-    const bundle = (await (await fetch(`${base}/registry/bundle.json`)).json()) as Bundle;
+    const bundleResponse = await fetch(`${base}/registry/bundle.json`);
+    const bundleBytes = new Uint8Array(await bundleResponse.arrayBuffer());
+    const bundle = JSON.parse(new TextDecoder().decode(bundleBytes)) as Bundle;
     const seed = (await (await fetch(`${base}/registry/seed.json`)).json()) as {
       bundle: string;
       bundleRoot: string;
+      bundleCid?: string;
       mirrors: { bundle: string; root: string }[];
     };
 
@@ -50,6 +54,10 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
     assert.equal(verification.computedRoot, bundle.manifest.root);
     assert.equal(seed.bundleRoot, bundle.manifest.root);
     assert.equal(seed.bundle, "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json");
+    // The seed pins the bundle's content address over the exact published
+    // bytes; a mirror pointer is a hash, not just a URL.
+    assert.ok(typeof seed.bundleCid === "string" && seed.bundleCid.length > 0, "the seed must pin a bundleCid");
+    assert.equal(cidV1Raw(bundleBytes), seed.bundleCid, "the served bytes must hash to the seed's pin");
     // A mirror entry must be a genuinely separate location that pins the same
     // root, and there must be at least one. This assertion previously required
     // mirror.bundle === seed.bundle — it ENCODED the duplication that made

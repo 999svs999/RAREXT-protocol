@@ -147,5 +147,15 @@ consistent is the federation problem, and it has two parts:
   is still missing is a live federation protocol: mirrors do not gossip, and
   the seed is still a file someone publishes;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
-  rather than a URL — that is the IPFS or Arweave pinning adapter, which the
-  existing anchor adapter interface already has a slot for.
+  rather than a URL — the first half is implemented: the seed pins the bundle's
+  content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the exact
+  published bytes, computed by `publish-proof.mjs`), and every client path
+  verifies it — `bundleFromSeed` hashes the bytes a mirror served and refuses a
+  copy that hashes elsewhere even if it verifies and rebuilds the pinned root
+  (a pointer that is a hash cannot be re-serialized into being), the deploy
+  asserts the live bundle hashes to what the live seed pins, and
+  `verify-seed-mirrors.mjs` checks each candidate against the pin. What is
+  still missing is publishing THROUGH a content-addressed store: the CID is
+  computed and verified everywhere, but nothing yet hands it to IPFS or
+  Arweave, so the hash still resolves only at the URLs the seed lists. That is
+  the pinning adapter, whose slot exists in `apps/api/src/adapters/content.ts`.

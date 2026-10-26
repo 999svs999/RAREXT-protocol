@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A mirror pointer is now a hash, not just a URL.** MIRRORS.md named content addressing for
+  the bundle as federation's other missing half; the first half of it is implemented. The seed
+  pins the bundle's content address — `bundleCid`, a CIDv1 over the raw sha2-256 of the exact
+  published bytes, computed by `publish-proof.mjs` where the bytes are written — and every
+  client path verifies it: `bundleFromSeed` reads BYTES (not a parsed shape), hashes them, and
+  refuses a copy that hashes elsewhere **even if it verifies internally and rebuilds the pinned
+  root**, because a pointer that is a hash cannot be re-serialized into being (the test serves a
+  semantically identical bundle with different whitespace and requires the refusal);
+  `verify-seed-mirrors.mjs` hashes each live candidate; and the deploy fails unless the live
+  bundle hashes to exactly what the live seed pins. Honest scope, stated in the doc: the CID is
+  computed and verified everywhere, but nothing yet hands it to IPFS or Arweave, so the hash
+  still resolves only at the URLs the seed lists — that is the pinning adapter, whose slot
+  exists in `apps/api/src/adapters/content.ts`.
 - **The front door now links the proof, and the deploy pins it.** The landing page — where a
   visitor decides whether this project is a promise or a proof — linked only the registry
   listing; the pinned verifier and the gallery (the AI artifacts that verify themselves) were

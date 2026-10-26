@@ -13,6 +13,7 @@
 // exist to be redundant.
 
 import { verifyBundle } from "../apps/api/src/bundle.ts";
+import { cidV1Raw } from "../apps/api/src/adapters/content.ts";
 
 const SEED_URL = process.argv[2] ?? "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
 const TIMEOUT_MS = Number(process.env.SEED_TIMEOUT_MS ?? 20_000);
@@ -21,6 +22,12 @@ const getJson = async (url) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+};
+
+const getBytes = async (url) => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
 };
 
 const seed = await getJson(SEED_URL);
@@ -49,7 +56,18 @@ let verified = 0;
 const failures = [];
 for (const candidate of candidates) {
   try {
-    const bundle = await getJson(candidate.bundle);
+    const bytes = await getBytes(candidate.bundle);
+    if (typeof seed.bundleCid === "string" && seed.bundleCid.length > 0) {
+      const served = cidV1Raw(bytes);
+      if (served !== seed.bundleCid) {
+        console.log(
+          `  ✖ ${candidate.label}: ${candidate.bundle} — serves ${served}, the seed pins ${seed.bundleCid}`,
+        );
+        failures.push(`${candidate.label}: content address does not match the seed's pin`);
+        continue;
+      }
+    }
+    const bundle = JSON.parse(new TextDecoder().decode(bytes));
     const verification = verifyBundle(bundle);
     if (!verification.valid) {
       console.log(`  ✖ ${candidate.label}: ${candidate.bundle} — ${verification.reason}`);

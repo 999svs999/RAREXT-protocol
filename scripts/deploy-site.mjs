@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { cidV1Raw } from "../apps/api/src/adapters/content.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SITE = join(ROOT, "site");
@@ -405,6 +406,20 @@ async function verifyLive(files, seed, root, sourceCommit) {
       fail(`live root mismatch: ${label} is ${value}, expected ${root}`);
     }
   }
+
+  // The seed pins the bundle's content address (a CIDv1 over the raw sha2-256
+  // of the published bytes), so a mirror pointer is a hash rather than a URL.
+  // The live bundle must hash to exactly what the live seed pins — a seed
+  // without the pin, or bytes that hash elsewhere, do not ship.
+  const seedCid = seedLive?.bundleCid;
+  if (typeof seedCid !== "string" || seedCid.length === 0) {
+    fail("the live seed pins no bundleCid — a mirror pointer must be a hash, not just a URL");
+  }
+  const servedCid = cidV1Raw(live.get("registry/bundle.json"));
+  if (servedCid !== seedCid) {
+    fail(`the live bundle's content address is ${servedCid}, but the live seed pins ${seedCid}`);
+  }
+  console.log(`  bundle content address matches the seed's pin (${servedCid.slice(0, 18)}…)`);
 
   // A mirror list that names one location twice is not a mirror list: a client
   // failing over between copies of the same file has failed over to nothing.
