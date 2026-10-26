@@ -1905,6 +1905,15 @@ export function createApp(options: AppOptions = {}): AppServer {
             throw new Error("body must be a signed placement record");
           }
 
+          const stewardKeyId = String(signed.record.steward.keyId ?? "");
+          if (
+            stewardKeyId &&
+            store.listRevocations().some((revocation) => revocation.target === stewardKeyId)
+          ) {
+            send(res, 403, { error: "the placement steward is revoked" });
+            return;
+          }
+
           const result = placements.put(signed);
 
           if (result.status === 201) durability.adopt(signed.record.placement);
@@ -1918,6 +1927,7 @@ export function createApp(options: AppOptions = {}): AppServer {
             });
           return;
         }
+
       }
 
       if (req.method === "GET" && pathname.startsWith("/v1/placements/")) {

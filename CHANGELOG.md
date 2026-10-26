@@ -11,6 +11,28 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Hardening round: the external MCP agent storage path.** The surface "AI lives on
+  RAREXT" rests on — an external agent putting and getting bytes through MCP — went
+  from 1 guarding test case to 10, with failure injection across the whole path: a
+  lying `content-length` is refused loudly and never parsed as a fragment (the holder
+  now cross-checks the declared length against the delivered bytes, ends the
+  connection, and bounds a stalled body with a timer); the byte quota is checked
+  before the stream is consumed (`507` before bytes are stored, both upload paths);
+  corrupted shard bytes are caught by the digest check; persistence holds across a
+  holder restart; a challenge after GC answers a clean `404` with the ledger recording
+  the shard not-live; concurrent identical puts converge to one stored object; a
+  revoked identity is refused; malformed tool arguments do not crash the MCP server.
+  The per-path guarantees and their bounds are in `docs/HARDENING.md`'s
+  "Guarantees by path" table — including the honest bound that a truncated body's 400
+  is not always deliverable when the client's FIN races the response: the contract is
+  loud refusal, not a specific status. Two defects were found and fixed mid-round
+  (a `readJson` signature refactor whose call sites were not updated —
+  `setTimeout(…, undefined)` fired instantly and killed every JSON request — and a
+  response flushed after its socket was destroyed). Supervisor note: the round was
+  authored by the external agent and finished by the supervisor after its turn was
+  cut twice (25-minute attempt timeout, then the Agnes text throttle and the Google
+  per-minute token wall); the continuation prompt quoted the agent's own failing
+  tests as the specification.
 - **The snapshot/migration claims in the operations doc are checked.** Fifteenth
   claim kind: `docs/OPERATIONS.md`'s "Snapshots and migrations" and "Game-native
   state migration" sections publish the current snapshot version (2), the 1 → 2

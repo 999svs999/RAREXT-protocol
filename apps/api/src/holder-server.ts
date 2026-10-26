@@ -39,6 +39,14 @@ export interface HolderServerOptions {
   /** Maximum requests allowed in `windowMs`. */
   maxRequestsPerWindow?: number;
   windowMs?: number;
+  /**
+   * How long the holder waits on a JSON request body that declared a
+   * content-length but stopped sending bytes. A client that declared N bytes
+   * and sent fewer would otherwise hold the request open indefinitely; the
+   * timer bounds the stall and the mismatch is refused with a 400 and the
+   * connection ended. Default 30 s.
+   */
+  bodyStallMs?: number;
 }
 
 export class RateLimiter {
@@ -157,6 +165,9 @@ function send(
   body: unknown,
   type = "application/json",
 ): void {
+  // A handler that already answered (the body-mismatch refusal writes its own
+  // 400) must not crash on a second write.
+  if (res.headersSent || res.writableEnded) return;
   const payload =
     type === "application/json" ? JSON.stringify(body) : (body as Buffer);
 
@@ -167,7 +178,7 @@ function send(
   res.end(payload);
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(req: IncomingMessage, res: ServerResponse, bodyStallMs: number): Promise<Record<string, unknown>> {
   const declared = Number(req.headers["content-length"] ?? "0");
 
   if (declared > MAX_BODY) throw new Error("request body is too large");
@@ -175,12 +186,63 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   const chunks: Buffer[] = [];
   let size = 0;
 
-  for await (const chunk of req) {
-    size += chunk.length;
+  // A declared content-length is a client claim about how many bytes are
+  // coming. The parser delivers exactly that many — or the body ends early
+  // (a truncation, or a client that stopped mid-body and held the socket
+  // open, in which case the read loop below would stall until the
+  // connection died on its own). The stall timer bounds that wait: when it
+  // fires, the request stream is errored so the loop below aborts, and the
+  // size mismatch is refused as a 400 with the connection ended instead of
+  // waiting on bytes that are not coming.
+  let bodyEndedEarly = false;
+  const stallTimer =
+    Number.isSafeInteger(declared) && declared > 0
+      ? setTimeout(() => {
+          bodyEndedEarly = true;
+          req.destroy(new Error("request body read stalled"));
+        }, bodyStallMs)
+      : null;
+  stallTimer?.unref();
 
-    if (size > MAX_BODY) throw new Error("request body is too large");
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
 
-    chunks.push(chunk as Buffer);
+      if (size > MAX_BODY) throw new Error("request body is too large");
+
+      chunks.push(chunk as Buffer);
+    }
+  } catch {
+    // A destroyed socket (the stall timer, or a client abort) interrupts the
+    // loop. The partially read body is a mismatch either way: refuse it, do
+    // not parse a fragment.
+    bodyEndedEarly = true;
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer);
+  }
+
+  if (Number.isSafeInteger(declared) && declared > 0 && (size !== declared || bodyEndedEarly)) {
+    // Refuse the body and end the connection: an early-ended body, or excess
+    // bytes the parser did not deliver, would otherwise be misparsed as the
+    // next request on a keep-alive socket.
+    if (!res.headersSent) {
+      res.writeHead(400, {
+        "content-type": "application/json",
+        "connection": "close",
+      });
+      // Flush the refusal BEFORE the socket dies: destroying the socket
+      // immediately after end() races the kernel's write and the client sees
+      // a connection reset instead of the 400 it is owed.
+      res.end(
+        JSON.stringify({ error: `received ${size} bytes, content-length declares ${declared}` }),
+        () => {
+          req.socket?.destroy();
+        },
+      );
+      return {};
+    }
+    req.socket?.destroy();
+    return {};
   }
 
   const text = Buffer.concat(chunks).toString("utf8");
@@ -363,7 +425,7 @@ export function createHolderServer(options: HolderServerOptions) {
           send(res, 401, { error: "unauthorized" });
           return;
         }
-        const body = await readJson(req);
+        const body = await readJson(req, res, options.bodyStallMs ?? 30_000);
         const referenced = body.referenced;
         if (!Array.isArray(referenced) || !referenced.every(isHash)) {
           send(res, 400, { error: "referenced must be an array of sha256 hashes" });
@@ -512,7 +574,7 @@ export function createHolderServer(options: HolderServerOptions) {
         }
 
         if (req.method === "POST") {
-          const body = await readJson(req);
+          const body = await readJson(req, res, options.bodyStallMs ?? 30_000);
           const content = body.content;
 
           if (typeof content !== "string" || content.length === 0) {
@@ -603,7 +665,10 @@ export function createHolderServer(options: HolderServerOptions) {
           if (options.maxBytes !== undefined) {
             const currentBytes = store.list().reduce((sum, shard) => sum + shard.size, 0);
             if (currentBytes + length > options.maxBytes) {
+              // Quota first, before the stream is consumed: the client is told
+              // to send `length` bytes, so the refusal must not wait for them.
               send(res, 507, { error: "insufficient storage: byte quota exceeded" });
+              req.destroy();
               return;
             }
           }
@@ -751,7 +816,7 @@ export function createHolderServer(options: HolderServerOptions) {
       }
 
       if (req.method === "POST" && url.pathname === "/v1/holder/challenge") {
-        const body = await readJson(req);
+        const body = await readJson(req, res, options.bodyStallMs ?? 30_000);
         const storedAs = body.storedAs;
         const leafIndex = body.leafIndex;
         const nonce = body.nonce;

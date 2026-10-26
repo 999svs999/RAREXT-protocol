@@ -84,7 +84,23 @@ test("the registry chains records and refuses a fork", async () => {
     assert.equal(registry.historyFor(placement.blobHash)[1]!.record.sequence, 1);
 
     const fork = signPlacement(placement, signer, first);
-    assert.equal(registry.put(fork).status, 409);
+    // A re-signed equivalent record at the taken sequence is the same
+    // placement: it converges to 200 unchanged — the signature is valid, the
+    // sequence is taken, and accepting it extends nothing. What the registry
+    // refuses is a fork that CLAIMS the sequence with different semantics.
+    assert.deepEqual(registry.put(fork), { status: 200 });
+
+    const divergent = signPlacement(
+      {
+        ...placement,
+        shards: placement.shards.map((shard, index) =>
+          index === 0 ? { ...shard, holder: `${shard.holder}-fork` } : shard,
+        ),
+      },
+      signer,
+      first,
+    );
+    assert.equal(registry.put(divergent).status, 409);
 
     const skipped = signPlacement(placement, signer, second);
     assert.deepEqual(registry.put(skipped), { status: 201 });
@@ -315,7 +331,23 @@ test("mechanism: registry — a rejected record never reaches the history, and t
     // The honest extension lands, and a fork off the same parent is refused.
     assert.deepEqual(registry.put(second), { status: 201 });
     const fork = signPlacement(placement, signer, first);
-    assert.equal(registry.put(fork).status, 409);
+    // A re-signed equivalent record at the taken sequence converges to
+    // 200 unchanged — same placement semantics, nothing added to the
+    // history. A fork with different semantics at that sequence still 409s.
+    assert.deepEqual(registry.put(fork), { status: 200 });
+    assert.equal(registry.historyFor(placement.blobHash).length, 2);
+
+    const divergent = signPlacement(
+      {
+        ...placement,
+        shards: placement.shards.map((shard, index) =>
+          index === 0 ? { ...shard, holder: `${shard.holder}-fork` } : shard,
+        ),
+      },
+      signer,
+      first,
+    );
+    assert.equal(registry.put(divergent).status, 409);
     assert.equal(registry.historyFor(placement.blobHash).length, 2);
 
     // A restart rebuilds the same chain, so the refusals were not in-memory only.

@@ -70,6 +70,26 @@ function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicKey)).digest("hex");
 }
 
+/**
+ * Placement semantics without the recording timestamp: two records that place
+ * identical bytes on identical holders ARE the same placement, even when
+ * their createdAt differs by a millisecond.
+ */
+function samePlacementSemantics(a: SignedPlacement["record"], b: SignedPlacement["record"]): boolean {
+  // Two timestamps are recording metadata, not placement semantics: the
+  // placement's createdAt (when the ledger placed it) and the record's
+  // createdAt (when the agent signed it). Compare the record with both
+  // projected out, so convergence does not depend on clock alignment between
+  // two concurrent registrations of the same blob.
+  const withoutCreatedAt = ({ createdAt: _at, ...rest }: SignedPlacement["record"]) => ({
+    ...rest,
+    placement: (({ createdAt: _placed, ...placement }) => placement)(rest.placement),
+  });
+  return (
+    JSON.stringify(withoutCreatedAt(a)) === JSON.stringify(withoutCreatedAt(b))
+  );
+}
+
 function sameSealedMetadata(
   left: SealedMetadata | undefined,
   right: SealedMetadata | undefined,
@@ -397,6 +417,12 @@ export class PlacementRegistry {
 
     if (current) {
       if (recordDigest(current.record) === verified.digest) return { status: 200 };
+      // Two records that place identical bytes on identical holders ARE the
+      // same placement, even when their createdAt differs by a millisecond —
+      // the timestamp is recording metadata, not placement semantics. Without
+      // this, two concurrent agents putting the same blob race their
+      // registrations and the loser is refused for clock alignment.
+      if (samePlacementSemantics(current.record, signed.record)) return { status: 200 };
       if (!sameSealedMetadata(current.record.placement.sealed, signed.record.placement.sealed)) {
         return {
           status: 409,
