@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The app-protocol doc's configuration and routes are checked (kind 18).** A coverage
+  sweep of the docs found `docs/APP-PROTOCOL.md` — 48 numeric/structural claim lines —
+  was the largest unchecked surface. `claim:check` now verifies that every `RAREXT_*`
+  name the doc tells an app author to set is actually read by the implementation
+  (discovered by walking the api, mcp, chain, core and sdk source trees, not a hand-picked
+  file list) and that all 21 published routes are still handled. Two checker bugs were
+  found and fixed while wiring it, both recorded because they are the same trap: `root` is
+  a URL object, so `path.join` mangles it silently (a directory walk that finds nothing) and
+  the file reads that reused the mangled form returned empty strings whose `join("\n")` is
+  only 72 characters — the check then reported every documented name as unread at once. The
+  walk's file count is now printed in the summary so a future silent-empty walk is visible
+  immediately, and a zero-file walk fails loudly.
 - **Hardening round: the agent SDK's keyfile and signing boundary (negative result,
   pinned).** The path an external agent touches first — its key file and signatures —
   went from a single 73-line integration case to that plus a fault suite: the keyfile

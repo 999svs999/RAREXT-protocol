@@ -11,7 +11,8 @@
 //
 // Everything here is in-repo: no network, no fixtures, no bench run.
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url);
@@ -292,6 +293,14 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And an app-protocol config name the code never reads must be reported.
+  const beforeAppProtocol = failures;
+  const originalAppProtocol = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
+  const doctoredAppProtocol = originalAppProtocol.replace("RAREXT_CHALLENGES`", "RAREXT_CHALLENGES_V2`");
+  checkAppProtocol(doctoredAppProtocol);
+  const caughtAppProtocol = failures > beforeAppProtocol;
+  if (!caughtAppProtocol) fail("self-test: the checker accepted a documented config name no code reads");
+  caught = caught && caughtAppProtocol;
   // And a mirrors doc naming an npm script the tree does not define must be
   // reported (this is also how a doc that stops pointing at the CI-run
   // takedown test would be caught).
@@ -321,6 +330,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
   assertChanged(originalOperations, doctoredOperationsWindow, "audit-window");
   assertChanged(originalMirrorsDoc, doctoredMirrorsDoc, "mirrors-doc");
+  assertChanged(originalAppProtocol, doctoredAppProtocol, "app-protocol");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -336,6 +346,7 @@ if (process.argv.includes("--self-test")) {
 
 checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMirrorsDoc();
+checkAppProtocol();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -348,6 +359,108 @@ checkOperationalDefaults();
 checkEvidenceCitations();
 checkChainSurface();
 checkRewardTable();
+
+function checkAppProtocol(docOverride) {
+  console.log(`app protocol (docs/APP-PROTOCOL.md${docOverride ? ", DOCTORED" : ""} vs code):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
+  const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+
+  // Every RAREXT_* name the doc tells an app author to set must be read by the
+  // implementation — a documented knob nobody reads is a lie with a config
+  // table around it.
+  const names = Array.from(new Set(Array.from(doc.matchAll(/`(RAREXT_[A-Z0-9_]+)`/g)).map((m) => m[1])));
+  if (names.length === 0) fail("APP-PROTOCOL.md names no RAREXT_* configuration");
+  // The real source set, discovered rather than hand-listed: every ts file
+  // under the api, mcp and sdk trees. A hand-picked list is how a checker
+  // reports a false "nobody reads this" — the first version of this kind did
+  // exactly that, missing sponsorship.ts by omission.
+  // `root` is a URL, so a directory listing must convert it to a path —
+  // path.join on a URL silently mangles it and the walk finds nothing, which
+  // is how the first version of this kind produced a false "nobody reads
+  // this" for every name at once.
+  const sourceFiles = [];
+  const walk = (relative) => {
+    for (const entry of readdirSync(fileURLToPath(new URL(relative, root)), { withFileTypes: true })) {
+      const child = `${relative}${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        walk(`${child}/`);
+      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        sourceFiles.push(child);
+      }
+    }
+  };
+  for (const dir of ["apps/api/src/", "apps/mcp/src/", "apps/chain/src/", "packages/core/src/", "packages/agent-sdk/src/"]) {
+    try {
+      walk(dir);
+    } catch {
+      // A tree that does not exist yet is not a failure.
+    }
+  }
+  if (sourceFiles.length === 0) fail("the source walk found no files, so every config name would read as unread");
+  const sources = sourceFiles
+    .map((rel) => {
+      try {
+        return readFileSync(new URL(rel, root), "utf8");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
+  for (const name of names) {
+    if (!sources.includes(name)) {
+      fail(`APP-PROTOCOL.md documents ${name}, which no implementation file reads`);
+    }
+  }
+
+  // Every route the doc publishes must be handled, params normalised.
+  const guards = new Set();
+  let currentMethod = null;
+  for (const line of app.split("\n")) {
+    const method = line.match(/req\.method === "(\w+)"/);
+    if (method) currentMethod = method[1];
+    for (const match of line.matchAll(/pathname === "([^"]+)"/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+    for (const match of line.matchAll(/pathname\.startsWith\("([^"]+)"\)/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+  }
+  const routes = Array.from(
+    new Set(
+      Array.from(doc.matchAll(/`(GET|POST|PUT|DELETE|PATCH) (\/v1\/[\w/:{}.-]+)`/g)).map((m) => ({
+        method: m[1],
+        path: m[2],
+      })),
+    ),
+  );
+  if (routes.length === 0) fail("APP-PROTOCOL.md publishes no route list");
+  let unhandled = 0;
+  for (const { method, path } of routes) {
+    // A published :param maps to either an exact guard (when the route names
+    // the param inline) or a prefix guard for the collection path.
+    const normalised = path.replace(/:[A-Za-z]+/g, "");
+    const literal = path.replace(/\/:[A-Za-z]+/g, "");
+    const handled =
+      guards.has(`${method} ${path}`) ||
+      guards.has(`${method} ${literal}`) ||
+      Array.from(guards).some(
+        (guard) =>
+          guard.startsWith(`${method} `) &&
+          (normalised.endsWith(guard.split(" ")[1]) ||
+            guard.split(" ")[1].startsWith(normalised) ||
+            normalised.startsWith(guard.split(" ")[1])),
+      );
+    if (!handled) {
+      unhandled += 1;
+      fail(`APP-PROTOCOL.md publishes ${method} ${path}, but app.ts no longer handles it`);
+    }
+  }
+
+  console.log(
+    `  ${names.length} config name(s) read by the code | ${sourceFiles.length} source file(s) walked | ${routes.length} route(s) handled (${unhandled} unhandled)`,
+  );
+}
 
 /**
  * The mirrors doc: docs/MIRRORS.md publishes bundle routes, names npm scripts,
