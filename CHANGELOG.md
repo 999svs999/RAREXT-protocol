@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The audit-window and verifier-timeout claims are checked.** Sixteenth claim kind:
+  `docs/OPERATIONS.md`'s audit-freshness row and `docs/STORAGE-SECURITY.md`'s
+  nonce/timeout statements are verified against the code — `AUDIT_WINDOW_MS` = 15 min
+  (imported constant), the 5-minute future-timestamp tolerance (`CLOCK_SKEW_MS` read
+  from source), the exact refusal literals the doc quotes and the code must produce,
+  `MAX_CHALLENGE_NONCE` as a positive integer, and `MAX_EXTERNAL_VERIFIER_TIMEOUT_MS` =
+  300,000 matching the doc's published range. The boundary behaviour stays pinned
+  functionally by `apps/api/test/audit-attestation.test.ts`, whose existence and
+  execution the evidence-citation kind already enforces — so the checker asserts the
+  published numbers, not a second copy of the behaviour. Self-test: a doctored 30-minute
+  window is reported. One over-strict assertion was corrected while wiring it: the doc
+  quotes one refusal verbatim and describes the other in shorthand, so the check anchors
+  each in its own form.
 - **Hardening round: the multi-holder gate and the non-loopback holder path.** The
   layer that decides which holders store which shards — and how a client reaches one
   off-loopback — went from two single-case test files to a suite that pins the

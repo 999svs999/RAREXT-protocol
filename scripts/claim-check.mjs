@@ -22,7 +22,9 @@ const das = await import(new URL("apps/api/src/das.ts", root).href);
 const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
 const coreAi = await import(new URL("packages/core/src/ai.ts", root).href);
 const storageConstants = await import(new URL("apps/api/src/storage.ts", root).href);
+const durabilityConstants = await import(new URL("apps/api/src/durability.ts", root).href);
 const work = await import(new URL("apps/api/src/work.ts", root).href);
+const audits = await import(new URL("apps/api/src/audit-attestation.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const generative = await import(new URL("apps/api/src/generative.ts", root).href);
 const bounded = await import(new URL("apps/api/src/bounded.ts", root).href);
@@ -290,6 +292,16 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And an audit-window number the code contradicts must be reported.
+  const beforeWindow = failures;
+  const doctoredOperationsWindow = originalOperations.replace(
+    "default `AUDIT_WINDOW_MS` = 15 min",
+    "default `AUDIT_WINDOW_MS` = 30 min",
+  );
+  checkAuditWindowClaims(doctoredOperationsWindow);
+  const caughtWindow = failures > beforeWindow;
+  if (!caughtWindow) fail("self-test: the checker accepted an audit window the code contradicts");
+  caught = caught && caughtWindow;
   const caughtSnapshot = failures > beforeSnapshot;
   if (!caughtSnapshot) fail("self-test: the checker accepted a snapshot version the code contradicts");
   caught = caught && caughtSnapshot;
@@ -297,6 +309,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
+  assertChanged(originalOperations, doctoredOperationsWindow, "audit-window");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -702,6 +715,65 @@ function checkRewardTable(docOverride) {
 
 
 /**
+ * The audit-window claims: docs/OPERATIONS.md publishes the audit-freshness row
+ * (`AUDIT_WINDOW_MS` = 15 min by default, future timestamps up to 5 min
+ * tolerated, and the exact refusal messages), and docs/STORAGE-SECURITY.md
+ * publishes the nonce bound and the verifier-timeout range (1-300,000 ms). The
+ * numbers and the message literals must be the code's. The boundary BEHAVIOUR
+ * is pinned functionally by apps/api/test/audit-attestation.test.ts, whose
+ * existence and execution this suite already enforces.
+ */
+function checkAuditWindowClaims(docOverride) {
+  console.log(`audit window (OPERATIONS.md + STORAGE-SECURITY.md${docOverride ? ", DOCTORED" : ""} vs code):`);
+  const operations = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  const security = readFileSync(new URL("docs/STORAGE-SECURITY.md", root), "utf8");
+  const auditSource = readFileSync(new URL("apps/api/src/audit-attestation.ts", root), "utf8");
+  const verifierSource = readFileSync(new URL("apps/api/src/verifiers.ts", root), "utf8");
+
+  if (!operations.includes("default `AUDIT_WINDOW_MS` = 15 min")) {
+    fail("OPERATIONS.md no longer states the 15-minute audit window");
+  }
+  if (!security.includes("`AUDIT_WINDOW_MS` (15 min by default)")) {
+    fail("STORAGE-SECURITY.md no longer states the 15-minute audit window");
+  }
+  if (audits.AUDIT_WINDOW_MS !== 15 * 60 * 1000) {
+    fail(`the code's AUDIT_WINDOW_MS is ${audits.AUDIT_WINDOW_MS} ms, not 15 min`);
+  }
+
+  if (!operations.includes("up to 5 min in the future are tolerated")) {
+    fail("OPERATIONS.md no longer states the 5-minute future-timestamp tolerance");
+  }
+  const skewMatch = auditSource.match(/CLOCK_SKEW_MS = (\d+) \* (\d+) \* (\d+)/);
+  const skew = skewMatch ? Number(skewMatch[1]) * Number(skewMatch[2]) * Number(skewMatch[3]) : NaN;
+  if (skew !== 5 * 60 * 1000) fail(`the code's CLOCK_SKEW_MS is ${skew} ms, not 5 min`);
+
+  // The doc quotes one refusal verbatim and describes the other in shorthand;
+  // both must stay anchored — the quoted string in the doc, and both literals
+  // in the code that produces them.
+  if (!operations.includes("`audit attestation has expired`")) {
+    fail("OPERATIONS.md no longer quotes the expired-audit refusal");
+  }
+  if (!operations.includes("a future timestamp rejects")) {
+    fail("OPERATIONS.md no longer describes the future-timestamp refusal");
+  }
+  for (const message of ["audit attestation has expired", "audit attestation timestamp is in the future"]) {
+    if (!auditSource.includes(message)) fail(`the code no longer produces the documented refusal "${message}"`);
+  }
+
+  if (!security.includes("`MAX_CHALLENGE_NONCE`")) fail("STORAGE-SECURITY.md no longer names MAX_CHALLENGE_NONCE");
+  const nonce = durabilityConstants.MAX_CHALLENGE_NONCE;
+  if (!Number.isSafeInteger(nonce) || nonce <= 0) fail(`MAX_CHALLENGE_NONCE is not a positive integer (${nonce})`);
+
+  if (!/1.{0,3}300,000 ms/.test(security)) fail("STORAGE-SECURITY.md no longer states the 1-300,000 ms verifier-timeout range");
+  const timeoutCap = Number(verifierSource.match(/MAX_EXTERNAL_VERIFIER_TIMEOUT_MS = ([\d_]+)/)?.[1]?.replaceAll("_", ""));
+  if (timeoutCap !== 300_000) fail(`the code's MAX_EXTERNAL_VERIFIER_TIMEOUT_MS is ${timeoutCap}, not 300,000`);
+
+  console.log(
+    `  window ${audits.AUDIT_WINDOW_MS / 60000} min | skew ${skew / 60000} min | nonce <= ${nonce} | verifier timeout <= ${timeoutCap} ms`,
+  );
+}
+
+/**
  * The soak claim: the docs cite a dated chaos run, and its log is committed.
  * Every operation class in that log must have completed at 100%, and the docs'
  * "latest" numbers must be the log's numbers.
@@ -1007,6 +1079,7 @@ function checkAiVerificationDoc(docOverride, appOverride) {
 checkAiVerificationDoc();
 checkSemanticsDoc();
 checkSnapshotMigrationDoc();
+checkAuditWindowClaims();
 
 /**
  * The semantics doc: docs/SEMANTICS.md publishes concrete claims about the
