@@ -205,25 +205,30 @@ function pinFrontDoor(files, root) {
     fail("the landing page marks no data-pin-root proof link — the front door must carry one");
   }
 
+  // The marker's position inside the tag must not matter — the first version
+  // of this rewrite required data-pin-root before href, matched nothing on the
+  // real tag (href comes first), and was caught by the count check below on
+  // its first deploy run: "pinned 0 of 1". Rewrite the whole tag, then the
+  // href inside it.
   let pinned = 0;
-  const rewritten = html.replace(
-    /(<a\b[^>]*\bdata-pin-root\b[^>]*href=")([^"]*)(")/g,
-    (whole, before, href, after) => {
-      if (href.includes(`root=${root}`)) {
-        pinned += 1;
-        return whole;
-      }
-      const joined = href + (href.includes("?") ? "&" : "?") + `root=${root}`;
+  const rewritten = html.replace(/<a\b[^>]*\bdata-pin-root\b[^>]*>/g, (tag) =>
+    tag.replace(/href="([^"]*)"/, (whole, href) => {
       if (!/^(https?:\/\/|\.\/|\/)/.test(href)) {
         fail(`the pinned proof link has an unusable href: "${href}"`);
       }
+      const joined = href.includes(`root=${root}`)
+        ? href
+        : href + (href.includes("?") ? "&" : "?") + `root=${root}`;
       pinned += 1;
-      return `${before}${joined}${after}`;
-    },
+      return `href="${joined}"`;
+    }),
   );
 
   if (pinned !== anchors.length) {
     fail(`pinned ${pinned} of ${anchors.length} data-pin-root link(s) — every marker must resolve`);
+  }
+  if (!rewritten.includes(`root=${root}`)) {
+    fail("the rewritten front door carries no pinned root — refusing to publish an unpinned proof link");
   }
 
   const bytes = Buffer.from(rewritten, "utf8");
