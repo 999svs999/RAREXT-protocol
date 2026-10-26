@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Federation's first step, implemented: a client finds the mirror that verifies.**
+  `docs/MIRRORS.md` names mirror discovery as the next step; `bundleFromSeed`
+  (`apps/api/src/bundle.ts`) is its first half, and it is the half that carries the trust:
+  the client tries the seed's own URL and then each mirror in order, and accepts only a
+  copy that **rebuilds the root the seed pins**. Internal validity is deliberately not
+  enough — a mirror can rewrite both its bytes and the root inside them — so a bundle that
+  verifies but rebuilds a different root is refused by the pin, which is the case the test
+  exercises directly alongside a tampered copy, a 404, and a seed whose candidates all
+  fail (the error names every candidate and why, so an outage reads as evidence). What is
+  still missing is stated in the doc rather than implied: mirrors do not gossip, and the
+  seed is still a file someone publishes. Test: `apps/api/test/bundle-seed.test.ts`.
 - **The claim axis is closed with a checked coverage map (kind 20).** `docs/CLAIMS.md`
   records which documents `claim:check` mechanically verifies (15, with the kind that
   reads each) and which are deliberately prose (8, each with its reason). The map is

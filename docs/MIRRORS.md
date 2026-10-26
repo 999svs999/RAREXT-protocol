@@ -125,7 +125,15 @@ consistent is the federation problem, and it has two parts:
 
 - a **seed list** of registries, published in the protocol repository and
   optionally anchored, so a client can find mirrors — the static seed above is a
-  first step, not a live federation protocol;
+  first step, and its consumption is implemented: `bundleFromSeed` in
+  `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
+  order, and accepts only a copy that **rebuilds the root the seed pins**
+  (internal validity is not enough, because a mirror can rewrite both its bytes
+  and the root inside them). Every candidate that fails is skipped with its
+  reason recorded, and a seed whose candidates all fail raises an error naming
+  each one — an outage reads as evidence rather than as an opaque failure. What
+  is still missing is a live federation protocol: mirrors do not gossip, and
+  the seed is still a file someone publishes;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — that is the IPFS or Arweave pinning adapter, which the
   existing anchor adapter interface already has a slot for.

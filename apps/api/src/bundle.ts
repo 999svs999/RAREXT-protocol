@@ -143,3 +143,77 @@ export function bundleSummary(bundle: Bundle): string {
     `root ${bundle.manifest.root.slice(0, 12)}`
   );
 }
+
+/** The seed list a client discovers mirrors from (docs/MIRRORS.md). */
+export interface SeedDocument {
+  bundle: string;
+  bundleRoot: string;
+  mirrors?: Array<{ bundle: string; root: string }>;
+}
+
+export interface VerifiedBundleSource {
+  bundle: Bundle;
+  root: string;
+  source: string;
+}
+
+/**
+ * Federation's first step: find a bundle by trying the seed's own URL and then
+ * each mirror, accepting the first copy that REBUILDS THE ROOT THE SEED PINS.
+ *
+ * Internal validity is not enough — a mirror can rewrite both its bundle and
+ * the root inside it — so the pin is what makes the copy trustworthy. A
+ * candidate that fails anywhere (a 404, malformed JSON, a root that does not
+ * rebuild, a valid bundle whose root is not the pinned one) is skipped with its
+ * reason recorded; if none verifies, the error names every candidate and why,
+ * so an outage reads as evidence rather than as an opaque failure.
+ */
+export async function bundleFromSeed(
+  seed: SeedDocument,
+  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+): Promise<VerifiedBundleSource> {
+  const request = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+
+  const candidates = Array.from(
+    new Set([seed.bundle, ...(seed.mirrors ?? []).map((mirror) => mirror.bundle)]),
+  ).filter((url) => typeof url === "string" && url.length > 0);
+
+  if (candidates.length === 0) {
+    throw new Error("the seed names no bundle or mirror to try");
+  }
+
+  const refusals: string[] = [];
+
+  for (const url of candidates) {
+    let value: unknown;
+    try {
+      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) {
+        refusals.push(`${url}: HTTP ${response.status}`);
+        continue;
+      }
+      value = await response.json();
+    } catch (error) {
+      refusals.push(`${url}: ${error instanceof Error ? error.message : "fetch failed"}`);
+      continue;
+    }
+
+    const verification = verifyBundle(value as Bundle);
+    if (!verification.valid) {
+      refusals.push(`${url}: ${verification.reason ?? "the bundle does not verify"}`);
+      continue;
+    }
+
+    if (verification.computedRoot !== seed.bundleRoot) {
+      refusals.push(
+        `${url}: verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${seed.bundleRoot}`,
+      );
+      continue;
+    }
+
+    return { bundle: value as Bundle, root: verification.computedRoot, source: url };
+  }
+
+  throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);
+}
