@@ -292,6 +292,16 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a mirrors doc naming an npm script the tree does not define must be
+  // reported (this is also how a doc that stops pointing at the CI-run
+  // takedown test would be caught).
+  const beforeMirrors = failures;
+  const originalMirrorsDoc = readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+  const doctoredMirrorsDoc = originalMirrorsDoc.replace("npm run test:takedown", "npm run test:mirror");
+  checkMirrorsDoc(doctoredMirrorsDoc);
+  const caughtMirrors = failures > beforeMirrors;
+  if (!caughtMirrors) fail("self-test: the checker accepted a mirrors doc naming an undefined npm script");
+  caught = caught && caughtMirrors;
   // And an audit-window number the code contradicts must be reported.
   const beforeWindow = failures;
   const doctoredOperationsWindow = originalOperations.replace(
@@ -310,6 +320,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalOperations, doctoredLimitsDoc, "limits-table");
   assertChanged(originalOperations, doctoredOperationsDoc, "ai-bounds");
   assertChanged(originalOperations, doctoredOperationsWindow, "audit-window");
+  assertChanged(originalMirrorsDoc, doctoredMirrorsDoc, "mirrors-doc");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -324,6 +335,7 @@ if (process.argv.includes("--self-test")) {
 }
 
 checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
+checkMirrorsDoc();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -336,6 +348,84 @@ checkOperationalDefaults();
 checkEvidenceCitations();
 checkChainSurface();
 checkRewardTable();
+
+/**
+ * The mirrors doc: docs/MIRRORS.md publishes bundle routes, names npm scripts,
+ * calls the takedown test "the acceptance criterion" that "runs in CI", and
+ * lists the published copy's artifacts. Each is held to the tree: the routes to
+ * app.ts's guards, the scripts to package.json, the CI sentence to
+ * scripts/ci.sh, and the published artifacts to the deploy's own sources (which
+ * are what make the doc's URLs resolve).
+ */
+function checkMirrorsDoc(docOverride) {
+  console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""} vs tree):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+  const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+  const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
+  const ci = readFileSync(new URL("scripts/ci.sh", root), "utf8");
+  const deploy = readFileSync(new URL("scripts/deploy-site.mjs", root), "utf8");
+
+  const guards = new Set();
+  let currentMethod = null;
+  for (const line of app.split("\n")) {
+    const method = line.match(/req\.method === "(\w+)"/);
+    if (method) currentMethod = method[1];
+    for (const match of line.matchAll(/pathname === "([^"]+)"/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+    for (const match of line.matchAll(/pathname\.startsWith\("([^"]+)"\)/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+  }
+  const bundleRoutes = Array.from(doc.matchAll(/^(GET|POST)\s+(\/v1\/bundles[\w/<>.-]*)/gm)).map((m) => ({
+    method: m[1],
+    path: m[2].split("?")[0].replace(/\/$/, ""),
+  }));
+  if (bundleRoutes.length === 0) fail("MIRRORS.md no longer publishes any bundle route");
+  let unhandled = 0;
+  for (const { method, path } of bundleRoutes) {
+    const base = path.split("<")[0].replace(/\/$/, "");
+    const handled =
+      guards.has(`${method} ${path}`) ||
+      Array.from(guards).some((guard) => guard.startsWith(`${method} `) && base.startsWith(guard.split(" ")[1]));
+    if (!handled) {
+      unhandled += 1;
+      fail(`MIRRORS.md publishes ${method} ${path}, but app.ts no longer handles it`);
+    }
+  }
+
+  const named = Array.from(new Set(Array.from(doc.matchAll(/npm run ([\w:-]+)/g)).map((m) => m[1])));
+  for (const script of named) {
+    if (typeof pkg.scripts[script] !== "string") {
+      fail(`MIRRORS.md names npm run ${script}, which package.json does not define`);
+    }
+  }
+  if (!doc.includes("it runs in CI")) fail("MIRRORS.md no longer claims the takedown test runs in CI");
+  if (!ci.includes("npm run test:takedown")) {
+    fail("MIRRORS.md says the takedown test runs in CI, but scripts/ci.sh does not run it");
+  }
+
+  for (const [rel, label] of [
+    ["site/registry/bundle.json", "the published bundle"],
+    ["site/registry/seed.json", "the published seed"],
+    ["site/registry/mirror/verify.html", "the published verify page"],
+  ]) {
+    let size = 0;
+    try {
+      size = statSync(new URL(rel, root)).size;
+    } catch {
+      size = 0;
+    }
+    if (size === 0) fail(`MIRRORS.md's published copy lists ${label}, but ${rel} is missing`);
+  }
+  if (!deploy.includes("registry/mirror/${entry.name}") || !deploy.includes("target: `mirror/${entry.name}`")) {
+    fail("the deploy no longer maps registry/mirror/* onto /mirror/*, so the doc's mirror URLs would 404");
+  }
+
+  console.log(
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present`,
+  );
+}
 
 /**
  * The pricing claims in docs/STORAGE-ECONOMY.md: "The public tier defaults to a

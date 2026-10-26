@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The mirrors doc's claims are checked, and its CI claim made true.** Seventeenth
+  claim kind: `docs/MIRRORS.md`'s bundle routes are held to `app.ts`'s guards, its four
+  named npm scripts to `package.json`, its published-copy artifacts to the deploy's own
+  sources (`site/registry/{bundle.json,seed.json,mirror/verify.html}` plus the
+  `registry/mirror/* → /mirror/*` mapping that makes the URLs resolve) — and its claim
+  that the takedown test "runs in CI" to `scripts/ci.sh`. That last one was **false**:
+  the doc calls the takedown test the acceptance criterion and says CI runs it, but
+  `ci.sh` never did. It passes in about a second, so it is now wired into the gate, and
+  the checker keeps the sentence true. The self-test doctors the doc to name an
+  undefined script and asserts the mismatch is reported. A second suspicion was checked
+  and dismissed rather than assumed: the published `/mirror/` URLs resolve because the
+  deploy sources them from `site/registry/mirror/`, not `site/mirror/`.
 - **The audit-window and verifier-timeout claims are checked.** Sixteenth claim kind:
   `docs/OPERATIONS.md`'s audit-freshness row and `docs/STORAGE-SECURITY.md`'s
   nonce/timeout statements are verified against the code — `AUDIT_WINDOW_MS` = 15 min
