@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Hardening round: the agent SDK's keyfile and signing boundary (negative result,
+  pinned).** The path an external agent touches first — its key file and signatures —
+  went from a single 73-line integration case to that plus a fault suite: the keyfile
+  round-trips with its identity intact and the README's modes hold (0600 file, 0700
+  directory); a second write refuses `EEXIST` instead of clobbering a key, leaving the
+  original bytes untouched; seven malformed keyfile shapes are each refused with a
+  message naming the problem; the public/private **pairing** is validated (a file cannot
+  advertise one identity while signing as another); a signature verifies over its own
+  canonical bytes and fails over a modified payload or a flipped bit; and handles
+  outside the documented shape are refused at creation. **No defect was found** — the
+  SDK already validated more than suspected (the pairing check was in place before this
+  round) — so the value is that each property is now pinned, including the file-mode
+  claims. One type-level trap recorded: `node:crypto`'s `JsonWebKey` is structurally
+  wider than the SDK's, so importing a JWK needs an explicit widening cast that the
+  runtime never needed. Guarantees row in `docs/HARDENING.md`.
 - **Hardening round: the sealed tier's fault surface (negative result, pinned).** The
   primitives behind "a mirror holds ciphertext it cannot read" got their own fault suite
   in `sealed-path.test.ts`: a round trip is byte-exact while a one-bit tamper of the
