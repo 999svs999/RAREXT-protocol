@@ -26,6 +26,8 @@ const storageConstants = await import(new URL("apps/api/src/storage.ts", root).h
 const durabilityConstants = await import(new URL("apps/api/src/durability.ts", root).href);
 const work = await import(new URL("apps/api/src/work.ts", root).href);
 const audits = await import(new URL("apps/api/src/audit-attestation.ts", root).href);
+const sdk = await import(new URL("packages/agent-sdk/src/index.ts", root).href);
+const leaf = await import(new URL("packages/core/src/leaf.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const generative = await import(new URL("apps/api/src/generative.ts", root).href);
 const bounded = await import(new URL("apps/api/src/bounded.ts", root).href);
@@ -293,6 +295,14 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a runtime floor the package contradicts must be reported.
+  const beforeCrypto = failures;
+  const originalCryptoDoc = readFileSync(new URL("docs/CRYPTO.md", root), "utf8");
+  const doctoredCryptoDoc = originalCryptoDoc.replace(/Node \d+\.\d+\+/, "Node 20.12+");
+  checkCryptoDoc(doctoredCryptoDoc);
+  const caughtCrypto = failures > beforeCrypto;
+  if (!caughtCrypto) fail("self-test: the checker accepted a runtime floor the package contradicts");
+  caught = caught && caughtCrypto;
   // And an app-protocol config name the code never reads must be reported.
   const beforeAppProtocol = failures;
   const originalAppProtocol = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
@@ -331,6 +341,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalOperations, doctoredOperationsWindow, "audit-window");
   assertChanged(originalMirrorsDoc, doctoredMirrorsDoc, "mirrors-doc");
   assertChanged(originalAppProtocol, doctoredAppProtocol, "app-protocol");
+  assertChanged(originalCryptoDoc, doctoredCryptoDoc, "crypto-doc");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -347,6 +358,7 @@ if (process.argv.includes("--self-test")) {
 checkSamplingTable(readFileSync(rfcPath, "utf8"), rfcPath.split("/").pop());
 checkMirrorsDoc();
 checkAppProtocol();
+checkCryptoDoc();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -359,6 +371,64 @@ checkOperationalDefaults();
 checkEvidenceCitations();
 checkChainSurface();
 checkRewardTable();
+
+/**
+ * The crypto doc: docs/CRYPTO.md publishes the runtime floor ("Node 22.18+")
+ * and the suite set (ECDSA P-256, ML-DSA), and describes the leaf-version
+ * history ("leaf version 3 added the profile"). The runtime floor must be the
+ * package's own engines field, the suites must be what the SDK derives from a
+ * key — functionally, not by name — and the shipped leaf version must still be
+ * at least the version the profile claim describes.
+ */
+function checkCryptoDoc(docOverride) {
+  console.log(`crypto doc (docs/CRYPTO.md${docOverride ? ", DOCTORED" : ""} vs code):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/CRYPTO.md", root), "utf8");
+  const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
+
+  // The runtime floor, both sides.
+  const docFloor = doc.match(/Node (\d+\.\d+)\+/)?.[1];
+  if (!docFloor) fail("CRYPTO.md no longer states the Node runtime floor");
+  const enginesFloor = String(pkg.engines?.node ?? "").replace(/^[>=^~]+/, "");
+  if (docFloor !== enginesFloor) {
+    fail(`CRYPTO.md says Node ${docFloor}+, but package.json engines say ${pkg.engines?.node}`);
+  }
+
+  // The leaf-version history: the profile arrived in version 3, and the
+  // shipped format must still be at least that.
+  if (!doc.includes("Leaf version 3 added the profile")) {
+    fail("CRYPTO.md no longer describes leaf version 3 as the profile version");
+  }
+  const shipped = leaf.PUBLICATION_LEAF_VERSION;
+  if (!Number.isSafeInteger(shipped) || shipped < 3) {
+    fail(`the shipped publication leaf version is ${shipped}, below the documented profile version 3`);
+  }
+
+  // The suites, derived functionally from keys the doc names.
+  if (!doc.includes("ECDSA P-256") || !doc.includes("ML-DSA")) {
+    fail("CRYPTO.md no longer names the ECDSA P-256 and ML-DSA suites");
+  }
+  const derived = [
+    [{ kty: "EC", crv: "P-256" }, "ecdsa-p256"],
+    [{ kty: "AKP", alg: "ML-DSA-44" }, "ml-dsa-44"],
+    [{ kty: "AKP", alg: "ML-DSA-65" }, "ml-dsa-65"],
+  ];
+  for (const [key, expected] of derived) {
+    const suite = sdk.suiteOf(key);
+    if (suite !== expected) fail(`the SDK derives suite ${suite} for a key the doc calls ${expected}`);
+  }
+  // A foreign key must be refused, never silently classified.
+  let refused = false;
+  try {
+    sdk.suiteOf({ kty: "RSA" });
+  } catch {
+    refused = true;
+  }
+  if (!refused) fail("the SDK classified a foreign key instead of refusing it");
+
+  console.log(
+    `  node ${docFloor}+ | leaf version ${shipped} (>= 3) | suites ecdsa-p256, ml-dsa-44, ml-dsa-65 | foreign key refused`,
+  );
+}
 
 function checkAppProtocol(docOverride) {
   console.log(`app protocol (docs/APP-PROTOCOL.md${docOverride ? ", DOCTORED" : ""} vs code):`);

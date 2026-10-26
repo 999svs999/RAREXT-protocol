@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The crypto doc's runtime floor, leaf versions, and suites are checked (kind 19).**
+  `docs/CRYPTO.md` publishes the runtime floor ("Node 22.18+"), the leaf-version history
+  ("Leaf version 3 added the profile"), and the suite set (ECDSA P-256, ML-DSA).
+  `claim:check` compares the floor with `package.json`'s own `engines.node`, requires the
+  shipped `PUBLICATION_LEAF_VERSION` (currently 4) to be at least the documented profile
+  version, and derives the suites **functionally** through the SDK's `suiteOf` — a P-256
+  key is `ecdsa-p256`, ML-DSA-44/65 keys map to their suites, and a foreign key (RSA) is
+  refused rather than silently classified. Self-test: a doctored runtime floor is
+  reported.
 - **The app-protocol doc's configuration and routes are checked (kind 18).** A coverage
   sweep of the docs found `docs/APP-PROTOCOL.md` — 48 numeric/structural claim lines —
   was the largest unchecked surface. `claim:check` now verifies that every `RAREXT_*`
