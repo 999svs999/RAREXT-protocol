@@ -630,16 +630,32 @@ function checkMirrorsDoc(docOverride) {
   console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""} vs tree):`);
   const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
   // The doc says the proof page fails over and reports the location it
-  // verified ("Served from"). That claim lives in build-mirror.mjs, which
-  // writes the page — so the generator is checked, not a built artefact that
-  // only exists after a build.
-  const builder = readFileSync(new URL("scripts/build-mirror.mjs", root), "utf8");
+  // verified ("Served from"). That page lives in ONE module — it used to exist
+  // twice, once per generator, and a failover fix landed in the copy that was
+  // never published. So the page module is checked for the behaviour, and the
+  // generators are checked for USING it rather than keeping private copies:
+  // what broke was not the page but its duplication.
+  const page = readFileSync(new URL("scripts/mirror-verify-page.mjs", root), "utf8");
   if (!doc.includes("Served from")) {
     fail("MIRRORS.md no longer describes the page reporting which location it verified");
   }
-  for (const marker of ["Served from", "../registry/bundle.json", "loadBundle"]) {
-    if (!builder.includes(marker)) {
-      fail(`MIRRORS.md says the proof page fails over, but build-mirror.mjs has no "${marker}"`);
+  for (const marker of ["Served from", "../registry/bundle.json", "loadBundle", "rebuild"]) {
+    if (!page.includes(marker)) {
+      fail(`MIRRORS.md says the proof page fails over, but the page module has no "${marker}"`);
+    }
+  }
+  const generators = ["scripts/build-mirror.mjs", "scripts/publish-ai-proof.mjs"];
+  for (const generator of generators) {
+    const source = readFileSync(new URL(generator, root), "utf8");
+    if (!source.includes("mirror-verify-page.mjs")) {
+      fail(`${generator} does not use the shared proof page — the page has one source`);
+    }
+    // Only the page's CODE counts as a private copy. The title and heading
+    // strings are arguments, and a generator passing them is the point of the
+    // shared module — an earlier version of this guard failed on exactly that,
+    // twice, which is how it was caught.
+    if (source.includes("No copy verified") || source.includes("htmlRow") || source.includes("loadBundle")) {
+      fail(`${generator} still carries its own copy of the proof page code`);
     }
   }
   const app = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");

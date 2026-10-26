@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The published proof page was a second implementation, and the failover landed in the copy
+  nobody published.** After adding mirror failover to the generated page, the live page had no
+  trace of it: `build-mirror.mjs` writes the local dev tree, while the PUBLISHED page comes from
+  `publish-ai-proof.mjs`, which carried its own near-identical copy of the same page. Both were
+  "generated correctly" by their own generator, so the duplication was invisible and the fix
+  simply went to the unused twin — the same trap as before, one level up: not a broken check but
+  a broken assumption about which artefact the check was looking at. The page now exists once,
+  in `scripts/mirror-verify-page.mjs`, and both generators call it with their own title and
+  heading; the committed `site/registry/mirror/verify.html` was regenerated from that module
+  (5,389 → 8,487 chars) and its failover proved again in a real browser (tampered local copy
+  rejected with its reason, faithful sibling served, roots equal at 793915a9…). `claim:check`
+  now asserts the page's behaviour lives in the module AND that neither generator keeps a
+  private copy of the page code — that guard caught two mistakes of its own while being written
+  (it first failed on the heading strings, which are legitimate arguments rather than
+  duplication), which is recorded because a guard that cannot tell an argument from a copy is
+  the same class of error it exists to prevent.
 - **The published proof page now fails over between copies, and says which one it used.**
   A visitor who opened a mirror's `verify.html` had no recourse if that mirror's own copy was
   tampered or missing: the page fetched `./bundle.json` and stopped. It now applies the same
