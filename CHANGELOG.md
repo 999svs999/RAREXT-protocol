@@ -11,6 +11,26 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Hardening round: the multi-holder gate and the non-loopback holder path.** The
+  layer that decides which holders store which shards — and how a client reaches one
+  off-loopback — went from two single-case test files to a suite that pins the
+  placement contract: with exactly `k + m` holders, a holder answering 5xx (e.g. a
+  `507` quota) fails the placement loudly instead of letting it proceed with fewer
+  shards; a holder answering with anything that is not a valid shard name is refused
+  at placement; the probe/repair path skips spares that reject writes, refuses to
+  commit when its lease expires or its placement is forgotten mid-read, and backs off
+  after failures instead of storming; and the non-loopback holder streams
+  byte-exact with its token enforced. One honest bound is recorded in
+  `docs/HARDENING.md` (and in the source): the returned `storedAs` is a locator, not a
+  proof — equality with the shard digest is deliberately NOT asserted at placement
+  (a holder names the file by its own digest of the bytes it received), so integrity is
+  enforced when the bytes are read back against that name; asserting equality there
+  refused honest repairs and stub holders that named files by their own rule.
+  Supervisor note: the round was agent-authored and carried to green by the
+  supervisor after every rail ran dry mid-round (OpenCode/OpenRouter caps, Agnes
+  throttle, Google's 20-requests-per-model daily buckets); the mid-write tree it left
+  had numbered-line prefixes in the test file, a missing import, and non-deterministic
+  holder selection in the 5xx case — all repaired before the commit.
 - **Hardening round: the external MCP agent storage path.** The surface "AI lives on
   RAREXT" rests on — an external agent putting and getting bytes through MCP — went
   from 1 guarding test case to 10, with failure injection across the whole path: a

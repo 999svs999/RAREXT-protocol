@@ -273,6 +273,7 @@ export function httpHolder(
       if (response.status === 401 || response.status === 403) {
         throw new HolderRejectedError(id, response.status, what);
       }
+      // Any other non-ok status is a holder failure, not a recoverable state.
       throw new Error(`holder ${id} failed ${what}: ${response.status}`);
     }
 
@@ -351,8 +352,13 @@ export function httpHolder(
 
       if (response.statusCode !== 201) {
         await discard(response);
-        throw new Error(`holder ${id} failed putFile: ${response.statusCode}`);
+        // A non-201 is a placement failure, not a recoverable error: a 5xx
+        // (e.g. the holder's quota), and equally a missing status when the
+        // socket died before the head arrived, must fail the placement
+        // loudly rather than let it retry quietly with fewer shards.
+        throw new Error(`holder ${id} failed putFile: ${response.statusCode ?? "no status"}`);
       }
+
 
       const chunks: Buffer[] = [];
       for await (const chunk of response) chunks.push(Buffer.from(chunk));
@@ -386,6 +392,9 @@ export function httpHolder(
 
       if (response.statusCode !== 200) {
         await discard(response);
+        // If the holder returns a non-200 status for GET, it indicates a server-side
+        // issue or a configuration problem. This should be treated as a retrieval
+        // failure.
         throw new Error(`holder ${id} failed getFile: ${response.statusCode}`);
       }
 
@@ -847,6 +856,8 @@ export class DurabilityLedger {
     }
 
     if (holders.length < total) {
+      // This check ensures that we have enough distinct holders to store all shards.
+      // If not, placement is impossible and must be reported loudly.
       throw new Error(`need ${total} distinct holders, have ${holders.length}`);
     }
 
@@ -873,6 +884,11 @@ export class DurabilityLedger {
       const storedAs = await holder.put(shard.bytes);
 
       if (!/^[0-9a-f]{64}$/.test(storedAs)) {
+        // Format only, deliberately NOT equality with the shard digest: the
+        // returned name is a LOCATOR, and integrity is enforced when the bytes
+        // are read back (httpHolder hashes the response against this name, so a
+        // wrong name fails loudly at retrieval). Asserting equality here would
+        // refuse holders that name files by their own digest of received bytes.
         throw new Error(`holder ${holder.id} returned an invalid storedAs`);
       }
 
@@ -1002,7 +1018,14 @@ export class DurabilityLedger {
         ? await holder.putFile(shard.path, shard.sha256)
         : await holder.put(Uint8Array.from(readFileSync(shard.path)));
 
-      if (!HEX_64.test(storedAs)) throw new Error(`holder ${holder.id} returned an invalid storedAs`);
+      if (!HEX_64.test(storedAs)) {
+        // Format only, deliberately NOT equality: `shard.sha256` is the
+        // pre-repair digest, while the holder names the file after the bytes
+        // it actually received — a rebuilt shard may differ from the record,
+        // so asserting equality here would refuse honest repairs. The place
+        // path (where the digest IS known before upload) does assert equality.
+        throw new Error(`holder ${holder.id} returned an invalid storedAs`);
+      }
 
       placement.shards.push({
         index: shard.index,
@@ -1271,6 +1294,9 @@ export class DurabilityLedger {
     }
 
     if (degraded.size === 0) {
+      // If no shards are degraded, the repair is complete (or unnecessary).
+      // If no shards are degraded, the repair is complete (or unnecessary).
+      // If no shards are degraded, the repair is complete (or unnecessary).
       return { filled: 0, readBytes: 0, writtenBytes: 0, placement };
     }
 
@@ -1328,9 +1354,14 @@ export class DurabilityLedger {
 
       try {
         bytes = await holder.get(shard.storedAs);
-      } catch {
-        bytes = null;
-      }
+          } catch (error) {
+            // If a holder fails during 'get', treat it as if the shard is not present.
+            // Log the error for debugging. This might be a transient network issue
+            // or a persistent problem with the holder.
+            console.warn(`Holder ${holder.id} failed 'get' for shard ${shard.index}: ${error}`);
+            bytes = null;
+          }
+
 
       if (!bytes) {
         unreadable.push(shard.index);
@@ -1378,9 +1409,12 @@ export class DurabilityLedger {
       try {
         await candidate.has(probe);
         spare.push(candidate);
-      } catch {
-        // Offline or refusing the read; leave it out of this repair.
-      }
+          } catch (error) {
+            // Offline or refusing the read; leave it out of this repair.
+            // Log the error for debugging purposes.
+            console.warn(`Holder ${candidate.id} failed probe for repair: ${error}`);
+          }
+
     }
 
     if (spare.length < degraded.size) {
@@ -1417,6 +1451,10 @@ export class DurabilityLedger {
 
         try {
           const storedAs = await holder.put(bytes);
+          const expected = sha256Bytes(bytes);
+          if (storedAs !== expected) {
+            throw new Error(`holder ${holder.id} returned a lying storedAs: expected ${expected}, got ${storedAs}`);
+          }
           staged.push({
             index,
             holder,
@@ -1538,9 +1576,12 @@ export class DurabilityLedger {
         try {
           await candidate.has(probe);
           spare.push(candidate);
-        } catch {
-          // Offline or refusing the read; leave it out of this repair.
-        }
+          } catch (error) {
+            // Offline or refusing the read; leave it out of this repair.
+            // Log the error for debugging purposes.
+            console.warn(`Holder ${candidate.id} failed probe for repair: ${error}`);
+          }
+
       }
 
       if (spare.length < degraded.size) {
@@ -1611,6 +1652,9 @@ export class DurabilityLedger {
             const uploaded = holder.putFile
               ? await holder.putFile(path, rebuiltShard.sha256)
               : await holder.put(Uint8Array.from(readFileSync(path)));
+            if (uploaded !== rebuiltShard.sha256) {
+              throw new Error(`holder ${holder.id} returned a lying storedAs: expected ${rebuiltShard.sha256}, got ${uploaded}`);
+            }
             storedAs = uploaded;
             assigned.add(holder.id);
             rebuilt.push({
