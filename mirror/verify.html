@@ -26,46 +26,103 @@
       import { verifyBundle } from "./verify.js";
       const out = document.getElementById("out");
 
+      const htmlRow = (label, value, cls) =>
+        '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
+
+      // Fail over between copies the way a client should: this mirror's own
+      // bundle, then the sibling registry copy (whichever relative form this
+      // tree is published in), then whatever the seed names. A candidate is
+      // accepted only if it verifies AND rebuilds the pinned root — a tampered
+      // copy fails the first test, and a copy of a DIFFERENT bundle fails the
+      // second. Every rejection is kept, and the page says which location the
+      // copy it verified actually came from.
+      async function loadBundle(pinned) {
+        const candidates = ["./bundle.json", "../registry/bundle.json", "../bundle.json"];
+        for (const seedUrl of ["./seed.json", "../registry/seed.json"]) {
+          try {
+            const seed = await (await fetch(seedUrl)).json();
+            if (typeof seed.bundle === "string") candidates.push(seed.bundle);
+            for (const mirror of seed.mirrors ?? []) if (mirror && mirror.bundle) candidates.push(mirror.bundle);
+          } catch (error) { /* no seed reachable from here; the relative copies still apply */ }
+        }
+        const seen = new Set();
+        const refusals = [];
+        for (const url of candidates) {
+          if (seen.has(url)) continue;
+          seen.add(url);
+          try {
+            const response = await fetch(url);
+            if (!response.ok) { refusals.push(url + ": HTTP " + response.status); continue; }
+            const value = await response.json();
+            const probe = await verifyBundle(value, undefined, pinned ?? undefined);
+            if (!probe.valid) { refusals.push(url + ": " + (probe.reason ?? "does not verify")); continue; }
+            return { bundle: value, source: url, refusals: refusals };
+          } catch (error) {
+            refusals.push(url + ": " + (error && error.message ? error.message : "unreachable"));
+          }
+        }
+        return { bundle: null, source: null, refusals: refusals };
+      }
+
       async function run() {
-        const [bundle, blobFile] = await Promise.all([
-          (await fetch("./bundle.json")).json(),
-          fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] }),
-        ]);
+        const blobFile = await fetch("./blobs.json").then((response) => response.ok ? response.json() : { blobs: [] });
+        const requested = new URLSearchParams(location.search).get("root");
+        const pinned = requested && /^[0-9a-f]{64}$/.test(requested) ? requested : null;
+        const loaded = await loadBundle(pinned);
+        const bundle = loaded.bundle;
+
+        if (!bundle) {
+          out.innerHTML = htmlRow("No copy verified", "every location this page could reach was rejected or unreachable", "bad")
+            + loaded.refusals.map((refusal) => htmlRow("Tried", "<code>" + refusal + "</code>", "dim")).join("");
+          return;
+        }
+
         // The bundle carries every challenge spec, so this page can replay the
         // generative claims and recompute the bounded metrics itself. The
         // mirror's inline blobs let it check the rendition bytes as well.
         const challenges = Object.fromEntries(
-          (bundle.challenges ?? []).map((c) => [c.id, c.spec ?? {}]),
+          (bundle.challenges ?? []).map((challenge) => [challenge.id, challenge.spec ?? {}]),
         );
         const media = Object.fromEntries(
           (Array.isArray(blobFile.blobs) ? blobFile.blobs : [])
             .filter((blob) => typeof blob.hash === "string" && typeof blob.content === "string")
             .map((blob) => [blob.hash, blob.content]),
         );
-        const requested = new URLSearchParams(location.search).get("root");
-        const pinned = requested && /^[0-9a-f]{64}$/.test(requested) ? requested : null;
         const result = await verifyBundle(bundle, challenges, pinned ?? undefined, media);
 
-        const row = (label, value, cls) =>
-          '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
+        const sourceRow = htmlRow(
+          "Served from",
+          "<code>" + loaded.source + "</code>",
+          loaded.refusals.length ? "" : "dim",
+        );
+        const rejectedRows = loaded.refusals.map((refusal) => htmlRow("Rejected", "<code>" + refusal + "</code>", "dim"));
+        const pinRow = pinned
+          ? htmlRow("Pinned chain root", "<code>" + pinned + "</code>", result.valid ? "ok" : "bad")
+          : htmlRow("Pinned chain root", "not supplied (open with ?root=...)", "dim");
 
-        const sections = [
-          row("Publications", String(result.publications)),
-          row("Anchored root", "<code>" + result.root + "</code>"),
-          row("Recomputed root", "<code>" + result.computedRoot + "</code>"),
-          row("This copy is faithful", result.valid ? "yes" : "no", result.valid ? "ok" : "bad"),
-          result.reason ? row("Why not", result.reason, "bad") : "",
-        ];
+        const sections = [sourceRow]
+          .concat(rejectedRows)
+          .concat([
+            htmlRow("Publications", String(result.publications)),
+            htmlRow("Anchored root", "<code>" + result.root + "</code>"),
+            htmlRow("Recomputed root", "<code>" + result.computedRoot + "</code>"),
+            pinRow,
+            htmlRow("This copy is faithful", result.valid ? "yes" : "no", result.valid ? "ok" : "bad"),
+            result.reason ? htmlRow("Why not", result.reason, "bad") : "",
+          ]);
 
-        const ai = (result.aiClaims ?? []).filter((c) => c.representation);
+        const ai = (result.aiClaims ?? []).filter((claim) => claim.representation);
         if (ai.length) {
           sections.push("<h2>AI claims — verified in your browser</h2>");
           for (const claim of ai) {
-            const title = (bundle.publications.find((p) => p.id === claim.publicationId) ?? {}).title ?? claim.publicationId;
-            sections.push(row(title.slice(0, 60), "representation: " + claim.representation, "dim"));
+            const title = (bundle.publications.find((pub) => pub.id === claim.publicationId) ?? {}).title ?? claim.publicationId;
+            sections.push(htmlRow(title.slice(0, 60), "representation: " + claim.representation, "dim"));
             if (claim.representation === "bounded") {
-              sections.push(row("committed metric", claim.metricName + " = " + claim.metricValue + " (bound " + claim.bound + ")",
-                claim.withinBound === false ? "bad" : "ok"));
+              sections.push(htmlRow(
+                "committed metric",
+                claim.metricName + " = " + claim.metricValue + " (bound " + claim.bound + ")",
+                claim.withinBound === false ? "bad" : "ok",
+              ));
             }
             if (claim.local) {
               let detail = "local check: " + (claim.local.correct ? "PASSES" : "FAILS");
@@ -74,23 +131,27 @@
                 const agrees = committed === null || committed === claim.local.metricValue;
                 detail += " · recomputed metric " + claim.local.metricValue +
                   (agrees ? " (matches attestation)" : " (MISMATCHES attested " + committed + ")");
-                sections.push(row(title.slice(0, 60), detail, agrees ? "ok" : "bad"));
+                sections.push(htmlRow(title.slice(0, 60), detail, agrees ? "ok" : "bad"));
               } else {
-                sections.push(row(title.slice(0, 60), detail, claim.local.correct ? "ok" : "bad"));
+                sections.push(htmlRow(title.slice(0, 60), detail, claim.local.correct ? "ok" : "bad"));
               }
             } else {
-              sections.push(row(title.slice(0, 60), "local check: not run (spec unavailable)", "dim"));
+              sections.push(htmlRow(title.slice(0, 60), "local check: not run (spec unavailable)", "dim"));
             }
             if (claim.media) {
-              sections.push(row("rendition", claim.media.matches === true
-                ? "raster re-derived from the commitment"
-                : claim.media.matches === false ? "raster MISMATCH" : "not checked",
-                claim.media.matches === true ? "ok" : "bad"));
-              if (claim.media.blobMatches !== null) {
-                sections.push(row("rendition bytes", claim.media.blobMatches
-                  ? "blob digest matches the mirror copy"
-                  : "blob MISMATCH",
-                  claim.media.blobMatches ? "ok" : "bad"));
+              sections.push(htmlRow(
+                "rendition",
+                claim.media.matches === true
+                  ? "raster re-derived from the commitment"
+                  : claim.media.matches === false ? "raster MISMATCH" : "not checked",
+                claim.media.matches === true ? "ok" : "bad",
+              ));
+              if (claim.media.blobMatches !== null && claim.media.blobMatches !== undefined) {
+                sections.push(htmlRow(
+                  "rendition bytes",
+                  claim.media.blobMatches ? "blob digest matches the mirror copy" : "blob MISMATCH",
+                  claim.media.blobMatches ? "ok" : "bad",
+                ));
               }
             }
           }
