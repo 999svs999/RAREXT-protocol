@@ -27,6 +27,8 @@ const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const generative = await import(new URL("apps/api/src/generative.ts", root).href);
 const bounded = await import(new URL("apps/api/src/bounded.ts", root).href);
 const verifiersModule = await import(new URL("apps/api/src/verifiers.ts", root).href);
+const semanticsModule = await import(new URL("apps/api/src/semantics.ts", root).href);
+const coreSemanticsModule = await import(new URL("packages/core/src/semantics.ts", root).href);
 const { samplesForMissingFraction, missProbability } = das;
 
 const UNITS = 9216; // the 36 MiB photo slice in 4 KiB chunks, as the RFC states
@@ -266,6 +268,18 @@ if (process.argv.includes("--self-test")) {
   const caughtAi = failures > beforeAi;
   if (!caughtAi) fail("self-test: the checker accepted a doctored AI rendition rule name");
   caught = caught && caughtAi;
+  // And the semantics doc — a published field the validator drops must be
+  // caught. The `createdAt` line anchors on the interface block.
+  const beforeSemantics = failures;
+  const originalSemanticsDoc = readFileSync(new URL("docs/SEMANTICS.md", root), "utf8");
+  const doctoredSemanticsDoc = originalSemanticsDoc.replace(
+    "  createdAt: string;",
+    "  created: string;",
+  );
+  checkSemanticsDoc(doctoredSemanticsDoc);
+  const caughtSemantics = failures > beforeSemantics;
+  if (!caughtSemantics) fail("self-test: the checker accepted a doctored semantics field name");
+  caught = caught && caughtSemantics;
   caught = assertChanged(original, doctored, "sampling-table") && caught;
   caught = assertChanged(realSoak, doctoredSoak, "soak-log") && caught;
   assertChanged(JSON.stringify(realThroughput), JSON.stringify(doctoredThroughput), "throughput");
@@ -276,6 +290,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalChains, doctoredChains, "chain-surface");
   assertChanged(originalWorkDoc, doctoredWorkDoc, "reward-table");
   assertChanged(originalAiDoc, doctoredAiDoc, "ai-verification");
+  assertChanged(originalSemanticsDoc, doctoredSemanticsDoc, "semantics-doc");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
 
   console.log(caught ? "\nself-test PASSED: the checker caught the doctored row" : "\nself-test FAILED: the checker accepted a doctored row");
@@ -977,6 +992,147 @@ function checkAiVerificationDoc(docOverride, appOverride) {
 }
 
 checkAiVerificationDoc();
+checkSemanticsDoc();
+
+/**
+ * The semantics doc: docs/SEMANTICS.md publishes concrete claims about the
+ * semantic layer — the Semantics record's fields, its two hash fields, the
+ * binding status values GET /v1/challenges reports, the API routes, the claim
+ * kinds a record licenses, and the scope rule that a claim's scope keys must
+ * appear in the record's inputs or outputs. Every published field/route/rule
+ * must be what the implementation actually does.
+ */
+function checkSemanticsDoc(docOverride, appOverride) {
+  console.log(`semantics doc (docs/SEMANTICS.md${docOverride ? ", DOCTORED" : ""} vs code):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/SEMANTICS.md", root), "utf8");
+  const app = appOverride ?? readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+
+  // 1. The record's named fields — the doc publishes the full interface; every
+  // field name must appear in the code's validator return, so a renamed or
+  // dropped field cannot drift silently.
+  const apiSemanticsSrc = readFileSync(new URL("apps/api/src/semantics.ts", root), "utf8");
+  const apiSemantics = apiSemanticsSrc.match(
+    /return\s+\{\s*id: record\.id,([\s\S]*?)\};/,
+  )?.[1];
+  if (!apiSemantics) fail("the Semantics validator's return object could not be located in semantics.ts");
+  const fields = ["id", "app", "version", "claimKind", "title", "summary", "specHash", "verifierHash", "inputs", "outputs", "interpretation", "owner", "origin", "createdAt"];
+  for (const field of fields) {
+    if (!doc.includes(field)) fail(`SEMANTICS.md no longer publishes the "${field}" field`);
+    if (apiSemantics && !new RegExp(`\\b${field}:`).test("id: record.id" + apiSemantics)) {
+      fail(`the validator no longer returns a "${field}" field`);
+    }
+  }
+
+  // 2. Binding status: the doc publishes exactly four values; the registry's
+  // bindingFor must be able to report each of them, not just some.
+  // The doc states them as: ok, missing, version-mismatch, spec-mismatch.
+  const expectedStatuses = ["ok", "missing", "version-mismatch", "spec-mismatch"];
+  for (const status of expectedStatuses) {
+    if (!doc.includes(status)) fail(`SEMANTICS.md no longer lists binding status "${status}"`);
+  }
+
+  // 3. API routes — the doc's API block publishes four routes; each must be
+  // handled by the app the way the route-surface kind checks it.
+  const semanticsRoutes = [
+    { method: "GET", path: "/v1/semantics" },
+    { method: "GET", path: "/v1/semantics/:id" },
+    { method: "GET", path: "/v1/challenges" },
+  ];
+  const guards = new Set();
+  let currentMethod = null;
+  for (const line of app.split("\n")) {
+    const method = line.match(/req\.method === "(\w+)"/);
+    if (method) currentMethod = method[1];
+    for (const match of line.matchAll(/pathname === "([^"]+)"/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+    for (const match of line.matchAll(/pathname\.startsWith\("([^"]+)"\)/g)) {
+      if (currentMethod) guards.add(`${currentMethod} ${match[1].replace(/\/$/, "")}`);
+    }
+  }
+  for (const { method, path } of semanticsRoutes) {
+    const key = `${method} ${path}`;
+    if (guards.has(key)) continue;
+    const byPrefix = Array.from(guards).some(
+      (guard) => guard.startsWith(`${method} `) && path.startsWith(guard.split(" ")[1] + "/"),
+    );
+    if (byPrefix) continue;
+    fail(`SEMANTICS.md publishes ${key}, but app.ts no longer handles it`);
+  }
+
+  // 4. Claim kinds — the doc's table publishes four kinds. Each one a record
+  // licenses must be accepted by the validator; one it drops must not be.
+  const kinds = ["satisfies", "attests", "produces", "derives"];
+  for (const kind of kinds) {
+    if (!doc.includes(kind)) fail(`SEMANTICS.md no longer publishes claim kind "${kind}"`);
+  }
+
+  // 5. The hash fields — specHash, semanticsHash, verifierHash. The doc
+  // states specHash is "the hash of the machine spec"; re-derive it the way
+  // the module does and require it to be stable and non-trivial.
+  const registry = semanticsModule.createSemanticsRegistry(() => []);
+  const halfAdder = registry.get("logic/half-adder", 1);
+  if (!halfAdder) fail("the logic/half-adder semantics record is missing from the registry");
+  if (typeof halfAdder.specHash !== "string" || halfAdder.specHash.length !== 64) {
+    fail("half-adder's specHash is not a 64-char hex digest");
+  }
+  if (semanticsModule.specHash({}) !== semanticsModule.specHash({})) {
+    fail("specHash is not a pure function of its input");
+  }
+  const semanticsH = semanticsModule.semanticsHash(halfAdder);
+  if (semanticsH.length !== 64) fail("semanticsHash did not return a 64-char digest");
+  if (semanticsH !== registry.hashOf(halfAdder)) {
+    fail("semanticsHash and the registry's hashOf disagree for the same record");
+  }
+  if (!doc.includes("semanticsHash")) fail("SEMANTICS.md no longer names the semanticsHash field");
+  if (!doc.includes("verifierHash")) fail("SEMANTICS.md no longer names the verifierHash field");
+  if (!doc.includes("specHash")) fail("SEMANTICS.md no longer names the specHash field");
+
+  // 6. The scope rule: "Scope keys must appear in the semantics' inputs or
+  // outputs". Exercise it through the real claim binder: a scope key the
+  // record does not contemplate must be rejected, and one it does must pass.
+  const challenge = {
+    id: "half-adder",
+    app: "logic",
+    title: "half-adder",
+    description: "half-adder",
+    version: 1,
+    spec: { inputs: ["a", "b"], outputs: ["sum", "carry"] },
+    semanticsId: "logic/half-adder",
+    semanticsVersion: 1,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  const attestation = {
+    app: "logic",
+    challengeId: "half-adder",
+    taskId: "half-adder",
+    circuitHash: "0".repeat(64),
+    traceHash: "0".repeat(64),
+    correct: true,
+    score: 100,
+    gateCount: 5,
+    claimKind: "satisfies",
+    scope: null,
+    verifierHash: halfAdder.verifierHash ?? "",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  const okBind = semanticsModule.bindClaim(attestation, challenge, registry, {
+    scope: { dataset: "erp-prod" },
+  });
+  const goodScope = semanticsModule.bindClaim(attestation, challenge, registry, {});
+  if ("error" in goodScope) fail(`a scope-less claim must bind, got: ${goodScope.error}`);
+  const recordInputs = [...halfAdder.inputs, ...halfAdder.outputs];
+  const inScopeKey = recordInputs[0];
+  const inBind = semanticsModule.bindClaim(attestation, challenge, registry, { scope: { [inScopeKey]: "v" } });
+  if ("error" in inBind) fail(`a scope key the record contemplates (${inScopeKey}) was rejected: ${inBind.error}`);
+  if (!("error" in okBind)) fail("a scope key the record does not contemplate was accepted");
+
+  console.log(
+    `  ${fields.length} record fields vs the validator | ${expectedStatuses.length} binding statuses | ` +
+      `${semanticsRoutes.length} route(s) handled | ${kinds.length} claim kind(s) | ` +
+      `specHash ${halfAdder.specHash.slice(0, 8)}… (stable) | scope rule enforced through bindClaim`,
+  );
+}
 
 console.log(failures === 0 ? "\nall published claims match the implementation" : `\n${failures} mismatch(es)`);
 process.exit(failures === 0 ? 0 : 1);

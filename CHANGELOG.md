@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The semantics doc's claims are checked against the real validator.** Fourteenth
+  claim kind: `docs/SEMANTICS.md` publishes the `Semantics` record's fourteen named
+  fields, its two hash fields (`specHash`, `semanticsHash`), the four binding-status
+  values (`ok`, `missing`, `version-mismatch`, `spec-mismatch`), the three API routes
+  (`GET /v1/semantics`, `GET /v1/semantics/:id`, `GET /v1/challenges`), the four claim
+  kinds a record licenses (`satisfies`, `attests`, `produces`, `derives`), and the
+  scope rule that a claim's scope keys must appear in the record's `inputs` or
+  `outputs`. The checker parses each field name out of the doc and locates it in the
+  validator's return object in `apps/api/src/semantics.ts`; re-derives `specHash`
+  through `semantics.specHash` and `semanticsHash` through `semantics.semanticsHash`,
+  requiring both to be stable 64-char digests; extracts the route guards the same way
+  the route-surface kind does; and exercises the scope rule through `bindClaim` — a
+  scope-less claim and a scope key the record contemplates (`circuit`) must bind, and
+  a key it does not (`dataset`) must be rejected. The self-test doctored the
+  interface's `createdAt: string;` to `created: string;` and the fixture-changed
+  guard covers the new fixture.
 - **The AI-verification vision doc is now a checked claim surface.** Thirteenth claim kind:
   `docs/AI-VERIFICATION.md` publishes the two rendition rule names (`xorshift32-image-v1`,
   `bounded-strip-v1`), the stable verifier hashes derived from their manifests, the
