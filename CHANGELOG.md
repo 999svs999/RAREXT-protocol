@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Hardening round: the sealed tier's fault surface (negative result, pinned).** The
+  primitives behind "a mirror holds ciphertext it cannot read" got their own fault suite
+  in `sealed-path.test.ts`: a round trip is byte-exact while a one-bit tamper of the
+  ciphertext or auth tag is refused (`authentication failed`, never partial output), a
+  wrong secret is refused, malformed `iv`/`salt`/`authTag` are named in the refusal
+  before any crypto runs (an empty ciphertext is valid base64 and refused by
+  authentication instead), metadata recorded by a placement is bound to its ciphertext
+  (a swapped pair refuses), the same plaintext encrypted twice shares no salt, iv, or
+  ciphertext, and the recorded metadata plus committed ciphertext carry no plaintext.
+  **No defect was found** — every injected fault was already refused — so the round's
+  value is that the refusals are now pinned and the length bound is stated rather than
+  implied: AES-GCM is a stream cipher, so ciphertext length equals plaintext length, and
+  the sealed tier hides content, not size (`docs/HARDENING.md`, sealed tier row).
 - **The mirrors doc's claims are checked, and its CI claim made true.** Seventeenth
   claim kind: `docs/MIRRORS.md`'s bundle routes are held to `app.ts`'s guards, its four
   named npm scripts to `package.json`, its published-copy artifacts to the deploy's own
