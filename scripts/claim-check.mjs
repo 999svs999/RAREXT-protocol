@@ -791,6 +791,26 @@ function checkMirrorsDoc(docOverride) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
   }
 
+  // The doc says the workbench refuses reads from a bundle it cannot verify —
+  // the same gap check as the proof page, pinned the same way and falling back
+  // to the seed's bundleRoot. The gate lives in ONE module (mirror.ts), and the
+  // workbench must carry the refusal banner the served index.html ships.
+  if (!doc.includes("refusal banner") || !doc.includes("internal consistency only")) {
+    fail("MIRRORS.md no longer documents the workbench refusing reads from an unverified bundle");
+  }
+  const workbenchGate = readFileSync(new URL("apps/web/src/mirror.ts", root), "utf8");
+  for (const marker of ["verifyBundle", "bundleRoot", "../registry/seed.json", "refused"]) {
+    if (!workbenchGate.includes(marker)) {
+      fail(`MIRRORS.md says the workbench verifies its bundle with the proof page's check, but the gate (mirror.ts) has no "${marker}"`);
+    }
+  }
+  const workbenchMain = readFileSync(new URL("apps/web/src/main.ts", root), "utf8");
+  for (const marker of ["startMirrorGate", "mirror-refusal", "mirrorGate.ready"]) {
+    if (!workbenchMain.includes(marker)) {
+      fail(`MIRRORS.md says the workbench refuses reads and shows a refusal banner, but the app (main.ts) has no "${marker}"`);
+    }
+  }
+
   for (const generator of generators) {
     const source = readFileSync(new URL(generator, root), "utf8");
     if (!source.includes("mirror-verify-page.mjs")) {
@@ -867,7 +887,7 @@ function checkMirrorsDoc(docOverride) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles`,
   );
 }
 

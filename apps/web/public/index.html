@@ -75,6 +75,30 @@
       </div>
     </header>
 
+    <div id="mirror-refusal" class="mirror-refusal hidden" role="alert">
+      <strong>This workbench refused its bundle: the bytes do not rebuild the pinned root.</strong>
+      <p>
+        Reads from this mirror's bundle are disabled — the feed, the challenges,
+        and the semantics cannot be answered from bytes that fail verification.
+        Open <a href="./verify.html">the bundle verifier</a> for the same check
+        this workbench runs at startup.
+      </p>
+      <div class="mirror-refusal-roots">
+        <div>
+          <span>Pinned root</span>
+          <code data-refusal="pinned"></code>
+        </div>
+        <div>
+          <span>Computed root</span>
+          <code data-refusal="computed"></code>
+        </div>
+        <div>
+          <span>Why</span>
+          <code data-refusal="reason"></code>
+        </div>
+      </div>
+    </div>
+
     <main>
       <section id="view-workbench" class="view workbench">
         <aside class="panel panel-left">

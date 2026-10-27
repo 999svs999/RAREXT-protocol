@@ -42,7 +42,15 @@ A mirror is a directory:
 
 - `bundle.json` and `bundle.js` — the registry state.
 - `index.html`, `app.js`, `styles.css` — the workbench, answering its reads from
-  the bundle instead of a server.
+  the bundle instead of a server. It does not read from bytes it was merely
+  shipped: on startup the workbench runs the same check `verify.html` runs
+  (`verifyBundle`), pinned the same way — `?root=<root>`, falling back to the
+  seed's `bundleRoot` tried from `./seed.json` then `../registry/seed.json`.
+  With no pin available it verifies internal consistency only, and says so.
+  When the bundle is refused — the bytes do not rebuild the pinned root —
+  every read falls through to the network (on a static mirror that is a 404,
+  the honest empty state) and the page shows a refusal banner naming the
+  computed root and the pinned one. An honest bundle behaves exactly as before.
 - `verify.html` — a page that recomputes the root in the browser and tells you
   whether this copy is faithful. Open it with `?root=<chain root>` to pin the
   bundle to a root obtained from the chain or another trusted source; without a

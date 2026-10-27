@@ -25,6 +25,12 @@ import { bemReadout, parseBemStatus } from "./bem.ts";
 import type { BemStatus } from "./bem.ts";
 import { runWork, type WorkBoard } from "./work.ts";
 import { localVerdict } from "./verify.ts";
+import {
+  startMirrorGate,
+  type MirrorBundle,
+  type MirrorGateOutcome,
+  type MirrorRefusal,
+} from "./mirror.ts";
 
 const NODE_WIDTH = 144;
 const NODE_HEIGHT = 64;
@@ -217,20 +223,9 @@ const touchPoints = new Map<number, { x: number; y: number }>();
 /**
  * A mirror ships the registry as a bundle, so the workbench keeps working with
  * the operator offline. When a bundle is present the read paths are answered
- * from it; writes still need a live registry.
+ * from it — but only after the gate has verified it (see mirror.ts) — and
+ * writes still need a live registry.
  */
-interface MirrorBundle {
-  manifest: {
-    root: string;
-    leafVersion: number;
-    anchorId: string | null;
-    createdAt: string;
-    counts: Record<string, number>;
-  };
-  publications: Publication[];
-  challenges: (Challenge & { semanticsBinding?: string })[];
-  semantics: (Semantics & { semanticsHash?: string })[];
-}
 
 declare global {
   interface Window {
@@ -238,48 +233,34 @@ declare global {
   }
 }
 
-function mirrorResponse(path: string): unknown {
-  const bundle = window.__RAREXT_BUNDLE__;
-  if (!bundle) return null;
-
-  const url = new URL(path, "https://mirror.invalid");
-  const publications = [...bundle.publications].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
-
-  if (url.pathname === "/v1/feed" || url.pathname === "/v1/artifacts") {
-    const limit = Number(url.searchParams.get("limit") ?? "50");
-    const offset = Number(url.searchParams.get("offset") ?? "0");
-    return publications.slice(offset, offset + limit);
-  }
-
-  if (url.pathname === "/v1/challenges") return bundle.challenges;
-  if (url.pathname === "/v1/semantics") return bundle.semantics;
-
-  if (url.pathname === "/v1/apps") {
-    return bundle.challenges.map((challenge) => ({
-      id: challenge.app,
-      name: challenge.app,
-      version: "1",
-      description: challenge.description,
-      artifactKinds: [],
-      challengeCount: 1,
-      verifier: "builtin",
-      configured: true,
-      url: null,
-    }));
-  }
-
-  if (url.pathname === "/v1/adapters") return [];
-  if (url.pathname === "/v1/tapeout/status") {
-    return { configured: false, chainId: null, blockNumber: null };
-  }
-
-  return null;
-}
+/**
+ * The workbench refuses to serve reads from a bundle it has not verified. The
+ * gate runs the verifier page's own check (verifyBundle) against the same pin
+ * rules — ?root= first, then the seed's bundleRoot — and until it settles, and
+ * forever after a refusal, mirror reads fall through to the network. On a
+ * static mirror that is a 404: an honest empty state instead of tampered data.
+ */
+const mirrorGate = startMirrorGate(window.__RAREXT_BUNDLE__, {
+  requestedRoot: new URLSearchParams(window.location.search).get("root"),
+  onVerified: (outcome: MirrorGateOutcome) => {
+    if (outcome.kind === "verified") {
+      console.info(
+        `mirror bundle verified against the pinned root (${outcome.computedRoot}); reads answer from the bundle`,
+      );
+      return;
+    }
+    // The verifier page's rule with no pin: internal consistency only.
+    console.info(
+      "mirror bundle verified (internal consistency only: no root pin is available); reads answer from the bundle",
+    );
+  },
+  onRefused: showMirrorRefusal,
+});
 
 async function apiGet(path: string): Promise<unknown> {
-  const mirrored = mirrorResponse(path);
+  await mirrorGate.ready;
+
+  const mirrored = mirrorGate.read(path);
   if (mirrored !== null) return mirrored;
 
   const response = await fetch(path);
@@ -1402,6 +1383,36 @@ function toast(message: string, error = false): void {
 
   if (toastTimer) window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toastEl.classList.add("hidden"), 3400);
+}
+
+/**
+ * A broken copy says so. The banner element ships with the page (the mirror's
+ * index.html), and this fills it in and shows it: which roots disagree, and
+ * what the verifier found. There is no silent fallback — the reads stay
+ * refused, exactly as the verifier page refuses its copies.
+ */
+function showMirrorRefusal(refusal: MirrorRefusal): void {
+  const banner = el<HTMLDivElement>("mirror-refusal");
+  const pinned = banner.querySelector<HTMLElement>("[data-refusal='pinned']");
+  const computed = banner.querySelector<HTMLElement>("[data-refusal='computed']");
+  const reason = banner.querySelector<HTMLElement>("[data-refusal='reason']");
+
+  if (pinned) {
+    pinned.textContent = refusal.pinnedRoot
+      ? refusal.pinnedRoot
+      : "no pin was available — ?root= was absent and no seed named one";
+  }
+
+  if (computed) {
+    computed.textContent = refusal.computedRoot ?? "—";
+  }
+
+  if (reason) {
+    reason.textContent = refusal.reason ?? "the bundle does not rebuild the pinned root";
+  }
+
+  banner.classList.remove("hidden");
+  document.body.classList.add("mirror-refused");
 }
 
 function openWelcome(): void {
