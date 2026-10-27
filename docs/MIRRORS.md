@@ -249,17 +249,16 @@ consistent is the federation problem, and it has two parts:
    another location verifies — announcements are redundancy, like mirrors. A
    seed without `announcements` behaves exactly as before: no fetch, no new
    candidate, no change in error wording or ordering. Still missing: the
-   announcement URLs still come from the seed (there is no peer-to-peer
-   discovery of announcements themselves), the announcing key travels in the
-   announcement document beside each record rather than being resolved through
-   the handle's key history when the caller supplies a resolver — an announcing
-   key is resolved through the handle's key history, a key the handle does not
-   vouch for is refused, a revoked key is refused even when the window is valid,
-   and with NO resolver supplied the honest default is refusal for a keyless
-   record (the envelope never mints its own authority). The API's own identity
-   store is not yet wired as that resolver — its reader passes core's
-   `unresolvedIdentity`. The server's own store IS the resolver where a caller
-   wires it: `bundleFromSeedForStore(seed, store, options)` answers the port
+   announcement URLs come from the seed (there is no peer-to-peer discovery of
+   announcements themselves), and a resident that reads announcements itself
+   must supply the resolver — with none supplied the honest default is refusal
+   for a keyless record, because the envelope never mints its own authority.
+   An announcing key is resolved through the handle's key history: a key the
+   handle does not vouch for is refused, a revoked key is refused even when the
+   window is valid, and a revocation lookup that could not be performed refuses
+   the record rather than reading a failed check as proof the key is good —
+   "could not tell" is its own outcome, never "not revoked". The server's own
+   store IS the resolver where a caller wires it: `bundleFromSeedForStore(seed, store, options)` answers the port
    straight from the identities, rotations and revocations the API already
    serves, so a keyless record resolves through the store that owns it and is
    refused when that store does not vouch for the announcing key or records it

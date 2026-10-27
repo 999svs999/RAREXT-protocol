@@ -5,11 +5,12 @@ import { readFileSync } from "node:fs";
 
 import type { Bundle } from "../../../packages/core/src/index.ts";
 import { RarextStore } from "../src/store.ts";
-import { bundleFromSeedForStore, verifyBundle } from "../src/bundle.ts";
+import { bundleFromSeedForStore, bundleFromSeeds, verifyBundle } from "../src/bundle.ts";
 import { cidV1Raw } from "../src/adapters/content.ts";
 import { announcementIdentityForStore } from "../src/announcement-identity.ts";
 import {
   DAY,
+  announcerIdentity,
   announcementSigner,
   iso,
   otherSigner,
@@ -372,6 +373,44 @@ test("an unvouched handle may not introduce a registry the seed does not pin", a
       refusals(events),
       /may mirror a registry the seed pins, not introduce one/,
       "an unvouched handle cannot mint a registry of its own choosing",
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test("a revocation check that could not run refuses the record", async () => {
+  const signer = announcementSigner();
+  const server = await fixture();
+  try {
+    const record = signedAnnouncement(signer, {
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+    });
+    server.publish([record]);
+
+    // The port that knows the handle but cannot reach its revocation list. A
+    // failed check is NOT "not revoked": the fold must refuse rather than read
+    // an unreachable list as proof that the key is good.
+    const unreachable = {
+      ...announcerIdentity(),
+      revokedKey: async () => {
+        throw new Error("the revocation list is unreachable");
+      },
+    };
+
+    const events: Event[] = [];
+    const found = await bundleFromSeeds([seedPointingAt(server.urls)], {
+      identity: unreachable,
+      onAnnouncement: (event) => events.push(event as Event),
+    });
+
+    assert.equal(found.root, pinnedRoot, "discovery completes on the seed's own copy");
+    assert.match(
+      refusals(events),
+      /could not be determined|unreachable/,
+      `a check that did not run is reported as such: ${JSON.stringify(events)}`,
     );
   } finally {
     server.close();

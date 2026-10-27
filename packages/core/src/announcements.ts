@@ -592,17 +592,33 @@ export async function foldAnnouncements(
     }
     return histories.get(handle) ?? null;
   };
-  const revokedKey = async (keyId: string): Promise<AnnouncementRevocation | null> => {
-    if (!revocations.has(keyId)) {
-      let revocation: AnnouncementRevocation | null = null;
-      try {
-        revocation = (await input.verifier.revokedKey(keyId)) ?? null;
-      } catch {
-        revocation = null;
-      }
-      revocations.set(keyId, revocation);
+  /**
+   * A revocation lookup has THREE outcomes, not two: a revocation, no
+   * revocation, and "could not tell". Collapsing the third into the second —
+   * which is what `catch { revocation = null }` did — reads a failed check as
+   * proof that a key is good, and caches it for the rest of the fold. A
+   * resident whose revocation list fetch fails would then accept records signed
+   * by keys that are in fact revoked. Failure is therefore carried, and the
+   * record is refused rather than believed.
+   */
+  type RevocationLookup =
+    | { ok: true; revocation: AnnouncementRevocation | null }
+    | { ok: false; reason: string };
+  const revocationOutcomes = new Map<string, RevocationLookup>();
+  const revokedKey = async (keyId: string): Promise<RevocationLookup> => {
+    const cached = revocationOutcomes.get(keyId);
+    if (cached) return cached;
+    let outcome: RevocationLookup;
+    try {
+      outcome = { ok: true, revocation: (await input.verifier.revokedKey(keyId)) ?? null };
+    } catch (error) {
+      outcome = {
+        ok: false,
+        reason: error instanceof Error ? error.message : "the revocation lookup failed",
+      };
     }
-    return revocations.get(keyId) ?? null;
+    revocationOutcomes.set(keyId, outcome);
+    return outcome;
   };
 
   const pool: BundleSeed[] = [...seeds];
@@ -649,7 +665,21 @@ export async function foldAnnouncements(
       const handle = payload && isNonEmptyString(payload.handle) ? payload.handle : null;
       const keyId = payload && isNonEmptyString(payload.keyId) ? payload.keyId : null;
       const history = handle ? await resolveKeys(handle) : null;
-      const revoked = history && keyId ? await revokedKey(keyId) : null;
+      let revoked: AnnouncementRevocation | null = null;
+      if (history && keyId) {
+        const lookup = await revokedKey(keyId);
+        if (!lookup.ok) {
+          input.onAnnouncement?.({
+            url,
+            status: "skipped",
+            reason:
+              `record ${index}: whether key ${keyId} is revoked could not be determined ` +
+              `(${lookup.reason}), and a check that did not run is not a key that is good`,
+          });
+          continue;
+        }
+        revoked = lookup.revocation;
+      }
 
       const verdict = verifyAnnouncement(record, {
         url,

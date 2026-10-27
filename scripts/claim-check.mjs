@@ -474,6 +474,18 @@ if (process.argv.includes("--self-test")) {
   const caughtPinWrite = failures > beforePinWrite;
   if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
   caught = caught && caughtPinWrite;
+  // And a fold that reads a FAILED revocation lookup as "not revoked" — the
+  // fail-open this loop closed — must be reported.
+  const failOpenSource = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  const doctoredFailOpen = failOpenSource.replace(
+    "if (!lookup.ok) {",
+    "if (false && !lookup.ok) {",
+  );
+  const beforeFailOpen = failures;
+  checkMirrorsDoc(undefined, { announcements: doctoredFailOpen });
+  const caughtFailOpen = failures > beforeFailOpen;
+  if (!caughtFailOpen) fail("self-test: the checker accepted a fold that fails open on a revocation lookup");
+  caught = caught && caughtFailOpen;
   // And a fold that stops comparing the handle against the seed's announcers —
   // the open question this loop answered — must be reported.
   const realAnnouncements = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
@@ -1544,6 +1556,23 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // must carry it: the comparison against the seed's announcers, and each
   // refusal — the mirror a seed does not name, the registry it does not pin, and
   // the contradiction it forbids.
+  // The doc states the fail-closed rule for a revocation lookup. That is a claim
+  // about the fold, so the fold must keep the lookup's OUTCOME apart from the
+  // revocation it looked for — collapsing them is the fail-open this closed.
+  if (/could not be performed/.test(doc)) {
+    const foldSource =
+      sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+    if (!/could not be determined/.test(foldSource)) {
+      fail("MIRRORS.md says a revocation lookup that could not run refuses the record, but the fold does not carry it");
+    }
+    if (!/revocationOutcomes/.test(foldSource)) {
+      fail("the fold must keep the lookup's outcome apart from the revocation it looked for");
+    }
+    if (!/if \(!lookup\.ok\) \{/.test(foldSource)) {
+      fail("the fold must refuse when the revocation lookup did not succeed");
+    }
+  }
+
   if (/announcers/.test(doc)) {
     const announcementsSource =
       sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
