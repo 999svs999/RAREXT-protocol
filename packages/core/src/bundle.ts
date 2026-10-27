@@ -177,6 +177,19 @@ export interface BundleSeed {
    */
   url?: string;
   mirrors?: Array<{ bundle: string; root: string }>;
+  /**
+   * RFC 0019 step 1: URLs of signed announcement documents, each a JSON array
+   * of signed records in which an operator states where a registry's bundle
+   * can be fetched and under which pins. An announcement proposes LOCATIONS,
+   * never facts: a verified record enters the same union `planSeedUnion`
+   * already runs and cannot edit, override, or retract what this seed pins.
+   * Absent or empty means today's exact behaviour: no fetch, no new
+   * candidate, no change in error wording or ordering.
+   *
+   * Read by the ONE fold, `foldAnnouncements` in `announcements.ts`, which
+   * every non-browser caller delegates to.
+   */
+  announcements?: string[];
 }
 
 /** The seed's URL as it is named in errors and results. */

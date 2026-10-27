@@ -14,13 +14,14 @@ import { dirname, join } from "node:path";
 import {
   canonicalize,
   cidV1,
+  foldAnnouncements,
   planSeedUnion,
   readBundleResponseBytes,
   verifyAiArtifact,
-  verifyAnnouncement,
   verifyBundleShape,
   verifyCandidates,
   verifyGenerativeReplay,
+  type AnnouncementEvent,
   type AnnouncementVerifier,
   type AiLocalVerification,
   type BundleSeed,
@@ -109,24 +110,17 @@ export function cidV1Raw(bytes: Uint8Array): string {
 /**
  * The seed list a client discovers mirrors from (docs/MIRRORS.md).
  */
+export type { AnnouncementEvent } from "@rarext/core";
+
+/**
+ * The seed list a client discovers mirrors from (docs/MIRRORS.md).
+ *
+ * `announcements` (RFC 0019 step 1) is inherited from core's `BundleSeed`,
+ * because the fold that reads it is core's too — see `foldAnnouncements`.
+ */
 export interface SeedDocument extends BundleSeed {
   pins?: SeedPin[];
-  /**
-   * RFC 0019 step 1: URLs of signed announcement documents, each a JSON array
-   * of signed records in which an operator states where a registry's bundle
-   * can be fetched and under which pins. An announcement proposes LOCATIONS,
-   * never facts: a verified record enters the same union `planSeedUnion`
-   * already runs and cannot edit, override, or retract what this seed pins.
-   * Absent or empty means today's exact behaviour: no fetch, no new
-   * candidate, no change in error wording or ordering.
-   */
-  announcements?: string[];
 }
-
-/** What folding a seed's announcements reports: one event per record or document. */
-export type AnnouncementEvent =
-  | { url: string; status: "accepted"; mirror: string }
-  | { url: string; status: "skipped"; reason: string };
 
 export interface VerifiedBundleSource {
   bundle: Bundle;
@@ -212,6 +206,11 @@ export async function findVerifiedBundle(
  * before anything is fetched. An announcement that cannot be fetched, parsed,
  * or verified is reported with its reason and skipped, never fatal while
  * another location verifies — announcements are redundancy, like mirrors.
+ *
+ * That whole step is ONE function, core's `foldAnnouncements`, called here
+ * with this client's fetch and this package's identity primitives. The API
+ * twin `bundleFromSeeds` calls the same one, so a fix to the order, the
+ * wording, or the refusal record lands in both paths at once.
  */
 export async function findVerifiedBundleFromSeeds(
   seeds: SeedDocument[],
@@ -221,56 +220,18 @@ export async function findVerifiedBundleFromSeeds(
   const sha256 = options.sha256 ?? nodeSha256;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
-  // RFC 0019 step 1: fetch each announcement document the seeds name, verify
-  // every record, and pool the survivors with the trusted seeds BEFORE the
-  // union is planned. A seed without `announcements` contributes nothing here:
-  // the pool is exactly the seeds, so the plan, the fetches, and the error
-  // wording are byte for byte today's.
-  const pool: BundleSeed[] = [...seeds];
-  const announcementUrls = [
-    ...new Set(seeds.flatMap((seed) => seed.announcements ?? [])),
-  ];
-  for (const url of announcementUrls) {
-    let document: unknown;
-    try {
-      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const bytes = await readBundleResponseBytes(response);
-      document = JSON.parse(new TextDecoder().decode(bytes));
-    } catch (error) {
-      options.onAnnouncement?.({
-        url,
-        status: "skipped",
-        reason: error instanceof Error ? error.message : "the announcement document could not be fetched",
-      });
-      continue;
-    }
-    if (!Array.isArray(document)) {
-      options.onAnnouncement?.({
-        url,
-        status: "skipped",
-        reason: "the announcement document is not a JSON array of signed records",
-      });
-      continue;
-    }
-    for (const [index, record] of document.entries()) {
-      const verdict = verifyAnnouncement(record, { url, verifier: announcementVerifier });
-      if (verdict.ok) {
-        pool.push(verdict.seed);
-        options.onAnnouncement?.({
-          url,
-          status: "accepted",
-          mirror: verdict.seed.mirrors?.[0]?.bundle ?? "",
-        });
-      } else {
-        options.onAnnouncement?.({
-          url,
-          status: "skipped",
-          reason: `record ${index}: ${verdict.reason}`,
-        });
-      }
-    }
-  }
+  // RFC 0019 step 1: core's fold fetches each announcement document the seeds
+  // name, verifies every record with this package's identity primitives, and
+  // pools the survivors with the trusted seeds BEFORE the union is planned. A
+  // seed without `announcements` contributes nothing here: the pool is exactly
+  // the seeds, so the plan, the fetches, and the error wording are byte for
+  // byte today's.
+  const pool = await foldAnnouncements(seeds, {
+    verifier: announcementVerifier,
+    fetch: request,
+    timeoutMs,
+    onAnnouncement: options.onAnnouncement,
+  });
 
   const plan = planSeedUnion(pool);
 

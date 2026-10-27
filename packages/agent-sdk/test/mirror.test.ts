@@ -7,10 +7,8 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 
 import {
-  AgentSigner,
   cidV1,
   cidV1Raw,
-  createAgentKeyfile,
   findVerifiedBundle,
   findVerifiedBundleFromSeeds,
   replayBundleAi,
@@ -19,6 +17,12 @@ import {
   type Bundle,
   type SeedDocument,
 } from "../src/index.ts";
+import {
+  DAY,
+  announcementSigner,
+  iso,
+  signedAnnouncement,
+} from "./announcement-fixtures.ts";
 import { canonicalize, MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
 /**
@@ -672,51 +676,11 @@ test("a seed without a bundleCid beside one that has it is coexistence, not cont
  * each document is fetched, every record is verified (signature, key id, and
  * the issued/expires window), and each survivor enters the SAME union
  * `planSeedUnion` already runs — no parallel rule. The fixtures are signed
- * with the repo's own helpers: a keyfile created by `createAgentKeyfile` and a
- * payload signed by `AgentSigner`, so what the tests exercise is the real
- * verification path, not hand-rolled crypto.
+ * with the repo's own helpers (`createAgentKeyfile` + `AgentSigner.sign`) and
+ * live in `./announcement-fixtures.ts`, which the API's announcement suite
+ * imports too, so both suites exercise the real verification path against one
+ * definition of what a record looks like.
  */
-
-const ANNOUNCER = "operator-alice";
-
-/** One day in milliseconds, for windows relative to the run's own clock. */
-const DAY = 24 * 60 * 60 * 1000;
-
-const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
-
-function announcementSigner(): AgentSigner {
-  const keyfile = createAgentKeyfile(ANNOUNCER);
-  return new AgentSigner(keyfile.privateKey);
-}
-
-/** A signed announcement record, built the way an operator would build one. */
-function signedAnnouncement(
-  signer: AgentSigner,
-  claims: {
-    bundle: string;
-    mirror: string;
-    bundleRoot: string;
-    bundleCid?: string;
-    issuedAt?: string;
-    expiresAt?: string;
-  },
-) {
-  const payload = {
-    kind: "rarext.mirror-announcement",
-    version: 1,
-    handle: ANNOUNCER,
-    bundle: claims.bundle,
-    mirror: claims.mirror,
-    bundleRoot: claims.bundleRoot,
-    ...(claims.bundleCid === undefined ? {} : { bundleCid: claims.bundleCid }),
-    keyId: signer.keyId,
-    algorithm: signer.suite,
-    issuedAt: claims.issuedAt ?? iso(-DAY),
-    expiresAt: claims.expiresAt ?? iso(30 * DAY),
-    nonce: "announce-mirror-1",
-  };
-  return { announcement: payload, signature: signer.sign(payload), publicKey: signer.publicKey };
-}
 
 /** A fetch stub serving exact routes and recording every URL it is asked for. */
 function stubFetch(routes: Record<string, { status?: number; body: string }>, calls: string[] = []) {

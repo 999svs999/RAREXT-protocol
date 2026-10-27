@@ -1,8 +1,11 @@
 import {
+  foldAnnouncements,
   planSeedUnion,
   readBundleResponseBytes,
   verifyBundleShape,
   verifyCandidates,
+  type AnnouncementEvent,
+  type AnnouncementVerifier,
   type BundleSeed,
 } from "../../../packages/core/src/index.ts";
 import type {
@@ -16,11 +19,28 @@ import type {
 
 import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
 import { nodeSha256 } from "./digest.ts";
+import { keyId, suiteFor, verifyPayload } from "./identity.ts";
 import type { RarextStore } from "./store.ts";
 
 export const BUNDLE_VERSION = 1;
 
 export type { Bundle, BundleManifest, BundleVerification } from "../../../packages/core/src/index.ts";
+export type { AnnouncementEvent } from "../../../packages/core/src/index.ts";
+
+/**
+ * The signature machinery core's `foldAnnouncements` runs behind on the API
+ * path: the key id and the suite are derived from the carried key (by
+ * `keyId` and `suiteFor`, never claimed by the record), and the signature is
+ * checked by this server's own `verifyPayload` — the same primitives every
+ * signed publication this API accepts is verified with, so an announcement
+ * gets no bespoke crypto of its own. The sequence that applies them lives in
+ * core; this file only names where the primitives come from.
+ */
+const announcementVerifier: AnnouncementVerifier = {
+  keyIdOf: keyId,
+  suiteOf: suiteFor,
+  verify: verifyPayload,
+};
 
 /**
  * A bundle is the registry in a form anyone can hold: the publications that
@@ -106,6 +126,20 @@ export interface SeedDocument extends BundleSeed {
    * not recorded as one. `verify-seed-mirrors.mjs` resolves each entry.
    */
   pins?: SeedPin[];
+  /**
+   * RFC 0019 step 1: announcement document URLs, inherited from core's
+   * `BundleSeed` because the fold that reads them is core's too — this path
+   * adds no rule of its own, only a caller for `foldAnnouncements`.
+   */
+  announcements?: string[];
+}
+
+/** What both discovery entry points accept: the caller's fetch and observers. */
+export interface BundleDiscoveryOptions {
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+  /** Observe each announcement record as it is accepted or reported and skipped. */
+  onAnnouncement?: (event: AnnouncementEvent) => void;
 }
 
 export interface VerifiedBundleSource {
@@ -132,10 +166,13 @@ export interface VerifiedBundleFromSeeds extends VerifiedBundleSource {
  * rebuild, a valid bundle whose root is not the pinned one) is skipped with its
  * reason recorded; if none verifies, the error names every candidate and why,
  * so an outage reads as evidence rather than as an opaque failure.
+ *
+ * RFC 0019 step 1: a seed may carry `announcements`, folded in below exactly as
+ * the SDK path folds them — same core function, same semantics.
  */
 export async function bundleFromSeed(
   seed: SeedDocument,
-  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  options: BundleDiscoveryOptions = {},
 ): Promise<VerifiedBundleSource> {
   const found = await bundleFromSeeds([seed], options);
   return { bundle: found.bundle, root: found.root, source: found.source };
@@ -152,15 +189,42 @@ export async function bundleFromSeed(
  * disagreement throws naming the registry, the field, and every value with the
  * seed URL that pinned it. A seed without a `bundleCid` beside one that has it
  * is not a disagreement, and the stricter pin governs the shared candidates.
+ *
+ * RFC 0019 step 1: when seeds carry `announcements`, each document is fetched
+ * and every record verified by THE fold, core's `foldAnnouncements`, called
+ * here with this server's own identity primitives — the same function the SDK
+ * path calls, so both paths pool announcements identically and neither one
+ * holds a second copy of the sequence. The survivors are pooled with the seeds
+ * BEFORE `planSeedUnion` runs, so the disagreement rule covers announcements
+ * with no new rule of its own: a verified record that pins a different root
+ * for a registry the seed names throws the same loud error, naming both
+ * values and both sources, before anything is fetched. A record or a document
+ * that cannot be fetched, parsed, or verified is reported through
+ * `onAnnouncement` with its reason and skipped, never fatal while another
+ * location verifies. A seed with no `announcements` performs no announcement
+ * fetch and behaves exactly as before.
  */
 export async function bundleFromSeeds(
   seeds: SeedDocument[],
-  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  options: BundleDiscoveryOptions = {},
 ): Promise<VerifiedBundleFromSeeds> {
   const request = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
-  const plan = planSeedUnion(seeds);
+  // RFC 0019 step 1: core's fold fetches each announcement document the seeds
+  // name, verifies every record with this server's identity primitives, and
+  // pools the survivors with the trusted seeds BEFORE the union is planned. A
+  // seed without `announcements` contributes nothing here: the pool is exactly
+  // the seeds, so the plan, the fetches, and the error wording are byte for
+  // byte today's.
+  const pool = await foldAnnouncements(seeds, {
+    verifier: announcementVerifier,
+    fetch: request,
+    timeoutMs,
+    onAnnouncement: options.onAnnouncement,
+  });
+
+  const plan = planSeedUnion(pool);
 
   // The per-candidate sequence — fetch the bytes (capped, exactly as the seed
   // docs publish), the CID pin over the bytes, the shape, the recomputed root
@@ -169,7 +233,7 @@ export async function bundleFromSeeds(
   // one place, so a fix lands in every client at once.
   const outcome = await verifyCandidates({
     plan,
-    attribute: seeds.length > 1,
+    attribute: pool.length > 1,
     sha256: nodeSha256,
     fetchBytes: async (url) => {
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });

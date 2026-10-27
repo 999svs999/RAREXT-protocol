@@ -1,3 +1,4 @@
+import { readBundleResponseBytes } from "./bundle.ts";
 import type { BundleSeed } from "./bundle.ts";
 import type { JsonWebKey, SignatureSuite } from "./types.ts";
 
@@ -203,4 +204,95 @@ export function verifyAnnouncement(
   };
   if (typeof payload.bundleCid === "string") seed.bundleCid = payload.bundleCid;
   return { ok: true, seed };
+}
+
+/** What folding a seed's announcements reports: one event per record or document. */
+export type AnnouncementEvent =
+  | { url: string; status: "accepted"; mirror: string }
+  | { url: string; status: "skipped"; reason: string };
+
+/**
+ * RFC 0019 step 1: THE announcement fold — fetch every announcement document
+ * the seeds name, verify every record with the injected verifier, and return
+ * the seeds pooled with the verified survivors, so the caller plans
+ * `planSeedUnion` over the pool.
+ *
+ * It is one implementation because it used to be one caller's loop: the SDK
+ * path (`findVerifiedBundleFromSeeds`) and the API path (`bundleFromSeeds`)
+ * both delegate here, exactly as both delegate to `verifyCandidates` for the
+ * candidate sequence. The order is the invariant: fetch the document through
+ * the same capped reader a bundle gets, parse it (a document that is not a
+ * JSON array of signed records skips as a whole), verify each record — key id
+ * and suite derived from the carried key, signature over the canonical
+ * payload, the `issuedAt`/`expiresAt` window — pool each survivor, and report
+ * every refusal with its reason through `onAnnouncement`. A refusal is never
+ * fatal while another location verifies; a VERIFIED record that contradicts
+ * the pins is the union's stop, which happens after this returns, in
+ * `planSeedUnion`.
+ *
+ * A seed with no `announcements` contributes nothing: the URL set is empty,
+ * no fetch is made, and the returned pool is the seeds, byte for byte — which
+ * is why the callers can pass it unconditionally and stay additive.
+ *
+ * I/O and cryptography are injected: `fetch` and `timeoutMs` are the caller's
+ * (node fetch in both twins today), and `verifier` is the caller's identity
+ * primitives. Core stays pure, and a caller cannot reimplement the sequence
+ * without visibly not calling this.
+ */
+export async function foldAnnouncements(
+  seeds: BundleSeed[],
+  input: {
+    verifier: AnnouncementVerifier;
+    fetch: typeof fetch;
+    timeoutMs?: number;
+    onAnnouncement?: (event: AnnouncementEvent) => void;
+  },
+): Promise<BundleSeed[]> {
+  const request = input.fetch;
+  const timeoutMs = input.timeoutMs ?? 15_000;
+
+  const pool: BundleSeed[] = [...seeds];
+  const announcementUrls = [...new Set(seeds.flatMap((seed) => seed.announcements ?? []))];
+  for (const url of announcementUrls) {
+    let document: unknown;
+    try {
+      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bytes = await readBundleResponseBytes(response);
+      document = JSON.parse(new TextDecoder().decode(bytes));
+    } catch (error) {
+      input.onAnnouncement?.({
+        url,
+        status: "skipped",
+        reason: error instanceof Error ? error.message : "the announcement document could not be fetched",
+      });
+      continue;
+    }
+    if (!Array.isArray(document)) {
+      input.onAnnouncement?.({
+        url,
+        status: "skipped",
+        reason: "the announcement document is not a JSON array of signed records",
+      });
+      continue;
+    }
+    for (const [index, record] of document.entries()) {
+      const verdict = verifyAnnouncement(record, { url, verifier: input.verifier });
+      if (verdict.ok) {
+        pool.push(verdict.seed);
+        input.onAnnouncement?.({
+          url,
+          status: "accepted",
+          mirror: verdict.seed.mirrors?.[0]?.bundle ?? "",
+        });
+      } else {
+        input.onAnnouncement?.({
+          url,
+          status: "skipped",
+          reason: `record ${index}: ${verdict.reason}`,
+        });
+      }
+    }
+  }
+  return pool;
 }

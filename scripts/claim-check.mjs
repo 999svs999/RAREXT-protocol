@@ -371,9 +371,10 @@ if (process.argv.includes("--self-test")) {
   // the fixture both strips a caller's delegation and injects a private
   // refusal loop, the two shapes a re-fork takes.
   const beforeSequence = failures;
+  const realApiBundle = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
   const doctoredApiBundle =
-    readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8") +
-    "\n// stray fork\nconst strayRefusals = [];\nconst strayRefuse = (url, reason) => {\n  strayRefusals.push(`${url}: ${reason}`);\n};\n";
+    realApiBundle.replaceAll("foldAnnouncements(", "foldAnnouncementsUnused(") +
+    "\n// stray fork\nconst refusals = [];\nconst refuse = (url, reason) => {\n  refusals.push({ url, reason });\n};\n";
   const realSdkIndex = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
   const doctoredSdkIndex = realSdkIndex.replaceAll("verifyCandidates(", "verifyCandidatesUnused(");
   checkVerifySequence({
@@ -383,6 +384,35 @@ if (process.argv.includes("--self-test")) {
   const caughtSequence = failures > beforeSequence;
   if (!caughtSequence) fail("self-test: the checker accepted a re-forked verification sequence");
   caught = caught && caughtSequence;
+  // And a caller that inlines the announcement's own signature and window
+  // checks instead of calling core's fold must be reported: the fixture is a
+  // copy of the window arithmetic core owns, which is the re-fork this guard
+  // names.
+  const beforeFold = failures;
+  const inlinedApiBundle =
+    realApiBundle +
+    "\n// stray announcement re-fork\n" +
+    "const strayWindow = (payload: { issuedAt?: string; expiresAt?: string }) => {\n" +
+    "  const issuedAt = new Date(payload.issuedAt as string);\n" +
+    "  const expiresAt = new Date(payload.expiresAt as string);\n" +
+    "  if (expiresAt.getTime() <= issuedAt.getTime()) throw new Error(\"stale\");\n" +
+    "  return issuedAt;\n" +
+    "};\n";
+  checkVerifySequence({ "apps/api/src/bundle.ts": inlinedApiBundle });
+  const caughtFold = failures > beforeFold;
+  if (!caughtFold) fail("self-test: the checker accepted an inlined announcement verification");
+  caught = caught && caughtFold;
+  // And a SECOND module holding the announcement record's shape — a third
+  // implementation outside the two callers — must be reported. The fixture
+  // appends the record's kind to a module that has no business carrying it.
+  const beforeThird = failures;
+  const realMcpServer = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
+  const thirdAnnouncementHolder =
+    realMcpServer + '\nconst strayRecord = { kind: "rarext.mirror-announcement" };\n';
+  checkVerifySequence({ "apps/mcp/src/server.ts": thirdAnnouncementHolder });
+  const caughtThird = failures > beforeThird;
+  if (!caughtThird) fail("self-test: the checker accepted a second module holding the announcement record's shape");
+  caught = caught && caughtThird;
   // And a coverage map that lists a doc this checker never reads must be
   // reported — the map is only useful if it cannot drift from the checker.
   const beforeCoverage = failures;
