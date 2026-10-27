@@ -683,6 +683,45 @@ function checkVerifySequence(sources) {
     fail("core exports no verifyCandidates, so the callers could not be delegating to it");
   }
 
+  // The announcement fold's own rules live in core too, and the guards for that
+  // must assert what their injections claim — the first version of this check
+  // asserted neither and both injections printed "the checker accepted ...",
+  // which the self-test caught (the ci gate runs verify mode only, so a
+  // decorative guard can ride a green gate).
+  const coreAnnouncements = read("packages/core/src/announcements.ts");
+  if (!coreAnnouncements.includes("expiresAt.getTime()")) {
+    fail("core's announcements module no longer owns the window arithmetic");
+  }
+  if (!coreAnnouncements.includes("ANNOUNCEMENT_KIND")) {
+    fail("core's announcements module no longer owns the record's kind");
+  }
+  const recordKind = /ANNOUNCEMENT_KIND\s*=\s*"([^"]+)"/.exec(coreAnnouncements)?.[1];
+  if (!recordKind) {
+    fail("core's announcements module no longer declares the record's kind literal");
+  }
+  for (const [relative, who] of callers) {
+    const text = read(relative);
+    // A caller comparing the window itself is a re-fork of the fold's rule.
+    if (/(expiresAt|issuedAt)\.getTime\(\)/.test(text)) {
+      fail(`${who} re-implements the announcement window (core's fold owns it)`);
+    }
+    // A caller quoting the record's kind is a second holder of the shape.
+    if (text.includes(recordKind)) {
+      fail(`${who} holds the announcement record's kind ("${recordKind}" lives in core)`);
+    }
+  }
+  for (const relative of ["apps/mcp/src/server.ts", "apps/chain/src/server.ts"]) {
+    let text;
+    try {
+      text = read(relative);
+    } catch {
+      continue;
+    }
+    if (text.includes(recordKind)) {
+      fail(`${relative} holds the announcement record's kind ("${recordKind}" lives in core)`);
+    }
+  }
+
   // Each caller delegates: it names the shared function, and it does NOT
   // re-grow the behaviour. The refusal assembly and the wording moved to core
   // with the sequence; seeing them in a caller means a fork is sprouting.

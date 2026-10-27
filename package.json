@@ -62,7 +62,8 @@
     "deploy:anchor": "node contracts/scripts/deploy-anchor.mjs",
     "deploy:anchor:testnet": "node contracts/scripts/deploy-anchor-testnet.mjs",
     "demo:ai": "node scripts/demo-ai-on-rarext.mjs",
-    "demo:resident": "node scripts/demo-resident.mjs"
+    "demo:resident": "node scripts/demo-resident.mjs",
+    "claim:self-test": "node scripts/claim-check.mjs --self-test"
   },
   "engines": {
     "node": ">=22.18"
