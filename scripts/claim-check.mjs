@@ -474,6 +474,18 @@ if (process.argv.includes("--self-test")) {
   const caughtPinWrite = failures > beforePinWrite;
   if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
   caught = caught && caughtPinWrite;
+  // And an identity adapter that starts DECIDING — packing a rotation window
+  // of its own — must be reported. Core decides; the adapter answers.
+  const realIdentityAdapter = readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
+  const doctoredIdentityAdapter = realIdentityAdapter.replace(
+    "store.rotationsFor(handle)",
+    "store.rotationsFor(handle).filter((rotation) => Date.parse(rotation.issuedAt) <= Date.now())",
+  );
+  const beforeAdapter = failures;
+  checkMirrorsDoc(undefined, { identityAdapter: doctoredIdentityAdapter });
+  const caughtAdapter = failures > beforeAdapter;
+  if (!caughtAdapter) fail("self-test: the checker accepted an adapter that re-derives core's rotation window");
+  caught = caught && caughtAdapter;
   // And a live checker with no pin check must be reported — a doc that says
   // pins are verified while the script verifies none is the quiet drift.
   const realSeedVerifier = readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
@@ -1516,6 +1528,33 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   console.log(
     `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
   );
+  // The doc names the wired helper for the API's own store. Naming a helper is
+  // a claim about the tree, so the tree must carry it: the helper exists, it
+  // wires the STORE adapter, and the adapter itself answers only — any window
+  // arithmetic or revocation rule in it would be the third fork the guards
+  // exist to prevent.
+  if (/bundleFromSeedForStore/.test(doc)) {
+    const bundleSource = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+    if (!/export async function bundleFromSeedForStore\(/.test(bundleSource)) {
+      fail("MIRRORS.md names bundleFromSeedForStore, but no such helper exists");
+    }
+    if (!/announcementIdentityForStore\(store\)/.test(bundleSource)) {
+      fail("the wiring helper must hand the store adapter to the fold, not a rule of its own");
+    }
+    const adapterSource =
+      sources.identityAdapter ?? readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
+    if (!/store\.getIdentity\(handle\)/.test(adapterSource)) {
+      fail("the identity adapter must ask the store for the handle's identity");
+    }
+    // Comments are stripped first: this module's own prose NAMES the arithmetic
+    // it refuses to do, and a guard that reads prose would fail on the sentence
+    // forbidding the thing it checks for.
+    const adapterCode = adapterSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    if (/issuedAt|expiresAt/.test(adapterCode)) {
+      fail("core decides and the adapter answers: window arithmetic found in the adapter");
+    }
+  }
+
 }
 
 /**

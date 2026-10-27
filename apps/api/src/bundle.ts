@@ -23,6 +23,7 @@ import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
 import { nodeSha256 } from "./digest.ts";
 import { keyId, suiteFor, verifyPayload } from "./identity.ts";
 import type { RarextStore } from "./store.ts";
+import { announcementIdentityForStore } from "./announcement-identity.ts";
 
 export const BUNDLE_VERSION = 1;
 
@@ -179,6 +180,24 @@ export interface VerifiedBundleFromSeeds extends VerifiedBundleSource {
  * RFC 0019 step 1: a seed may carry `announcements`, folded in below exactly as
  * the SDK path folds them — same core function, same semantics.
  */
+/**
+ * Announcement-aware discovery, wired to this server's OWN identity store.
+ *
+ * The API has no route that calls bundle discovery today, so this helper is the
+ * one-line wiring for whichever caller arrives first — and the test that drives
+ * it is the proof the adapter works end to end, rather than an assurance that it
+ * would. `bundleFromSeed` itself keeps `unresolvedIdentity` as its default: a
+ * module-level reader has no store in hand, and refusing an unresolvable record
+ * is the honest default, not a gap to paper over.
+ */
+export async function bundleFromSeedForStore(
+  seed: SeedDocument,
+  store: RarextStore,
+  options: Omit<BundleDiscoveryOptions, "identity"> = {},
+): Promise<VerifiedBundleSource> {
+  return bundleFromSeed(seed, { ...options, identity: announcementIdentityForStore(store) });
+}
+
 export async function bundleFromSeed(
   seed: SeedDocument,
   options: BundleDiscoveryOptions = {},
