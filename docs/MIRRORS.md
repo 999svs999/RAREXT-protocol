@@ -138,6 +138,18 @@ the pinned root, the inline blobs, and the AI rendition:
 node --test apps/api/test/published-bundle.test.ts apps/web/test/published-mirror.test.ts
 ```
 
+## The SDK's mirror client
+
+An agent does not need the registry to find and check a copy. `@rarext/agent-sdk`
+exports `findVerifiedBundle(seed, { fetch, sha256, timeoutMs })`: it reads the
+seed's bundle URL and then each mirror as BYTES, checks the seed's `bundleCid`
+when one is pinned, verifies the bundle shape, and accepts the first copy whose
+recomputed root equals the seed's `bundleRoot`. Every refusal is named, so a
+seed whose candidates all fail raises an error listing each URL and why. The
+same `verifyBundleShape` and `cidV1` primitives live in `@rarext/core`; the API
+and the SDK pass their own sha256, so there is one implementation and no second
+copy in the client.
+
 ## The next step
 
 A mirror is a copy of one registry. Making the copy findable and keeping copies

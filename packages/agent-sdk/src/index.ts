@@ -12,7 +12,9 @@ import { dirname, join } from "node:path";
 
 import {
   canonicalize,
+  cidV1,
   verifyAiArtifact,
+  verifyBundleShape,
   type AiLocalVerification,
 } from "@rarext/core";
 import type {
@@ -25,6 +27,8 @@ import type {
   BuildLineage,
   BuildSearchQuery,
   BuildSummary,
+  Bundle,
+  BundleVerification,
   Challenge,
   Circuit,
   ClaimKind,
@@ -45,7 +49,9 @@ import type {
   Publication,
   PublicationPayload,
   PublicationSource,
+  SeedPin,
   Semantics,
+  Sha256,
   SignatureSuite,
   SimulationResult,
   SourceQuery,
@@ -62,14 +68,137 @@ export type {
   BuildSearchQuery,
   BuildSort,
   BuildSummary,
+  Bundle,
+  BundleVerification,
   Challenge,
   Claim,
   ClaimKind,
   ClaimScope,
   LeaderboardEntry,
+  SeedPin,
   Semantics,
   VerificationOutput,
 } from "@rarext/core";
+
+const nodeSha256: Sha256 = (bytes) =>
+  new Uint8Array(createHash("sha256").update(bytes).digest());
+
+export { cidV1, verifyBundleShape } from "@rarext/core";
+
+/** A bundle verified locally against the root a seed pins. */
+export function verifyBundle(bundle: Bundle): BundleVerification {
+  return verifyBundleShape(bundle, nodeSha256);
+}
+
+/** The CIDv1 of bytes, computed with node:crypto in the SDK's runtime. */
+export function cidV1Raw(bytes: Uint8Array): string {
+  return cidV1(nodeSha256, bytes);
+}
+
+/** The seed list a client discovers mirrors from (docs/MIRRORS.md). */
+export interface SeedDocument {
+  bundle: string;
+  bundleRoot: string;
+  /**
+   * The bundle's content address, when the publisher pins it: a CIDv1 over the
+   * raw sha2-256 of the EXACT published bytes. When present it is authoritative
+   * — a mirror that re-serializes the same bundle with different whitespace
+   * serves different bytes, and different bytes are a different artifact.
+   */
+  bundleCid?: string;
+  pins?: SeedPin[];
+  mirrors?: Array<{ bundle: string; root: string }>;
+}
+
+export interface VerifiedBundleSource {
+  bundle: Bundle;
+  root: string;
+  source: string;
+}
+
+export interface FindVerifiedBundleOptions {
+  fetch?: typeof fetch;
+  /** The sha256 digest the client trusts; defaults to node:crypto. */
+  sha256?: Sha256;
+  timeoutMs?: number;
+}
+
+/**
+ * Federation's first step in the SDK: try the seed's own bundle URL and then
+ * each mirror, read BYTES, verify the CID pin when the seed carries one, verify
+ * the bundle shape, and accept only the first copy whose recomputed root equals
+ * the seed's `bundleRoot`.
+ *
+ * Internal validity is not enough — a mirror can rewrite both its bundle and
+ * the root inside it — so the pin is what makes the copy trustworthy. Every
+ * candidate that fails is skipped with its reason recorded; if none verifies,
+ * the error names every candidate and why, so an outage reads as evidence
+ * rather than as an opaque failure.
+ */
+export async function findVerifiedBundle(
+  seed: SeedDocument,
+  options: FindVerifiedBundleOptions = {},
+): Promise<VerifiedBundleSource> {
+  const request = options.fetch ?? fetch;
+  const sha256 = options.sha256 ?? nodeSha256;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+
+  const candidates = Array.from(
+    new Set([seed.bundle, ...(seed.mirrors ?? []).map((mirror) => mirror.bundle)]),
+  ).filter((url) => typeof url === "string" && url.length > 0);
+
+  if (candidates.length === 0) {
+    throw new Error("the seed names no bundle or mirror to try");
+  }
+
+  const refusals: string[] = [];
+
+  for (const url of candidates) {
+    let value: unknown;
+    try {
+      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) {
+        refusals.push(`${url}: HTTP ${response.status}`);
+        continue;
+      }
+      // Read the bytes, not a parsed shape: when the seed pins a CID, the hash
+      // is taken over exactly what the mirror served. A re-serialized copy of
+      // the same bundle fails here, which is the point — the pointer is a hash,
+      // and a hash cannot be re-serialized into being.
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (seed.bundleCid) {
+        const served = cidV1(sha256, bytes);
+        if (served !== seed.bundleCid) {
+          refusals.push(
+            `${url}: serves ${served}, the seed pins ${seed.bundleCid}`,
+          );
+          continue;
+        }
+      }
+      value = JSON.parse(new TextDecoder().decode(bytes));
+    } catch (error) {
+      refusals.push(`${url}: ${error instanceof Error ? error.message : "fetch failed"}`);
+      continue;
+    }
+
+    const verification = verifyBundleShape(value as Bundle, sha256);
+    if (!verification.valid) {
+      refusals.push(`${url}: ${verification.reason ?? "the bundle does not verify"}`);
+      continue;
+    }
+
+    if (verification.computedRoot !== seed.bundleRoot) {
+      refusals.push(
+        `${url}: verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${seed.bundleRoot}`,
+      );
+      continue;
+    }
+
+    return { bundle: value as Bundle, root: verification.computedRoot, source: url };
+  }
+
+  throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);
+}
 
 export interface RarextClientOptions {
   baseUrl?: string;

@@ -820,6 +820,24 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
   }
 
+  // The SDK half of the same story: the doc says an agent can find and check a
+  // copy without the registry, using the core primitives the server uses.
+  if (!doc.includes("findVerifiedBundle")) {
+    fail("MIRRORS.md no longer documents the SDK's mirror client (findVerifiedBundle)");
+  }
+  const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+  for (const marker of ["findVerifiedBundle", "bundleCid", "bundleRoot"]) {
+    if (!sdkSource.includes(marker)) {
+      fail(`MIRRORS.md says the SDK finds and checks a copy, but the SDK source has no "${marker}"`);
+    }
+  }
+  const coreIndex = readFileSync(new URL("packages/core/src/index.ts", root), "utf8");
+  for (const marker of ["verifyBundleShape", "cidV1"]) {
+    if (!coreIndex.includes(marker)) {
+      fail(`MIRRORS.md says the SDK and API share core primitives, but core exports no "${marker}"`);
+    }
+  }
+
   // The doc's other half of the same bullet: the pinning call is implemented,
   // the publish records it in `seed.pins`, and the live checker resolves each
   // pin. Three sentences, three files — checked in BOTH directions, so a doc
