@@ -311,6 +311,25 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And an RFC that leans on a primitive which does not exist must be reported.
+  // The phantom name is built at runtime: a literal in this file would be
+  // found in the walked sources and the injection would pass vacuously.
+  // The injection must target what the kind READS. The primitive list is
+  // explicit and checked against the SOURCES, so editing the RFC's prose about
+  // primitives changes nothing the checker looks at — the first version of this
+  // injection did exactly that and proved nothing. What the kind reads is the
+  // RFC's own structure: its sections and its load-bearing sentence. Weakening
+  // the sentence is the injection.
+  const beforeRfc = failures;
+  const originalRfc = readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
+  const doctoredRfc = originalRfc.replace(
+    "**An announcement proposes LOCATIONS, never facts.**",
+    "An announcement proposes locations.",
+  );
+  checkAnnouncementRfc(doctoredRfc);
+  const caughtRfc = failures > beforeRfc;
+  if (!caughtRfc) fail("self-test: the checker accepted an RFC leaning on a primitive that does not exist");
+  caught = caught && caughtRfc;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -500,6 +519,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(realSdkIndex, doctoredSdkIndex, "verify-sequence");
   assertChanged(originalLanding, doctoredLanding, "front-door");
   assertChanged(originalConfigDoc, doctoredConfigDoc, "config-surface");
+  assertChanged(originalRfc, doctoredRfc, "announcement-rfc");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -534,6 +554,7 @@ checkArtifactSources();
 checkVerifySequence();
 checkFrontDoor();
 checkConfigSurface();
+checkAnnouncementRfc();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -739,6 +760,61 @@ function checkArtifactSources(filesOverride) {
  * code that writes it — so an operator renaming a knob, or a doc drifting from
  * it, fails the gate instead of failing an operator.
  */
+/**
+ * RFC 0019 (mirror announcements) — the deliverable is an argument, and its
+ * load-bearing claims are about code that already exists. This kind holds them:
+ * every primitive the RFC leans on must be in the trees, every document it
+ * references must exist, and the three sections its analysis rests on must
+ * still be there, so a later edit cannot quietly drop the security argument or
+ * rename a primitive into fiction.
+ */
+function checkAnnouncementRfc(rfcOverride) {
+  console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
+  const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
+  const { text: sources } = readSourceTrees({ includeScripts: true });
+
+  // The primitives the RFC states as existing, each verified to exist. This list
+  // is deliberately explicit: the RFC also proposes NEW names (the
+  // `announcements` field among them), and a checker cannot tell a proposal
+  // from a claim — the human decides which names are claims, and this list is
+  // that decision, recorded where the gate can hold it.
+  const EXISTING = [
+    "planSeedUnion", "verifyCandidates", "verifyBundleShape", "cidV1", "canonicalize",
+    "bundleFromSeed", "findVerifiedBundle", "suiteOf", "publicKeyId",
+    "createAgentKeyfile", "readAgentKeyfile", "verifyPayload", "isRevoked",
+    "verifyRevocation", "keyRotationPayload", "seedLabel", "readBundleResponseBytes",
+  ];
+  for (const name of EXISTING) {
+    if (!sources.includes(name)) {
+      fail(`RFC 0019 leans on ${name}, which does not exist in the source trees`);
+    }
+  }
+
+  for (const path of new Set(Array.from(rfc.matchAll(/`((?:rfcs|docs)\/[\w.-]+\.md)`/g)).map((m) => m[1]))) {
+    try {
+      readFileSync(new URL(path, root), "utf8");
+    } catch {
+      fail(`RFC 0019 references ${path}, which does not exist`);
+    }
+  }
+
+  for (const section of ["## Security considerations", "## Compatibility", "## Non-goals"]) {
+    if (!rfc.includes(section)) {
+      fail(`RFC 0019 no longer has its ${section.replace("## ", "")} section`);
+    }
+  }
+
+  // The analysis the RFC exists for, in its own words: an announcement moves
+  // locations, never truth. If that sentence goes, the argument has changed.
+  if (!/proposes LOCATIONS, never facts/.test(rfc)) {
+    fail("RFC 0019 no longer states that an announcement proposes locations, never facts");
+  }
+
+  console.log(
+    `  ${EXISTING.length} primitive(s) exist | sections present | "locations, never facts" stated`,
+  );
+}
+
 function checkConfigSurface(docOverride) {
   const docs = [
     ["docs/ARCHITECTURE.md", "architecture"],

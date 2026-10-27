@@ -26,6 +26,7 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/APP-PROTOCOL.md` | app protocol | every `RAREXT_*` name read by the implementation, and the published route list |
 | `docs/CRYPTO.md` | crypto doc | the runtime floor against `engines.node`, the leaf-version floor, and the suite derivation through `suiteOf` |
 | `scripts/` | artifact sources | the inline bundle (`bundle.js`) and proof page (`verify.html`) each live in one module; generators delegate to them and keep no private copies |
+| `rfcs/0019-mirror-announcements.md` | announcement rfc | the 17 primitives it leans on exist, its referenced paths resolve, and the sections and sentence its argument rests on are present |
 
 ## Deliberately prose
 

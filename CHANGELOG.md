@@ -11,6 +11,23 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RFC 0019 — mirror announcements, the last stated federation gap, argued in writing.** The
+  agent wrote the RFC and its MIRRORS.md link; the claim kind and the commit were cut mid-turn and
+  the supervisor finished them. The RFC proposes announcements as **signed locations**: an
+  operator signs a statement binding a registry's bundle URL, a mirror URL, the pinned root and
+  CID, an issue time and an expiry, using identity primitives that already exist. Its security
+  section states the shape the design turns on — **an announcement proposes LOCATIONS, never
+  facts**: it cannot change a pinned root or CID (clients still run the existing candidate
+  verification and refuse bytes that do not hash), a forged record fails signature verification,
+  an expired one is discarded before it reaches the union, and two operators disagreeing is still
+  the loud stop `planSeedUnion` already provides. It is additive by construction (an optional
+  `announcements[]`, absent meaning today's exact behaviour) with explicit non-goals (no DHT, no
+  new transport, no consensus, no change to what "verified" means). All seventeen primitives it
+  leans on were verified to exist in the tree. The new kind holds it: primitives present, paths
+  resolve, and the three sections plus the load-bearing sentence must survive edits. Its own
+  injection caught a mistake in the test rather than the code — the first version doctored the
+  RFC's prose about primitives, which the kind never reads (the explicit list is checked against
+  the SOURCES), so it proved nothing; the injection now weakens the sentence the kind does read.
 - **Two body readers, one hardened — the pin service could be wedged.** The MCP hardening round
   taught `holder-server.ts`'s `readJson` an inactivity bound and a declared-versus-delivered
   refusal; `pin-server.ts`'s `readBody` kept a size cap alone. A client that declared a

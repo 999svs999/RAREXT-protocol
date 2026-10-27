@@ -228,8 +228,11 @@ consistent is the federation problem, and it has two parts:
   returned with the winning copy's contributing seeds and the union's size. A
   seed that carries no `bundleCid` beside one that does is not a disagreement
   (absence is not a contradiction), and the stricter pin governs the shared
-  candidates. What is still missing is a live federation protocol: mirrors do
-  not gossip, and the seed is still a file someone publishes;
+   candidates. What is still missing is a live federation protocol: mirrors do
+   not gossip, and the seed is still a file someone publishes — the design for
+   signed mirror announcements now exists as
+   `rfcs/0019-mirror-announcements.md`, and the implementation is still missing,
+   so nothing here announces, verifies, or gossips anything today;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — implemented for the copy the seed names: the seed pins the
   bundle's content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the
