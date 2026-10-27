@@ -39,6 +39,19 @@ counting streamed bytes when it is not, so a hostile mirror is refused at the ca
 and skipped like any other bad candidate instead of handing every verifier a
 giant allocation.
 
+The whole candidate sequence — fetch the bytes, check the seed's CID pin over
+exactly those bytes, verify the bundle's shape, require the recomputed root to
+equal the pinned root, record each refusal, accept the first copy that passes —
+is ONE function, core's `verifyCandidates`, with the fetch and the digest
+injected. `bundleFromSeed`, `findVerifiedBundle`, and `verify-seed-mirrors.mjs`
+delegate to it (the checker runs it one location at a time, because its
+contract is to report every location, not only the first that passes), so a fix
+to the order or the wording lands in every client at once. This page's
+failover loop is the one deliberate exception: core consumes the caller's
+sha256 synchronously, the only digest a browser holds is WebCrypto's
+asynchronous digest, and a second, async twin of the sequence would re-fork
+the drift this shared function exists to close.
+
 ## The mirror
 
 ```bash

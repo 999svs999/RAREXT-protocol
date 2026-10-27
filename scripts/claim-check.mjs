@@ -348,6 +348,22 @@ if (process.argv.includes("--self-test")) {
   const caughtSources = failures > beforeSources;
   if (!caughtSources) fail("self-test: the checker accepted a generator keeping its own inline copy");
   caught = caught && caughtSources;
+  // And a caller that re-grows the verification sequence must be reported —
+  // the fixture both strips a caller's delegation and injects a private
+  // refusal loop, the two shapes a re-fork takes.
+  const beforeSequence = failures;
+  const doctoredApiBundle =
+    readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8") +
+    "\n// stray fork\nconst strayRefusals = [];\nconst strayRefuse = (url, reason) => {\n  strayRefusals.push(`${url}: ${reason}`);\n};\n";
+  const realSdkIndex = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+  const doctoredSdkIndex = realSdkIndex.replaceAll("verifyCandidates(", "verifyCandidatesUnused(");
+  checkVerifySequence({
+    "apps/api/src/bundle.ts": doctoredApiBundle,
+    "packages/agent-sdk/src/index.ts": doctoredSdkIndex,
+  });
+  const caughtSequence = failures > beforeSequence;
+  if (!caughtSequence) fail("self-test: the checker accepted a re-forked verification sequence");
+  caught = caught && caughtSequence;
   // And a coverage map that lists a doc this checker never reads must be
   // reported — the map is only useful if it cannot drift from the checker.
   const beforeCoverage = failures;
@@ -481,6 +497,7 @@ if (process.argv.includes("--self-test")) {
     doctoredScripts.map((f) => f.text).join("\n"),
     "artifact-sources",
   );
+  assertChanged(realSdkIndex, doctoredSdkIndex, "verify-sequence");
   assertChanged(originalLanding, doctoredLanding, "front-door");
   assertChanged(originalConfigDoc, doctoredConfigDoc, "config-surface");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
@@ -514,6 +531,7 @@ checkAppProtocol();
 checkCryptoDoc();
 checkClaimsCoverage();
 checkArtifactSources();
+checkVerifySequence();
 checkFrontDoor();
 checkConfigSurface();
 checkMdsFloor();
@@ -554,6 +572,92 @@ checkRewardTable();
  * anchored root. The doc states the contract; this check holds both sides to
  * it.
  */
+/**
+ * The verification sequence has ONE implementation.
+ *
+ * "Fetch the bytes, check the seed's CID pin, verify the bundle's shape,
+ * require the recomputed root to equal the pinned root, record each refusal,
+ * accept the first copy that passes" used to run four times — the API's
+ * `bundleFromSeed`, the SDK's `findVerifiedBundle`, the live seed checker, and
+ * the proof page — and the twins are exactly what failed before: a body-reader
+ * hardening reached one of two readers, a failover fix reached one of two page
+ * generators. The sequence now lives in core's `verifyCandidates` with the
+ * fetch and the digest injected, and the callers delegate. A fix to the order,
+ * the wording, or the refusal record therefore lands in every client at once
+ * — and a caller that quietly re-grows its own loop, or repeats the sequence's
+ * wording, fails here.
+ *
+ * The proof page's `loadBundle` is the ONE deliberate exception, and the
+ * exception must stay documented: core consumes the caller's sha256
+ * synchronously, the only digest a browser holds is WebCrypto's asynchronous
+ * digest, and an async twin of the sequence would re-fork what this closes.
+ */
+function checkVerifySequence(sources) {
+  console.log(`verify sequence (one implementation${sources ? ", DOCTORED" : ""}):`);
+  const read = (relative) =>
+    sources?.[relative] ?? readFileSync(new URL(relative, root), "utf8");
+  const core = read("packages/core/src/bundle.ts");
+  const coreIndex = read("packages/core/src/index.ts");
+  const callers = [
+    ["apps/api/src/bundle.ts", "the API's bundleFromSeed"],
+    ["packages/agent-sdk/src/index.ts", "the SDK's findVerifiedBundle"],
+    ["scripts/verify-seed-mirrors.mjs", "the live seed checker"],
+  ];
+  const page = read("scripts/mirror-verify-page.mjs");
+
+  // The sequence itself, with its identifying behaviour, lives in core.
+  for (const marker of [
+    "export async function verifyCandidates",
+    "serves ${served}, the seed pins ${",
+    "verifies internally but rebuilds",
+    "no candidate rebuilt the pinned root:",
+    "refusals.push",
+  ]) {
+    if (!core.includes(marker)) fail(`the shared sequence lost "${marker}" from core's bundle.ts`);
+  }
+  if (!coreIndex.includes("verifyCandidates")) {
+    fail("core exports no verifyCandidates, so the callers could not be delegating to it");
+  }
+
+  // Each caller delegates: it names the shared function, and it does NOT
+  // re-grow the behaviour. The refusal assembly and the wording moved to core
+  // with the sequence; seeing them in a caller means a fork is sprouting.
+  for (const [relative, who] of callers) {
+    const text = read(relative);
+    if (!text.includes("verifyCandidates(")) {
+      fail(`${who} does not call core's verifyCandidates — the sequence is forking again`);
+    }
+    for (const marker of [
+      "serves ${served}, the seed pins ${",
+      "verifies internally but rebuilds",
+      "no candidate rebuilt the pinned root:",
+      "refusals.push",
+    ]) {
+      if (text.includes(marker)) {
+        fail(`${who} re-implements the verification sequence ("${marker}" must live only in core)`);
+      }
+    }
+  }
+
+  // The documented exception: the browser page keeps its loop, and the reason
+  // (the asynchronous WebCrypto digest) stays written beside it.
+  if (!page.includes("loadBundle")) fail("the proof page lost its failover loop (loadBundle)");
+  if (!page.includes("ONE deliberate exception")) {
+    fail("the proof page keeps a loop outside the shared sequence but no longer documents why");
+  }
+  if (!page.includes("asynchronous")) {
+    fail("the proof page's exception lost its stated constraint (the asynchronous WebCrypto digest)");
+  }
+  if (page.includes("serves ${served}, the seed pins ${")) {
+    fail("the proof page re-implements the shared sequence's CID-pin wording");
+  }
+
+  console.log(
+    `  core's verifyCandidates owns the order and the refusals | ${callers.length} caller(s) delegate | ` +
+      `the browser page's loop stays with its documented constraint`,
+  );
+}
+
 function checkFrontDoor(docOverride, indexOverride) {
   console.log(`front door (site/index.html${indexOverride ? ", DOCTORED" : ""} vs docs/MIRRORS.md):`);
   const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
@@ -970,7 +1074,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs writes no bundleCid");
   }
   const bundleModule = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
-  for (const marker of ["bundleCid", "cidV1Raw", "readBundleResponseBytes"]) {
+  for (const marker of ["bundleCid", "verifyCandidates", "readBundleResponseBytes"]) {
     if (!bundleModule.includes(marker)) {
       fail(`MIRRORS.md says clients verify the CID, but bundle.ts has no "${marker}"`);
     }
@@ -992,6 +1096,12 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   }
   if (!seedVerifier.includes("readBundleResponseBytes")) {
     fail("MIRRORS.md says clients cap a bundle response, but verify-seed-mirrors reads without the cap");
+  }
+  if (!seedVerifier.includes("verifyCandidates(")) {
+    fail("MIRRORS.md says the live checker runs the shared sequence, but it does not call core's verifyCandidates");
+  }
+  if (!doc.includes("verifyCandidates")) {
+    fail("MIRRORS.md no longer names the shared verification sequence (verifyCandidates)");
   }
 
   // The SDK half of the same story: the doc says an agent can find and check a

@@ -11,7 +11,10 @@ import {
   type Bundle,
   type SeedDocument,
 } from "../src/bundle.ts";
+import { findVerifiedBundleFromSeeds } from "../../../packages/agent-sdk/src/index.ts";
+import { publicationLeaf } from "../../../packages/core/src/index.ts";
 import { cidV1Raw } from "../src/adapters/content.ts";
+import { createHash } from "node:crypto";
 import { MAX_BUNDLE_RESPONSE_BYTES } from "../../../packages/core/src/index.ts";
 
 /**
@@ -403,6 +406,124 @@ test("a candidate that answers oversized is refused at the cap, and the next can
         return true;
       },
     );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+test("one sequence, not two: the API twin and the SDK twin behave byte-identically", async () => {
+  // Three candidates: the first tampered (shape refusal), the second
+  // internally valid and CID-valid under its nominator's pin but a DIFFERENT
+  // registry (root refusal), the third the honest copy (accepted). All three
+  // failing must name every candidate in order; the honest list must accept
+  // the third — identically in BOTH callers, because after `verifyCandidates`
+  // moved to core there is only one sequence left to diverge.
+  const nodeSha256 = (bytes: Uint8Array) =>
+    new Uint8Array(createHash("sha256").update(bytes).digest());
+  const committedBytes = new TextEncoder().encode(JSON.stringify(committed));
+  const committedCid = cidV1Raw(committedBytes);
+
+  const tampered: Bundle = structuredClone(committed);
+  tampered.publications = tampered.publications.map((publication, index) =>
+    index === 0 ? { ...publication, title: "an altered title" } : publication,
+  );
+  const tamperedBytes = new TextEncoder().encode(JSON.stringify(tampered));
+
+  const otherBundle: Bundle = structuredClone(committed);
+  otherBundle.publications = otherBundle.publications.map((publication, index) =>
+    index === 0 ? { ...publication, title: "another registry's record" } : publication,
+  );
+  otherBundle.manifest.publications = otherBundle.publications.map((publication) => ({
+    id: publication.id,
+    leaf: publicationLeaf(publication, nodeSha256, otherBundle.manifest.leafVersion),
+  }));
+  const otherRoot = verifyBundle(otherBundle).computedRoot!;
+  otherBundle.manifest.root = otherRoot;
+  assert.equal(verifyBundle(otherBundle).valid, true, "the fixture verifies internally");
+  const otherBytes = new TextEncoder().encode(JSON.stringify(otherBundle));
+  const otherCid = cidV1Raw(otherBytes);
+
+  const server = serve({
+    "/tampered/bundle.json": { body: Buffer.from(tamperedBytes).toString("utf8") },
+    "/another/bundle.json": { body: Buffer.from(otherBytes).toString("utf8") },
+    "/honest/bundle.json": { body: Buffer.from(committedBytes).toString("utf8") },
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+    const pinnedRoot = committed.manifest.root;
+
+    // All three failing: the aggregate names tampered (shape), another (root,
+    // its pin passing because the nominator pins ITS bytes), and an absent
+    // third URL — in candidate order — with the nominating seed named.
+    const failing: SeedDocument[] = [
+      { bundle: `${base}/tampered/bundle.json`, bundleRoot: pinnedRoot },
+      { bundle: `${base}/another/bundle.json`, bundleRoot: pinnedRoot, bundleCid: otherCid },
+      { bundle: `${base}/absent/bundle.json`, bundleRoot: pinnedRoot, bundleCid: committedCid },
+    ];
+
+    let apiError!: Error;
+    try {
+      await bundleFromSeeds(
+        failing.map((seed) => ({ ...seed, url: "https://operator.example/seed.json" })),
+      );
+      assert.fail("every candidate failing must reject");
+    } catch (error) {
+      if (!(error instanceof Error) || /must reject/.test(error.message)) throw error;
+      apiError = error;
+    }
+    assert.match(apiError.message, /no candidate rebuilt the pinned root/);
+    assert.ok(
+      apiError.message.indexOf("tampered/bundle.json") <
+        apiError.message.indexOf("another/bundle.json") &&
+        apiError.message.indexOf("another/bundle.json") <
+          apiError.message.indexOf("absent/bundle.json"),
+      `the refusals are recorded in candidate order: ${apiError.message}`,
+    );
+    assert.match(
+      apiError.message,
+      /tampered\/bundle\.json: the publications in this bundle do not rebuild the anchored root/,
+    );
+    assert.match(apiError.message, /another\/bundle\.json: verifies internally but rebuilds/);
+    assert.match(apiError.message, /absent\/bundle\.json: HTTP 404/);
+    assert.match(
+      apiError.message,
+      /nominated by https:\/\/operator\.example\/seed\.json/,
+    );
+
+    let sdkError!: Error;
+    try {
+      await findVerifiedBundleFromSeeds(
+        failing.map((seed) => ({ ...seed, url: "https://operator.example/seed.json" })),
+      );
+      assert.fail("every candidate failing must reject");
+    } catch (error) {
+      if (!(error instanceof Error) || /must reject/.test(error.message)) throw error;
+      sdkError = error;
+    }
+    assert.equal(
+      sdkError.message,
+      apiError.message,
+      "the two callers run the one sequence: their aggregate refusals agree byte for byte",
+    );
+
+    // The tampered, pin-valid-but-root-wrong, honest list from the task: the
+    // accepted source must be the third in both callers.
+    const honest: SeedDocument[] = [
+      { bundle: `${base}/tampered/bundle.json`, bundleRoot: pinnedRoot },
+      { bundle: `${base}/another/bundle.json`, bundleRoot: pinnedRoot, bundleCid: otherCid },
+      { bundle: `${base}/honest/bundle.json`, bundleRoot: pinnedRoot, bundleCid: committedCid },
+    ];
+    const apiFound = await bundleFromSeeds(honest.map((seed) => ({ ...seed })));
+    assert.equal(apiFound.source, `${base}/honest/bundle.json`, "the third candidate verifies");
+    assert.equal(apiFound.root, pinnedRoot);
+    assert.equal(apiFound.candidates, 3);
+
+    const sdkFound = await findVerifiedBundleFromSeeds(honest.map((seed) => ({ ...seed })));
+    assert.equal(sdkFound.source, `${base}/honest/bundle.json`);
+    assert.equal(sdkFound.root, pinnedRoot);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

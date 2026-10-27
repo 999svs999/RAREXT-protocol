@@ -16,13 +16,22 @@
 // failing pin, one line per pin, and is not fatal while a location verifies.
 
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
-import { MAX_BUNDLE_RESPONSE_BYTES, readBundleResponseBytes } from "../packages/core/src/index.ts";
-import { verifyBundle } from "../apps/api/src/bundle.ts";
+import {
+  MAX_BUNDLE_RESPONSE_BYTES,
+  planSeedUnion,
+  readBundleResponseBytes,
+  verifyCandidates,
+} from "../packages/core/src/index.ts";
 import { cidV1Raw } from "../apps/api/src/adapters/content.ts";
 
 const SEED_URL = "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
 const TIMEOUT_MS = Number(process.env.SEED_TIMEOUT_MS ?? 20_000);
+
+/** The digest this process trusts, the same node:crypto one every API path uses. */
+const nodeSha256 = (bytes) =>
+  new Uint8Array(createHash("sha256").update(bytes).digest());
 
 const getJson = async (url) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -154,42 +163,55 @@ async function main() {
   console.log(`seed ${seedUrl}`);
   console.log(`  pinned root ${pinned.slice(0, 16)}… · ${candidates.length} distinct location(s)`);
 
+  // The per-location sequence — fetch the bytes through the shared cap, the
+  // seed's CID pin over those bytes, the bundle's shape, the recomputed root
+  // against the pinned root — is core's `verifyCandidates`, the one sequence
+  // the API and the SDK run. This script runs it ONE LOCATION AT A TIME
+  // because its contract is broader than a client's failover: a live checker
+  // reports every location, not only the first copy that passes.
+  const labels = new Map();
+  if (typeof seed.bundle === "string" && seed.bundle.length > 0) {
+    labels.set(seed.bundle, "seed.bundle");
+  }
+  for (const [index, mirror] of (seed.mirrors ?? []).entries()) {
+    if (typeof mirror?.bundle === "string" && mirror.bundle.length > 0) {
+      labels.set(mirror.bundle, `mirrors[${index}]${mirror?.id ? ` (${mirror.id})` : ""}`);
+    }
+  }
+
   let verified = 0;
   const failures = [];
-  for (const candidate of candidates) {
-    try {
-      const bytes = await getBytes(candidate.bundle);
-      if (typeof seed.bundleCid === "string" && seed.bundleCid.length > 0) {
-        const served = cidV1Raw(bytes);
-        if (served !== seed.bundleCid) {
-          console.log(
-            `  ✖ ${candidate.label}: ${candidate.bundle} — serves ${served}, the seed pins ${seed.bundleCid}`,
-          );
-          failures.push(`${candidate.label}: content address does not match the seed's pin`);
-          continue;
-        }
-      }
-      const bundle = JSON.parse(new TextDecoder().decode(bytes));
-      const verification = verifyBundle(bundle);
-      if (!verification.valid) {
-        console.log(`  ✖ ${candidate.label}: ${candidate.bundle} — ${verification.reason}`);
-        failures.push(`${candidate.label}: ${verification.reason}`);
-        continue;
-      }
-      if (verification.computedRoot !== pinned) {
-        console.log(
-          `  ✖ ${candidate.label}: ${candidate.bundle} — rebuilds ${verification.computedRoot?.slice(0, 16)}…, not the pinned root`,
-        );
-        failures.push(`${candidate.label}: rebuilds a different root`);
-        continue;
-      }
+  const plan = planSeedUnion([seed]);
+  for (const nomination of plan.nominations) {
+    const label = labels.get(nomination.url) ?? nomination.url;
+    const outcome = await verifyCandidates({
+      plan: { nominations: [nomination] },
+      fetchBytes: getBytes,
+      sha256: nodeSha256,
+    });
+    if (outcome.status === "verified") {
       verified += 1;
       console.log(
-        `  ✔ ${candidate.label}: ${candidate.bundle} — ${verification.publications} publications rebuild the pinned root`,
+        `  ✔ ${label}: ${nomination.url} — ${outcome.publications} publications rebuild the pinned root`,
       );
-    } catch (error) {
-      console.log(`  · ${candidate.label}: ${candidate.bundle} — unreachable (${error.message})`);
-      failures.push(`${candidate.label}: unreachable`);
+      continue;
+    }
+    for (const refusal of outcome.refusals) {
+      if (refusal.stage === "fetch" || refusal.stage === "parse") {
+        console.log(`  · ${label}: ${refusal.url} — unreachable (${refusal.reason})`);
+        failures.push(`${label}: unreachable`);
+      } else if (refusal.stage === "pin") {
+        console.log(`  ✖ ${label}: ${refusal.url} — ${refusal.reason}`);
+        failures.push(`${label}: content address does not match the seed's pin`);
+      } else if (refusal.stage === "root") {
+        console.log(
+          `  ✖ ${label}: ${refusal.url} — rebuilds ${refusal.detail?.computedRoot?.slice(0, 16)}…, not the pinned root`,
+        );
+        failures.push(`${label}: rebuilds a different root`);
+      } else {
+        console.log(`  ✖ ${label}: ${refusal.url} — ${refusal.reason}`);
+        failures.push(`${label}: ${refusal.reason}`);
+      }
     }
   }
 

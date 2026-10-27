@@ -1,4 +1,5 @@
 import { canonicalize } from "./canonical.ts";
+import { cidV1 } from "./content.ts";
 import type { Sha256 } from "./digest.ts";
 import { publicationLeaf } from "./leaf.ts";
 import { merkleRoot } from "./merkle.ts";
@@ -298,4 +299,182 @@ export function pinGroups(nominators: BundleSeed[]): Array<{
     byRoot.set(seed.bundleRoot, group);
   }
   return [...byRoot.values()];
+}
+
+/** Where in the verification sequence a candidate copy was refused. */
+export type CandidateStage = "fetch" | "pin" | "parse" | "shape" | "root";
+
+/** One candidate URL refused during the verification sequence. */
+export interface CandidateRefusal {
+  url: string;
+  reason: string;
+  stage: CandidateStage;
+  /** The seeds that nominated the copy, for attribution in a pooled union. */
+  nominators: BundleSeed[];
+  /** For a root refusal: what the copy rebuilt and what was pinned to it. */
+  detail?: { computedRoot?: string; pinnedRoot?: string };
+}
+
+/** Per-attempt outcome a caller can observe: the shape the demo prints as it lands. */
+export type CandidateOutcome =
+  | { url: string; status: "trying" }
+  | { url: string; status: "refused"; reason: string }
+  | { url: string; status: "verified"; root: string };
+
+/** A candidate copy that passed the whole sequence. */
+export interface VerifiedCandidate {
+  status: "verified";
+  bundle: Bundle;
+  root: string;
+  source: string;
+  publications: number;
+  /** How many distinct candidate URLs the plan held. */
+  candidates: number;
+  /** The labels of the seeds that nominated the winning copy. */
+  seeds: string[];
+  /** Every refusal recorded before the copy was accepted. */
+  refusals: CandidateRefusal[];
+}
+
+/** Every candidate failed; `message` is the aggregate the callers throw. */
+export interface RefusedCandidates {
+  status: "refused";
+  refusals: CandidateRefusal[];
+  /** `no candidate rebuilt the pinned root:` followed by one line per refusal. */
+  message: string;
+  candidates: number;
+}
+
+export type VerifyCandidatesResult = VerifiedCandidate | RefusedCandidates;
+
+/**
+ * The ONE candidate-verification sequence every client runs: fetch the bytes,
+ * check the seed's CID pin over exactly those bytes, verify the bundle's shape,
+ * require the recomputed root to equal the pinned root, record every refusal,
+ * and accept the first copy that passes. The order is the invariant: a body
+ * reader hardening, a failover fix, and a pin check each landed in one of two
+ * twin loops before this existed, and nothing failed, because each twin was
+ * still correct by its own generator's lights.
+ *
+ * I/O is injected: `fetchBytes` does the caller's fetch (node fetch in the API,
+ * the SDK and the live checker; a rejection is a refusal for that candidate,
+ * never a crash) and `sha256` is the digest the caller trusts — core takes the
+ * digest as a parameter and never hashes on its own. The pins come from the
+ * nominating seeds of each candidate already in `plan` (the exact
+ * disagreement-aware pins `pinGroups` derives), so "absence is not a
+ * contradiction" holds here as it does in planning.
+ */
+export async function verifyCandidates(
+  input: {
+    plan: SeedUnionPlan;
+    fetchBytes: (url: string) => Promise<Uint8Array>;
+    sha256: Sha256;
+    /** Attribute refusals to the seeds that nominated each copy (pooled unions). */
+    attribute?: boolean;
+    onCandidate?: (event: CandidateOutcome) => void;
+  },
+): Promise<VerifyCandidatesResult> {
+  const { plan, fetchBytes, sha256, onCandidate } = input;
+  const refusals: CandidateRefusal[] = [];
+  const refuse = (refusal: CandidateRefusal) => {
+    refusals.push(refusal);
+    onCandidate?.({ url: refusal.url, status: "refused", reason: refusal.reason });
+  };
+
+  for (const { url, seeds: nominators } of plan.nominations) {
+    onCandidate?.({ url, status: "trying" });
+    // Read the bytes, not a parsed shape: when a nominating seed pins a CID,
+    // the hash is taken over exactly what the mirror served. A re-serialized
+    // copy of the same bundle fails here, which is the point — the pointer is
+    // a hash, and a hash cannot be re-serialized into being.
+    let bytes: Uint8Array;
+    try {
+      bytes = await fetchBytes(url);
+    } catch (error) {
+      refuse({
+        url,
+        reason: error instanceof Error ? error.message : "fetch failed",
+        stage: "fetch",
+        nominators,
+      });
+      continue;
+    }
+
+    for (const pin of pinGroups(nominators)) {
+      if (pin.bundleCid) {
+        const served = cidV1(sha256, bytes);
+        if (served !== pin.bundleCid) {
+          refuse({
+            url,
+            reason: `serves ${served}, the seed pins ${pin.bundleCid}`,
+            stage: "pin",
+            nominators,
+          });
+          continue;
+        }
+      }
+      let value: unknown;
+      try {
+        value = JSON.parse(new TextDecoder().decode(bytes));
+      } catch (error) {
+        refuse({
+          url,
+          reason: error instanceof Error ? error.message : "the bundle is not JSON",
+          stage: "parse",
+          nominators,
+        });
+        continue;
+      }
+
+      const verification = verifyBundleShape(value as Bundle, sha256);
+      if (!verification.valid) {
+        refuse({
+          url,
+          reason: verification.reason ?? "the bundle does not verify",
+          stage: "shape",
+          nominators,
+        });
+        continue;
+      }
+
+      if (verification.computedRoot !== pin.bundleRoot) {
+        refuse({
+          url,
+          reason: `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${pin.bundleRoot}`,
+          stage: "root",
+          nominators,
+          detail: {
+            computedRoot: verification.computedRoot ?? "",
+            pinnedRoot: pin.bundleRoot,
+          },
+        });
+        continue;
+      }
+
+      onCandidate?.({ url, status: "verified", root: verification.computedRoot! });
+      return {
+        status: "verified",
+        bundle: value as Bundle,
+        root: verification.computedRoot!,
+        source: url,
+        publications: verification.publications,
+        candidates: plan.nominations.length,
+        seeds: nominators.map(seedLabel),
+        refusals,
+      };
+    }
+  }
+
+  const message =
+    `no candidate rebuilt the pinned root:\n  ` +
+    refusals
+      .map(
+        (refusal) =>
+          `${refusal.url}: ${refusal.reason}` +
+          (input.attribute
+            ? `, nominated by ${refusal.nominators.map(seedLabel).join(", ")}`
+            : ""),
+      )
+      .join("\n  ");
+  return { status: "refused", refusals, message, candidates: plan.nominations.length };
 }

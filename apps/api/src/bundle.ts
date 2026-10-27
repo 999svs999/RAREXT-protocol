@@ -1,9 +1,8 @@
 import {
-  pinGroups,
   planSeedUnion,
   readBundleResponseBytes,
-  seedLabel,
   verifyBundleShape,
+  verifyCandidates,
   type BundleSeed,
 } from "../../../packages/core/src/index.ts";
 import type {
@@ -16,7 +15,6 @@ import type {
 } from "../../../packages/core/src/index.ts";
 
 import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
-import { cidV1Raw } from "./adapters/content.ts";
 import { nodeSha256 } from "./digest.ts";
 import type { RarextStore } from "./store.ts";
 
@@ -163,78 +161,23 @@ export async function bundleFromSeeds(
   const timeoutMs = options.timeoutMs ?? 15_000;
 
   const plan = planSeedUnion(seeds);
-  const attribute = seeds.length > 1;
 
-  const refusals: string[] = [];
-  const refuse = (url: string, reason: string, nominators: BundleSeed[]) => {
-    refusals.push(
-      `${url}: ${reason}` +
-        (attribute
-          ? `, nominated by ${nominators.map(seedLabel).join(", ")}`
-          : ""),
-    );
-  };
-
-  for (const { url, seeds: nominators } of plan.nominations) {
-    // Read the bytes, not a parsed shape: when a nominating seed pins a CID,
-    // the hash is taken over exactly what the mirror served. A re-serialized
-    // copy of the same bundle fails here, which is the point — the pointer is
-    // a hash, and a hash cannot be re-serialized into being. The read is
-    // capped: a mirror that declares a huge Content-Length, or streams
-    // forever, is refused at the cap and skipped like any other bad copy.
-    let bytes: Uint8Array;
-    try {
+  // The per-candidate sequence — fetch the bytes (capped, exactly as the seed
+  // docs publish), the CID pin over the bytes, the shape, the recomputed root
+  // against the pin, every refusal recorded — is core's `verifyCandidates`.
+  // This file injects node fetch and node:crypto; the sequence itself lives in
+  // one place, so a fix lands in every client at once.
+  const outcome = await verifyCandidates({
+    plan,
+    attribute: seeds.length > 1,
+    sha256: nodeSha256,
+    fetchBytes: async (url) => {
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) {
-        refuse(url, `HTTP ${response.status}`, nominators);
-        continue;
-      }
-      bytes = await readBundleResponseBytes(response);
-    } catch (error) {
-      refuse(url, error instanceof Error ? error.message : "fetch failed", nominators);
-      continue;
-    }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return readBundleResponseBytes(response);
+    },
+  });
 
-    for (const pin of pinGroups(nominators)) {
-      if (pin.bundleCid) {
-        const served = cidV1Raw(bytes);
-        if (served !== pin.bundleCid) {
-          refuse(url, `serves ${served}, the seed pins ${pin.bundleCid}`, nominators);
-          continue;
-        }
-      }
-      let value: unknown;
-      try {
-        value = JSON.parse(new TextDecoder().decode(bytes));
-      } catch (error) {
-        refuse(url, error instanceof Error ? error.message : "the bundle is not JSON", nominators);
-        continue;
-      }
-
-      const verification = verifyBundle(value as Bundle);
-      if (!verification.valid) {
-        refuse(url, verification.reason ?? "the bundle does not verify", nominators);
-        continue;
-      }
-
-      if (verification.computedRoot !== pin.bundleRoot) {
-        refuse(
-          url,
-          `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${pin.bundleRoot}`,
-          nominators,
-        );
-        continue;
-      }
-
-      return {
-        bundle: value as Bundle,
-        root: verification.computedRoot,
-        source: url,
-        candidates: plan.nominations.length,
-        seeds: nominators.map(seedLabel),
-      };
-    }
-  }
-
-  throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);
+  if (outcome.status !== "verified") throw new Error(outcome.message);
+  return outcome;
 }

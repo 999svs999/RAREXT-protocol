@@ -13,15 +13,15 @@ import { dirname, join } from "node:path";
 import {
   canonicalize,
   cidV1,
-  pinGroups,
   planSeedUnion,
   readBundleResponseBytes,
-  seedLabel,
   verifyAiArtifact,
   verifyBundleShape,
+  verifyCandidates,
   verifyGenerativeReplay,
   type AiLocalVerification,
   type BundleSeed,
+  type CandidateOutcome,
   type GenerativeBody,
   type GenerativeSpec,
 } from "@rarext/core";
@@ -91,7 +91,7 @@ export type {
 const nodeSha256: Sha256 = (bytes) =>
   new Uint8Array(createHash("sha256").update(bytes).digest());
 
-export { cidV1, verifyBundleShape } from "@rarext/core";
+export { cidV1, verifyBundleShape, verifyCandidates } from "@rarext/core";
 
 /** A bundle verified locally against the root a seed pins. */
 export function verifyBundle(bundle: Bundle): BundleVerification {
@@ -126,12 +126,9 @@ export interface VerifiedBundleFromSeeds extends VerifiedBundleSource {
 
 /**
  * One step in the search for a verified copy. The demo prints these as they
- * happen; the verification itself stays in `findVerifiedBundle`.
+ * happen; the verification itself stays in core's `verifyCandidates`.
  */
-export type FindVerifiedBundleEvent =
-  | { url: string; status: "trying" }
-  | { url: string; status: "refused"; reason: string }
-  | { url: string; status: "verified"; root: string };
+export type FindVerifiedBundleEvent = CandidateOutcome;
 
 export interface FindVerifiedBundleOptions {
   fetch?: typeof fetch;
@@ -192,83 +189,26 @@ export async function findVerifiedBundleFromSeeds(
   const timeoutMs = options.timeoutMs ?? 15_000;
 
   const plan = planSeedUnion(seeds);
-  const attribute = seeds.length > 1;
 
-  const refusals: string[] = [];
-  const refuse = (url: string, reason: string, nominators: BundleSeed[]) => {
-    refusals.push(
-      `${url}: ${reason}` +
-        (attribute
-          ? `, nominated by ${nominators.map(seedLabel).join(", ")}`
-          : ""),
-    );
-    options.onCandidate?.({ url, status: "refused", reason });
-  };
-
-  for (const { url, seeds: nominators } of plan.nominations) {
-    options.onCandidate?.({ url, status: "trying" });
-    // Read the bytes once. When any nominating seed pins a CID, the hash is
-    // taken over exactly what the mirror served — a re-serialized copy of the
-    // same bundle fails here, which is the point: the pointer is a hash, and a
-    // hash cannot be re-serialized into being. The read is capped: a mirror
-    // that declares a huge Content-Length, or streams forever, is refused at
-    // the cap and skipped like any other bad copy.
-    let bytes: Uint8Array;
-    try {
+  // The per-candidate sequence — fetch the bytes (through the shared cap),
+  // the CID pin over exactly those bytes, the bundle's shape, the recomputed
+  // root against the pin, every refusal recorded — is core's
+  // `verifyCandidates`. The SDK's own digest travels with it, so an agent can
+  // bring another sha256 and the sequence stays the same one everywhere.
+  const outcome = await verifyCandidates({
+    plan,
+    attribute: seeds.length > 1,
+    sha256,
+    onCandidate: options.onCandidate,
+    fetchBytes: async (url) => {
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) {
-        refuse(url, `HTTP ${response.status}`, nominators);
-        continue;
-      }
-      bytes = await readBundleResponseBytes(response);
-    } catch (error) {
-      refuse(url, error instanceof Error ? error.message : "fetch failed", nominators);
-      continue;
-    }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return readBundleResponseBytes(response);
+    },
+  });
 
-    for (const pin of pinGroups(nominators)) {
-      if (pin.bundleCid) {
-        const served = cidV1(sha256, bytes);
-        if (served !== pin.bundleCid) {
-          refuse(url, `serves ${served}, the seed pins ${pin.bundleCid}`, nominators);
-          continue;
-        }
-      }
-      let value: unknown;
-      try {
-        value = JSON.parse(new TextDecoder().decode(bytes));
-      } catch (error) {
-        refuse(url, error instanceof Error ? error.message : "the bundle is not JSON", nominators);
-        continue;
-      }
-
-      const verification = verifyBundleShape(value as Bundle, sha256);
-      if (!verification.valid) {
-        refuse(url, verification.reason ?? "the bundle does not verify", nominators);
-        continue;
-      }
-
-      if (verification.computedRoot !== pin.bundleRoot) {
-        refuse(
-          url,
-          `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${pin.bundleRoot}`,
-          nominators,
-        );
-        continue;
-      }
-
-      options.onCandidate?.({ url, status: "verified", root: verification.computedRoot });
-      return {
-        bundle: value as Bundle,
-        root: verification.computedRoot,
-        source: url,
-        candidates: plan.nominations.length,
-        seeds: nominators.map(seedLabel),
-      };
-    }
-  }
-
-  throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);
+  if (outcome.status !== "verified") throw new Error(outcome.message);
+  return outcome;
 }
 
 /**

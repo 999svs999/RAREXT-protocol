@@ -71,7 +71,17 @@ export type {
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
 export type { Bundle, BundleManifest, BundleVerification, SeedPin } from "./bundle.ts";
-export type { BundleSeed, SeedNomination, SeedUnionPlan } from "./bundle.ts";
+export type {
+  BundleSeed,
+  CandidateOutcome,
+  CandidateRefusal,
+  CandidateStage,
+  RefusedCandidates,
+  SeedNomination,
+  SeedUnionPlan,
+  VerifiedCandidate,
+  VerifyCandidatesResult,
+} from "./bundle.ts";
 export {
   MAX_BUNDLE_RESPONSE_BYTES,
   pinGroups,
@@ -79,6 +89,7 @@ export {
   readBundleResponseBytes,
   seedLabel,
   verifyBundleShape,
+  verifyCandidates,
 } from "./bundle.ts";
 export type { BundleResponse } from "./bundle.ts";
 export { base32Encode, cidV1 } from "./content.ts";
