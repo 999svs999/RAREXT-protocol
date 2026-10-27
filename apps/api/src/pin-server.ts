@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import { cidV1Raw } from "./adapters/content.ts";
 import { GcScheduler, PinGc } from "./gc-schedule.ts";
 import { destructiveGcAllowed } from "./net.ts";
+import { collectBody } from "./http-body.ts";
 
 const MAX_CONTENT = 32 * 1024 * 1024;
 const MAX_PUBLICATION_IDS = 100;
@@ -449,22 +450,27 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const declared = Number(req.headers["content-length"] ?? "0");
-  const limit = Math.ceil(MAX_CONTENT * 4 / 3) + 4096;
+async function readBody(
+  req: IncomingMessage,
+  bodyStallMs: number,
+): Promise<Record<string, unknown>> {
+  // The same reader the holder uses (http-body.ts): a hard size cap AND an
+  // inactivity bound AND a declared-versus-delivered check. This reader had
+  // only the cap, so a client that declared a length, sent part of it and held
+  // the socket open could wedge a pin write — the hardening round that taught
+  // the holder did not reach here.
+  const collected = await collectBody(req, {
+    limit: Math.ceil(MAX_CONTENT * 4 / 3) + 4096,
+    stallMs: bodyStallMs,
+  });
 
-  if (declared > limit) throw new Error("request body is too large");
-
-  const chunks: Buffer[] = [];
-  let size = 0;
-
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > limit) throw new Error("request body is too large");
-    chunks.push(chunk as Buffer);
+  if (collected.endedEarly || (collected.declared > 0 && collected.size !== collected.declared)) {
+    throw new Error(
+      `received ${collected.size} bytes, content-length declares ${collected.declared}`,
+    );
   }
 
-  const value = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as unknown;
+  const value = JSON.parse(collected.bytes.toString("utf8") || "{}") as unknown;
 
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("expected a JSON object");
@@ -474,6 +480,8 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 export interface PinServerOptions {
+  /** How long the reader waits for the next body chunk before refusing a stalled request. */
+  bodyStallMs?: number;
   /** When set, every request except /health must carry a bearer token. Supports multiple tokens for rotation. */
   token?: string | string[];
   tokens?: string[];
@@ -509,6 +517,7 @@ export class RateLimiter {
 
 export function createPinServer(store: PinStore, options: PinServerOptions = {}) {
   const tokenConfig = options.tokens ?? options.token;
+  const bodyStallMs = options.bodyStallMs ?? 30_000;
   const tokenCount = parseTokens(tokenConfig).length;
   const rateLimiter = options.maxRequestsPerWindow
     ? new RateLimiter(options.maxRequestsPerWindow, options.windowMs ?? 60_000)
@@ -540,7 +549,7 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
         }
 
         if (req.method === "POST") {
-          const body = await readBody(req);
+          const body = await readBody(req, bodyStallMs);
           const cid = body.cid;
           const content = body.content;
 
@@ -585,7 +594,7 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
       }
 
       if (req.method === "POST" && url.pathname === "/v1/pins/gc") {
-        const body = await readBody(req);
+        const body = await readBody(req, bodyStallMs);
         const referenced = body.referenced;
 
         if (
@@ -660,11 +669,15 @@ export function createPinServer(store: PinStore, options: PinServerOptions = {})
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const directory = process.env.RAREXT_PIN_DIR ?? ".data/pins";
   const port = Number(process.env.RAREXT_PIN_PORT ?? "9700");
+  // How long a body read waits for its next chunk before the request is
+  // refused. Same default as the holder's reader; lower it in a test, or on a
+  // proxy-fronted deployment where the proxy already bounds uploads.
+  const bodyStallMs = Number(process.env.RAREXT_PIN_BODY_STALL_MS ?? "30000");
   const token = process.env.RAREXT_PIN_TOKEN || undefined;
   const maxBytes = process.env.RAREXT_PIN_MAX_BYTES ? Number(process.env.RAREXT_PIN_MAX_BYTES) : undefined;
   const maxRequestsPerWindow = process.env.RAREXT_PIN_MAX_REQUESTS ? Number(process.env.RAREXT_PIN_MAX_REQUESTS) : undefined;
   const store = new PinStore(directory);
-  const server = createPinServer(store, { token, maxBytes, maxRequestsPerWindow });
+  const server = createPinServer(store, { token, maxBytes, maxRequestsPerWindow, bodyStallMs });
 
   const gcIntervalMs = Number(process.env.RAREXT_PIN_GC_INTERVAL_MS ?? 24 * 60 * 60 * 1000);
   const gcGracePeriodMs = Number(process.env.RAREXT_PIN_GC_GRACE_MS ?? 24 * 60 * 60 * 1000);

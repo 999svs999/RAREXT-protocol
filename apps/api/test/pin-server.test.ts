@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
+import { connect } from "node:net";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 
@@ -64,6 +65,8 @@ async function withPinService<T>(body: (base: string, dir: string) => Promise<T>
       RAREXT_PIN_PORT: String(port),
       RAREXT_PIN_DIR: dir,
       RAREXT_PIN_GC_INTERVAL_MS: "0",
+      // The stall bound under test, in the server the test spawns.
+      RAREXT_PIN_BODY_STALL_MS: "400",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -99,6 +102,49 @@ async function withPinService<T>(body: (base: string, dir: string) => Promise<T>
     }
   }
 }
+
+test("a stalled or short body is refused instead of wedging a pin write", async () => {
+  await withPinService(async (base) => {
+    const port = Number(new URL(base).port);
+
+    // A client that declares a length, sends a fragment, and then holds the
+    // socket open. Before the shared reader, this wedged the handler: the
+    // async iteration waited for bytes that never came. The inactivity bound
+    // now refuses it, and the connection is ended rather than held.
+    const refused = await new Promise<string>((resolve, reject) => {
+      const socket = connect(port, "127.0.0.1", () => {
+        socket.write(
+          "POST /v1/pins HTTP/1.1\r\n" +
+            `host: 127.0.0.1:${port}\r\n` +
+            "content-type: application/json\r\n" +
+            "content-length: 200\r\n\r\n" +
+            '{"cid":"bafkrei"',
+        );
+      });
+      let seen = "";
+      const timer = setTimeout(() => reject(new Error("the connection was neither answered nor closed")), 6000);
+      socket.on("data", (chunk) => {
+        seen += chunk.toString("utf8");
+      });
+      socket.on("close", () => {
+        clearTimeout(timer);
+        resolve(seen);
+      });
+      socket.on("error", () => {
+        clearTimeout(timer);
+        resolve(seen || "socket error");
+      });
+    });
+
+    // Either a refusal naming the mismatch, or a closed connection — never a
+    // held-open request. Both are honest; a hang is not.
+    assert.match(refused, /(received \d+ bytes, content-length declares 200)|socket error|^$/);
+
+    // And the service is still healthy and serving afterwards.
+    const health = await fetch(`${base}/health`);
+    assert.equal(health.status, 200);
+  });
+});
 
 test("a pin served as raw bytes still verifies — the decoder reads both shapes", async () => {
   // The other honest way to serve a pin: a static copy at a URL, raw bytes.

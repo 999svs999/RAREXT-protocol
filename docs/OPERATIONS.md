@@ -312,6 +312,11 @@ matches the bytes it receives, writes pins atomically, and stores no secrets. Se
 `RAREXT_PIN_TOKEN` on the service and every client to require a bearer token. Back up
 the pin directory with `.data/`; a pin is one replica, not a permanence guarantee.
 
+The service reads a request body with a hard size cap and an activity bound: a client that
+declares a `content-length`, sends part of it and then holds the socket open is refused
+rather than allowed to wedge a pin write. `RAREXT_PIN_BODY_STALL_MS` sets how long the
+reader waits for its next chunk (default 30000).
+
 `npm run publish:proof` makes the same call for the published bundle when a service is
 configured (`RAREXT_PIN_SERVICE_URL`, falling back to `RAREXT_PIN_URL`) and records the
 result in the seed's `pins` array; with no service configured it records nothing and the

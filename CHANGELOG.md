@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Two body readers, one hardened — the pin service could be wedged.** The MCP hardening round
+  taught `holder-server.ts`'s `readJson` an inactivity bound and a declared-versus-delivered
+  refusal; `pin-server.ts`'s `readBody` kept a size cap alone. A client that declared a
+  `content-length`, sent a fragment, and held the socket open therefore wedged a pin write
+  indefinitely — the hardening never reached the second implementation. Both now read through ONE
+  collector (`apps/api/src/http-body.ts`: hard cap, inactivity bound reset on every chunk,
+  early-end detection, declared-versus-delivered check), with each caller keeping its own refusal
+  style (the holder writes a 400 and flushes before the socket dies; the pin server throws and its
+  handler answers 400). The pin service gains `RAREXT_PIN_BODY_STALL_MS` (default 30s, documented),
+  and the new test opens a raw socket that declares 200 bytes, sends 10, and holds — proving the
+  request is refused rather than held. Anti-vacuity was proven by raising the bound to 60s: all
+  three tests in the file fail, the wedged request taking the service down with it, which is the
+  availability impact stated as a measurement rather than an argument.
 - **The docs' configuration surface is asserted, not just true today (kind 22).** A sweep of the
   docs that grew most in recent cycles found env-style names, state paths, and RFC references that
   were **backed by the code but asserted by nothing** — true the day the sweep ran, free to rot the

@@ -24,6 +24,7 @@ import {
 import { merkleProof } from "./merkle.ts";
 import { destructiveGcAllowed } from "./net.ts";
 import { BlobStore, sha256Bytes } from "./storage.ts";
+import { collectBody } from "./http-body.ts";
 
 const MAX_BODY = 32 * 1024 * 1024;
 const MAX_RAW_BODY = 8 * 1024 * 1024 * 1024;
@@ -178,50 +179,28 @@ function send(
   res.end(payload);
 }
 
-async function readJson(req: IncomingMessage, res: ServerResponse, bodyStallMs: number): Promise<Record<string, unknown>> {
-  const declared = Number(req.headers["content-length"] ?? "0");
-
-  if (declared > MAX_BODY) throw new Error("request body is too large");
-
-  const chunks: Buffer[] = [];
-  let size = 0;
-
-  // A declared content-length is a client claim about how many bytes are
-  // coming. The parser delivers exactly that many — or the body ends early
-  // (a truncation, or a client that stopped mid-body and held the socket
-  // open, in which case the read loop below would stall until the
-  // connection died on its own). The stall timer bounds that wait: when it
-  // fires, the request stream is errored so the loop below aborts, and the
-  // size mismatch is refused as a 400 with the connection ended instead of
-  // waiting on bytes that are not coming.
-  let bodyEndedEarly = false;
-  const stallTimer =
-    Number.isSafeInteger(declared) && declared > 0
-      ? setTimeout(() => {
-          bodyEndedEarly = true;
-          req.destroy(new Error("request body read stalled"));
-        }, bodyStallMs)
-      : null;
-  stallTimer?.unref();
-
+async function readJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+  bodyStallMs: number,
+): Promise<Record<string, unknown>> {
+  // The collection itself — cap, inactivity bound, declared-versus-delivered
+  // check — lives in ONE place (http-body.ts): this reader learned those
+  // lessons first, and the pin server's reader had not. Behaviour here is
+  // unchanged: the refusal is still a 400 written and flushed before the
+  // socket dies, and the caller still receives an empty object it will fail
+  // to act on.
+  let collected;
   try {
-    for await (const chunk of req) {
-      size += chunk.length;
-
-      if (size > MAX_BODY) throw new Error("request body is too large");
-
-      chunks.push(chunk as Buffer);
-    }
+    collected = await collectBody(req, { limit: MAX_BODY, stallMs: bodyStallMs });
   } catch {
-    // A destroyed socket (the stall timer, or a client abort) interrupts the
-    // loop. The partially read body is a mismatch either way: refuse it, do
-    // not parse a fragment.
-    bodyEndedEarly = true;
-  } finally {
-    if (stallTimer) clearTimeout(stallTimer);
+    // "request body is too large" — refused exactly as before, by throwing.
+    throw new Error("request body is too large");
   }
 
-  if (Number.isSafeInteger(declared) && declared > 0 && (size !== declared || bodyEndedEarly)) {
+  const { bytes, declared, size, endedEarly } = collected;
+
+  if (endedEarly || (declared > 0 && size !== declared)) {
     // Refuse the body and end the connection: an early-ended body, or excess
     // bytes the parser did not deliver, would otherwise be misparsed as the
     // next request on a keep-alive socket.
@@ -245,7 +224,7 @@ async function readJson(req: IncomingMessage, res: ServerResponse, bodyStallMs: 
     return {};
   }
 
-  const text = Buffer.concat(chunks).toString("utf8");
+  const text = bytes.toString("utf8");
   const parsed: unknown = text ? JSON.parse(text) : {};
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
