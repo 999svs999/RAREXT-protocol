@@ -6,9 +6,16 @@ import type { Bundle } from "../../../packages/core/src/index.ts";
 import { MAX_BUNDLE_RESPONSE_BYTES, parseRegistrySeedList, registrySeedUrl } from "@rarext/core";
 import {
   findVerifiedBundlesFromRegistryList,
+  joinRegistryNetwork,
   registriesFromPublishedList,
 } from "../src/registries.ts";
 import { verifyBundle } from "../src/index.ts";
+import {
+  DAY,
+  announcementSigner,
+  iso,
+  signedAnnouncement,
+} from "./announcement-fixtures.ts";
 
 /**
  * The federation query. The seed list existed and was served, but nothing
@@ -137,4 +144,111 @@ test("the list and its seeds are read under the response cap", async () => {
     },
     "an unbounded list is never parsed",
   );
+});
+
+test("joining the network verifies each registry and attributes its announcements", async () => {
+  const signer = announcementSigner();
+  const handle = "operator-alice";
+  const root64 = root;
+
+  const record = signedAnnouncement(signer, {
+    handle,
+    bundle: "https://a.example/registry/bundle.json",
+    mirror: "https://a.example/announced/bundle.json",
+    bundleRoot: root64,
+  });
+  const keyless = { ...record } as Record<string, unknown>;
+  delete keyless.publicKey;
+
+  const net = stubNetwork({
+    "https://list.example/registries": JSON.stringify([
+      { id: "a", url: "https://a.example" },
+      { id: "b", url: "https://b.example" },
+    ]),
+    // Registry A: a seed naming an announcement, its own identity documents,
+    // and an announced mirror. Its own copy is absent, so the announcement is
+    // the only thing that can produce a candidate.
+    "https://a.example/registry/seed.json": JSON.stringify({
+      url: "https://a.example/registry/seed.json",
+      bundle: "https://a.example/registry/bundle.json",
+      bundleRoot: root64,
+      announcers: [handle],
+      announcements: ["https://a.example/announcements.json"],
+    }),
+    "https://a.example/announcements.json": JSON.stringify([keyless]),
+    "https://a.example/announced/bundle.json": committedBytes.toString("utf8"),
+    [`https://a.example/v1/identities/${handle}`]: JSON.stringify({
+      handle,
+      keyId: signer.keyId,
+      algorithm: signer.suite,
+      publicKey: signer.publicKey,
+      createdAt: iso(-400 * DAY),
+    }),
+    [`https://a.example/v1/identities/${handle}/rotations`]: "[]",
+    "https://a.example/v1/revocations": "[]",
+    // Registry B does not answer at all.
+  });
+
+  const result = await joinRegistryNetwork("https://list.example/registries", { fetch: net.doFetch });
+
+  assert.deepEqual(
+    result.registries.map((entry) => `${entry.id}:${entry.status}`),
+    ["a:verified", "b:unreachable"],
+    `every registry is reported, and a dead one is not fatal: ${JSON.stringify(result.registries)}`,
+  );
+  assert.equal(result.verified.length, 1);
+  assert.equal(result.verified[0].bundle.source, "https://a.example/announced/bundle.json");
+  assert.equal(result.verified[0].bundle.root, root64);
+
+  const accepted = result.announcements.find((event) => event.status === "accepted");
+  assert.ok(accepted, `the announcement is reported: ${JSON.stringify(result.announcements)}`);
+  assert.equal(accepted.registry, "a", "and attributed to the registry whose seed listed it");
+  assert.equal(accepted.mirror, "https://a.example/announced/bundle.json");
+});
+
+test("a network join refuses an announcement whose key that registry revoked", async () => {
+  const signer = announcementSigner();
+  const handle = "operator-alice";
+
+  const record = signedAnnouncement(signer, {
+    handle,
+    bundle: "https://c.example/registry/bundle.json",
+    mirror: "https://c.example/announced/bundle.json",
+    bundleRoot: root,
+  });
+  const keyless = { ...record } as Record<string, unknown>;
+  delete keyless.publicKey;
+
+  const net = stubNetwork({
+    "https://list.example/registries": JSON.stringify([{ id: "c", url: "https://c.example" }]),
+    "https://c.example/registry/seed.json": JSON.stringify({
+      url: "https://c.example/registry/seed.json",
+      bundle: "https://c.example/registry/bundle.json",
+      bundleRoot: root,
+      announcers: [handle],
+      announcements: ["https://c.example/announcements.json"],
+    }),
+    "https://c.example/announcements.json": JSON.stringify([keyless]),
+    "https://c.example/announced/bundle.json": committedBytes.toString("utf8"),
+    [`https://c.example/v1/identities/${handle}`]: JSON.stringify({
+      handle,
+      keyId: signer.keyId,
+      algorithm: signer.suite,
+      publicKey: signer.publicKey,
+      createdAt: iso(-400 * DAY),
+    }),
+    [`https://c.example/v1/identities/${handle}/rotations`]: "[]",
+    "https://c.example/v1/revocations": JSON.stringify([
+      { id: "rev-1", kind: "capability", target: signer.keyId, reason: "key compromised" },
+    ]),
+  });
+
+  const result = await joinRegistryNetwork("https://list.example/registries", { fetch: net.doFetch });
+
+  assert.equal(result.verified.length, 0, "a revoked key yields no verified bundle");
+  assert.equal(result.registries[0].status, "refused");
+  const refusal = result.announcements.find((event) => event.status !== "accepted");
+  assert.ok(refusal, `the refusal is reported: ${JSON.stringify(result.announcements)}`);
+  assert.equal(refusal.registry, "c");
+  assert.match(String(refusal.reason), /revok/i, "and names the revocation");
 });

@@ -228,7 +228,16 @@ consistent is the federation problem, and it has two parts:
   `findVerifiedBundlesFromRegistryList(listUrl, …)` asks every listed registry
   for a copy of ITS bundle (each registry has its own root, so each is verified
   against its own pins) and REPORTS a registry that does not answer — one dead
-  host must not blind a resident to the rest. The static seed above is a
+  host must not blind a resident to the rest. One call composes the whole walk:
+  `joinRegistryNetwork(listUrl, …)` reads the list, verifies each registry's copy
+  against its own pins, folds each registry's announcements, and resolves each
+  announcer's key from THAT registry's own published documents — reporting every
+  registry and every announcement attributed to the registry it came from. Where
+  those documents live is not guessed but declared: `identityDocumentUrls(origin,
+  surface)` knows the two shapes (`api` = `/v1/identities/<handle>`, `static-tree`
+  = `/identities/<handle>.json`), because pointing a resident at the wrong surface
+  does not raise an error — every handle simply reads as unknown, and a publisher
+  that published everything stops being believed. The static seed above is a
   first step, and its consumption is implemented: `bundleFromSeed` in
   `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
   order, and accepts only a copy that **rebuilds the root the seed pins**

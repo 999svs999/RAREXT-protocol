@@ -6,7 +6,8 @@ import {
 } from "@rarext/core";
 import type { RegistrySeedEntry } from "@rarext/core";
 
-import { findVerifiedBundle, type SeedDocument, type VerifiedBundleSource } from "./index.ts";
+import { findVerifiedBundle, findVerifiedBundleFromSeeds, type SeedDocument, type VerifiedBundleSource } from "./index.ts";
+import { identityFromPublishedOrigin } from "./published-identity.ts";
 
 /**
  * The federation query: read a published seed list, and ask every registry on it
@@ -107,4 +108,112 @@ export async function findVerifiedBundlesFromRegistryList(
   }
 
   return { list: listUrl, entries, verified, failures };
+}
+
+/**
+ * Join the network in one call: every registry on a published list, its copy
+ * verified against its own root, and its announcements believed only under keys
+ * resolved from THAT registry's own published documents.
+ *
+ * This is the composition the last several units were built for. A resident with
+ * nothing but a list URL now discovers the federation, verifies each member's
+ * bundle, and refuses an announcement from a key its registry does not vouch
+ * for — with every failure attributed to the registry it came from, so an
+ * operator reading the report knows which host to talk to.
+ */
+export interface NetworkJoinResult {
+  list: string;
+  entries: RegistrySeedEntry[];
+  registries: Array<
+    | { id: string; url: string; status: "verified"; source: string; root: string }
+    | { id: string; url: string; status: "refused"; reason: string }
+    | { id: string; url: string; status: "unreachable"; reason: string }
+  >;
+  verified: Array<{ id: string; url: string; bundle: VerifiedBundleSource }>;
+  /** Every announcement event, attributed to the registry whose seed listed it. */
+  announcements: Array<{ registry: string; url: string; status: string; reason?: string; mirror?: string }>;
+}
+
+export interface NetworkJoinOptions extends RegistryListOptions {
+  /** Called for every announcement event, already attributed to its registry. */
+  onAnnouncement?: (event: NetworkJoinResult["announcements"][number]) => void;
+}
+
+export async function joinRegistryNetwork(
+  listUrl: string,
+  options: NetworkJoinOptions = {},
+): Promise<NetworkJoinResult> {
+  const doFetch = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REGISTRY_TIMEOUT_MS;
+
+  const entries = await registriesFromPublishedList(listUrl, { fetch: doFetch, timeoutMs });
+  const result: NetworkJoinResult = { list: listUrl, entries, registries: [], verified: [], announcements: [] };
+
+  for (const entry of entries) {
+    const seedUrl = resolveRegistryUrl(registrySeedUrl(entry), listUrl);
+    const failure = (status: "refused" | "unreachable", reason: string): void => {
+      result.registries.push({ id: entry.id, url: entry.url, status, reason });
+      options.onRegistry?.({ id: entry.id, url: entry.url, status, reason });
+    };
+
+    let seed: SeedDocument;
+    try {
+      const parsed = (await readJson(seedUrl, doFetch, timeoutMs)) as SeedDocument;
+      if (!parsed || typeof parsed.bundle !== "string" || typeof parsed.bundleRoot !== "string") {
+        failure("unreachable", `${seedUrl}: not a seed document`);
+        continue;
+      }
+      seed = { ...parsed, url: seedUrl };
+    } catch (error) {
+      failure("unreachable", error instanceof Error ? error.message : String(error));
+      continue;
+    }
+
+    // The registry's OWN documents resolve its announcers — the API surface,
+    // because a registry in a seed list is a server, not a directory of files.
+    const identity = identityFromPublishedOrigin({
+      origin: entry.url,
+      surface: "api",
+      ...(options.fetch ? { fetch: doFetch } : {}),
+      timeoutMs,
+    });
+
+    try {
+      const found = await findVerifiedBundleFromSeeds([seed], {
+        fetch: doFetch,
+        timeoutMs,
+        identity,
+        onAnnouncement: (event) => {
+          // The event union says what it carries: an accepted record names its
+          // mirror, a refused one names its reason. Narrowing rather than
+          // spreading optional fields keeps that distinction in the report.
+          const attributed =
+            event.status === "accepted"
+              ? { registry: entry.id, url: event.url, status: event.status, mirror: event.mirror }
+              : { registry: entry.id, url: event.url, status: event.status, reason: event.reason };
+          result.announcements.push(attributed);
+          options.onAnnouncement?.(attributed);
+        },
+      });
+      result.verified.push({ id: entry.id, url: entry.url, bundle: found });
+      result.registries.push({
+        id: entry.id,
+        url: entry.url,
+        status: "verified",
+        source: found.source,
+        root: found.root,
+      });
+      options.onRegistry?.({
+        id: entry.id,
+        url: entry.url,
+        status: "verified",
+        source: found.source,
+        root: found.root,
+      });
+    } catch (error) {
+      failure("refused", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return result;
 }

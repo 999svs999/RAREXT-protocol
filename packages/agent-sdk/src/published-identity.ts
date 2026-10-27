@@ -122,3 +122,50 @@ export function identityFromPublishedDocuments(
     },
   };
 }
+
+/**
+ * Where a publisher's identity documents live, per surface. Two surfaces exist
+ * and they are not the same shape: an API serves `/v1/identities/<handle>` (the
+ * routes this repository already exposes), while a static tree serves
+ * `/identities/<handle>.json`. Both are in ONE place here because the failure
+ * mode otherwise is silent: a resident pointed at the wrong surface gets 404s,
+ * and a 404 is an honest "this handle is unknown" — so a wrong convention does
+ * not error, it just stops believing a publisher that published everything.
+ */
+export type IdentityDocumentSurface = "api" | "static-tree";
+
+export interface IdentityDocumentUrls {
+  identityUrl: (handle: string) => string;
+  rotationsUrl: (handle: string) => string;
+  revocationsUrl: string;
+}
+
+export function identityDocumentUrls(options: {
+  origin: string;
+  surface?: IdentityDocumentSurface;
+}): IdentityDocumentUrls {
+  const origin = options.origin.replace(/\/+$/, "");
+  if ((options.surface ?? "api") === "static-tree") {
+    return {
+      identityUrl: (handle) => `${origin}/identities/${encodeURIComponent(handle)}.json`,
+      rotationsUrl: (handle) => `${origin}/identities/${encodeURIComponent(handle)}.rotations.json`,
+      revocationsUrl: `${origin}/revocations.json`,
+    };
+  }
+  return {
+    identityUrl: (handle) => `${origin}/v1/identities/${encodeURIComponent(handle)}`,
+    rotationsUrl: (handle) => `${origin}/v1/identities/${encodeURIComponent(handle)}/rotations`,
+    revocationsUrl: `${origin}/v1/revocations`,
+  };
+}
+
+/** The resolver for one publisher's origin, on the surface it actually serves. */
+export function identityFromPublishedOrigin(
+  options: Omit<PublishedIdentityOptions, "identityUrl" | "rotationsUrl" | "revocationsUrl"> & {
+    origin: string;
+    surface?: IdentityDocumentSurface;
+  },
+): AnnouncementIdentity {
+  const urls = identityDocumentUrls({ origin: options.origin, ...(options.surface ? { surface: options.surface } : {}) });
+  return identityFromPublishedDocuments({ ...urls, ...options });
+}

@@ -257,10 +257,13 @@ async function main() {
         // operator, no server of its own — and every record is believed only
         // under the key its named handle's history resolves.
         const origin = new URL(".", seedUrl).href;
-        const identity = sdk.identityFromPublishedDocuments({
-          identityUrl: (handle) => new URL(`identities/${handle}.json`, origin).href,
-          rotationsUrl: (handle) => new URL(`identities/${handle}.rotations.json`, origin).href,
-          revocationsUrl: new URL("revocations.json", origin).href,
+        // The served tree's own layout, from the one place that knows both
+        // surfaces: a static tree keeps `<handle>.json` beside its seed, while
+        // an API serves /v1/identities/<handle>. Hardcoding it here is how a
+        // resident ends up reading 404s and calling a publisher unknown.
+        const identity = sdk.identityFromPublishedOrigin({
+          origin,
+          surface: "static-tree",
           timeoutMs: TIMEOUT_MS,
         });
         console.log(

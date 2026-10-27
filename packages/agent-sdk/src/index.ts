@@ -125,7 +125,11 @@ export type { AnnouncementEvent } from "@rarext/core";
  * so a resident with no server of its own can fold announcements and believe
  * what the keys it trusts actually said.
  */
-export { identityFromPublishedDocuments } from "./published-identity.ts";
+export {
+  identityDocumentUrls,
+  identityFromPublishedDocuments,
+  identityFromPublishedOrigin,
+} from "./published-identity.ts";
 /**
  * The federation query: a published seed list, read and asked registry by
  * registry for a copy of ITS bundle. A registry that does not answer is
@@ -134,10 +138,21 @@ export { identityFromPublishedDocuments } from "./published-identity.ts";
 export {
   DEFAULT_REGISTRY_TIMEOUT_MS,
   findVerifiedBundlesFromRegistryList,
+  joinRegistryNetwork,
   registriesFromPublishedList,
 } from "./registries.ts";
-export type { RegistryListOptions, RegistryListResult, RegistryOutcome } from "./registries.ts";
-export type { PublishedIdentityOptions } from "./published-identity.ts";
+export type {
+  NetworkJoinOptions,
+  NetworkJoinResult,
+  RegistryListOptions,
+  RegistryListResult,
+  RegistryOutcome,
+} from "./registries.ts";
+export type {
+  IdentityDocumentSurface,
+  IdentityDocumentUrls,
+  PublishedIdentityOptions,
+} from "./published-identity.ts";
 export { DEFAULT_IDENTITY_TIMEOUT_MS } from "./published-identity.ts";
 
 /**

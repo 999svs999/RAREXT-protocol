@@ -477,12 +477,24 @@ if (process.argv.includes("--self-test")) {
   // And a resident demo that stops calling the resolver — the doc's sentence
   // about that leg would then be describing a script that does not do it.
   const demoSource = readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
-  const doctoredDemo = demoSource.replace("sdk.identityFromPublishedDocuments(", "sdk.notTheResolver(");
+  const doctoredDemo = demoSource.replace("sdk.identityFromPublishedOrigin(", "sdk.notTheResolver(");
   const beforeDemo = failures;
   checkMirrorsDoc(undefined, { demoResident: doctoredDemo });
   const caughtDemo = failures > beforeDemo;
   if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
   caught = caught && caughtDemo;
+  // And a one-call join that stops folding announcements — the doc's sentence is
+  // then describing something the client does not do.
+  const networkJoinSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+  const doctoredNetwork = networkJoinSource.replace(
+    "await findVerifiedBundleFromSeeds([seed]",
+    "await findVerifiedBundle(seed",
+  );
+  const beforeNetwork = failures;
+  checkMirrorsDoc(undefined, { registryClient: doctoredNetwork });
+  const caughtNetwork = failures > beforeNetwork;
+  if (!caughtNetwork) fail("self-test: the checker accepted a join that never folds announcements");
+  caught = caught && caughtNetwork;
   // And a SERVER that grows its own normaliser for the seed list — the fork the
   // single parser exists to prevent — must be reported.
   const serverRegistrySource = readFileSync(new URL("apps/api/src/registries.ts", root), "utf8");
@@ -1588,6 +1600,29 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   console.log(
     `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
   );
+  // The doc names the one-call join and the surface convention behind it. Both
+  // are claims about the tree: the client must fold through the SDK's own
+  // announcement path with a resolver built from the same convention module, and
+  // the demo must use that module too rather than hardcoding one surface.
+  if (/joinRegistryNetwork/.test(doc)) {
+    const networkSource =
+      sources.registryClient ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+    if (!/export async function joinRegistryNetwork\(/.test(networkSource)) {
+      fail("MIRRORS.md names joinRegistryNetwork, but the SDK does not export it");
+    }
+    if (!/await findVerifiedBundleFromSeeds\(\[seed\]/.test(networkSource)) {
+      fail("the one-call join must fold each registry's announcements through the SDK's own path");
+    }
+    if (!/identityFromPublishedOrigin\(/.test(networkSource)) {
+      fail("the join must build each registry's resolver from the shared surface convention");
+    }
+    const demoSource =
+      sources.demoResident ?? readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
+    if (!/sdk\.identityFromPublishedOrigin\(/.test(demoSource)) {
+      fail("the demo must use the shared surface convention rather than hardcoding paths");
+    }
+  }
+
   // The doc names the federation query and the one parser of the seed list. Both
   // are claims about the tree: the SDK must call the client, and the SERVER must
   // use the same parser the client uses — a second normaliser is how one list
@@ -1620,7 +1655,10 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // deciding nothing of its own.
   if (/identityFromPublishedDocuments/.test(doc)) {
     const sdkIndex = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
-    if (!/export \{ identityFromPublishedDocuments \}/.test(sdkIndex)) {
+    // A member of the export list, not a single-name export line: the SDK exports
+    // the resolver together with the surface convention, and the first version of
+    // this guard only recognised the one-name form.
+    if (!/export \{[\s\S]*?\bidentityFromPublishedDocuments,/.test(sdkIndex)) {
       fail("MIRRORS.md names identityFromPublishedDocuments, but the SDK does not export it");
     }
     const publishedIdentity =
@@ -1640,7 +1678,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     // announcements through published documents is a claim about the script.
     const demoScript =
       sources.demoResident ?? readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
-    if (!/sdk\.identityFromPublishedDocuments\(/.test(demoScript)) {
+    if (!/sdk\.identityFromPublished(Origin|Documents)\(/.test(demoScript)) {
       fail("MIRRORS.md says the resident demo resolves keys from published documents, but the demo never calls the resolver");
     }
     if (!/findVerifiedBundleFromSeeds\(/.test(demoScript)) {
