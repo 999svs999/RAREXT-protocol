@@ -1,10 +1,12 @@
 import {
   foldAnnouncements,
+  unresolvedIdentity,
   planSeedUnion,
   readBundleResponseBytes,
   verifyBundleShape,
   verifyCandidates,
   type AnnouncementEvent,
+  type AnnouncementIdentity,
   type AnnouncementVerifier,
   type BundleSeed,
 } from "../../../packages/core/src/index.ts";
@@ -36,12 +38,11 @@ export type { AnnouncementEvent } from "../../../packages/core/src/index.ts";
  * gets no bespoke crypto of its own. The sequence that applies them lives in
  * core; this file only names where the primitives come from.
  */
-const announcementVerifier: AnnouncementVerifier = {
+const announcementPrimitives = {
   keyIdOf: keyId,
   suiteOf: suiteFor,
   verify: verifyPayload,
 };
-
 /**
  * A bundle is the registry in a form anyone can hold: the publications that
  * were anchored, the anchors themselves, the challenges, and the semantics.
@@ -140,6 +141,14 @@ export interface BundleDiscoveryOptions {
   timeoutMs?: number;
   /** Observe each announcement record as it is accepted or reported and skipped. */
   onAnnouncement?: (event: AnnouncementEvent) => void;
+  /**
+   * Where a named handle's key history is resolved from. This server stores
+   * identities, but a module-level reader has no store in hand, so the default
+   * is core's `unresolvedIdentity`: a record carrying its own key is checked
+   * against that key and a keyless record is refused. Supplying the store (or
+   * any other history) is the caller's choice.
+   */
+  identity?: AnnouncementIdentity;
 }
 
 export interface VerifiedBundleSource {
@@ -217,8 +226,12 @@ export async function bundleFromSeeds(
   // seed without `announcements` contributes nothing here: the pool is exactly
   // the seeds, so the plan, the fetches, and the error wording are byte for
   // byte today's.
+  const verifier: AnnouncementVerifier = {
+    ...(options.identity ?? unresolvedIdentity),
+    ...announcementPrimitives,
+  };
   const pool = await foldAnnouncements(seeds, {
-    verifier: announcementVerifier,
+    verifier,
     fetch: request,
     timeoutMs,
     onAnnouncement: options.onAnnouncement,

@@ -22,6 +22,7 @@ import {
   announcementSigner,
   iso,
   signedAnnouncement,
+  announcerIdentity,
 } from "./announcement-fixtures.ts";
 import { canonicalize, MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
@@ -735,6 +736,7 @@ test("a verified announcement nominates its mirror, and that mirror wins when th
       [announcedMirror]: { body: JSON.stringify(committed) },
       [announcementUrl]: { body: JSON.stringify([record]) },
     }),
+    identity: announcerIdentity(),
     onAnnouncement: (event) => events.push(event),
   });
 
@@ -789,6 +791,7 @@ test("a forged announcement is reported and skipped, and the seed's own candidat
       },
       calls,
     ),
+    identity: announcerIdentity(),
     onAnnouncement: (event) => events.push(event),
   });
 
@@ -840,6 +843,7 @@ test("an expired announcement is discarded before the union, so its mirror is ne
       },
       calls,
     ),
+    identity: announcerIdentity(),
     onAnnouncement: (event) => events.push(event),
   });
 
@@ -880,6 +884,9 @@ test("a valid announcement claiming a different root for the same registry trips
     () =>
       findVerifiedBundleFromSeeds([seed], {
         fetch: stubFetch({ [announcementUrl]: { body: JSON.stringify([record]) } }, calls),
+        // Valid and resolvable: the disagreement is the union's to raise, not
+        // resolution's to pre-empt.
+        identity: announcerIdentity(),
       }),
     (error: Error) => {
       assert.match(error.message, /the seeds disagree about the registry/);
@@ -964,6 +971,7 @@ test("an announcement URL that 404s is reported and skipped, and everything else
       [registry]: { body: JSON.stringify(committed) },
       [announcementUrl]: { status: 404, body: JSON.stringify({ error: "not found" }) },
     }),
+    identity: announcerIdentity(),
     onAnnouncement: (event) => events.push(event),
   });
 

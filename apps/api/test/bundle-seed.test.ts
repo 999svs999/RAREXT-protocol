@@ -16,6 +16,7 @@ import { findVerifiedBundleFromSeeds } from "../../../packages/agent-sdk/src/ind
 import {
   DAY,
   announcementSigner,
+  announcerIdentity,
   iso,
   signedAnnouncement,
 } from "../../../packages/agent-sdk/test/announcement-fixtures.ts";
@@ -629,7 +630,8 @@ test("a verified announcement nominates an extra mirror, and that mirror wins wh
           announcements: [announcementUrl],
         },
       ],
-      { onAnnouncement: (event) => events.push(event) },
+      { identity: announcerIdentity(),
+    onAnnouncement: (event) => events.push(event) },
     );
 
     assert.equal(
@@ -693,7 +695,8 @@ test("a forged announcement is reported with its reason, and the seed's own cand
     };
 
     const events: AnnouncementEvent[] = [];
-    const found = await bundleFromSeed(seed, { onAnnouncement: (event) => events.push(event) });
+    const found = await bundleFromSeed(seed, { identity: announcerIdentity(),
+    onAnnouncement: (event) => events.push(event) });
     assert.equal(found.source, registry, "the seed's own candidate still verifies");
     assert.equal(found.root, pinnedRoot);
     assert.deepEqual(events, [
@@ -715,7 +718,8 @@ test("a forged announcement is reported with its reason, and the seed's own cand
     requests.length = 0;
     routes["/registry/bundle.json"] = { status: 404, body: JSON.stringify({ error: "not found" }) };
     await assert.rejects(
-      () => bundleFromSeed(seed, { onAnnouncement: (event) => events.push(event) }),
+      () => bundleFromSeed(seed, { identity: announcerIdentity(),
+    onAnnouncement: (event) => events.push(event) }),
       (error: Error) => {
         assert.match(error.message, /no candidate rebuilt the pinned root/);
         assert.match(error.message, /HTTP 404/);
@@ -769,7 +773,8 @@ test("an expired announcement is discarded before the union, so its mirror is ne
     // The path still works: an expired record is a skipped record, not a
     // broken search.
     const events: AnnouncementEvent[] = [];
-    const found = await bundleFromSeed(seed, { onAnnouncement: (event) => events.push(event) });
+    const found = await bundleFromSeed(seed, { identity: announcerIdentity(),
+    onAnnouncement: (event) => events.push(event) });
     assert.equal(found.source, registry, "the seed's own candidate verifies despite the expired record");
     assert.equal(events.length, 1);
     assert.equal(events[0].status, "skipped");
@@ -784,7 +789,8 @@ test("an expired announcement is discarded before the union, so its mirror is ne
     requests.length = 0;
     routes["/registry/bundle.json"] = { status: 404, body: JSON.stringify({ error: "not found" }) };
     await assert.rejects(
-      () => bundleFromSeed(seed, { onAnnouncement: () => {} }),
+      () => bundleFromSeed(seed, { identity: announcerIdentity(),
+    onAnnouncement: () => {} }),
       /no candidate rebuilt the pinned root/,
       "the expired record nominated no candidate, so the union holds only the seed's dead copy",
     );
@@ -826,7 +832,9 @@ test("a valid announcement contradicting the pins trips the union's loud stop, n
 
     let apiError!: Error;
     try {
-      await bundleFromSeed(seed);
+      // A VALID announcement (resolvable, correctly signed) that contradicts
+      // the pins: it must enter the union and trip the existing rule.
+      await bundleFromSeed(seed, { identity: announcerIdentity() });
       assert.fail("a disagreement must reject");
     } catch (error) {
       if (!(error instanceof Error) || /must reject/.test(error.message)) throw error;
@@ -857,7 +865,7 @@ test("a valid announcement contradicting the pins trips the union's loud stop, n
     requests.length = 0;
     let sdkError!: Error;
     try {
-      await findVerifiedBundleFromSeeds([seed]);
+      await findVerifiedBundleFromSeeds([seed], { identity: announcerIdentity() });
       assert.fail("a disagreement must reject");
     } catch (error) {
       if (!(error instanceof Error) || /must reject/.test(error.message)) throw error;
@@ -955,7 +963,8 @@ test("an announcement URL that 404s is reported and skipped, and everything else
         bundleRoot: pinnedRoot,
         announcements: [announcementUrl],
       },
-      { onAnnouncement: (event) => events.push(event) },
+      { identity: announcerIdentity(),
+    onAnnouncement: (event) => events.push(event) },
     );
 
     assert.equal(found.source, registry, "the unreachable announcement does not stop the search");
@@ -1019,14 +1028,16 @@ test("one fold, two callers: the API path and the SDK path report the same annou
 
     const apiEvents: AnnouncementEvent[] = [];
     const apiFound = await bundleFromSeeds([seed], {
-      onAnnouncement: (event) => apiEvents.push(event),
+      identity: announcerIdentity(),
+    onAnnouncement: (event) => apiEvents.push(event),
     });
     const apiRequests = [...requests];
     requests.length = 0;
 
     const sdkEvents: AnnouncementEvent[] = [];
     const sdkFound = await findVerifiedBundleFromSeeds([seed], {
-      onAnnouncement: (event) => sdkEvents.push(event),
+      identity: announcerIdentity(),
+    onAnnouncement: (event) => sdkEvents.push(event),
     });
     const sdkRequests = [...requests];
     requests.length = 0;

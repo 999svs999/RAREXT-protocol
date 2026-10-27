@@ -252,7 +252,14 @@ consistent is the federation problem, and it has two parts:
    announcement URLs still come from the seed (there is no peer-to-peer
    discovery of announcements themselves), the announcing key travels in the
    announcement document beside each record rather than being resolved through
-   the handle's key history, and who may announce remains RFC 0019's open question.
+   the handle's key history when the caller supplies a resolver — an announcing
+   key is resolved through the handle's key history, a key the handle does not
+   vouch for is refused, a revoked key is refused even when the window is valid,
+   and with NO resolver supplied the honest default is refusal for a keyless
+   record (the envelope never mints its own authority). The API's own identity
+   store is not yet wired as that resolver — its reader passes core's
+   `unresolvedIdentity` — so on that path a keyless record is refused; that
+   wiring, and who may announce, remain RFC 0019's open question.
    Both client paths fold announcements and neither owns the rule: the fold and
    the record's verification live in `packages/core/src/announcements.ts`, the
    SDK's `findVerifiedBundleFromSeeds` and the API's `bundleFromSeed` each

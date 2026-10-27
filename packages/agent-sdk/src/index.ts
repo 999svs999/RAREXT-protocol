@@ -17,17 +17,21 @@ import {
   foldAnnouncements,
   planSeedUnion,
   readBundleResponseBytes,
+  unresolvedIdentity,
   verifyAiArtifact,
   verifyBundleShape,
   verifyCandidates,
   verifyGenerativeReplay,
-  type AnnouncementEvent,
-  type AnnouncementVerifier,
-  type AiLocalVerification,
-  type BundleSeed,
-  type CandidateOutcome,
-  type GenerativeBody,
-  type GenerativeSpec,
+} from "@rarext/core";
+import type {
+  AnnouncementEvent,
+  AnnouncementIdentity,
+  AnnouncementVerifier,
+  AiLocalVerification,
+  BundleSeed,
+  CandidateOutcome,
+  GenerativeBody,
+  GenerativeSpec,
 } from "@rarext/core";
 import type {
   AdapterInfo,
@@ -74,6 +78,9 @@ import type {
 } from "@rarext/core";
 
 export type {
+  AnnouncementIdentity,
+  AnnouncementKeyHistory,
+  AnnouncementRevocation,
   AppInfo,
   Artifact,
   BuildLineage,
@@ -151,6 +158,13 @@ export interface FindVerifiedBundleOptions {
   onCandidate?: (event: FindVerifiedBundleEvent) => void;
   /** Observe each announcement record as it is accepted or reported and skipped. */
   onAnnouncement?: (event: AnnouncementEvent) => void;
+  /**
+   * Where a named handle's key history is resolved from. Without one, core's
+   * `unresolvedIdentity` applies: a record carrying its own key is checked
+   * against that key, and a record carrying none is refused — an envelope
+   * never mints its own authority.
+   */
+  identity?: AnnouncementIdentity;
 }
 
 /**
@@ -226,8 +240,18 @@ export async function findVerifiedBundleFromSeeds(
   // seed without `announcements` contributes nothing here: the pool is exactly
   // the seeds, so the plan, the fetches, and the error wording are byte for
   // byte today's.
+  // The identity half of the port is per-call: an agent that ships a key
+  // history (or reaches one through its API) passes it here, and without one
+  // core's `unresolvedIdentity` applies — a keyless record is then refused
+  // rather than believed on the strength of its own envelope.
+  const verifier: AnnouncementVerifier = {
+    ...(options.identity ?? unresolvedIdentity),
+    keyIdOf: publicKeyId,
+    suiteOf: announcementVerifier.suiteOf,
+    verify: announcementVerifier.verify,
+  };
   const pool = await foldAnnouncements(seeds, {
-    verifier: announcementVerifier,
+    verifier,
     fetch: request,
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
@@ -663,6 +687,14 @@ export function verifyPayload(
  * and the signature is checked over the canonical payload by `verifyPayload`.
  */
 const announcementVerifier: AnnouncementVerifier = {
+  // An agent holding a bundle has no identity store of its own, so a handle's
+  // key history is unresolvable here and core's `unresolvedIdentity` is the
+  // honest answer: a record carrying its own key is checked against the key it
+  // carries, and a record carrying none is refused with "no key history"
+  // rather than believed on the strength of the envelope. Resolving through a
+  // server (or a key history the agent ships with) is RFC 0019's open
+  // question, named as such in the RFC and docs/MIRRORS.md.
+  ...unresolvedIdentity,
   keyIdOf: publicKeyId,
   suiteOf: (key) => {
     try {

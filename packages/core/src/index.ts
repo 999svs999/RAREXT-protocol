@@ -94,6 +94,9 @@ export {
 export type { BundleResponse } from "./bundle.ts";
 export type {
   AnnouncementEvent,
+  AnnouncementIdentity,
+  AnnouncementKeyHistory,
+  AnnouncementRevocation,
   AnnouncementVerifier,
   AnnouncementVerdict,
   MirrorAnnouncementPayload,
@@ -103,6 +106,7 @@ export {
   ANNOUNCEMENT_KIND,
   ANNOUNCEMENT_VERSION,
   foldAnnouncements,
+  unresolvedIdentity,
   verifyAnnouncement,
 } from "./announcements.ts";
 export { base32Encode, cidV1 } from "./content.ts";
