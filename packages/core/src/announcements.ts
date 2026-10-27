@@ -606,7 +606,18 @@ export async function foldAnnouncements(
   };
 
   const pool: BundleSeed[] = [...seeds];
-  const announcementUrls = [...new Set(seeds.flatMap((seed) => seed.announcements ?? []))];
+  // Which seeds listed which document: the vouching question is "did a seed that
+  // pins this registry name this handle as ITS announcer", so the listing seed
+  // has to travel with the URL rather than being flattened away.
+  const listingSeeds = new Map<string, BundleSeed[]>();
+  for (const seed of seeds) {
+    for (const url of seed.announcements ?? []) {
+      const listed = listingSeeds.get(url) ?? [];
+      listed.push(seed);
+      listingSeeds.set(url, listed);
+    }
+  }
+  const announcementUrls = [...listingSeeds.keys()];
   for (const url of announcementUrls) {
     let document: unknown;
     try {
@@ -647,6 +658,45 @@ export async function foldAnnouncements(
         revoked,
       });
       if (verdict.ok) {
+        // RFC 0019's open question, answered mechanically: a location is open to
+        // any resolvable handle, a FACT is not. The record's claim is a fact, so
+        // an unvouched handle may only restate what the seeds already pin: a
+        // location for a pinned registry, agreeing with its pins. Anything else
+        // — a registry the seeds do not pin, or pins that differ — is refused
+        // HERE, which is also what closes the denial-of-service the RFC warns
+        // about: an unvouched contradiction can no longer reach the union's
+        // loud stop, because it never enters the union at all.
+        const vouched = (listingSeeds.get(url) ?? []).some((seed) =>
+          (seed.announcers ?? []).includes(handle as string),
+        );
+        if (!vouched) {
+          const means = (entry: BundleSeed): boolean =>
+            entry.bundleRoot === verdict.seed.bundleRoot &&
+            (entry.bundleCid === undefined ||
+              verdict.seed.bundleCid === undefined ||
+              entry.bundleCid === verdict.seed.bundleCid);
+          const forSameRegistry = pool.filter((entry) => entry.bundle === verdict.seed.bundle);
+          if (forSameRegistry.length === 0) {
+            input.onAnnouncement?.({
+              url,
+              status: "skipped",
+              reason:
+                `record ${index}: handle ${handle} is not named among this seed's announcers, ` +
+                `so it may mirror a registry the seed pins, not introduce one`,
+            });
+            continue;
+          }
+          if (!forSameRegistry.some(means)) {
+            input.onAnnouncement?.({
+              url,
+              status: "skipped",
+              reason:
+                `record ${index}: handle ${handle} is not named among this seed's announcers, ` +
+                `so it may mirror the seed's pins, not contradict them`,
+            });
+            continue;
+          }
+        }
         pool.push(verdict.seed);
         input.onAnnouncement?.({
           url,

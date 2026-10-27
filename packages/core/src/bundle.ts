@@ -178,6 +178,16 @@ export interface BundleSeed {
   url?: string;
   mirrors?: Array<{ bundle: string; root: string }>;
   /**
+   * RFC 0019's open question, answered: the handles this seed names as its
+   * ANNOUNCERS. An announcement proposes LOCATIONS, never facts, so any
+   * resolvable handle may announce a location for a registry this seed already
+   * pins — a mirror is cheap and the pins make it harmless. What only a named
+   * announcer may do is speak FACTS: introduce a registry this seed does not
+   * pin, or disagree with its pins (which is the union's loud stop). Silence is
+   * therefore not permission to claim, but never a bar to mirroring.
+   */
+  announcers?: string[];
+  /**
    * RFC 0019 step 1: URLs of signed announcement documents, each a JSON array
    * of signed records in which an operator states where a registry's bundle
    * can be fetched and under which pins. An announcement proposes LOCATIONS,

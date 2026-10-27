@@ -105,6 +105,24 @@ function storeKnowing(signer: ReturnType<typeof announcementSigner>): RarextStor
   return store;
 }
 
+const OTHER_HANDLE = "operator-bob";
+
+/** The same store, knowing a second handle the seed does NOT name as announcer. */
+function storeKnowingBoth(
+  signer: ReturnType<typeof announcementSigner>,
+  other: ReturnType<typeof announcementSigner>,
+): RarextStore {
+  const store = storeKnowing(signer);
+  store.addIdentity({
+    handle: OTHER_HANDLE,
+    keyId: other.keyId,
+    algorithm: other.suite,
+    publicKey: other.publicKey as never,
+    createdAt: iso(-400 * DAY),
+  });
+  return store;
+}
+
 type Event = { status: string; reason?: string };
 
 function refusals(events: Event[]): string {
@@ -266,4 +284,96 @@ test("the adapter answers the port and decides nothing", async () => {
   assert.ok(revocation, "a revoked key answers the revocation");
   assert.equal(revocation.target, signer.keyId);
   assert.equal(revocation.reason, "compromised");
+});
+
+test("a handle the seed does not name may still mirror what it pins", async () => {
+  const signer = announcementSigner();
+  const other = otherSigner();
+  const server = await fixture();
+  try {
+    // operator-bob is resolvable but is NOT among the seed's announcers. His
+    // record AGREES with the pins, so it is a LOCATION — and locations are open.
+    const record = signedAnnouncement(other, {
+      handle: OTHER_HANDLE,
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+    });
+    server.publish([record]);
+    server.down("/registry/bundle.json"); // only resolution can produce a candidate
+
+    const events: Event[] = [];
+    const found = await bundleFromSeedForStore(
+      seedPointingAt(server.urls),
+      storeKnowingBoth(signer, other),
+      { onAnnouncement: (event) => events.push(event as Event) },
+    );
+
+    assert.equal(found.source, server.urls.mirror, "an unvouched mirror of the pinned registry serves it");
+    assert.equal(found.root, pinnedRoot, "and it is the same artifact, because the pins say so");
+  } finally {
+    server.close();
+  }
+});
+
+test("an unvouched contradiction is refused, and cannot reach the union's loud stop", async () => {
+  const signer = announcementSigner();
+  const other = otherSigner();
+  const server = await fixture();
+  try {
+    // The denial of service RFC 0019 warns about: any key holder announcing a
+    // contradicting root would stall every client's fold. He is unvouched, so
+    // his claim never enters the union — and discovery still COMPLETES.
+    const record = signedAnnouncement(other, {
+      handle: OTHER_HANDLE,
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: "b".repeat(64),
+    });
+    server.publish([record]);
+
+    const events: Event[] = [];
+    const found = await bundleFromSeedForStore(
+      seedPointingAt(server.urls),
+      storeKnowingBoth(signer, other),
+      { onAnnouncement: (event) => events.push(event as Event) },
+    );
+
+    assert.equal(found.root, pinnedRoot, "the seed's own copy answers; nothing threw");
+    assert.match(
+      refusals(events),
+      /not named among this seed's announcers/,
+      "the refusal says why, rather than stopping every client",
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test("an unvouched handle may not introduce a registry the seed does not pin", async () => {
+  const signer = announcementSigner();
+  const other = otherSigner();
+  const server = await fixture();
+  try {
+    const record = signedAnnouncement(other, {
+      handle: OTHER_HANDLE,
+      bundle: `${server.urls.registry}?foreign`,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+    });
+    server.publish([record]);
+
+    const events: Event[] = [];
+    await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowingBoth(signer, other), {
+      onAnnouncement: (event) => events.push(event as Event),
+    });
+
+    assert.match(
+      refusals(events),
+      /may mirror a registry the seed pins, not introduce one/,
+      "an unvouched handle cannot mint a registry of its own choosing",
+    );
+  } finally {
+    server.close();
+  }
 });

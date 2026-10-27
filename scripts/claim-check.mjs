@@ -474,6 +474,18 @@ if (process.argv.includes("--self-test")) {
   const caughtPinWrite = failures > beforePinWrite;
   if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
   caught = caught && caughtPinWrite;
+  // And a fold that stops comparing the handle against the seed's announcers —
+  // the open question this loop answered — must be reported.
+  const realAnnouncements = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  const doctoredAnnouncements = realAnnouncements.replace(
+    "(seed.announcers ?? []).includes(handle as string)",
+    "true",
+  );
+  const beforeAnnouncers = failures;
+  checkMirrorsDoc(undefined, { announcements: doctoredAnnouncements });
+  const caughtAnnouncers = failures > beforeAnnouncers;
+  if (!caughtAnnouncers) fail("self-test: the checker accepted a fold that ignores the seed's announcers");
+  caught = caught && caughtAnnouncers;
   // And an identity adapter that starts DECIDING — packing a rotation window
   // of its own — must be reported. Core decides; the adapter answers.
   const realIdentityAdapter = readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
@@ -1528,6 +1540,27 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   console.log(
     `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
   );
+  // The doc states who may announce. That is a claim about the fold, so the fold
+  // must carry it: the comparison against the seed's announcers, and each
+  // refusal — the mirror a seed does not name, the registry it does not pin, and
+  // the contradiction it forbids.
+  if (/announcers/.test(doc)) {
+    const announcementsSource =
+      sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+    if (!/\.announcers \?\? \[\]\)\.includes\(handle/.test(announcementsSource)) {
+      fail("MIRRORS.md says a seed's announcers decide who may announce, but the fold never compares the handle against them");
+    }
+    if (!/not named among this seed's announcers/.test(announcementsSource)) {
+      fail("the fold must refuse an unvouched announcer by name, not silently");
+    }
+    if (!/not introduce one/.test(announcementsSource)) {
+      fail("the fold must refuse an unvouched handle trying to introduce a registry");
+    }
+    if (!/not contradict them/.test(announcementsSource)) {
+      fail("the fold must refuse an unvouched contradiction of the pins");
+    }
+  }
+
   // The doc names the wired helper for the API's own store. Naming a helper is
   // a claim about the tree, so the tree must carry it: the helper exists, it
   // wires the STORE adapter, and the adapter itself answers only — any window

@@ -266,8 +266,14 @@ consistent is the federation problem, and it has two parts:
    revoked. The wired path had no caller until `GET /v1/discovery`
    (docs/APP-PROTOCOL.md): the route folds the operator's seeds through this
    server's own identities and reports which location answered and whose keys
-   said so, taking no location from the caller. Who may announce remains RFC
-   0019's open question.
+   said so, taking no location from the caller. Who may announce is answered by
+   the seed's `announcers`: any resolvable handle may announce a LOCATION for a
+   registry the seed already pins, and only while agreeing with those pins,
+   while only a handle the seed names may announce a FACT — a registry the seed
+   does not pin, or pins that differ. An unvouched contradiction is refused with
+   its reason instead of reaching the union's loud stop, which is what closes the
+   denial-of-service RFC 0019 warns about; silence is not permission to claim,
+   and never a bar to mirroring.
    Both client paths fold announcements and neither owns the rule: the fold and
    the record's verification live in `packages/core/src/announcements.ts`, the
    SDK's `findVerifiedBundleFromSeeds` and the API's `bundleFromSeed` each

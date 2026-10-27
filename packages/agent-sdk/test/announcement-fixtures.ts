@@ -46,6 +46,9 @@ export function otherSigner(): AgentSigner {
 export function signedAnnouncement(
   signer: AgentSigner,
   claims: {
+    /** The handle the record names. Defaults to the announcer's; a second
+     *  handle is how a test produces an announcer a seed did NOT name. */
+    handle?: string;
     bundle: string;
     mirror: string;
     bundleRoot: string;
@@ -58,7 +61,7 @@ export function signedAnnouncement(
   const payload = {
     kind: "rarext.mirror-announcement",
     version: 1,
-    handle: ANNOUNCER,
+    handle: claims.handle ?? ANNOUNCER,
     bundle: claims.bundle,
     mirror: claims.mirror,
     bundleRoot: claims.bundleRoot,

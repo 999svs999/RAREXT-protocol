@@ -266,8 +266,9 @@ An announcing operator must be able to do two things.
 - **Availability is the real exposure.** A valid announcement that disagrees
   with a trusted seed stops the union loudly — correct as an integrity result,
   and a denial-of-service shape as an availability one, because any identity
-  that can produce a valid signature can produce the disagreement. That is why
-  who may announce is an open question and not an assumption.
+  that can produce a valid signature can produce the disagreement. This is
+  exactly what the answer to open question 1 below closes, by refusing an
+  unvouched contradiction before it can reach the union.
 - **What an announcement does not prove.** It does not prove the mirror is
   online, that it holds the bytes, that it will hold them next week, or that its
   operator is honest. It proves only that an identity said so, at a time, until a
@@ -343,10 +344,21 @@ This is additive by construction.
 
 ## Open questions
 
-1. **Who may announce?** Any identity, or only identities a seed lists? Any
-   identity maximises openness and gives every key holder a denial-of-service
-   path through the disagreement stop; seed-listed identities make federation
-   as closed as the seed it replaces. This RFC does not settle it.
+1. **Who may announce?** — **ANSWERED: any identity may announce a LOCATION;
+   only a handle the seed names as an `announcer` may announce a FACT.** Both
+   horns of the original question are bad: any identity gives every key holder a
+   denial-of-service path through the disagreement stop, while seed-listed
+   identities make federation as closed as the seed it replaces. The way out is
+   that the two things an announcement carries have different costs. A location
+   is cheap and harmless — the pins make any mirror either correct or useless,
+   since it must rebuild the pinned root and, when pinned, hash to the pinned
+   CID. A fact is not cheap: introducing a registry nobody pins, or contradicting
+   the pins, is a claim about what is true. So an unvouched handle may mirror a
+   registry the seed already pins, and only if it AGREES with those pins; a
+   contradiction or a new registry from an unvouched handle is refused with its
+   reason, which is also what removes the denial-of-service: the claim never
+   enters the union, so the loud stop cannot be provoked by any key holder.
+   Silence is therefore not permission to claim — and never a bar to mirroring.
 2. **How long may an announcement live, and who caps it?** A maximum lifetime,
    a clock-skew allowance for `issuedAt`, and what a client treats as "now" are
    all unspecified here.
@@ -370,9 +382,13 @@ This is additive by construction.
 
 ## Decision
 
-**Draft.** The gap is real and named by `docs/MIRRORS.md`; the design above is
+**Proposed.** The gap is real and named by `docs/MIRRORS.md`; the design above is
 the smallest signed statement that closes the discovery half of it without
-touching verification. No code ships with this RFC. It may move to Proposed when
-the open questions above — above all, who may announce — are answered, and when
-an implementation can demonstrate that a seed without `announcements` behaves
-exactly as it does today.
+touching verification. It is implemented: `verifyAnnouncement` folds verified
+records into the union, resolution runs through the announcing handle's key
+history, and open question 1 is answered by the `announcers` rule — with a test
+proving that an unvouched contradiction is refused and discovery still
+completes, so the denial-of-service shape is closed rather than described.
+Questions 2–5 (lifetime caps, where verification runs, a revocation kind for
+keys, and caching) remain open, and a seed without `announcements` still behaves
+exactly as it did before.

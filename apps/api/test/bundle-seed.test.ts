@@ -627,7 +627,8 @@ test("a verified announcement nominates an extra mirror, and that mirror wins wh
           bundleRoot: pinnedRoot,
           bundleCid: honestCid,
           mirrors: [{ bundle: `${base}/mirror/bundle.json`, root: pinnedRoot }],
-          announcements: [announcementUrl],
+          announcers: ["operator-alice"],
+    announcements: [announcementUrl],
         },
       ],
       { identity: announcerIdentity(),
@@ -691,7 +692,8 @@ test("a forged announcement is reported with its reason, and the seed's own cand
       url: "https://registry.example/seed.json",
       bundle: registry,
       bundleRoot: pinnedRoot,
-      announcements: [announcementUrl],
+      announcers: ["operator-alice"],
+    announcements: [announcementUrl],
     };
 
     const events: AnnouncementEvent[] = [];
@@ -767,7 +769,8 @@ test("an expired announcement is discarded before the union, so its mirror is ne
       url: "https://registry.example/seed.json",
       bundle: registry,
       bundleRoot: pinnedRoot,
-      announcements: [announcementUrl],
+      announcers: ["operator-alice"],
+    announcements: [announcementUrl],
     };
 
     // The path still works: an expired record is a skipped record, not a
@@ -827,7 +830,8 @@ test("a valid announcement contradicting the pins trips the union's loud stop, n
       url: "https://registry.example/seed.json",
       bundle: registry,
       bundleRoot: pinnedRoot,
-      announcements: [announcementUrl],
+      announcers: ["operator-alice"],
+    announcements: [announcementUrl],
     };
 
     let apiError!: Error;
@@ -961,7 +965,8 @@ test("an announcement URL that 404s is reported and skipped, and everything else
         url: "https://registry.example/seed.json",
         bundle: registry,
         bundleRoot: pinnedRoot,
-        announcements: [announcementUrl],
+        announcers: ["operator-alice"],
+    announcements: [announcementUrl],
       },
       { identity: announcerIdentity(),
     onAnnouncement: (event) => events.push(event) },

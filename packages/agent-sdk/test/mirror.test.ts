@@ -725,6 +725,7 @@ test("a verified announcement nominates its mirror, and that mirror wins when th
     bundleRoot: pinnedRoot,
     bundleCid: honestCid,
     mirrors: [{ bundle: "https://dead.example/bundle.json", root: pinnedRoot }],
+    announcers: ["operator-alice"],
     announcements: [announcementUrl],
   };
 
@@ -778,6 +779,7 @@ test("a forged announcement is reported and skipped, and the seed's own candidat
     url: "https://registry.example/seed.json",
     bundle: registry,
     bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
     announcements: [announcementUrl],
   };
 
@@ -830,6 +832,7 @@ test("an expired announcement is discarded before the union, so its mirror is ne
     url: "https://registry.example/seed.json",
     bundle: registry,
     bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
     announcements: [announcementUrl],
   };
 
@@ -876,6 +879,7 @@ test("a valid announcement claiming a different root for the same registry trips
     url: "https://registry.example/seed.json",
     bundle: registry,
     bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
     announcements: [announcementUrl],
   };
 
@@ -962,6 +966,7 @@ test("an announcement URL that 404s is reported and skipped, and everything else
     url: "https://registry.example/seed.json",
     bundle: registry,
     bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
     announcements: [announcementUrl],
   };
 
