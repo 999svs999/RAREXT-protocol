@@ -282,6 +282,15 @@ if (process.argv.includes("--self-test")) {
   const caughtAi = failures > beforeAi;
   if (!caughtAi) fail("self-test: the checker accepted a doctored AI rendition rule name");
   caught = caught && caughtAi;
+  // And an AI verification doc that stops naming the SDK's offline replay: the
+  // sentence is held to the export and to the committed bundle, so dropping it
+  // is drift, not a rewording.
+  const beforeAiReplay = failures;
+  const noReplayAiDoc = originalAiDoc.replace("replayBundleAi(bundle)", "replayClaimsOffline(bundle)");
+  checkAiVerificationDoc(noReplayAiDoc);
+  const caughtAiReplay = failures > beforeAiReplay;
+  if (!caughtAiReplay) fail("self-test: the checker accepted an AI verification doc that no longer names the SDK's bundle replay");
+  caught = caught && caughtAiReplay;
   // And the semantics doc — a published field the validator drops must be
   // caught. The `createdAt` line anchors on the interface block.
   const beforeSemantics = failures;
@@ -396,6 +405,15 @@ if (process.argv.includes("--self-test")) {
   const caughtPinCheck = failures > beforePinCheck;
   if (!caughtPinCheck) fail("self-test: the checker accepted a live checker that verifies no pin");
   caught = caught && caughtPinCheck;
+  // And a mirrors doc that stops naming the SDK's offline AI replay: the
+  // sentence is held to the export and to the refusal it quotes.
+  const beforeReplayDoc = failures;
+  const noReplayMirrorsDoc = originalMirrorsDoc.replace("`replayBundleAi(bundle)`", "`replayClaimsOffline(bundle)`");
+  checkMirrorsDoc(noReplayMirrorsDoc);
+  const caughtReplayDoc = failures > beforeReplayDoc;
+  if (!caughtReplayDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the SDK's bundle replay");
+  caught = caught && caughtReplayDoc;
+  assertChanged(originalMirrorsDoc, noReplayMirrorsDoc, "mirrors-doc-replay");
   assertChanged(originalMirrorsDoc, unpinnedMirrorsDoc, "mirrors-doc-pinning");
   assertChanged(realPublishProof, doctoredPublishProof, "publish-flow-pins");
   assertChanged(realSeedVerifier, doctoredSeedVerifier, "seed-pins-verification");
@@ -432,6 +450,7 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalChains, doctoredChains, "chain-surface");
   assertChanged(originalWorkDoc, doctoredWorkDoc, "reward-table");
   assertChanged(originalAiDoc, doctoredAiDoc, "ai-verification");
+  assertChanged(originalAiDoc, noReplayAiDoc, "ai-verification-replay");
   assertChanged(originalSemanticsDoc, doctoredSemanticsDoc, "semantics-doc");
   assertChanged(originalOperations, doctoredSnapshotDoc, "snapshot-migration");
   caught = assertChanged(originalArchitecture, doctoredDoc, "architecture") && caught;
@@ -845,6 +864,22 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`MIRRORS.md says the SDK finds and checks a copy, but the SDK source has no "${marker}"`);
     }
   }
+  // The second SDK sentence: the verified copy is the whole input to an offline
+  // AI replay. The doc names the export, quotes the refusal a missing challenge
+  // produces, and says the verdicts carry the copy's root — each held to the
+  // SDK, which must actually export the function the doc tells an agent to call.
+  if (!doc.includes("replayBundleAi")) {
+    fail("MIRRORS.md no longer documents the SDK's offline AI replay (replayBundleAi)");
+  }
+  if (typeof sdk.replayBundleAi !== "function" || !sdkSource.includes("export function replayBundleAi")) {
+    fail("MIRRORS.md says replayBundleAi replays a bundle's AI claims, but the SDK exports no such function");
+  }
+  if (!doc.includes("challenge <id> not in bundle") || !sdkSource.includes("not in bundle")) {
+    fail("MIRRORS.md quotes a missing-challenge verdict the SDK does not report");
+  }
+  if (!doc.includes("manifest root") || !sdkSource.includes("bundle.manifest.root")) {
+    fail("MIRRORS.md says replayBundleAi reports the copy's manifest root, but the SDK reads no manifest root");
+  }
   const coreIndex = readFileSync(new URL("packages/core/src/index.ts", root), "utf8");
   for (const marker of ["verifyBundleShape", "cidV1"]) {
     if (!coreIndex.includes(marker)) {
@@ -987,7 +1022,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi)`,
   );
 }
 
@@ -1720,13 +1755,81 @@ function checkAiVerificationDoc(docOverride, appOverride) {
   // manifests that include representation (the hash would change if it didn't).
   // The verifier hash stability check above covers this implicitly.
 
+  // 6. The offline bundle replay. The doc tells a reader they can check a
+  // claim with the SDK and no server, and separately that the committed bundle
+  // carries real AI publications. Both are held to the tree here: the export
+  // must exist, and the committed bundle must replay through it — every AI
+  // publication yielding a correct verdict with evidence, and a forged output
+  // next to them failing with the mismatch visible. This is the doc's trust
+  // model executed rather than described.
+  if (!doc.includes("replayBundleAi")) {
+    fail("AI-VERIFICATION.md no longer documents the SDK's offline bundle replay (replayBundleAi)");
+  }
+  if (typeof sdk.replayBundleAi !== "function") {
+    fail("AI-VERIFICATION.md says replayBundleAi replays a bundle's claims, but the SDK exports no such function");
+  }
+
+  const committedBundle = JSON.parse(
+    readFileSync(new URL("site/registry/bundle.json", root), "utf8"),
+  );
+  const aiPublications = (committedBundle.publications ?? []).filter(
+    (publication) => publication.attestation && publication.attestation.representation,
+  );
+  if (aiPublications.length === 0) {
+    fail("the committed bundle carries no AI publication, so the doc's live proof claim is vacuous");
+  }
+
+  const replayed = sdk.replayBundleAi(committedBundle);
+  if (replayed.root !== committedBundle.manifest.root) {
+    fail("replayBundleAi did not report the committed bundle's manifest root");
+  }
+  if (replayed.claims.length !== aiPublications.length) {
+    fail(
+      `replayBundleAi returned ${replayed.claims.length} verdict(s) for the committed bundle's ` +
+        `${aiPublications.length} AI publication(s)`,
+    );
+  }
+  for (const claim of replayed.claims) {
+    if (claim.correct !== true) {
+      fail(`the committed bundle's AI claim ${claim.publicationId} does not replay correct: true (${claim.error ?? "mismatch"})`);
+    }
+    if (!claim.evidence) {
+      fail(`the committed bundle's AI claim ${claim.publicationId} replayed with no evidence`);
+    }
+  }
+
+  const forgedBundle = structuredClone(committedBundle);
+  const forgedTarget = (forgedBundle.publications ?? []).find(
+    (publication) => publication.attestation && publication.attestation.representation === "generative",
+  );
+  if (!forgedTarget) {
+    fail("the committed bundle carries no generative publication to forge");
+  } else {
+    const body = forgedTarget.artifact.body;
+    body.output = `${body.output} forged`;
+    const forgedClaim = sdk
+      .replayBundleAi(forgedBundle)
+      .claims.find((claim) => claim.representation === "generative");
+    if (!forgedClaim || forgedClaim.correct !== false) {
+      fail("replayBundleAi accepted a forged generative output as correct");
+    }
+    if (
+      !forgedClaim ||
+      !forgedClaim.evidence ||
+      forgedClaim.evidence.expected === forgedClaim.evidence.actual
+    ) {
+      fail("the forged claim's evidence does not show the expected output beside the forged one");
+    }
+  }
+
   console.log(
     `  rules: ${coreAi.RASTER_RULE}, ${coreAi.BOUNDED_RASTER_RULE} | ` +
       `verifier hashes: ${genHash.slice(0, 8)}..., ${boundedHash.slice(0, 8)}... | ` +
       `media validators: generative ok, bounded ok | ` +
       `raster renderers: generative deterministic+rule-faithful, bounded deterministic+refuses-mismatch | ` +
       `routes: /v1/verifiers handled | ` +
-      `verifier manifests: generative/bounded representation declared`,
+      `verifier manifests: generative/bounded representation declared | ` +
+      `offline replay: ${replayed.claims.length} committed AI claim(s) correct with evidence, forged output rejected`,
   );
 }
 

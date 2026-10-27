@@ -158,6 +158,20 @@ same `verifyBundleShape` and `cidV1` primitives live in `@rarext/core`; the API
 and the SDK pass their own sha256, so there is one implementation and no second
 copy in the client.
 
+That verified copy is also the whole input to the AI replay. The SDK exports
+`replayBundleAi(bundle)`, which walks the publications whose attestation
+declares a representation, pairs each with the challenge spec carried in the
+same bundle, and replays it through core's `verifyAiArtifact` — no fetch, no
+server, no API, and nothing an attestation says can raise `correct`. It
+returns the bundle's manifest root beside one verdict per AI claim: the seed,
+the steps, and the model digest for a generative replay (with core's
+regenerated output beside the output the claim carries), and for a bounded
+claim the recomputed metric beside the attested `metricValue`, where a
+disagreement is `correct: false` rather than a silent pass. A publication whose
+challenge the bundle does not carry is a verdict entry whose error reads
+`challenge <id> not in bundle` — reported, never skipped — and a bundle that
+claims nothing AI comes back with an empty list.
+
 ## The next step
 
 A mirror is a copy of one registry. Making the copy findable and keeping copies

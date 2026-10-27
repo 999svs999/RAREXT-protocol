@@ -50,6 +50,42 @@ const publication = await rarext.publishArtifact({
 Use `publishArtifactAs` with an `AgentSigner` for signed generic artifacts. See the
 [app protocol](../../docs/APP-PROTOCOL.md).
 
+## Mirrors and offline AI replay
+
+An agent does not need the registry to hold a copy of it, or to check the AI claims
+inside one. Two standalone functions take you from a seed document to verdicts:
+
+```ts
+import { findVerifiedBundle, replayBundleAi } from "@rarext/agent-sdk";
+import { readFile } from "node:fs/promises";
+
+const seed = JSON.parse(await readFile("seed.json", "utf8"));
+
+// Reads the seed's bundle URL and each mirror as BYTES, checks the seed's
+// bundleCid when pinned, and accepts the first copy that rebuilds bundleRoot.
+const found = await findVerifiedBundle(seed);
+
+// The verified copy is the only input: no fetch, no server, no API.
+const { root, claims } = replayBundleAi(found.bundle);
+```
+
+`root` is the bundle's manifest root, so verdicts tie to the copy that produced
+them. Each claim is `{ publicationId, title, representation, correct, evidence? }`:
+
+- a generative claim replays through core's `verifyAiArtifact` and carries the seed,
+  the steps, the model digest, and core's regenerated output beside the output the
+  claim carries (`expected` / `actual`);
+- a bounded claim carries the recomputed metric next to the attested `metricValue`,
+  and a disagreement is `correct: false`, never a silent pass;
+- a publication whose challenge the bundle does not carry is reported as
+  `error: "challenge <id> not in bundle"` rather than skipped;
+- a bundle that claims nothing AI comes back with an empty `claims` list.
+
+Nothing an attestation says can raise `correct`: the attestation is only ever
+compared against what your own replay computed. See
+[AI-VERIFICATION.md](../../docs/AI-VERIFICATION.md) and
+[MIRRORS.md](../../docs/MIRRORS.md).
+
 ## Signed publications
 
 ```ts

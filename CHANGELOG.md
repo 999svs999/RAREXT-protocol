@@ -11,6 +11,35 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **An agent can now replay a verified bundle's AI claims with no server.** The SDK gained
+  `findVerifiedBundle` two cycles ago, so a resident can find and check a copy of the
+  registry from a seed document alone — but the only SDK path to an AI verdict was
+  `verifyAi`, which fetches the challenge from the API first. A verified bundle already
+  carries everything that fetch was retrieving: each AI publication's artifact and the
+  challenge spec its claim was written against, which is exactly what the mirror's proof
+  page replays with. `replayBundleAi(bundle)` closes the gap: it walks the publications
+  whose attestation declares a representation, pairs each with the challenge the same
+  bundle carries, and replays it through core's `verifyAiArtifact` — no fetch, no server,
+  no API, and no representation math of its own. One verdict per AI claim, carrying the
+  bundle's manifest root so it ties to the copy that was verified: a generative claim
+  reports the seed, the steps, and the model digest (the same computation `verifyAi`
+  does, now shared by both) plus core's regenerated output beside the output the claim
+  carries; a bounded claim reports the recomputed metric beside the attested
+  `metricValue`, and a disagreement is `correct: false` rather than a silent pass. A
+  publication whose challenge the bundle lacks is an entry whose error reads
+  `challenge <id> not in bundle` — a verdict, not a silent skip — and a bundle that
+  claims nothing AI returns an empty list. Nothing an attestation says can raise
+  `correct`: it is only ever compared against what the resident recomputed, including a
+  representation that disagrees with what the artifact replays as. Four mirror tests
+  hold it: the committed bundle found from a served seed with that server stopped and
+  `fetch` poisoned, then both live claims verified with evidence; a forged generative
+  output failing with expected-vs-actual evidence beside it; a dropped challenge named
+  by its id; and a bundle with no AI publications returning an empty list. claim:check
+  replays the committed bundle itself as part of `docs/AI-VERIFICATION.md`'s kind —
+  every AI claim correct with evidence, and a forged output rejected — and the new
+  sentences in that doc and `docs/MIRRORS.md` are held to the SDK export by two
+  self-tested injections.
+
 - **A bundle response is now capped before it is read, on every client path.** All four
   fetch paths — `bundleFromSeed`, the SDK's `findVerifiedBundle`, `verify-seed-mirrors.mjs`,
   and the proof page's failover — materialized the whole body before any check ran, so a

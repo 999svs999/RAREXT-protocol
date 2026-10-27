@@ -16,7 +16,10 @@ import {
   readBundleResponseBytes,
   verifyAiArtifact,
   verifyBundleShape,
+  verifyGenerativeReplay,
   type AiLocalVerification,
+  type GenerativeBody,
+  type GenerativeSpec,
 } from "@rarext/core";
 import type {
   AdapterInfo,
@@ -201,6 +204,168 @@ export async function findVerifiedBundle(
   }
 
   throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);
+}
+
+/**
+ * The identity of a generative claim's committed model: canonical JSON, then
+ * sha256. One implementation shared by `verifyAi` and `replayBundleAi`, so the
+ * live path and the bundle path can never disagree about what the digest is.
+ */
+function generativeModelDigest(body: unknown): string {
+  return createHash("sha256")
+    .update(canonicalize((body as { model: unknown }).model))
+    .digest("hex");
+}
+
+/** What core's math returned for one AI claim, plus the model's digest. */
+export interface BundleAiClaimEvidence {
+  /** Generative: the seed and step count the replay ran with. */
+  seed?: number;
+  steps?: number;
+  /** Generative: `generativeModelDigest`, the same value `verifyAi` returns. */
+  modelDigest?: string;
+  /** Generative: what core's replay regenerated, beside what the claim carries. */
+  expected?: string;
+  actual?: string;
+  /** Bounded: the metric core recomputed and the bound it had to meet. */
+  metricName?: string;
+  metricValue?: number;
+  bound?: number;
+  /**
+   * Bounded: the metric value the attestation committed, when it carries one.
+   * `metricValue` is the resident's own recomputation; this is the number the
+   * claim was published with, kept only so a reader can see the two together.
+   */
+  attestedMetricValue?: number;
+}
+
+/** One AI claim from a bundle, replayed by whoever holds the bundle. */
+export interface BundleAiClaimReplay {
+  publicationId: string;
+  title: string;
+  representation: "exact" | "bounded" | "generative";
+  /**
+   * False when the replay failed AND when it could not be run: a claim nobody
+   * replayed is never reported as passing. `error` says which case this is.
+   */
+  correct: boolean;
+  /** Why the claim could not be replayed, when it could not. */
+  error?: string;
+  evidence?: BundleAiClaimEvidence;
+}
+
+export interface BundleAiReplay {
+  /** `bundle.manifest.root`, so verdicts tie to the exact copy they came from. */
+  root: string;
+  /** One entry per publication that declares a representation; empty if none do. */
+  claims: BundleAiClaimReplay[];
+}
+
+/**
+ * Replay every AI claim a verified bundle carries — from the bundle alone.
+ *
+ * `findVerifiedBundle` proves the copy; this proves the claims inside it. A
+ * verified bundle already carries each AI publication's artifact and the
+ * challenge spec its claim was written against, so core's `verifyAiArtifact`
+ * is all the math this needs: no fetch, no server, no API, and nothing an
+ * attestation says can raise `correct` — the attestation is only ever compared
+ * against what the resident recomputed, and a disagreement fails the claim.
+ *
+ * Every publication that declares a representation yields exactly one entry:
+ * a publication whose challenge the bundle does not carry is an entry whose
+ * error reads `challenge <id> not in bundle` rather than a silent skip (an
+ * unplayable claim is a verdict, not an omission), a pair core cannot verify
+ * reports core's own error, and a bundle that claims nothing AI comes back
+ * with an empty list.
+ */
+export function replayBundleAi(bundle: Bundle): BundleAiReplay {
+  const challenges = new Map(
+    (bundle.challenges ?? []).map((challenge) => [challenge.id, challenge] as const),
+  );
+  const claims: BundleAiClaimReplay[] = [];
+
+  for (const publication of bundle.publications ?? []) {
+    const representation = publication.attestation?.representation;
+    if (!representation) continue;
+
+    const claim = {
+      publicationId: publication.id,
+      title: publication.title,
+      representation,
+    };
+
+    const challenge = challenges.get(publication.challengeId);
+    if (!challenge) {
+      claims.push({
+        ...claim,
+        correct: false,
+        error: `challenge ${publication.challengeId} not in bundle`,
+      });
+      continue;
+    }
+
+    const verdict = verifyAiArtifact(publication.artifact, challenge);
+    if ("error" in verdict) {
+      claims.push({ ...claim, correct: false, error: verdict.error });
+      continue;
+    }
+
+    // The attestation's declared kind and the kind the artifact actually
+    // replays as must be the same claim. A bundle can carry a claim that says
+    // `exact` over a generative artifact (or the reverse) — the two are not
+    // interchangeable, and reporting core's verdict for one under the other's
+    // label would be a pass nobody replayed.
+    if (verdict.representation !== representation) {
+      claims.push({
+        ...claim,
+        correct: false,
+        error: `attestation declares ${representation} but the artifact replays as ${verdict.representation}`,
+      });
+      continue;
+    }
+
+    if (verdict.representation === "generative") {
+      // verifyAiArtifact has already accepted this body and spec, so core's
+      // replay is run a second time only to recover the regenerated output for
+      // the evidence: a claim that failed must show what it did not match, and
+      // the SDK does no representation math of its own.
+      const body = publication.artifact.body as GenerativeBody;
+      const replay = verifyGenerativeReplay(body, challenge.spec as GenerativeSpec);
+
+      claims.push({
+        ...claim,
+        correct: verdict.correct,
+        evidence: {
+          seed: verdict.seed,
+          steps: verdict.steps,
+          modelDigest: generativeModelDigest(body),
+          expected: replay.expected,
+          actual: body.output,
+        },
+      });
+      continue;
+    }
+
+    // Bounded: re-derive the metric the way the proof page does and compare it
+    // with the value the attestation committed. The recomputed number is what
+    // the verdict rests on; an attestation that disagrees with it is a mismatch,
+    // never a silent pass beside it.
+    const attested = publication.attestation.metricValue;
+    const agrees = attested === undefined || attested === verdict.metricValue;
+
+    claims.push({
+      ...claim,
+      correct: verdict.correct && agrees,
+      evidence: {
+        metricName: verdict.metricName,
+        metricValue: verdict.metricValue,
+        bound: verdict.bound,
+        ...(attested === undefined ? {} : { attestedMetricValue: attested }),
+      },
+    });
+  }
+
+  return { root: bundle.manifest.root, claims };
 }
 
 export interface RarextClientOptions {
@@ -954,10 +1119,9 @@ export class RarextClient {
     if ("error" in result) throw new Error(result.error);
 
     if (result.representation === "generative") {
-      const body = artifact.body as { model: unknown };
       return {
         ...result,
-        modelDigest: createHash("sha256").update(canonicalize(body.model)).digest("hex"),
+        modelDigest: generativeModelDigest(artifact.body),
       };
     }
 

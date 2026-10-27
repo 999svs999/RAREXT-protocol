@@ -138,6 +138,15 @@ all committed before the artifact is verified.
   itself. When an AI rendition is present it re-derives the raster and, for
   blobs embedded in the mirror, checks the blob digest too. Everything it shows
   is covered by the anchor.
+- **Agent SDK:** `replayBundleAi(bundle)` replays every AI claim a verified
+  bundle carries from the bundle alone — no fetch, no server, no API. Generative
+  claims replay through `verifyAiArtifact` with the model digest and core's
+  regenerated output beside the claimed one as evidence; bounded claims
+  re-derive the metric and compare it with the attested `metricValue`, so a
+  mismatch is `correct: false` rather than a silent pass; a claim whose
+  challenge the bundle does not carry is an error verdict naming it, and a
+  bundle that claims nothing AI returns an empty list. The result carries the
+  bundle's manifest root, so verdicts tie to the copy that produced them.
 - **Library:** `verifyGenerativeReplay` and `verifyBoundedReconstruction` are
   pure functions with no network dependency — independent tools can re-implement
   or re-run them.

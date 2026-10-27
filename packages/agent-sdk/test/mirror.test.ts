@@ -10,10 +10,11 @@ import {
   cidV1,
   cidV1Raw,
   findVerifiedBundle,
+  replayBundleAi,
   verifyBundle,
   type Bundle,
 } from "../src/index.ts";
-import { MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
+import { canonicalize, MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
 /**
  * The SDK's mirror client, exercised against hostile copies: it tries the
@@ -250,4 +251,159 @@ test("an oversized candidate is refused at the cap, and the honest mirror is sti
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+/** The two AI publications the committed bundle carries, by representation. */
+function aiClaim(bundle: Bundle, representation: "generative" | "bounded") {
+  const publication = bundle.publications.find(
+    (candidate) => candidate.attestation.representation === representation,
+  );
+  assert.ok(publication, `the committed bundle carries a ${representation} publication`);
+  return publication;
+}
+
+test("from a seed document alone: find the bundle, then replay both AI claims with no server", async () => {
+  const honest = verifyBundle(committed);
+  assert.equal(honest.valid, true, honest.reason ?? undefined);
+  const pinnedRoot = honest.computedRoot!;
+  const bytes = Buffer.from(JSON.stringify(committed), "utf8");
+
+  const server = serve({ "/registry/bundle.json": { body: bytes.toString("utf8") } });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+
+    const found = await findVerifiedBundle({
+      bundle: `${base}/registry/bundle.json`,
+      bundleRoot: pinnedRoot,
+      bundleCid: cidV1Raw(bytes),
+    });
+
+    // Prove the boundary instead of asserting it: the server that just served
+    // the copy is stopped and every fetch from here on throws, so a replay
+    // that reached for the network would fail this test rather than quietly
+    // succeed against a still-running endpoint.
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      throw new Error("replayBundleAi must not reach the network");
+    }) as unknown as typeof fetch;
+
+    let replay: ReturnType<typeof replayBundleAi>;
+    try {
+      replay = replayBundleAi(found.bundle);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    assert.equal(replay.root, pinnedRoot, "the verdicts carry the root of the copy they came from");
+    assert.equal(replay.claims.length, 2, "both AI publications yield exactly one verdict each");
+
+    const generativePublication = aiClaim(found.bundle, "generative");
+    const generative = replay.claims.find((claim) => claim.representation === "generative");
+    assert.ok(generative);
+    assert.equal(generative.publicationId, generativePublication.id);
+    assert.equal(generative.title, generativePublication.title);
+    assert.equal(generative.correct, true, generative.error);
+    assert.equal(generative.error, undefined);
+
+    const generativeBody = generativePublication.artifact.body as { seed: number; output: string; model: unknown };
+    const steps = found.bundle.challenges.find((challenge) => challenge.id === "gen-starter")?.spec as { steps: number };
+    assert.equal(generative.evidence?.seed, generativeBody.seed);
+    assert.equal(generative.evidence?.steps, steps.steps);
+    assert.match(generative.evidence?.modelDigest ?? "", /^[0-9a-f]{64}$/);
+    assert.equal(
+      generative.evidence?.modelDigest,
+      createHash("sha256").update(canonicalize(generativeBody.model)).digest("hex"),
+      "the digest is the same computation the live verifyAi path runs",
+    );
+    // A faithful claim replays to exactly what it carries.
+    assert.equal(generative.evidence?.expected, generativeBody.output);
+    assert.equal(generative.evidence?.actual, generativeBody.output);
+
+    const boundedPublication = aiClaim(found.bundle, "bounded");
+    const bounded = replay.claims.find((claim) => claim.representation === "bounded");
+    assert.ok(bounded);
+    assert.equal(bounded.publicationId, boundedPublication.id);
+    assert.equal(bounded.correct, true, bounded.error);
+    assert.equal(bounded.error, undefined);
+    assert.equal(bounded.evidence?.metricName, "maxAbsError");
+    assert.equal(bounded.evidence?.bound, 4);
+    assert.equal(bounded.evidence?.metricValue, boundedPublication.attestation.metricValue);
+    assert.equal(bounded.evidence?.attestedMetricValue, boundedPublication.attestation.metricValue);
+    assert.equal(bounded.evidence?.metricValue, 2, "the committed bundle's metric is the recomputed one");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("a forged AI claim does not survive the resident's own replay", () => {
+  const tampered = structuredClone(committed);
+  const publication = aiClaim(tampered, "generative");
+  const body = publication.artifact.body as { output: string };
+  const claimed = body.output;
+  body.output = `${claimed} forged`;
+
+  // The forgery is a Merkle failure too — the leaf covers the artifact — which
+  // is why a resident verifies the copy first. Replay is the second, separate
+  // question: even handed the forged bytes out of band, the resident's own
+  // recomputation must not agree with them.
+  assert.equal(verifyBundle(tampered).valid, false, "the tampered copy does not rebuild the root");
+
+  const replay = replayBundleAi(tampered);
+  assert.equal(replay.claims.length, 2);
+
+  const generative = replay.claims.find((claim) => claim.representation === "generative");
+  assert.ok(generative);
+  assert.equal(generative.correct, false, "a replayed output that is not the claimed one must fail");
+  assert.equal(generative.evidence?.actual, `${claimed} forged`);
+  assert.equal(generative.evidence?.expected, claimed);
+  assert.notEqual(generative.evidence?.expected, generative.evidence?.actual);
+
+  // The untouched bounded claim beside it still replays: the failure is the
+  // forged claim's, not a blanket rejection of the copy.
+  const bounded = replay.claims.find((claim) => claim.representation === "bounded");
+  assert.ok(bounded);
+  assert.equal(bounded.correct, true, bounded.error);
+});
+
+test("a publication whose challenge the bundle does not carry is a verdict, not a skip", () => {
+  const withoutChallenge = structuredClone(committed);
+  withoutChallenge.challenges = withoutChallenge.challenges.filter(
+    (challenge) => challenge.id !== "bounded-starter",
+  );
+
+  const replay = replayBundleAi(withoutChallenge);
+  assert.equal(replay.claims.length, 2, "the unplayable claim is still reported");
+
+  const bounded = replay.claims.find((claim) => claim.representation === "bounded");
+  assert.ok(bounded);
+  assert.equal(bounded.correct, false, "a claim nobody replayed must not read as passing");
+  assert.equal(bounded.error, "challenge bounded-starter not in bundle");
+  assert.equal(bounded.evidence, undefined, "no verdict without the spec that defines it");
+
+  // The generative claim next to it has its challenge and replays unchanged.
+  const generative = replay.claims.find((claim) => claim.representation === "generative");
+  assert.ok(generative);
+  assert.equal(generative.correct, true, generative.error);
+});
+
+test("a bundle with no AI publications returns an empty list, not an error", () => {
+  const noClaims = structuredClone(committed);
+  noClaims.publications = noClaims.publications.map((publication) => {
+    const copy = structuredClone(publication);
+    delete copy.attestation.representation;
+    delete copy.attestation.metricName;
+    delete copy.attestation.metricValue;
+    return copy;
+  });
+
+  const replayed = replayBundleAi(noClaims);
+  assert.deepEqual(replayed.claims, [], "nothing here claims to be AI");
+  assert.equal(replayed.root, noClaims.manifest.root, "the empty list still names the copy it read");
+
+  assert.deepEqual(replayBundleAi({ ...committed, publications: [] }).claims, []);
 });

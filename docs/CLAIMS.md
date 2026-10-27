@@ -18,11 +18,11 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/CHAINS.md` | chain surface | the chain-registry routes and the table's `trac`/`evm` backing artifacts |
 | `docs/OPERATIONS.md` | limits, AI bounds, snapshot/migration, audit window, evidence citations | named constants, replay bounds (functionally), snapshot versions, the audit window and its refusal literals, and the test files the fault tables cite |
 | `docs/OPERATOR.md` | operational defaults | the `??` fallbacks the doc publishes (challenge interval, GC loops, grace); its narrative guidance rows are prose and are not asserted |
-| `docs/AI-VERIFICATION.md` | AI verification doc | rendition rule names, verifier hashes, media validators and raster renderers (functionally), and the verifier routes |
+| `docs/AI-VERIFICATION.md` | AI verification doc | rendition rule names, verifier hashes, media validators and raster renderers (functionally), the verifier routes, and the SDK's offline bundle replay run against the committed bundle |
 | `docs/SEMANTICS.md` | semantics doc | record fields, binding statuses, routes, claim kinds, and the scope rule through `bindClaim` |
 | `docs/STORAGE-SECURITY.md` | audit window | the nonce bound and the verifier-timeout range |
 | `docs/WORK.md` | reward table | every action's credit rate, both directions |
-| `docs/MIRRORS.md` | mirrors doc | bundle routes, named npm scripts, the takedown test's CI sentence, the published copy's artifacts, and the front door's pinned proof links |
+| `docs/MIRRORS.md` | mirrors doc | bundle routes, named npm scripts, the takedown test's CI sentence, the published copy's artifacts, the front door's pinned proof links, and the SDK's mirror client and offline AI replay |
 | `docs/APP-PROTOCOL.md` | app protocol | every `RAREXT_*` name read by the implementation, and the published route list |
 | `docs/CRYPTO.md` | crypto doc | the runtime floor against `engines.node`, the leaf-version floor, and the suite derivation through `suiteOf` |
 | `scripts/` | artifact sources | the inline bundle (`bundle.js`) and proof page (`verify.html`) each live in one module; generators delegate to them and keep no private copies |
