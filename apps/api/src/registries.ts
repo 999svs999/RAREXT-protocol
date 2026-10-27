@@ -1,12 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 
-export interface RegistrySeed {
-  id: string;
-  url: string;
-  operator: string;
-  chains: string[];
-  note: string | null;
-}
+import { parseRegistrySeedList } from "../../../packages/core/src/registries.ts";
+import type { RegistrySeedEntry } from "../../../packages/core/src/registries.ts";
+
+/**
+ * One entry of the seed list. Re-exported from core rather than restated: the
+ * client that consumes this list reads the same shape, and two declarations of
+ * one list is how they drift.
+ */
+export type RegistrySeed = RegistrySeedEntry;
 
 /**
  * The seed list: the registries a client can look for.
@@ -21,43 +23,17 @@ export function registrySeedList(): RegistrySeed[] {
   if (!source) return defaultSeeds();
 
   let text = source;
-
   if (!source.startsWith("[") && !source.startsWith("{")) {
-    if (!existsSync(source)) {
-      return defaultSeeds();
-    }
+    if (!existsSync(source)) return defaultSeeds();
     text = readFileSync(source, "utf8");
   }
 
   try {
-    const parsed = JSON.parse(text) as unknown;
-    const list = Array.isArray(parsed)
-      ? parsed
-      : typeof parsed === "object" && parsed !== null && "registries" in parsed
-        ? (parsed as { registries: unknown }).registries
-        : null;
-
-    if (!Array.isArray(list)) return defaultSeeds();
-
-    return list
-      .map((value) => {
-        if (typeof value !== "object" || value === null) return null;
-        const record = value as Partial<RegistrySeed>;
-        if (typeof record.id !== "string" || typeof record.url !== "string") {
-          return null;
-        }
-
-        return {
-          id: record.id,
-          url: record.url,
-          operator: typeof record.operator === "string" ? record.operator : "",
-          chains: Array.isArray(record.chains)
-            ? record.chains.filter((chain): chain is string => typeof chain === "string")
-            : [],
-          note: typeof record.note === "string" ? record.note : null,
-        };
-      })
-      .filter((seed): seed is RegistrySeed => seed !== null);
+    // The parsing — what an entry must carry, what is dropped, what is
+    // defaulted — lives in core, because a client consuming this list needs the
+    // same answers. A second normaliser here is how one list grows two meanings.
+    const parsed = parseRegistrySeedList(JSON.parse(text) as unknown);
+    return parsed.length > 0 ? parsed : defaultSeeds();
   } catch {
     return defaultSeeds();
   }
@@ -71,6 +47,10 @@ function defaultSeeds(): RegistrySeed[] {
       operator: "apesdaily",
       chains: ["rarex", "base", "solana", "bitcoin", "cosmos"],
       note: "The reference deployment of the RAREXT registry.",
+      // No seed named: the convention applies, and whether that registry
+      // answers at ${url}/registry/seed.json is the network's business, not a
+      // claim this list makes.
+      seed: null,
     },
   ];
 }

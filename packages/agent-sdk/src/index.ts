@@ -126,6 +126,17 @@ export type { AnnouncementEvent } from "@rarext/core";
  * what the keys it trusts actually said.
  */
 export { identityFromPublishedDocuments } from "./published-identity.ts";
+/**
+ * The federation query: a published seed list, read and asked registry by
+ * registry for a copy of ITS bundle. A registry that does not answer is
+ * reported, never fatal — one dead host must not blind a resident to the rest.
+ */
+export {
+  DEFAULT_REGISTRY_TIMEOUT_MS,
+  findVerifiedBundlesFromRegistryList,
+  registriesFromPublishedList,
+} from "./registries.ts";
+export type { RegistryListOptions, RegistryListResult, RegistryOutcome } from "./registries.ts";
 export type { PublishedIdentityOptions } from "./published-identity.ts";
 export { DEFAULT_IDENTITY_TIMEOUT_MS } from "./published-identity.ts";
 

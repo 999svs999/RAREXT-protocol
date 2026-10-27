@@ -70,6 +70,8 @@ export type {
 
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
+export { parseRegistrySeedList, registrySeedUrl, resolveRegistryUrl } from "./registries.ts";
+export type { RegistrySeedEntry } from "./registries.ts";
 export type { Bundle, BundleManifest, BundleVerification, SeedPin } from "./bundle.ts";
 export type {
   BundleSeed,

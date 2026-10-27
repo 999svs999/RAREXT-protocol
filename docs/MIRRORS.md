@@ -220,7 +220,15 @@ A mirror is a copy of one registry. Making the copy findable and keeping copies
 consistent is the federation problem, and it has two parts:
 
 - a **seed list** of registries, published in the protocol repository and
-  optionally anchored, so a client can find mirrors — the static seed above is a
+  optionally anchored, so a client can find mirrors — served at
+  `GET /v1/registries` (and overridable with `RAREXT_REGISTRIES`, inline JSON or
+  a file path) and parsed in exactly one place, core's `parseRegistrySeedList` /
+  `registrySeedUrl`, because the server that serves the list and the client that
+  reads it must not be able to disagree about what it says. The SDK consumes it:
+  `findVerifiedBundlesFromRegistryList(listUrl, …)` asks every listed registry
+  for a copy of ITS bundle (each registry has its own root, so each is verified
+  against its own pins) and REPORTS a registry that does not answer — one dead
+  host must not blind a resident to the rest. The static seed above is a
   first step, and its consumption is implemented: `bundleFromSeed` in
   `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
   order, and accepts only a copy that **rebuilds the root the seed pins**

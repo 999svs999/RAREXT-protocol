@@ -483,6 +483,18 @@ if (process.argv.includes("--self-test")) {
   const caughtDemo = failures > beforeDemo;
   if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
   caught = caught && caughtDemo;
+  // And a SERVER that grows its own normaliser for the seed list — the fork the
+  // single parser exists to prevent — must be reported.
+  const serverRegistrySource = readFileSync(new URL("apps/api/src/registries.ts", root), "utf8");
+  const doctoredServerRegistry = serverRegistrySource.replace(
+    "return parsed.length > 0 ? parsed : defaultSeeds();",
+    "return defaultSeeds();",
+  ).replace("parseRegistrySeedList(JSON.parse(text) as unknown)", "[]");
+  const beforeServerRegistry = failures;
+  checkMirrorsDoc(undefined, { serverRegistry: doctoredServerRegistry });
+  const caughtServerRegistry = failures > beforeServerRegistry;
+  if (!caughtServerRegistry) fail("self-test: the checker accepted a server that ignores the shared seed-list parser");
+  caught = caught && caughtServerRegistry;
   // And a resident's resolver that stops bounding its reads — the cap every
   // other fetch path carries — must be reported.
   const realPublishedIdentity = readFileSync(
@@ -1576,6 +1588,29 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   console.log(
     `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
   );
+  // The doc names the federation query and the one parser of the seed list. Both
+  // are claims about the tree: the SDK must call the client, and the SERVER must
+  // use the same parser the client uses — a second normaliser is how one list
+  // grows two meanings.
+  if (/findVerifiedBundlesFromRegistryList/.test(doc)) {
+    const registryClient =
+      sources.registryClient ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+    if (!/export async function findVerifiedBundlesFromRegistryList\(/.test(registryClient)) {
+      fail("MIRRORS.md names findVerifiedBundlesFromRegistryList, but the SDK does not export it");
+    }
+    if (!/parseRegistrySeedList\(parsed\)/.test(registryClient)) {
+      fail("the SDK's registry client must parse through core's parser, not one of its own");
+    }
+    if (!/await readBundleResponseBytes\(response\)/.test(registryClient)) {
+      fail("the registry client must bound every document it reads");
+    }
+    const serverRegistry =
+      sources.serverRegistry ?? readFileSync(new URL("apps/api/src/registries.ts", root), "utf8");
+    if (!/parseRegistrySeedList\(JSON\.parse\(text\) as unknown\)/.test(serverRegistry)) {
+      fail("the SERVER must normalise the seed list through the same core parser the client uses");
+    }
+  }
+
   // The doc states who may announce. That is a claim about the fold, so the fold
   // must carry it: the comparison against the seed's announcers, and each
   // refusal — the mirror a seed does not name, the registry it does not pin, and
