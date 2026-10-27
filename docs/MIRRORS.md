@@ -263,9 +263,11 @@ consistent is the federation problem, and it has two parts:
    straight from the identities, rotations and revocations the API already
    serves, so a keyless record resolves through the store that owns it and is
    refused when that store does not vouch for the announcing key or records it
-   revoked. No HTTP route calls bundle discovery yet, so the wired path is the
-   library's and the tests' — and who may announce remains RFC 0019's open
-   question.
+   revoked. The wired path had no caller until `GET /v1/discovery`
+   (docs/APP-PROTOCOL.md): the route folds the operator's seeds through this
+   server's own identities and reports which location answered and whose keys
+   said so, taking no location from the caller. Who may announce remains RFC
+   0019's open question.
    Both client paths fold announcements and neither owns the rule: the fold and
    the record's verification live in `packages/core/src/announcements.ts`, the
    SDK's `findVerifiedBundleFromSeeds` and the API's `bundleFromSeed` each

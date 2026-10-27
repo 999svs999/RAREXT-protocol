@@ -398,6 +398,25 @@ returns 409.
 - `GET /v1/launches/:mint/trajectory?chain=`
 - `POST /v1/verify` with `{ publicationId }`
 - `GET /v1/identities/:handle/rotations` and `/v1/identities/:handle/delegations`
+- `GET /v1/discovery`
+
+## Discovery
+
+`GET /v1/discovery` folds the seeds this server knows through **its own**
+identities and reports what verified: the location that served the copy, the
+recomputed root, how many candidates the union held, and one event per mirror
+announcement — accepted, or refused with the reason. An announcement is believed
+only under the key its named handle's history resolves, so the report is the
+server's answer to "what does the network say, and whose keys said it?".
+
+The seeds are the operator's, from `RAREXT_DISCOVERY_SEEDS` (comma-separated),
+defaulting to the published seed. The route reads **no location from the
+caller** — not a query parameter, not a header. A server that fetches a URL the
+client chose is an SSRF surface, and a verification report that reaches into
+somebody else's private network is not a report.
+
+A bundle that nothing verified is a `502` carrying the refusals, never a `200`
+with an unverified body.
 
 ## SDK
 

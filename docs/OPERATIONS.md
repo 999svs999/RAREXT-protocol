@@ -506,3 +506,7 @@ the configured holder set.
 Keep more than one generation, off the machine that runs the registry. A backup on the
 same disk is a copy, not a backup. Because the bundle is content-verified, an old copy
 still restores; it just restores an older view of the registry and its anchors.
+
+`GET /v1/discovery` reports the fold of the configured seeds through this server's own
+identities (set `RAREXT_DISCOVERY_SEEDS`, comma-separated, or the published seed is used);
+a bundle nothing verified answers `502` with the refusals.

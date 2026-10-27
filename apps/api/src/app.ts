@@ -82,6 +82,7 @@ import {
   verifyManifestInclusion,
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
+import { DiscoveryError, discoverPublishedBundle, discoverySeeds } from "./discovery.ts";
 import {
   isStorageTier,
   quoteStorageRent,
@@ -163,6 +164,15 @@ export interface AppOptions {
   store?: RarextStore;
   publicDir?: string;
   registry?: AdapterRegistry;
+  /**
+   * The seeds `/v1/discovery` folds, in order. Operator-configured on purpose:
+   * the route takes no location from the caller, so there is no URL here for a
+   * client to choose. Defaults to `RAREXT_DISCOVERY_SEEDS`, then to the
+   * published seed.
+   */
+  discoverySeeds?: string[];
+  /** The fetch discovery uses — a seam for tests, which serve their own seeds. */
+  discoveryFetch?: typeof fetch;
   challenges?: ChallengeRegistry;
   sponsors?: SponsorRegistry;
   onChallengeEvent?: (event: ChallengeEvent) => void | Promise<void>;
@@ -1826,6 +1836,30 @@ export function createApp(options: AppOptions = {}): AppServer {
         }
 
         send(res, 200, bundle);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/discovery") {
+        // No location is read from the request — not a query parameter, not a
+        // header. Discovery looks where the OPERATOR said, so this endpoint can
+        // never be turned into a fetch of somebody else's private network.
+        const seeds = options.discoverySeeds ?? discoverySeeds();
+        try {
+          const report = await discoverPublishedBundle({
+            seeds,
+            store,
+            ...(options.discoveryFetch ? { fetch: options.discoveryFetch } : {}),
+          });
+          send(res, 200, report);
+        } catch (error) {
+          // A refusal is a 502 WITH the refusals: every candidate and the reason
+          // it did not answer. A bare status code would be a shrug, and the
+          // whole point of this route is that the answer is checkable.
+          send(res, 502, {
+            error: error instanceof Error ? error.message : String(error),
+            refusals: error instanceof DiscoveryError ? error.refusals : [],
+          });
+        }
         return;
       }
 
