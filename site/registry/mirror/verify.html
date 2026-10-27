@@ -71,6 +71,19 @@
       // copy fails the first test, and a copy of a DIFFERENT bundle fails the
       // second. Every rejection is kept, and the page says which location the
       // copy it verified actually came from.
+      //
+      // This loop is the ONE deliberate exception to the shared verification
+      // sequence: the API's bundleFromSeed, the SDK's findVerifiedBundle, and
+      // verify-seed-mirrors.mjs all delegate the order -- bytes, CID pin,
+      // shape, pinned root, refusals -- to verifyCandidates in @rarext/core.
+      // It does not stay a loop out of neglect: core's sequence and shape
+      // check consume the caller's sha256 SYNCHRONOUSLY, and the only digest a
+      // browser has is WebCrypto's crypto.subtle.digest, which is
+      // asynchronous. Forking a second, async copy of the sequence into core
+      // would recreate exactly the drift this unit closed, so the page keeps
+      // this loop and the constraint instead. claim-check guards the
+      // exception: it fails if this loop starts re-implementing the shared
+      // sequence's wording (the CID pin) or if a caller stops delegating.
       async function loadBundle(pinned) {
         const candidates = ["./bundle.json", "../registry/bundle.json", "../bundle.json"];
         for (const seedUrl of ["./seed.json", "../registry/seed.json"]) {
