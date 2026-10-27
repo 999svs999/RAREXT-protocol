@@ -251,8 +251,14 @@ consistent is the federation problem, and it has two parts:
    candidate, no change in error wording or ordering. Still missing: the
    announcement URLs come from the seed (there is no peer-to-peer discovery of
    announcements themselves), and a resident that reads announcements itself
-   must supply the resolver — with none supplied the honest default is refusal
-   for a keyless record, because the envelope never mints its own authority.
+   must supply the resolver — either the store of an API it trusts, or, with no
+   server of its own, `identityFromPublishedDocuments` in the agent SDK, which
+   reads a handle's identity, its rotations and the revocation list from the
+   documents the publisher serves (`GET /v1/identities/<handle>`, its rotations,
+   `GET /v1/revocations`) under the same response cap as every other fetch, and
+   decides nothing: the walk, the windows and the revocation rule stay in core.
+   With none supplied the honest default is refusal for a keyless record,
+   because the envelope never mints its own authority.
    An announcing key is resolved through the handle's key history: a key the
    handle does not vouch for is refused, a revoked key is refused even when the
    window is valid, and a revocation lookup that could not be performed refuses

@@ -474,6 +474,21 @@ if (process.argv.includes("--self-test")) {
   const caughtPinWrite = failures > beforePinWrite;
   if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
   caught = caught && caughtPinWrite;
+  // And a resident's resolver that stops bounding its reads — the cap every
+  // other fetch path carries — must be reported.
+  const realPublishedIdentity = readFileSync(
+    new URL("packages/agent-sdk/src/published-identity.ts", root),
+    "utf8",
+  );
+  const doctoredPublishedIdentity = realPublishedIdentity.replace(
+    "const bytes = await readBundleResponseBytes(response);",
+    "const bytes = new Uint8Array(await response.arrayBuffer());",
+  );
+  const beforeResolverCap = failures;
+  checkMirrorsDoc(undefined, { publishedIdentity: doctoredPublishedIdentity });
+  const caughtResolverCap = failures > beforeResolverCap;
+  if (!caughtResolverCap) fail("self-test: the checker accepted a resolver that reads an unbounded document");
+  caught = caught && caughtResolverCap;
   // And a fold that reads a FAILED revocation lookup as "not revoked" — the
   // fail-open this loop closed — must be reported.
   const failOpenSource = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
@@ -1556,6 +1571,29 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // must carry it: the comparison against the seed's announcers, and each
   // refusal — the mirror a seed does not name, the registry it does not pin, and
   // the contradiction it forbids.
+  // The doc names the resident's own resolver. Naming it is a claim about the
+  // SDK, so the SDK must carry it: exported, bounded like every other fetch, and
+  // deciding nothing of its own.
+  if (/identityFromPublishedDocuments/.test(doc)) {
+    const sdkIndex = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+    if (!/export \{ identityFromPublishedDocuments \}/.test(sdkIndex)) {
+      fail("MIRRORS.md names identityFromPublishedDocuments, but the SDK does not export it");
+    }
+    const publishedIdentity =
+      sources.publishedIdentity ??
+      readFileSync(new URL("packages/agent-sdk/src/published-identity.ts", root), "utf8");
+    // The CALL, not the import: a module can import a bounded reader and never
+    // call it, and this guard's first version matched the import — which let a
+    // doctored copy straight through.
+    if (!/await readBundleResponseBytes\(response\)/.test(publishedIdentity)) {
+      fail("the resident's resolver must bound every document it reads");
+    }
+    const resolverCode = publishedIdentity.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    if (/issuedAt|expiresAt/.test(resolverCode)) {
+      fail("the resolver retrieves and core decides: window arithmetic found in the resolver");
+    }
+  }
+
   // The doc states the fail-closed rule for a revocation lookup. That is a claim
   // about the fold, so the fold must keep the lookup's OUTCOME apart from the
   // revocation it looked for — collapsing them is the fail-open this closed.

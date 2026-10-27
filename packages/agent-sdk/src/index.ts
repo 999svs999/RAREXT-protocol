@@ -118,6 +118,16 @@ export function cidV1Raw(bytes: Uint8Array): string {
  * The seed list a client discovers mirrors from (docs/MIRRORS.md).
  */
 export type { AnnouncementEvent } from "@rarext/core";
+/**
+ * A resident's own resolver: the keys of the world it lives in, read from the
+ * documents a publisher serves (`GET /v1/identities/<handle>`, its rotations,
+ * and `GET /v1/revocations`). Answers the same port an operator's server does,
+ * so a resident with no server of its own can fold announcements and believe
+ * what the keys it trusts actually said.
+ */
+export { identityFromPublishedDocuments } from "./published-identity.ts";
+export type { PublishedIdentityOptions } from "./published-identity.ts";
+export { DEFAULT_IDENTITY_TIMEOUT_MS } from "./published-identity.ts";
 
 /**
  * The seed list a client discovers mirrors from (docs/MIRRORS.md).
