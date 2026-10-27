@@ -155,3 +155,147 @@ export async function readBundleResponseBytes(
 export type SeedPin =
   | { cid: string; service: string; reference: string }
   | { cid: string; service: string; error: string };
+
+/**
+ * The seed shape the pure multi-seed helpers read. Both twins — the SDK's
+ * `SeedDocument` and the API-side one in `apps/api/src/bundle.ts` — extend
+ * this, so there is one disagreement rule and never two.
+ */
+export interface BundleSeed {
+  bundle: string;
+  bundleRoot: string;
+  /**
+   * The bundle's content address, when the publisher pins it: a CIDv1 over the
+   * raw sha2-256 of the EXACT published bytes.
+   */
+  bundleCid?: string;
+  /**
+   * Where this seed document came from, when the caller knows it. Only used to
+   * attribute a pinned value in a disagreement, so an error says WHICH seed's
+   * operator said what.
+   */
+  url?: string;
+  mirrors?: Array<{ bundle: string; root: string }>;
+}
+
+/** The seed's URL as it is named in errors and results. */
+export function seedLabel(seed: BundleSeed): string {
+  return seed.url ?? (typeof seed.bundle === "string" && seed.bundle.length > 0 ? seed.bundle : "an unnamed seed");
+}
+
+/** One candidate URL from the union, with every seed that nominated it. */
+export interface SeedNomination {
+  url: string;
+  seeds: BundleSeed[];
+}
+
+/** What planning a seed union returns: the deduplicated candidate list. */
+export interface SeedUnionPlan {
+  /** The union of every seed's own bundle URL and its mirrors, deduplicated. */
+  nominations: SeedNomination[];
+}
+
+/**
+ * The one disagreement rule, used by every client that pools seeds.
+ *
+ * Every seed that names the same primary `bundle` URL must pin the same
+ * `bundleRoot` and the same `bundleCid` when both carry one. A seed that
+ * carries no `bundleCid` beside one that does is NOT a disagreement — absence
+ * is not a contradiction — but two values for one registry are: the seeds'
+ * operators disagree about what the registry is, and rather than let "first
+ * seed wins" silently pick a side, planning throws naming the registry, the
+ * field, and every value with the seed that pinned it. This runs BEFORE any
+ * candidate is fetched, so a fork of the trust base stops the resident instead
+ * of racing them.
+ */
+export function planSeedUnion(seeds: BundleSeed[]): SeedUnionPlan {
+  if (!Array.isArray(seeds) || seeds.length === 0) {
+    throw new Error("the seeds name no bundle or mirror to try");
+  }
+
+  const byRegistry = new Map<string, BundleSeed[]>();
+  for (const seed of seeds) {
+    if (typeof seed?.bundle !== "string" || seed.bundle.length === 0) continue;
+    const group = byRegistry.get(seed.bundle) ?? [];
+    group.push(seed);
+    byRegistry.set(seed.bundle, group);
+  }
+
+  for (const [registry, group] of byRegistry) {
+    for (const field of ["bundleRoot", "bundleCid"] as const) {
+      const pinned = new Map<string, string[]>();
+      for (const seed of group) {
+        const value = seed[field];
+        // Absence is not a contradiction: only a carried value can clash.
+        if (typeof value !== "string" || value.length === 0) continue;
+        const holders = pinned.get(value) ?? [];
+        holders.push(seedLabel(seed));
+        pinned.set(value, holders);
+      }
+      if (pinned.size > 1) {
+        const lines = [...pinned].map(
+          ([value, holders]) => `  ${value} — pinned by ${holders.join(", ")}`,
+        );
+        throw new Error(
+          `the seeds disagree about the registry ${registry}: ${field}\n${lines.join("\n")}`,
+        );
+      }
+    }
+  }
+
+  const nominations: SeedNomination[] = [];
+  const seen = new Map<string, SeedNomination>();
+  for (const seed of seeds) {
+    const urls = [seed?.bundle, ...(seed?.mirrors ?? []).map((mirror) => mirror.bundle)].filter(
+      (url) => typeof url === "string" && url.length > 0,
+    );
+    for (const url of urls) {
+      const existing = seen.get(url);
+      if (existing) {
+        if (!existing.seeds.includes(seed)) existing.seeds.push(seed);
+      } else {
+        const nomination = { url, seeds: [seed] };
+        nominations.push(nomination);
+        seen.set(url, nomination);
+      }
+    }
+  }
+
+  if (nominations.length === 0) {
+    throw new Error(
+      seeds.length === 1
+        ? "the seed names no bundle or mirror to try"
+        : `${seeds.length} seeds name no bundle or mirror to try`,
+    );
+  }
+
+  return { nominations };
+}
+
+/**
+ * The verifiable pins a candidate must satisfy, one entry per distinct
+ * `bundleRoot` among the seeds that nominated it, the strictest first for a
+ * shared root: when two seeds agree on a root but only one carries a
+ * `bundleCid`, the pin that governs the copy is the stricter one. Seeds that
+ * name the same registry were already required to agree in `planSeedUnion`, so
+ * distinct roots here can only come from seeds naming different registries,
+ * and each root group is tried before any other.
+ */
+export function pinGroups(nominators: BundleSeed[]): Array<{
+  bundleRoot: string;
+  bundleCid?: string;
+  seeds: BundleSeed[];
+}> {
+  const byRoot = new Map<string, { bundleRoot: string; bundleCid?: string; seeds: BundleSeed[] }>();
+  for (const seed of nominators) {
+    const group = byRoot.get(seed.bundleRoot) ?? {
+      bundleRoot: seed.bundleRoot,
+      bundleCid: undefined,
+      seeds: [],
+    };
+    if (!group.bundleCid && seed.bundleCid) group.bundleCid = seed.bundleCid;
+    group.seeds.push(seed);
+    byRoot.set(seed.bundleRoot, group);
+  }
+  return [...byRoot.values()];
+}

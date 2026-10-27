@@ -4,7 +4,13 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { bundleFromSeed, verifyBundle, type Bundle } from "../src/bundle.ts";
+import {
+  bundleFromSeed,
+  bundleFromSeeds,
+  verifyBundle,
+  type Bundle,
+  type SeedDocument,
+} from "../src/bundle.ts";
 import { cidV1Raw } from "../src/adapters/content.ts";
 import { MAX_BUNDLE_RESPONSE_BYTES } from "../../../packages/core/src/index.ts";
 
@@ -158,6 +164,136 @@ test("a client finds the mirror whose copy rebuilds the seed's pinned root", asy
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+/** Two operators' seed documents for the same registry, each carrying its provenance. */
+function opSeed(url: string, seed: Omit<SeedDocument, "url">): SeedDocument {
+  return { ...seed, url };
+}
+
+test("a client pooling two operators' seeds gets the union, and stops loudly on disagreement", async () => {
+  const honest = verifyBundle(committed);
+  assert.equal(honest.valid, true, honest.reason ?? undefined);
+  const pinnedRoot = honest.computedRoot!;
+
+  const tampered: Bundle = structuredClone(committed);
+  tampered.publications = tampered.publications.map((publication, index) =>
+    index === 0 ? { ...publication, title: "an altered title" } : publication,
+  );
+
+  const seedA = opSeed("https://operator-a.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+    mirrors: [{ bundle: "REPLACED", root: pinnedRoot }],
+  });
+  const seedB = opSeed("https://operator-b.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+  });
+
+  // Operator A's copy is tampered and A's only mirror is down; operator B's
+  // copy is honest. The union tries every candidate and accepts B's.
+  const server = serve({
+    "/registry/bundle.json": { body: JSON.stringify(tampered) },
+    "/mirror-a/bundle.json": { status: 404, body: JSON.stringify({ error: "not found" }) },
+    "/mirror-b/bundle.json": { body: JSON.stringify(committed) },
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+    seedA.bundle = `${base}/registry/bundle.json`;
+    seedA.mirrors![0].bundle = `${base}/mirror-a/bundle.json`;
+    seedB.bundle = `${base}/mirror-b/bundle.json`;
+
+    const found = await bundleFromSeeds([seedA, seedB]);
+    assert.equal(
+      found.source,
+      `${base}/mirror-b/bundle.json`,
+      "the copy only seed B nominated is accepted after all of seed A's candidates fail",
+    );
+    assert.equal(found.root, pinnedRoot);
+    assert.equal(found.candidates, 3, "the union held every candidate, deduplicated");
+    assert.deepEqual(found.seeds, [seedB.url], "the result says which seeds nominated the winner");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  // The disagreement rule is checked BEFORE any candidate is fetched: the
+  // fetch stub records every call, and zero calls must happen.
+  const calls: string[] = [];
+  const recording = (async (url: unknown) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify(committed), { status: 200 });
+  }) as typeof fetch;
+  const registry = "https://registry.example/bundle.json";
+
+  await assert.rejects(
+    () =>
+      bundleFromSeeds(
+        [
+          opSeed("https://operator-a.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+          }),
+          opSeed("https://operator-b.example/seed.json", {
+            bundle: registry,
+            bundleRoot: "0".repeat(64),
+          }),
+        ],
+        { fetch: recording },
+      ),
+    (error: Error) => {
+      assert.match(error.message, /the seeds disagree about the registry/);
+      assert.match(error.message, /bundleRoot/);
+      assert.match(error.message, new RegExp(pinnedRoot.slice(0, 12)));
+      assert.match(error.message, /0{12}/);
+      assert.match(error.message, /https:\/\/operator-a\.example\/seed\.json/);
+      assert.match(error.message, /https:\/\/operator-b\.example\/seed\.json/);
+      assert.deepEqual(calls, [], "a disagreement must be seen before any fetch");
+      return true;
+    },
+    "two operators pinning different roots for the same registry must stop the resident",
+  );
+
+  // Every candidate across the union failing names refusals from BOTH seeds,
+  // with the seed that nominated each failing copy.
+  const failedA = opSeed("https://operator-a.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+  });
+  const failedB = opSeed("https://operator-b.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+  });
+  const honestServer = serve({
+    "/absent-a.json": { status: 404, body: JSON.stringify({ error: "not found" }) },
+    "/absent-b.json": { status: 404, body: JSON.stringify({ error: "not found" }) },
+  });
+  try {
+    honestServer.listen(0, "127.0.0.1");
+    await once(honestServer, "listening");
+    const { port } = honestServer.address() as AddressInfo;
+    failedA.bundle = `http://127.0.0.1:${port}/absent-a.json`;
+    failedB.bundle = `http://127.0.0.1:${port}/absent-b.json`;
+    await assert.rejects(
+      () => bundleFromSeeds([failedA, failedB]),
+      (error: Error) => {
+        assert.match(error.message, /absent-a\.json/);
+        assert.match(error.message, /absent-b\.json/);
+        assert.equal((error.message.match(/HTTP 404/g) ?? []).length, 2);
+        assert.match(error.message, /https:\/\/operator-a\.example\/seed\.json/);
+        assert.match(error.message, /https:\/\/operator-b\.example\/seed\.json/);
+        return true;
+      },
+      "the union's failure names every refusal, with the seed that nominated each copy",
+    );
+  } finally {
+    honestServer.closeAllConnections();
+    await new Promise<void>((resolve) => honestServer.close(() => resolve()));
   }
 });
 

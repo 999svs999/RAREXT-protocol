@@ -10,9 +10,11 @@ import {
   cidV1,
   cidV1Raw,
   findVerifiedBundle,
+  findVerifiedBundleFromSeeds,
   replayBundleAi,
   verifyBundle,
   type Bundle,
+  type SeedDocument,
 } from "../src/index.ts";
 import { canonicalize, MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
@@ -406,4 +408,258 @@ test("a bundle with no AI publications returns an empty list, not an error", () 
   assert.equal(replayed.root, noClaims.manifest.root, "the empty list still names the copy it read");
 
   assert.deepEqual(replayBundleAi({ ...committed, publications: [] }).claims, []);
+});
+
+/** Two operators' seed documents for the same registry, each carrying its provenance. */
+function opSeed(url: string, seed: Omit<SeedDocument, "url">): SeedDocument {
+  return { ...seed, url };
+}
+
+test("two agreeing seeds pool their mirrors: a copy only one operator nominated wins", async () => {
+  const honest = verifyBundle(committed);
+  assert.equal(honest.valid, true, honest.reason ?? undefined);
+  const pinnedRoot = honest.computedRoot!;
+
+  const tampered: Bundle = structuredClone(committed);
+  tampered.publications = tampered.publications.map((publication, index) =>
+    index === 0 ? { ...publication, title: "an altered title" } : publication,
+  );
+
+  const seedA = opSeed("https://operator-a.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+    mirrors: [{ bundle: "REPLACED", root: pinnedRoot }],
+  });
+  const seedB = opSeed("https://operator-b.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+  });
+
+  // Operator A's copy is tampered and A's only mirror is down; operator B's
+  // copy is honest. The union must try every candidate and accept B's —
+  // cross-operator redundancy is the whole point of pooling the seeds.
+  const server = serve({
+    "/registry/bundle.json": { body: JSON.stringify(tampered) },
+    "/mirror-a/bundle.json": { status: 404, body: JSON.stringify({ error: "not found" }) },
+    "/mirror-b/bundle.json": { body: JSON.stringify(committed) },
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+    seedA.bundle = `${base}/registry/bundle.json`;
+    seedA.mirrors![0].bundle = `${base}/mirror-a/bundle.json`;
+    seedB.bundle = `${base}/mirror-b/bundle.json`;
+
+    const found = await findVerifiedBundleFromSeeds([seedA, seedB]);
+
+    assert.equal(
+      found.source,
+      `${base}/mirror-b/bundle.json`,
+      "the copy only seed B nominated is accepted after all of seed A's candidates fail",
+    );
+    assert.equal(found.root, pinnedRoot);
+    assert.equal(found.bundle.manifest.root, pinnedRoot);
+    assert.equal(found.candidates, 3, "the union held every candidate, deduplicated");
+    assert.deepEqual(found.seeds, [seedB.url], "the result says which seeds nominated the winner");
+
+    // Every candidate across the union failing names refusals from BOTH seeds
+    // — including the seed that nominated each failing copy.
+    const seedC = opSeed("https://operator-c.example/seed.json", {
+      bundle: `${base}/absent-c.json`,
+      bundleRoot: pinnedRoot,
+    });
+    seedA.bundle = `${base}/absent-a.json`;
+    seedA.mirrors = [];
+    await assert.rejects(
+      () => findVerifiedBundleFromSeeds([seedA, seedC]),
+      (error: Error) => {
+        assert.match(error.message, /absent-a\.json/);
+        assert.match(error.message, /absent-c\.json/);
+        assert.equal((error.message.match(/HTTP 404/g) ?? []).length, 2);
+        assert.match(error.message, /https:\/\/operator-a\.example\/seed\.json/);
+        assert.match(error.message, /https:\/\/operator-c\.example\/seed\.json/);
+        return true;
+      },
+      "the union's failure names every refusal, with the seed that nominated each copy",
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("seeds disagreeing about the registry stop loudly, before anything is fetched", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+
+  const reserialized = JSON.stringify(committed, null, 2) + "\n";
+  const honestCid = cidV1Raw(Buffer.from(JSON.stringify(committed), "utf8"));
+  const otherCid = cidV1Raw(Buffer.from(reserialized, "utf8"));
+  assert.notEqual(otherCid, honestCid);
+
+  // The disagreement rule is checked BEFORE any candidate is fetched: the
+  // fetch stub records every call, and zero calls must happen.
+  const calls: string[] = [];
+  const recording = (async (url: unknown) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify(committed), { status: 200 });
+  }) as typeof fetch;
+  const registry = "https://registry.example/bundle.json";
+
+  await assert.rejects(
+    () =>
+      findVerifiedBundleFromSeeds(
+        [
+          opSeed("https://operator-a.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+          }),
+          opSeed("https://operator-b.example/seed.json", {
+            bundle: registry,
+            bundleRoot: "0".repeat(64),
+          }),
+        ],
+        { fetch: recording },
+      ),
+    (error: Error) => {
+      assert.match(error.message, /the seeds disagree about the registry/);
+      assert.match(error.message, /bundleRoot/);
+      assert.match(error.message, new RegExp(pinnedRoot.slice(0, 12)));
+      assert.match(error.message, /0{12}/);
+      assert.match(error.message, /https:\/\/operator-a\.example\/seed\.json/);
+      assert.match(error.message, /https:\/\/operator-b\.example\/seed\.json/);
+      assert.deepEqual(calls, [], "a disagreement must be seen before any fetch");
+      return true;
+    },
+    "two operators pinning different roots for the same registry must stop the resident",
+  );
+
+  await assert.rejects(
+    () =>
+      findVerifiedBundleFromSeeds(
+        [
+          opSeed("https://operator-a.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+            bundleCid: honestCid,
+          }),
+          opSeed("https://operator-b.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+            bundleCid: otherCid,
+          }),
+        ],
+        { fetch: recording },
+      ),
+    (error: Error) => {
+      assert.match(error.message, /the seeds disagree about the registry/);
+      assert.match(error.message, /bundleCid/);
+      assert.match(error.message, new RegExp(honestCid.slice(0, 12)));
+      assert.match(error.message, new RegExp(otherCid.slice(0, 12)));
+      assert.match(error.message, /https:\/\/operator-a\.example\/seed\.json/);
+      assert.match(error.message, /https:\/\/operator-b\.example\/seed\.json/);
+      assert.deepEqual(calls, [], "a CID disagreement must be seen before any fetch");
+      return true;
+    },
+    "two operators pinning different content addresses for the same registry must stop the resident",
+  );
+
+  // Three seeds, two agreeing and one divergent: the divergence is named with
+  // its value and the seed that pinned it.
+  await assert.rejects(
+    () =>
+      findVerifiedBundleFromSeeds(
+        [
+          opSeed("https://operator-a.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+          }),
+          opSeed("https://operator-b.example/seed.json", {
+            bundle: registry,
+            bundleRoot: pinnedRoot,
+          }),
+          opSeed("https://operator-c.example/seed.json", {
+            bundle: registry,
+            bundleRoot: "1".repeat(64),
+          }),
+        ],
+        { fetch: recording },
+      ),
+    (error: Error) => {
+      assert.match(error.message, /the seeds disagree about the registry/);
+      assert.match(error.message, new RegExp(pinnedRoot.slice(0, 12)));
+      assert.match(error.message, /1{12}/);
+      assert.match(error.message, /https:\/\/operator-c\.example\/seed\.json/);
+      assert.deepEqual(calls, [], "the divergent seed is named before any fetch");
+      return true;
+    },
+  );
+});
+
+test("a seed without a bundleCid beside one that has it is coexistence, not contradiction", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const reserialized = JSON.stringify(committed, null, 2) + "\n";
+  const honestCid = cidV1Raw(Buffer.from(JSON.stringify(committed), "utf8"));
+
+  const seedA = opSeed("https://operator-a.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+  });
+  const seedB = opSeed("https://operator-b.example/seed.json", {
+    bundle: "REPLACED",
+    bundleRoot: pinnedRoot,
+    bundleCid: honestCid,
+  });
+
+  // The stricter pin governs candidates both seeds nominated: the
+  // re-serialized copy rebuilds the pinned root and would pass the un-pinned
+  // seed's checks alone, but the seed that pins the CID refuses it — silently
+  // resolving by dropping the stricter pin is exactly what must not happen.
+  const server = serve({
+    "/reserialized/bundle.json": { body: reserialized },
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    seedA.bundle = `http://127.0.0.1:${port}/reserialized/bundle.json`;
+    seedB.bundle = seedA.bundle;
+
+    await assert.rejects(
+      () => findVerifiedBundleFromSeeds([seedA, seedB]),
+      (error: Error) => {
+        assert.doesNotMatch(error.message, /the seeds disagree about the registry/);
+        assert.match(error.message, /serves .* the seed pins /);
+        assert.match(error.message, new RegExp(honestCid.slice(0, 12)));
+        return true;
+      },
+      "absence of a pin is not a contradiction, and the stricter pin governs",
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  // And the honest bytes are accepted under the same pins, attributed to both
+  // seeds that nominated the copy.
+  const honestServer = serve({
+    "/reserialized/bundle.json": { body: JSON.stringify(committed) },
+  });
+  try {
+    honestServer.listen(0, "127.0.0.1");
+    await once(honestServer, "listening");
+    const { port } = honestServer.address() as AddressInfo;
+    seedA.bundle = `http://127.0.0.1:${port}/reserialized/bundle.json`;
+    seedB.bundle = seedA.bundle;
+    const found = await findVerifiedBundleFromSeeds([seedA, seedB]);
+    assert.equal(found.source, seedA.bundle);
+    assert.deepEqual(found.seeds, [seedA.url, seedB.url]);
+    assert.equal(found.candidates, 1);
+  } finally {
+    honestServer.closeAllConnections();
+    await new Promise<void>((resolve) => honestServer.close(() => resolve()));
+  }
 });

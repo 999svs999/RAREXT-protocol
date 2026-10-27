@@ -71,7 +71,15 @@ export type {
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
 export type { Bundle, BundleManifest, BundleVerification, SeedPin } from "./bundle.ts";
-export { MAX_BUNDLE_RESPONSE_BYTES, readBundleResponseBytes, verifyBundleShape } from "./bundle.ts";
+export type { BundleSeed, SeedNomination, SeedUnionPlan } from "./bundle.ts";
+export {
+  MAX_BUNDLE_RESPONSE_BYTES,
+  pinGroups,
+  planSeedUnion,
+  readBundleResponseBytes,
+  seedLabel,
+  verifyBundleShape,
+} from "./bundle.ts";
 export type { BundleResponse } from "./bundle.ts";
 export { base32Encode, cidV1 } from "./content.ts";
 export { sha256Hex, toHex, type Sha256 } from "./digest.ts";

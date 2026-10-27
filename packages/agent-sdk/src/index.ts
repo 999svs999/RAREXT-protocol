@@ -13,11 +13,15 @@ import { dirname, join } from "node:path";
 import {
   canonicalize,
   cidV1,
+  pinGroups,
+  planSeedUnion,
   readBundleResponseBytes,
+  seedLabel,
   verifyAiArtifact,
   verifyBundleShape,
   verifyGenerativeReplay,
   type AiLocalVerification,
+  type BundleSeed,
   type GenerativeBody,
   type GenerativeSpec,
 } from "@rarext/core";
@@ -99,25 +103,25 @@ export function cidV1Raw(bytes: Uint8Array): string {
   return cidV1(nodeSha256, bytes);
 }
 
-/** The seed list a client discovers mirrors from (docs/MIRRORS.md). */
-export interface SeedDocument {
-  bundle: string;
-  bundleRoot: string;
-  /**
-   * The bundle's content address, when the publisher pins it: a CIDv1 over the
-   * raw sha2-256 of the EXACT published bytes. When present it is authoritative
-   * — a mirror that re-serializes the same bundle with different whitespace
-   * serves different bytes, and different bytes are a different artifact.
-   */
-  bundleCid?: string;
+/**
+ * The seed list a client discovers mirrors from (docs/MIRRORS.md).
+ */
+export interface SeedDocument extends BundleSeed {
   pins?: SeedPin[];
-  mirrors?: Array<{ bundle: string; root: string }>;
 }
 
 export interface VerifiedBundleSource {
   bundle: Bundle;
   root: string;
   source: string;
+}
+
+/** What multi-seed discovery adds to a single verified copy: its provenance. */
+export interface VerifiedBundleFromSeeds extends VerifiedBundleSource {
+  /** How many distinct candidate URLs the union held. */
+  candidates: number;
+  /** The seeds (their URLs) that nominated the winning copy. */
+  seeds: string[];
 }
 
 /**
@@ -154,69 +158,114 @@ export async function findVerifiedBundle(
   seed: SeedDocument,
   options: FindVerifiedBundleOptions = {},
 ): Promise<VerifiedBundleSource> {
+  const found = await findVerifiedBundleFromSeeds([seed], options);
+  return { bundle: found.bundle, root: found.root, source: found.source };
+}
+
+/**
+ * The same search across SEEDS: the union of every seed's own bundle URL and
+ * its mirrors, deduplicated, so a copy only one operator nominated is still
+ * tried when the other operators' candidates all fail — a resident who trusts
+ * two operators gets both operators' redundancy, not whichever seed came
+ * first.
+ *
+ * The union is planned before anything is fetched, and planning enforces ONE
+ * disagreement rule (core's `planSeedUnion`): every seed naming the same
+ * primary `bundle` URL must pin the same `bundleRoot` and the same `bundleCid`
+ * when both carry one. Any disagreement throws naming the registry, the field,
+ * and every value with the seed URL that pinned it — two operators disagreeing
+ * about what the registry is stops the resident, it does not race them. A seed
+ * that carries no `bundleCid` beside one that does is not a disagreement, and
+ * the stricter pin governs the shared candidates.
+ *
+ * Each candidate is verified exactly as `findVerifiedBundle` verifies one,
+ * against the pins of the seeds that nominated it, and every refusal is
+ * recorded with its reason and, when several seeds are pooled, the seeds that
+ * nominated it.
+ */
+export async function findVerifiedBundleFromSeeds(
+  seeds: SeedDocument[],
+  options: FindVerifiedBundleOptions = {},
+): Promise<VerifiedBundleFromSeeds> {
   const request = options.fetch ?? fetch;
   const sha256 = options.sha256 ?? nodeSha256;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
-  const candidates = Array.from(
-    new Set([seed.bundle, ...(seed.mirrors ?? []).map((mirror) => mirror.bundle)]),
-  ).filter((url) => typeof url === "string" && url.length > 0);
-
-  if (candidates.length === 0) {
-    throw new Error("the seed names no bundle or mirror to try");
-  }
+  const plan = planSeedUnion(seeds);
+  const attribute = seeds.length > 1;
 
   const refusals: string[] = [];
-  const refuse = (url: string, reason: string) => {
-    refusals.push(`${url}: ${reason}`);
+  const refuse = (url: string, reason: string, nominators: BundleSeed[]) => {
+    refusals.push(
+      `${url}: ${reason}` +
+        (attribute
+          ? `, nominated by ${nominators.map(seedLabel).join(", ")}`
+          : ""),
+    );
     options.onCandidate?.({ url, status: "refused", reason });
   };
 
-  for (const url of candidates) {
+  for (const { url, seeds: nominators } of plan.nominations) {
     options.onCandidate?.({ url, status: "trying" });
-    let value: unknown;
+    // Read the bytes once. When any nominating seed pins a CID, the hash is
+    // taken over exactly what the mirror served — a re-serialized copy of the
+    // same bundle fails here, which is the point: the pointer is a hash, and a
+    // hash cannot be re-serialized into being. The read is capped: a mirror
+    // that declares a huge Content-Length, or streams forever, is refused at
+    // the cap and skipped like any other bad copy.
+    let bytes: Uint8Array;
     try {
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) {
-        refuse(url, `HTTP ${response.status}`);
+        refuse(url, `HTTP ${response.status}`, nominators);
         continue;
       }
-      // Read the bytes, not a parsed shape: when the seed pins a CID, the hash
-      // is taken over exactly what the mirror served. A re-serialized copy of
-      // the same bundle fails here, which is the point — the pointer is a
-      // hash, and a hash cannot be re-serialized into being. The read is
-      // capped: a mirror that declares a huge Content-Length, or streams
-      // forever, is refused at the cap and skipped like any other bad copy.
-      const bytes = await readBundleResponseBytes(response);
-      if (seed.bundleCid) {
+      bytes = await readBundleResponseBytes(response);
+    } catch (error) {
+      refuse(url, error instanceof Error ? error.message : "fetch failed", nominators);
+      continue;
+    }
+
+    for (const pin of pinGroups(nominators)) {
+      if (pin.bundleCid) {
         const served = cidV1(sha256, bytes);
-        if (served !== seed.bundleCid) {
-          refuse(url, `serves ${served}, the seed pins ${seed.bundleCid}`);
+        if (served !== pin.bundleCid) {
+          refuse(url, `serves ${served}, the seed pins ${pin.bundleCid}`, nominators);
           continue;
         }
       }
-      value = JSON.parse(new TextDecoder().decode(bytes));
-    } catch (error) {
-      refuse(url, error instanceof Error ? error.message : "fetch failed");
-      continue;
-    }
+      let value: unknown;
+      try {
+        value = JSON.parse(new TextDecoder().decode(bytes));
+      } catch (error) {
+        refuse(url, error instanceof Error ? error.message : "the bundle is not JSON", nominators);
+        continue;
+      }
 
-    const verification = verifyBundleShape(value as Bundle, sha256);
-    if (!verification.valid) {
-      refuse(url, verification.reason ?? "the bundle does not verify");
-      continue;
-    }
+      const verification = verifyBundleShape(value as Bundle, sha256);
+      if (!verification.valid) {
+        refuse(url, verification.reason ?? "the bundle does not verify", nominators);
+        continue;
+      }
 
-    if (verification.computedRoot !== seed.bundleRoot) {
-      refuse(
-        url,
-        `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${seed.bundleRoot}`,
-      );
-      continue;
-    }
+      if (verification.computedRoot !== pin.bundleRoot) {
+        refuse(
+          url,
+          `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${pin.bundleRoot}`,
+          nominators,
+        );
+        continue;
+      }
 
-    options.onCandidate?.({ url, status: "verified", root: verification.computedRoot });
-    return { bundle: value as Bundle, root: verification.computedRoot, source: url };
+      options.onCandidate?.({ url, status: "verified", root: verification.computedRoot });
+      return {
+        bundle: value as Bundle,
+        root: verification.computedRoot,
+        source: url,
+        candidates: plan.nominations.length,
+        seeds: nominators.map(seedLabel),
+      };
+    }
   }
 
   throw new Error(`no candidate rebuilt the pinned root:\n  ${refusals.join("\n  ")}`);

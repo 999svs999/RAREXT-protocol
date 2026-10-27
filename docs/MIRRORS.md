@@ -199,9 +199,24 @@ consistent is the federation problem, and it has two parts:
   (internal validity is not enough, because a mirror can rewrite both its bytes
   and the root inside them). Every candidate that fails is skipped with its
   reason recorded, and a seed whose candidates all fail raises an error naming
-  each one — an outage reads as evidence rather than as an opaque failure. What
-  is still missing is a live federation protocol: mirrors do not gossip, and
-  the seed is still a file someone publishes;
+  each one — an outage reads as evidence rather than as an opaque failure.
+  Multi-seed discovery is implemented too: a resident trusting two operators
+  passes both seeds to the SDK's `findVerifiedBundleFromSeeds(seeds, …)` or the
+  API-side twin `bundleFromSeeds(seeds, …)`, which verifies the seeds AGREE
+  before anything is fetched — every seed naming the same primary `bundle` URL
+  must pin the same `bundleRoot` and the same `bundleCid` when both carry one,
+  and any disagreement throws naming the registry, the field, and every value
+  with the seed URL that pinned it (`the seeds disagree about the registry …`)
+  — a fork or an attack that splits the trust base stops the resident loudly;
+  it does not race them, and "first seed wins" never silently picks a side —
+  and then pools the deduplicated union of every seed's own URL and mirrors,
+  so a copy only
+  one operator nominated is still tried when the others' candidates all fail,
+  returned with the winning copy's contributing seeds and the union's size. A
+  seed that carries no `bundleCid` beside one that does is not a disagreement
+  (absence is not a contradiction), and the stricter pin governs the shared
+  candidates. What is still missing is a live federation protocol: mirrors do
+  not gossip, and the seed is still a file someone publishes;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — implemented for the copy the seed names: the seed pins the
   bundle's content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the

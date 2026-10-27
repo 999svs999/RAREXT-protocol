@@ -424,7 +424,19 @@ if (process.argv.includes("--self-test")) {
   const caughtResidentDoc = failures > beforeResidentDoc;
   if (!caughtResidentDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the resident demo");
   caught = caught && caughtResidentDoc;
+  // And a mirrors doc that stops naming multi-seed discovery must be
+  // reported: the sentence is held to the SDK export, the API twin, and the
+  // disagreement rule living in core.
+  const beforeMultiSeed = failures;
+  const noMultiSeedMirrorsDoc = originalMirrorsDoc
+    .replace("findVerifiedBundleFromSeeds", "findVerifiedBundleEnsemble")
+    .replace("bundleFromSeeds", "bundleEnsemble");
+  checkMirrorsDoc(noMultiSeedMirrorsDoc);
+  const caughtMultiSeed = failures > beforeMultiSeed;
+  if (!caughtMultiSeed) fail("self-test: the checker accepted a mirrors doc that no longer names multi-seed discovery");
+  caught = caught && caughtMultiSeed;
   assertChanged(originalMirrorsDoc, noResidentMirrorsDoc, "mirrors-doc-resident");
+  assertChanged(originalMirrorsDoc, noMultiSeedMirrorsDoc, "mirrors-doc-multiseed");
   assertChanged(originalMirrorsDoc, noReplayMirrorsDoc, "mirrors-doc-replay");
   assertChanged(originalMirrorsDoc, unpinnedMirrorsDoc, "mirrors-doc-pinning");
   assertChanged(realPublishProof, doctoredPublishProof, "publish-flow-pins");
@@ -903,6 +915,41 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   if (!doc.includes("manifest root") || !sdkSource.includes("bundle.manifest.root")) {
     fail("MIRRORS.md says replayBundleAi reports the copy's manifest root, but the SDK reads no manifest root");
   }
+  // Multi-seed discovery: the doc says a resident can pool two operators'
+  // seeds and that disagreement about the registry stops loudly before any
+  // fetch. Both twins must carry the feature, and the disagreement rule must
+  // live in ONE module (core), so the SDK and the API can never fork it.
+  if (!doc.includes("findVerifiedBundleFromSeeds")) {
+    fail("MIRRORS.md no longer documents multi-seed discovery (findVerifiedBundleFromSeeds)");
+  }
+  if (!doc.includes("bundleFromSeeds")) {
+    fail("MIRRORS.md no longer documents the API-side twin (bundleFromSeeds)");
+  }
+  if (!doc.includes("the seeds disagree about the registry") || !doc.includes("not race")) {
+    fail("MIRRORS.md no longer names the disagreement error and its effect (stop, not race)");
+  }
+  if (!doc.includes("absence is not a contradiction")) {
+    fail("MIRRORS.md no longer states that a missing bundleCid beside one present is not a disagreement");
+  }
+  if (typeof sdk.findVerifiedBundleFromSeeds !== "function") {
+    fail("MIRRORS.md says the SDK pools seeds, but the SDK exports no findVerifiedBundleFromSeeds");
+  }
+  const coreBundleSource = readFileSync(new URL("packages/core/src/bundle.ts", root), "utf8");
+  for (const marker of ["export function planSeedUnion", "the seeds disagree about the registry", "Absence is not a contradiction"]) {
+    if (!coreBundleSource.includes(marker)) {
+      fail(`MIRRORS.md documents multi-seed disagreement, but core's bundle.ts has no "${marker}"`);
+    }
+  }
+  for (const marker of ["findVerifiedBundleFromSeeds", "planSeedUnion"]) {
+    if (!sdkSource.includes(marker)) {
+      fail(`MIRRORS.md says the SDK finds a copy across seeds, but the SDK source has no "${marker}"`);
+    }
+  }
+  for (const marker of ["bundleFromSeeds", "planSeedUnion"]) {
+    if (!bundleModule.includes(marker)) {
+      fail(`MIRRORS.md says the API-side twin pools seeds, but bundle.ts has no "${marker}"`);
+    }
+  }
   const coreIndex = readFileSync(new URL("packages/core/src/index.ts", root), "utf8");
   for (const marker of ["verifyBundleShape", "cidV1"]) {
     if (!coreIndex.includes(marker)) {
@@ -1071,7 +1118,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi)`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core`,
   );
 }
 
