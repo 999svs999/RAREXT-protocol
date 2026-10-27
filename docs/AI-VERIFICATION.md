@@ -151,7 +151,14 @@ all committed before the artifact is verified.
   published seed (or a URL you pass), uses the SDK's `findVerifiedBundle` to
   reach a copy that rebuilds the pinned root and CID, and replays every AI claim
   with `replayBundleAi`; it prints each candidate's refusal, every verdict with
-  its evidence, and the root they tie to. It needs no keys, no server, and no
+  its evidence, and the root they tie to. When the seed names announcement
+  documents it folds them too, resolving the announcing keys from the documents
+  the publisher serves (`identityFromPublishedDocuments`) and printing each
+  record as accepted with its mirror or refused with its reason — so the resident
+  believes an announcement only under a key it could actually check. A local tree
+  may pin its port (`--local <dir> --port <n>`) because a signed record names
+  absolute URLs and a signature over a rewritten URL is not a signature. It needs
+  no keys, no server, and no
   write access, and `--local <dir>` runs the same flow against a local tree in
   CI.
 - **Library:** `verifyGenerativeReplay` and `verifyBoundedReconstruction` are

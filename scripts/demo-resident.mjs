@@ -41,18 +41,29 @@ function usage(message) {
   if (message) console.error(`demo-resident: ${message}`);
   console.error(
     "usage: node scripts/demo-resident.mjs [seed-url]\n" +
-      "       node scripts/demo-resident.mjs --local <dir>",
+      "       node scripts/demo-resident.mjs --local <dir> [--port <n>]",
   );
 }
 
 function parseArgs(argv) {
   let local = null;
+  let port = 0;
   const positional = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--help" || arg === "-h") {
       usage();
       process.exit(0);
+    }
+    if (arg === "--port" || arg.startsWith("--port=")) {
+      const value = arg.startsWith("--port=") ? arg.slice("--port=".length) : argv[index + 1];
+      if (value === undefined || !/^\d+$/.test(value) || Number(value) === 0) {
+        usage("--port needs a port number");
+        process.exit(2);
+      }
+      port = Number(value);
+      if (!arg.startsWith("--port=")) index += 1;
+      continue;
     }
     if (arg === "--local") {
       const value = argv[index + 1];
@@ -86,7 +97,7 @@ function parseArgs(argv) {
     usage("a seed URL and --local are alternatives, not a pair");
     process.exit(2);
   }
-  return { local, seedUrl: positional[0] ?? LIVE_SEED_URL };
+  return { local, port, seedUrl: positional[0] ?? LIVE_SEED_URL };
 }
 
 function serveTree(directory) {
@@ -128,9 +139,25 @@ function localiseSeed(seed, seedUrl, base) {
     mirrors: Array.isArray(seed.mirrors)
       ? seed.mirrors.map((mirror) => ({ ...mirror, bundle: local(mirror.bundle) }))
       : seed.mirrors,
+    announcements: Array.isArray(seed.announcements)
+      ? seed.announcements.map((url) => local(url))
+      : seed.announcements,
   };
 }
 
+/**
+ * In a local run, announcement records may name paths relative to the served
+ * tree — the same affordance the seed already has — because a tree written to
+ * disk cannot know the loopback port it will be served on. Live runs use the
+ * plain fetch: an announcement there is a URL or it is nothing.
+ */
+/**
+ * A tree's records are SIGNED, and a signature covers the URLs it names — so a
+ * local run cannot rewrite them the way it rewrites the seed's own paths. A tree
+ * that carries announcements therefore writes them against the port it will be
+ * served on, which is what `--port` is for: pin it, write absolute loopback
+ * URLs, and the signatures stay honest.
+ */
 async function fetchSeed(seedUrl) {
   let response;
   try {
@@ -167,7 +194,7 @@ function printEvidence(claim) {
 }
 
 async function main() {
-  const { local, seedUrl: requestedSeed } = parseArgs(process.argv.slice(2));
+  const { local, port, seedUrl: requestedSeed } = parseArgs(process.argv.slice(2));
   let server;
   let seedUrl = requestedSeed;
   let exitCode = 0;
@@ -182,11 +209,16 @@ async function main() {
         throw new Error(`--local ${local} — no seed.json in the tree`);
       }
       server = serveTree(directory);
-      server.listen(0, "127.0.0.1");
+      // A caller that pins the port is a tree that had to know it in advance:
+      // signed announcement records name absolute URLs, and a signature over a
+      // rewritten URL is not a signature.
+      server.listen(port, "127.0.0.1");
       await once(server, "listening");
-      const { port } = server.address();
-      seedUrl = `http://127.0.0.1:${port}/seed.json`;
-      console.log(`resident demo — local tree ${directory} at http://127.0.0.1:${port}`);
+      // The port actually bound — with no --port it is whatever the OS handed
+      // out, and the seed URL names that, not what was requested.
+      const { port: boundPort } = server.address();
+      seedUrl = `http://127.0.0.1:${boundPort}/seed.json`;
+      console.log(`resident demo — local tree ${directory} at http://127.0.0.1:${boundPort}`);
     } else {
       console.log("resident demo — from a seed URL, with no operator and no keys");
     }
@@ -202,21 +234,51 @@ async function main() {
       console.log(`pinned bundle CID ${seed.bundleCid}`);
     }
 
-    console.log("\nfinding a copy whose bytes rebuild the pinned root");
+    const onCandidate = (event) => {
+      if (event.status === "trying") {
+        console.log(`  trying ${event.url}`);
+      } else if (event.status === "refused") {
+        console.log(`  refused ${event.url} — ${event.reason}`);
+      } else {
+        console.log(`  accepted ${event.url} — root ${event.root.slice(0, 16)}…`);
+      }
+    };
+
+    const announcementUrls = Array.isArray(seed.announcements) ? seed.announcements : [];
     let found;
     try {
-      found = await sdk.findVerifiedBundle(seed, {
-        timeoutMs: TIMEOUT_MS,
-        onCandidate: (event) => {
-          if (event.status === "trying") {
-            console.log(`  trying ${event.url}`);
-          } else if (event.status === "refused") {
-            console.log(`  refused ${event.url} — ${event.reason}`);
-          } else {
-            console.log(`  accepted ${event.url} — root ${event.root.slice(0, 16)}…`);
-          }
-        },
-      });
+      if (announcementUrls.length === 0) {
+        console.log("\nfinding a copy whose bytes rebuild the pinned root");
+        found = await sdk.findVerifiedBundle(seed, { timeoutMs: TIMEOUT_MS, onCandidate });
+      } else {
+        // The seed names announcements, so this run needs something the seed
+        // alone never needed: the KEYS those records were signed with. The
+        // resident reads them from the documents the publisher serves — no
+        // operator, no server of its own — and every record is believed only
+        // under the key its named handle's history resolves.
+        const origin = new URL(".", seedUrl).href;
+        const identity = sdk.identityFromPublishedDocuments({
+          identityUrl: (handle) => new URL(`identities/${handle}.json`, origin).href,
+          rotationsUrl: (handle) => new URL(`identities/${handle}.rotations.json`, origin).href,
+          revocationsUrl: new URL("revocations.json", origin).href,
+          timeoutMs: TIMEOUT_MS,
+        });
+        console.log(
+          `\nfolding ${announcementUrls.length} announcement document(s) through published identity documents`,
+        );
+        found = await sdk.findVerifiedBundleFromSeeds([seed], {
+          timeoutMs: TIMEOUT_MS,
+          identity,
+          onCandidate,
+          onAnnouncement: (event) => {
+            if (event.status === "accepted") {
+              console.log(`  announcement accepted ${event.url} — mirror ${event.mirror}`);
+            } else {
+              console.log(`  announcement refused ${event.url} — ${event.reason}`);
+            }
+          },
+        });
+      }
     } catch (error) {
       throw new Error(error.message);
     }

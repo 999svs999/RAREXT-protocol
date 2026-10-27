@@ -474,6 +474,15 @@ if (process.argv.includes("--self-test")) {
   const caughtPinWrite = failures > beforePinWrite;
   if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
   caught = caught && caughtPinWrite;
+  // And a resident demo that stops calling the resolver — the doc's sentence
+  // about that leg would then be describing a script that does not do it.
+  const demoSource = readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
+  const doctoredDemo = demoSource.replace("sdk.identityFromPublishedDocuments(", "sdk.notTheResolver(");
+  const beforeDemo = failures;
+  checkMirrorsDoc(undefined, { demoResident: doctoredDemo });
+  const caughtDemo = failures > beforeDemo;
+  if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
+  caught = caught && caughtDemo;
   // And a resident's resolver that stops bounding its reads — the cap every
   // other fetch path carries — must be reported.
   const realPublishedIdentity = readFileSync(
@@ -1591,6 +1600,16 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     const resolverCode = publishedIdentity.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     if (/issuedAt|expiresAt/.test(resolverCode)) {
       fail("the resolver retrieves and core decides: window arithmetic found in the resolver");
+    }
+    // And the resident demo must CALL it — a doc sentence saying the demo folds
+    // announcements through published documents is a claim about the script.
+    const demoScript =
+      sources.demoResident ?? readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
+    if (!/sdk\.identityFromPublishedDocuments\(/.test(demoScript)) {
+      fail("MIRRORS.md says the resident demo resolves keys from published documents, but the demo never calls the resolver");
+    }
+    if (!/findVerifiedBundleFromSeeds\(/.test(demoScript)) {
+      fail("the demo must fold through the SDK's announcement path, not a path of its own");
     }
   }
 

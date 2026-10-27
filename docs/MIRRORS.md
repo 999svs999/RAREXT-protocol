@@ -199,6 +199,21 @@ cannot be verified or any claim replays false. `npm run demo:resident -- --local
 paths it names) over loopback HTTP, so the end-to-end test runs the actual
 command without touching the network.
 
+When the seed names announcement documents, the demo folds them and prints each
+record as accepted with its mirror or refused with its reason, resolving the
+announcing keys from the documents the publisher serves with the SDK's
+`identityFromPublishedDocuments` — no operator, no server of its own. A tree
+carrying such records pins its port (`--local <dir> --port <n>`), because a
+record is signed over the URLs it names and a signature over a rewritten URL is
+not a signature. The end-to-end test proves both directions: a run whose only
+workable candidate is the announced mirror passes, and the same run with the
+published key revoked fails, naming the revocation.
+
+Honest scope: this demo is run against a LOCAL tree in tests and against the live
+seed by hand; the live seed names no announcements, so there the leg prints
+nothing to fold. Peer-to-peer discovery of announcement documents themselves
+remains missing, as does the seed list in "The next step".
+
 ## The next step
 
 A mirror is a copy of one registry. Making the copy findable and keeping copies
