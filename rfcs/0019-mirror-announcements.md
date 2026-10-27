@@ -5,8 +5,11 @@
 - **Created:** 2026-10-26
 - **Requires:** RFC 0002 (signed publications), RFC 0007 (trust model), RFC 0008 (key rotation and delegated publishing)
 - **Related:** [`docs/MIRRORS.md`](../docs/MIRRORS.md)
-- **Implementation:** none. This RFC is a design. Nothing announces, verifies, or
-  gossips today, and this document does not make any of that work.
+- **Implementation:** step 1 is implemented: the seed's optional `announcements[]`
+  is read by the SDK's `findVerifiedBundleFromSeeds`, each record is verified by
+  core's `verifyAnnouncement`, and verified announcements enter the union
+  `planSeedUnion` already runs. Still missing: discovery of the announcements
+  themselves, key resolution through the handle's key history, and the API twin.
 
 ## Summary
 

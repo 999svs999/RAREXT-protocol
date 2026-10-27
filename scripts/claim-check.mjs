@@ -483,8 +483,21 @@ if (process.argv.includes("--self-test")) {
   const caughtMultiSeed = failures > beforeMultiSeed;
   if (!caughtMultiSeed) fail("self-test: the checker accepted a mirrors doc that no longer names multi-seed discovery");
   caught = caught && caughtMultiSeed;
+  // And a mirrors doc that stops naming the announcement step must be
+  // reported: the sentence is held to core's verifier and the SDK's union
+  // entry (RFC 0019 step 1).
+  const beforeAnnouncements = failures;
+  const noAnnouncementMirrorsDoc = originalMirrorsDoc.replaceAll(
+    "verifyAnnouncement",
+    "verifyTheAnnouncement",
+  );
+  checkMirrorsDoc(noAnnouncementMirrorsDoc);
+  const caughtAnnouncements = failures > beforeAnnouncements;
+  if (!caughtAnnouncements) fail("self-test: the checker accepted a mirrors doc that no longer names the announcement verifier");
+  caught = caught && caughtAnnouncements;
   assertChanged(originalMirrorsDoc, noResidentMirrorsDoc, "mirrors-doc-resident");
   assertChanged(originalMirrorsDoc, noMultiSeedMirrorsDoc, "mirrors-doc-multiseed");
+  assertChanged(originalMirrorsDoc, noAnnouncementMirrorsDoc, "mirrors-doc-announcements");
   assertChanged(originalMirrorsDoc, noReplayMirrorsDoc, "mirrors-doc-replay");
   assertChanged(originalMirrorsDoc, unpinnedMirrorsDoc, "mirrors-doc-pinning");
   assertChanged(realPublishProof, doctoredPublishProof, "publish-flow-pins");
@@ -1242,6 +1255,28 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`MIRRORS.md says the API-side twin pools seeds, but bundle.ts has no "${marker}"`);
     }
   }
+  // RFC 0019 step 1: the doc says verified signed announcements enter the
+  // union. The sentence names the seed field, the pure verifier, and the SDK
+  // path, and each must exist: core owns the verification (kind, version, key
+  // id, suite, window), and the SDK reads the seed's field and folds the
+  // survivors into the union it already runs.
+  if (!doc.includes("announcements")) {
+    fail("MIRRORS.md no longer documents the seed's announcements field (RFC 0019 step 1)");
+  }
+  if (!doc.includes("verifyAnnouncement")) {
+    fail("MIRRORS.md no longer names the announcement verifier (verifyAnnouncement)");
+  }
+  const coreAnnouncements = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  for (const marker of ["export function verifyAnnouncement", "rarext.mirror-announcement", "issuedAt", "expiresAt"]) {
+    if (!coreAnnouncements.includes(marker)) {
+      fail(`MIRRORS.md says announcements are verified before the union, but core's announcements.ts has no "${marker}"`);
+    }
+  }
+  for (const marker of ["announcements", "verifyAnnouncement", "onAnnouncement"]) {
+    if (!sdkSource.includes(marker)) {
+      fail(`MIRRORS.md says the SDK folds verified announcements into the union, but the SDK source has no "${marker}"`);
+    }
+  }
   const coreIndex = readFileSync(new URL("packages/core/src/index.ts", root), "utf8");
   for (const marker of ["verifyBundleShape", "cidV1"]) {
     if (!coreIndex.includes(marker)) {
@@ -1410,7 +1445,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
   );
 }
 

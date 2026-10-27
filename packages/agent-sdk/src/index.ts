@@ -5,6 +5,7 @@ import {
   generateKeyPairSync,
   randomUUID,
   sign as signBytes,
+  verify as verifyBytes,
 } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -16,9 +17,11 @@ import {
   planSeedUnion,
   readBundleResponseBytes,
   verifyAiArtifact,
+  verifyAnnouncement,
   verifyBundleShape,
   verifyCandidates,
   verifyGenerativeReplay,
+  type AnnouncementVerifier,
   type AiLocalVerification,
   type BundleSeed,
   type CandidateOutcome,
@@ -108,7 +111,22 @@ export function cidV1Raw(bytes: Uint8Array): string {
  */
 export interface SeedDocument extends BundleSeed {
   pins?: SeedPin[];
+  /**
+   * RFC 0019 step 1: URLs of signed announcement documents, each a JSON array
+   * of signed records in which an operator states where a registry's bundle
+   * can be fetched and under which pins. An announcement proposes LOCATIONS,
+   * never facts: a verified record enters the same union `planSeedUnion`
+   * already runs and cannot edit, override, or retract what this seed pins.
+   * Absent or empty means today's exact behaviour: no fetch, no new
+   * candidate, no change in error wording or ordering.
+   */
+  announcements?: string[];
 }
+
+/** What folding a seed's announcements reports: one event per record or document. */
+export type AnnouncementEvent =
+  | { url: string; status: "accepted"; mirror: string }
+  | { url: string; status: "skipped"; reason: string };
 
 export interface VerifiedBundleSource {
   bundle: Bundle;
@@ -137,6 +155,8 @@ export interface FindVerifiedBundleOptions {
   timeoutMs?: number;
   /** Observe each candidate as it is tried, refused, or accepted. */
   onCandidate?: (event: FindVerifiedBundleEvent) => void;
+  /** Observe each announcement record as it is accepted or reported and skipped. */
+  onAnnouncement?: (event: AnnouncementEvent) => void;
 }
 
 /**
@@ -179,6 +199,19 @@ export async function findVerifiedBundle(
  * against the pins of the seeds that nominated it, and every refusal is
  * recorded with its reason and, when several seeds are pooled, the seeds that
  * nominated it.
+ *
+ * RFC 0019 step 1: when a seed carries `announcements`, each document is
+ * fetched through the same capped reader a bundle gets, every record is
+ * verified (canonical payload, signature by the repo's identity primitives
+ * against a key whose id is derived by `publicKeyId` and whose suite is
+ * derived by `suiteOf`, and the `issuedAt`/`expiresAt` window), and each
+ * survivor is pooled with the seeds BEFORE the union is planned — so the
+ * disagreement rule covers announcements with no new rule of its own: an
+ * announcement that pins a different root or CID for a registry the seed
+ * names throws the same loud error, naming both values and both sources,
+ * before anything is fetched. An announcement that cannot be fetched, parsed,
+ * or verified is reported with its reason and skipped, never fatal while
+ * another location verifies — announcements are redundancy, like mirrors.
  */
 export async function findVerifiedBundleFromSeeds(
   seeds: SeedDocument[],
@@ -188,7 +221,58 @@ export async function findVerifiedBundleFromSeeds(
   const sha256 = options.sha256 ?? nodeSha256;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
-  const plan = planSeedUnion(seeds);
+  // RFC 0019 step 1: fetch each announcement document the seeds name, verify
+  // every record, and pool the survivors with the trusted seeds BEFORE the
+  // union is planned. A seed without `announcements` contributes nothing here:
+  // the pool is exactly the seeds, so the plan, the fetches, and the error
+  // wording are byte for byte today's.
+  const pool: BundleSeed[] = [...seeds];
+  const announcementUrls = [
+    ...new Set(seeds.flatMap((seed) => seed.announcements ?? [])),
+  ];
+  for (const url of announcementUrls) {
+    let document: unknown;
+    try {
+      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bytes = await readBundleResponseBytes(response);
+      document = JSON.parse(new TextDecoder().decode(bytes));
+    } catch (error) {
+      options.onAnnouncement?.({
+        url,
+        status: "skipped",
+        reason: error instanceof Error ? error.message : "the announcement document could not be fetched",
+      });
+      continue;
+    }
+    if (!Array.isArray(document)) {
+      options.onAnnouncement?.({
+        url,
+        status: "skipped",
+        reason: "the announcement document is not a JSON array of signed records",
+      });
+      continue;
+    }
+    for (const [index, record] of document.entries()) {
+      const verdict = verifyAnnouncement(record, { url, verifier: announcementVerifier });
+      if (verdict.ok) {
+        pool.push(verdict.seed);
+        options.onAnnouncement?.({
+          url,
+          status: "accepted",
+          mirror: verdict.seed.mirrors?.[0]?.bundle ?? "",
+        });
+      } else {
+        options.onAnnouncement?.({
+          url,
+          status: "skipped",
+          reason: `record ${index}: ${verdict.reason}`,
+        });
+      }
+    }
+  }
+
+  const plan = planSeedUnion(pool);
 
   // The per-candidate sequence — fetch the bytes (through the shared cap),
   // the CID pin over exactly those bytes, the bundle's shape, the recomputed
@@ -197,7 +281,7 @@ export async function findVerifiedBundleFromSeeds(
   // bring another sha256 and the sequence stays the same one everywhere.
   const outcome = await verifyCandidates({
     plan,
-    attribute: seeds.length > 1,
+    attribute: pool.length > 1,
     sha256,
     onCandidate: options.onCandidate,
     fetchBytes: async (url) => {
@@ -570,6 +654,64 @@ export function suiteOf(key: JsonWebKey): SignatureSuite {
 export function publicKeyId(publicKey: JsonWebKey): string {
   return createHash("sha256").update(canonicalize(publicJwk(publicKey))).digest("hex");
 }
+
+/**
+ * Verify a signature over a payload — the SDK twin of the API's
+ * `verifyPayload` in `apps/api/src/identity.ts`, needed here because a
+ * resident that reads announcements verifies them locally rather than behind
+ * the API (RFC 0019, open question 3, answered for step 1). The suite decides
+ * the verification: ECDSA signs a SHA-256 digest in the P1363 encoding, ML-DSA
+ * signs the message itself. Both are checked against the *canonical* payload
+ * bytes, so a signature covers exactly what a reader would reconstruct.
+ */
+export function verifyPayload(
+  publicKey: JsonWebKey,
+  payload: unknown,
+  signature: string,
+  suite?: SignatureSuite,
+): boolean {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signature)) return false;
+
+  let resolved: SignatureSuite;
+  try {
+    resolved = suite ?? suiteOf(publicKey);
+  } catch {
+    return false;
+  }
+
+  try {
+    const bytes = Buffer.from(signature, "base64");
+    const message = Buffer.from(canonicalize(payload));
+    const key = createPublicKey({ key: nodeJwk(publicKey), format: "jwk" });
+
+    if (resolved === "ecdsa-p256") {
+      if (bytes.length !== 64) return false;
+
+      return verifyBytes("sha256", message, { key, dsaEncoding: "ieee-p1363" }, bytes);
+    }
+
+    return verifyBytes(null, message, key, bytes);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The signature machinery core's `verifyAnnouncement` runs behind: the key id
+ * and the suite are derived from the key itself (never claimed by the record),
+ * and the signature is checked over the canonical payload by `verifyPayload`.
+ */
+const announcementVerifier: AnnouncementVerifier = {
+  keyIdOf: publicKeyId,
+  suiteOf: (key) => {
+    try {
+      return suiteOf(key);
+    } catch {
+      return null;
+    }
+  },
+  verify: verifyPayload,
+};
 
 export function generateAgentKeypair(
   suite: SignatureSuite = "ecdsa-p256",

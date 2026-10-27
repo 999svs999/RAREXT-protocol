@@ -7,12 +7,15 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 
 import {
+  AgentSigner,
   cidV1,
   cidV1Raw,
+  createAgentKeyfile,
   findVerifiedBundle,
   findVerifiedBundleFromSeeds,
   replayBundleAi,
   verifyBundle,
+  type AnnouncementEvent,
   type Bundle,
   type SeedDocument,
 } from "../src/index.ts";
@@ -662,4 +665,346 @@ test("a seed without a bundleCid beside one that has it is coexistence, not cont
     honestServer.closeAllConnections();
     await new Promise<void>((resolve) => honestServer.close(() => resolve()));
   }
+});
+
+/**
+ * RFC 0019 step 1: signed announcements. A seed may carry `announcements[]`;
+ * each document is fetched, every record is verified (signature, key id, and
+ * the issued/expires window), and each survivor enters the SAME union
+ * `planSeedUnion` already runs — no parallel rule. The fixtures are signed
+ * with the repo's own helpers: a keyfile created by `createAgentKeyfile` and a
+ * payload signed by `AgentSigner`, so what the tests exercise is the real
+ * verification path, not hand-rolled crypto.
+ */
+
+const ANNOUNCER = "operator-alice";
+
+/** One day in milliseconds, for windows relative to the run's own clock. */
+const DAY = 24 * 60 * 60 * 1000;
+
+const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
+
+function announcementSigner(): AgentSigner {
+  const keyfile = createAgentKeyfile(ANNOUNCER);
+  return new AgentSigner(keyfile.privateKey);
+}
+
+/** A signed announcement record, built the way an operator would build one. */
+function signedAnnouncement(
+  signer: AgentSigner,
+  claims: {
+    bundle: string;
+    mirror: string;
+    bundleRoot: string;
+    bundleCid?: string;
+    issuedAt?: string;
+    expiresAt?: string;
+  },
+) {
+  const payload = {
+    kind: "rarext.mirror-announcement",
+    version: 1,
+    handle: ANNOUNCER,
+    bundle: claims.bundle,
+    mirror: claims.mirror,
+    bundleRoot: claims.bundleRoot,
+    ...(claims.bundleCid === undefined ? {} : { bundleCid: claims.bundleCid }),
+    keyId: signer.keyId,
+    algorithm: signer.suite,
+    issuedAt: claims.issuedAt ?? iso(-DAY),
+    expiresAt: claims.expiresAt ?? iso(30 * DAY),
+    nonce: "announce-mirror-1",
+  };
+  return { announcement: payload, signature: signer.sign(payload), publicKey: signer.publicKey };
+}
+
+/** A fetch stub serving exact routes and recording every URL it is asked for. */
+function stubFetch(routes: Record<string, { status?: number; body: string }>, calls: string[] = []) {
+  return (async (url: unknown) => {
+    const u = String(url);
+    calls.push(u);
+    const route = routes[u];
+    if (!route) {
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    }
+    return new Response(route.body, {
+      status: route.status ?? 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+}
+
+test("a verified announcement nominates its mirror, and that mirror wins when the seed's own candidates fail", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const honestCid = cidV1Raw(Buffer.from(JSON.stringify(committed), "utf8"));
+
+  const tampered: Bundle = structuredClone(committed);
+  tampered.publications = tampered.publications.map((publication, index) =>
+    index === 0 ? { ...publication, title: "an altered title" } : publication,
+  );
+
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    bundleCid: honestCid,
+    mirrors: [{ bundle: "https://dead.example/bundle.json", root: pinnedRoot }],
+    announcements: [announcementUrl],
+  };
+
+  const events: AnnouncementEvent[] = [];
+  const found = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch({
+      [registry]: { body: JSON.stringify(tampered) },
+      "https://dead.example/bundle.json": { status: 404, body: "{}" },
+      [announcedMirror]: { body: JSON.stringify(committed) },
+      [announcementUrl]: { body: JSON.stringify([record]) },
+    }),
+    onAnnouncement: (event) => events.push(event),
+  });
+
+  assert.equal(
+    found.source,
+    announcedMirror,
+    "the announced mirror is the copy that verifies after the seed's own candidates fail",
+  );
+  assert.equal(found.root, pinnedRoot);
+  assert.equal(found.bundle.manifest.root, pinnedRoot);
+  assert.deepEqual(
+    found.seeds,
+    [announcementUrl],
+    "the winning copy is attributed to the announcement document that nominated it",
+  );
+  assert.deepEqual(events, [
+    { url: announcementUrl, status: "accepted", mirror: announcedMirror },
+  ]);
+});
+
+test("a forged announcement is reported and skipped, and the seed's own candidates still work", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  // The forgery: the payload is edited AFTER signing, so the signature no
+  // longer covers what the record claims — the classic forged announcement.
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+  record.announcement = { ...record.announcement, mirror: "https://evil.example/bundle.json" };
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcements: [announcementUrl],
+  };
+
+  const calls: string[] = [];
+  const events: AnnouncementEvent[] = [];
+  const found = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(
+      {
+        [registry]: { body: JSON.stringify(committed) },
+        [announcementUrl]: { body: JSON.stringify([record]) },
+      },
+      calls,
+    ),
+    onAnnouncement: (event) => events.push(event),
+  });
+
+  assert.equal(found.source, registry, "the seed's own candidate still verifies");
+  assert.equal(found.root, pinnedRoot);
+  assert.deepEqual(events, [
+    {
+      url: announcementUrl,
+      status: "skipped",
+      reason: "record 0: the announcement's signature does not verify",
+    },
+  ]);
+  assert.ok(
+    !calls.includes("https://evil.example/bundle.json"),
+    "a forged record must not nominate anything: its mirror is never fetched",
+  );
+});
+
+test("an expired announcement is discarded before the union, so its mirror is never fetched", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+    issuedAt: iso(-2 * DAY),
+    expiresAt: iso(-DAY),
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcements: [announcementUrl],
+  };
+
+  const calls: string[] = [];
+  const events: AnnouncementEvent[] = [];
+  const found = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(
+      {
+        [registry]: { body: JSON.stringify(committed) },
+        [announcementUrl]: { body: JSON.stringify([record]) },
+      },
+      calls,
+    ),
+    onAnnouncement: (event) => events.push(event),
+  });
+
+  assert.equal(found.source, registry);
+  assert.ok(
+    !calls.includes(announcedMirror),
+    "an expired record is discarded before the union: its mirror URL is never fetched",
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0].status, "skipped");
+  assert.match(events[0].status === "skipped" ? events[0].reason : "", /expired at /);
+});
+
+test("a valid announcement claiming a different root for the same registry trips the union's loud stop", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const otherRoot = "f".repeat(64);
+
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: otherRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcements: [announcementUrl],
+  };
+
+  const calls: string[] = [];
+  await assert.rejects(
+    () =>
+      findVerifiedBundleFromSeeds([seed], {
+        fetch: stubFetch({ [announcementUrl]: { body: JSON.stringify([record]) } }, calls),
+      }),
+    (error: Error) => {
+      assert.match(error.message, /the seeds disagree about the registry/);
+      assert.match(error.message, /bundleRoot/);
+      assert.match(error.message, new RegExp(pinnedRoot.slice(0, 12)));
+      assert.match(error.message, new RegExp(otherRoot.slice(0, 12)));
+      assert.match(error.message, /https:\/\/registry\.example\/seed\.json/);
+      assert.match(error.message, /https:\/\/announcer\.example\/announcements\.json/);
+      assert.deepEqual(
+        calls,
+        [announcementUrl],
+        "only the announcement document is fetched: the disagreement stops before any candidate is fetched",
+      );
+      return true;
+    },
+    "a validly signed announcement contradicting the seed's pin must stop the resident loudly",
+  );
+});
+
+test("a seed without announcements behaves exactly as before, and no announcement URL is fetched", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+
+  const registry = "https://registry.example/bundle.json";
+  const mirror = "https://mirror.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+
+  // Poisoned for announcement URLs: if the no-announcement path so much as
+  // looked at one, the poison fires and the test fails.
+  const calls: string[] = [];
+  const poisoned = (async (url: unknown) => {
+    const u = String(url);
+    if (u.includes("announcement")) {
+      throw new Error("POISON: an announcement URL must not be fetched");
+    }
+    return stubFetch({ [mirror]: { body: JSON.stringify(committed) } }, calls)(u);
+  }) as typeof fetch;
+
+  const found = await findVerifiedBundle({
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    mirrors: [{ bundle: mirror, root: pinnedRoot }],
+  }, { fetch: poisoned });
+  assert.equal(found.source, mirror);
+  assert.deepEqual(
+    calls,
+    [registry, mirror],
+    "only the seed's own candidates are fetched; no announcement URL is touched",
+  );
+
+  // And the failure wording is the one the no-announcement path has always
+  // produced, byte for byte: a single seed, one refusal, no attribution.
+  await assert.rejects(
+    () => findVerifiedBundle({ bundle: `${registry}.absent`, bundleRoot: pinnedRoot }, { fetch: poisoned }),
+    (error: Error) => {
+      assert.equal(
+        error.message,
+        `no candidate rebuilt the pinned root:\n  ${registry}.absent: HTTP 404`,
+      );
+      return true;
+    },
+  );
+});
+
+test("an announcement URL that 404s is reported and skipped, and everything else works", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcements: [announcementUrl],
+  };
+
+  const events: AnnouncementEvent[] = [];
+  const found = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch({
+      [registry]: { body: JSON.stringify(committed) },
+      [announcementUrl]: { status: 404, body: JSON.stringify({ error: "not found" }) },
+    }),
+    onAnnouncement: (event) => events.push(event),
+  });
+
+  assert.equal(found.source, registry, "the unreachable announcement does not stop the search");
+  assert.deepEqual(events, [
+    { url: announcementUrl, status: "skipped", reason: "HTTP 404" },
+  ]);
 });

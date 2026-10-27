@@ -92,6 +92,17 @@ export {
   verifyCandidates,
 } from "./bundle.ts";
 export type { BundleResponse } from "./bundle.ts";
+export type {
+  AnnouncementVerifier,
+  AnnouncementVerdict,
+  MirrorAnnouncementPayload,
+  SignedAnnouncement,
+} from "./announcements.ts";
+export {
+  ANNOUNCEMENT_KIND,
+  ANNOUNCEMENT_VERSION,
+  verifyAnnouncement,
+} from "./announcements.ts";
 export { base32Encode, cidV1 } from "./content.ts";
 export { sha256Hex, toHex, type Sha256 } from "./digest.ts";
 export { leafPayload, publicationLeaf, PUBLICATION_LEAF_VERSION } from "./leaf.ts";

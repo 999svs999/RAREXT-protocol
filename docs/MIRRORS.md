@@ -230,9 +230,30 @@ consistent is the federation problem, and it has two parts:
   (absence is not a contradiction), and the stricter pin governs the shared
    candidates. What is still missing is a live federation protocol: mirrors do
    not gossip, and the seed is still a file someone publishes — the design for
-   signed mirror announcements now exists as
-   `rfcs/0019-mirror-announcements.md`, and the implementation is still missing,
-   so nothing here announces, verifies, or gossips anything today;
+   signed mirror announcements exists as
+   `rfcs/0019-mirror-announcements.md`, and its first step is implemented: a
+   seed may carry an optional `announcements[]` of URLs naming signed
+   announcement documents, the SDK's `findVerifiedBundleFromSeeds` fetches each
+   document through the same 8 MiB cap a bundle gets, verifies every record
+   with core's `verifyAnnouncement` (the canonical payload, the signature via
+   the repo's identity primitives against a key whose id is derived by
+   `publicKeyId` and whose suite is derived by `suiteOf`, and the
+   `issuedAt`/`expiresAt` window, so an expired record is discarded before it
+   can affect anything), and enters each verified record into the same union
+   `planSeedUnion` already runs — an announcement proposes LOCATIONS, never
+   facts, so an announcement that pins a different root for a registry the
+   seed names trips the same loud disagreement stop, naming both values and
+   both sources, before any candidate is fetched, and an announced mirror is
+   tried exactly like a seed-nominated one. An announcement that cannot be
+   fetched, parsed, or verified is reported with its reason and skipped while
+   another location verifies — announcements are redundancy, like mirrors. A
+   seed without `announcements` behaves exactly as before: no fetch, no new
+   candidate, no change in error wording or ordering. Still missing: the
+   announcement URLs still come from the seed (there is no peer-to-peer
+   discovery of announcements themselves), the announcing key travels in the
+   announcement document beside each record rather than being resolved through
+   the handle's key history, the API twin `bundleFromSeeds` does not read
+   announcements yet, and who may announce remains RFC 0019's open question;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — implemented for the copy the seed names: the seed pins the
   bundle's content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the
