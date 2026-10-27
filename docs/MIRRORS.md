@@ -252,8 +252,14 @@ consistent is the federation problem, and it has two parts:
    announcement URLs still come from the seed (there is no peer-to-peer
    discovery of announcements themselves), the announcing key travels in the
    announcement document beside each record rather than being resolved through
-   the handle's key history, the API twin `bundleFromSeeds` does not read
-   announcements yet, and who may announce remains RFC 0019's open question;
+   the handle's key history, and who may announce remains RFC 0019's open question.
+   Both client paths fold announcements and neither owns the rule: the fold and
+   the record's verification live in `packages/core/src/announcements.ts`, the
+   SDK's `findVerifiedBundleFromSeeds` and the API's `bundleFromSeed` each
+   supply only the primitives (a digest, and for the API the identity functions
+   it already uses), and claim-check fails if either caller inlines the
+   signature or the window check — the third fork is the failure this unit
+   exists to prevent;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
   rather than a URL — implemented for the copy the seed names: the seed pins the
   bundle's content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the
