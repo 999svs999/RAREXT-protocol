@@ -14,7 +14,7 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/HARDENING.md` | MDS floor | `1 + m/k` measured from the codec's own shard sizes |
 | `docs/STORAGE.md` | throughput artifact | `bench/storage/THROUGHPUT.json`'s peaks and their ratio, against the doc's 1 GiB figures |
 | `docs/STORAGE-ECONOMY.md` | rent pricing | the default rate, proration, ceiling rounding, and the documented override, through `quoteStorageRent` |
-| `docs/ARCHITECTURE.md` | route surface | every published route still handled by `app.ts` |
+| `docs/ARCHITECTURE.md` | route surface, config surface | every published route still handled by `app.ts`; every published env name, state path and RFC reference backed by the code |
 | `docs/CHAINS.md` | chain surface | the chain-registry routes and the table's `trac`/`evm` backing artifacts |
 | `docs/OPERATIONS.md` | limits, AI bounds, snapshot/migration, audit window, evidence citations | named constants, replay bounds (functionally), snapshot versions, the audit window and its refusal literals, and the test files the fault tables cite |
 | `docs/OPERATOR.md` | operational defaults | the `??` fallbacks the doc publishes (challenge interval, GC loops, grace); its narrative guidance rows are prose and are not asserted |

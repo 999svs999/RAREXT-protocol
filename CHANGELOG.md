@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The docs' configuration surface is asserted, not just true today (kind 22).** A sweep of the
+  docs that grew most in recent cycles found env-style names, state paths, and RFC references that
+  were **backed by the code but asserted by nothing** — true the day the sweep ran, free to rot the
+  next. Nothing was unbacked, so the finding is the missing assertion rather than a false claim:
+  the new config-surface kind now extracts those tokens from ARCHITECTURE, SEMANTICS, MIRRORS, and
+  OPERATIONS, and requires each env name to be read somewhere in the source trees (scripts count as
+  readers, since an operator's knob may be read only by the scripts they run), each `rfcs/*.md` to
+  exist, and each state path's file name to appear in the code that writes it — 35 env names, 1 RFC
+  path and 9 state paths, now held by the gate. The source walk itself was extracted into one
+  helper both this kind and the app-protocol kind use, because two kinds disagreeing about what
+  "the sources" means is the same disease as two implementations of anything. Two of its own traps
+  were caught while wiring it: a duplicated binding from the extraction (a syntax error, found by
+  running it), and the phantom-name trap a third time — the self-test's invented env name was
+  itself in the walked sources, so the doctored doc read as backed by the checker's own fixture.
+  The checker is now excluded as a reader, with that reason recorded, and the phantom name is built
+  at runtime.
 - **The client, the pin service and the checker had never been run against each other — and they
   disagreed.** Starting from the belief that no pin service shipped here, the check that
   prevented a duplicate implementation found `apps/api/src/pin-server.ts` already wired as

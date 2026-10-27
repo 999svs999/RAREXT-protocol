@@ -311,6 +311,19 @@ if (process.argv.includes("--self-test")) {
     "Snapshot version 3 is current.",
   );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
+  // And a doc that publishes a knob nothing reads must be reported — the
+  // fixture renames a real env name in the architecture doc.
+  const beforeConfig = failures;
+  const originalConfigDoc = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+  const phantomEnv = `RAREXT_VERIFIERS_V${originalConfigDoc.length}`;
+  const doctoredConfigDoc = originalConfigDoc.replace(
+    /`RAREXT_VERIFIERS`/g,
+    `\`${phantomEnv}\``,
+  );
+  checkConfigSurface(doctoredConfigDoc);
+  const caughtConfig = failures > beforeConfig;
+  if (!caughtConfig) fail("self-test: the checker accepted a documented knob nothing reads");
+  caught = caught && caughtConfig;
   // And a front door that lost its proof link must be reported — a landing
   // page that only describes the proof is the failure this check exists for.
   const beforeFrontDoor = failures;
@@ -469,6 +482,7 @@ if (process.argv.includes("--self-test")) {
     "artifact-sources",
   );
   assertChanged(originalLanding, doctoredLanding, "front-door");
+  assertChanged(originalConfigDoc, doctoredConfigDoc, "config-surface");
   assertChanged(originalOperatorDoc, doctoredOperatorDoc, "operator-defaults");
   assertChanged(originalOperations, doctoredOperationsDoc2, "evidence-citations");
   assertChanged(originalChains, doctoredChains, "chain-surface");
@@ -501,6 +515,7 @@ checkCryptoDoc();
 checkClaimsCoverage();
 checkArtifactSources();
 checkFrontDoor();
+checkConfigSurface();
 checkMdsFloor();
 checkRepairRecord();
 checkRentClaims();
@@ -605,6 +620,75 @@ function checkArtifactSources(filesOverride) {
 
   console.log(
     `  the inline bundle and the proof page each live in one module | ${generators.length} generators delegate to them`,
+  );
+}
+
+/**
+ * The configuration surface the docs publish.
+ *
+ * A sweep of the docs for mechanical tokens found env-style names, state paths
+ * and RFC references that were BACKED by the code but asserted by nothing: they
+ * were true the day the sweep ran and could rot the next. This kind makes the
+ * sweep permanent. For every doc that publishes configuration, each backticked
+ * env name must be read somewhere in the source trees, each referenced
+ * `rfcs/*.md` must exist, and each state path's file name must appear in the
+ * code that writes it — so an operator renaming a knob, or a doc drifting from
+ * it, fails the gate instead of failing an operator.
+ */
+function checkConfigSurface(docOverride) {
+  const docs = [
+    ["docs/ARCHITECTURE.md", "architecture"],
+    ["docs/SEMANTICS.md", "semantics"],
+    ["docs/MIRRORS.md", "mirrors"],
+    ["docs/OPERATIONS.md", "operations"],
+  ];
+  console.log(`config surface (${docOverride ? "DOCTORED: " : ""}${docs.length} docs vs code):`);
+
+  // Scripts count as readers: some names are read by the scripts an operator
+  // runs, not by a package. A documented name nobody anywhere reads is still a
+  // lie with a config table around it.
+  const { text: sources } = readSourceTrees({ includeScripts: true });
+
+  const ENV = /`((?:RAREXT|TRAC|TAPEOUT|PIN|HOLDER|MCP)_[A-Z0-9_]{2,})`/g;
+  const RFC = /`(rfcs\/[\w.-]+\.md)`/g;
+  const STATE = /`(~?\/?(?:\.data|\.rarext)\/[\w./-]+)`/g;
+
+  let envChecked = 0;
+  let rfcChecked = 0;
+  let pathChecked = 0;
+
+  for (const [relative, label] of docs) {
+    const text = docOverride ?? readFileSync(new URL(relative, root), "utf8");
+
+    for (const name of new Set(Array.from(text.matchAll(ENV)).map((m) => m[1]))) {
+      envChecked += 1;
+      if (!sources.includes(name)) {
+        fail(`${relative} documents ${name}, which nothing in the source trees reads`);
+      }
+    }
+
+    for (const rfc of new Set(Array.from(text.matchAll(RFC)).map((m) => m[1]))) {
+      rfcChecked += 1;
+      try {
+        readFileSync(new URL(rfc, root), "utf8");
+      } catch {
+        fail(`${relative} points at ${rfc}, which does not exist`);
+      }
+    }
+
+    for (const state of new Set(Array.from(text.matchAll(STATE)).map((m) => m[1]))) {
+      pathChecked += 1;
+      const base = state.split("/").pop();
+      if (!sources.includes(base) && !sources.includes(state)) {
+        fail(`${relative} documents the state path ${state}, whose file name no code writes`);
+      }
+    }
+
+    void label;
+  }
+
+  console.log(
+    `  ${envChecked} env name(s) read by code | ${rfcChecked} RFC path(s) exist | ${pathChecked} state path(s) written by code`,
   );
 }
 
@@ -725,6 +809,56 @@ function checkCryptoDoc(docOverride) {
   );
 }
 
+/**
+ * The source text a config claim is checked against, discovered by walking the
+ * trees rather than hand-listing files — a hand-picked list is how a checker
+ * reports a false "nobody reads this". One implementation, because the app
+ * protocol kind and the config-surface kind must never drift about what "the
+ * sources" means.
+ */
+function readSourceTrees({ includeScripts = false } = {}) {
+  const files = [];
+  const walk = (relative, extensions) => {
+    let entries;
+    try {
+      entries = readdirSync(fileURLToPath(new URL(relative, root)), { withFileTypes: true });
+    } catch {
+      return; // a tree that does not exist yet is not a failure
+    }
+    for (const entry of entries) {
+      const child = `${relative}${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        walk(`${child}/`, extensions);
+      } else if (extensions.some((ext) => entry.name.endsWith(ext)) && !entry.name.endsWith(".test.ts")) {
+        files.push(child);
+      }
+    }
+  };
+  for (const dir of ["apps/api/src/", "apps/mcp/src/", "apps/chain/src/", "packages/core/src/", "packages/agent-sdk/src/"]) {
+    walk(dir, [".ts"]);
+  }
+  if (includeScripts) walk("scripts/", [".mjs", ".ts"]);
+  // The checker is not a reader of configuration — and if it counted as one,
+  // its own self-test fixtures (which invent config names on purpose) would
+  // make every doctored name look read. This is the phantom-name trap a third
+  // time: a file that asserts a name exists must not be evidence that it does.
+  const readers = files.filter((rel) => !rel.endsWith("claim-check.mjs"));
+
+  if (files.length === 0) fail("the source walk found no files, so every config name would read as unread");
+
+  const text = readers
+    .map((rel) => {
+      try {
+        return readFileSync(new URL(rel, root), "utf8");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
+  return { files, text };
+}
+
 function checkAppProtocol(docOverride) {
   console.log(`app protocol (docs/APP-PROTOCOL.md${docOverride ? ", DOCTORED" : ""} vs code):`);
   const doc = docOverride ?? readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
@@ -743,35 +877,7 @@ function checkAppProtocol(docOverride) {
   // path.join on a URL silently mangles it and the walk finds nothing, which
   // is how the first version of this kind produced a false "nobody reads
   // this" for every name at once.
-  const sourceFiles = [];
-  const walk = (relative) => {
-    for (const entry of readdirSync(fileURLToPath(new URL(relative, root)), { withFileTypes: true })) {
-      const child = `${relative}${entry.name}`;
-      if (entry.isDirectory()) {
-        if (entry.name === "node_modules" || entry.name === "dist") continue;
-        walk(`${child}/`);
-      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
-        sourceFiles.push(child);
-      }
-    }
-  };
-  for (const dir of ["apps/api/src/", "apps/mcp/src/", "apps/chain/src/", "packages/core/src/", "packages/agent-sdk/src/"]) {
-    try {
-      walk(dir);
-    } catch {
-      // A tree that does not exist yet is not a failure.
-    }
-  }
-  if (sourceFiles.length === 0) fail("the source walk found no files, so every config name would read as unread");
-  const sources = sourceFiles
-    .map((rel) => {
-      try {
-        return readFileSync(new URL(rel, root), "utf8");
-      } catch {
-        return "";
-      }
-    })
-    .join("\n");
+  const { files: sourceFiles, text: sources } = readSourceTrees();
   for (const name of names) {
     if (!sources.includes(name)) {
       fail(`APP-PROTOCOL.md documents ${name}, which no implementation file reads`);
