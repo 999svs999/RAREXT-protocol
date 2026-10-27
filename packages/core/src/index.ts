@@ -70,7 +70,12 @@ export type {
 
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
-export { leafPayload, PUBLICATION_LEAF_VERSION } from "./leaf.ts";
+export type { Bundle, BundleManifest, BundleVerification, SeedPin } from "./bundle.ts";
+export { verifyBundleShape } from "./bundle.ts";
+export { base32Encode, cidV1 } from "./content.ts";
+export { sha256Hex, toHex, type Sha256 } from "./digest.ts";
+export { leafPayload, publicationLeaf, PUBLICATION_LEAF_VERSION } from "./leaf.ts";
+export { merkleProof, merkleRoot, verifyProof } from "./merkle.ts";
 export { simulate, validateCircuit } from "./simulator.ts";
 export { countGates, score } from "./scoring.ts";
 export { findTask, tasks } from "./tasks.ts";

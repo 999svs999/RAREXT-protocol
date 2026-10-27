@@ -1,3 +1,5 @@
+import { canonicalize } from "./canonical.ts";
+import { sha256Hex, type Sha256 } from "./digest.ts";
 import type { Publication } from "./types.ts";
 
 export const PUBLICATION_LEAF_VERSION = 4;
@@ -105,4 +107,17 @@ export function leafPayload(
     ...extended,
     attestation: { ...attestation, ...evidence },
   };
+}
+
+/**
+ * A publication's leaf: the canonical payload hashed with the injected digest.
+ * The registry, a mirror, and an agent client all call this one function, so a
+ * version or shape change cannot drift between them.
+ */
+export function publicationLeaf(
+  publication: Publication,
+  sha256: Sha256,
+  version: number = PUBLICATION_LEAF_VERSION,
+): string {
+  return sha256Hex(sha256, canonicalize(leafPayload(publication, version)));
 }

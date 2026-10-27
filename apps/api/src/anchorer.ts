@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  canonicalize,
-  leafPayload,
+  publicationLeaf as corePublicationLeaf,
   PUBLICATION_LEAF_VERSION as LEAF_VERSION,
 } from "../../../packages/core/src/index.ts";
 import type { Anchor, Publication } from "../../../packages/core/src/index.ts";
 
-import { sha256 } from "./attest.ts";
+import { nodeSha256 } from "./digest.ts";
 import { merkleRoot } from "./merkle.ts";
 import { createDefaultRegistry } from "./adapters/registry.ts";
 import type { AdapterRegistry } from "./adapters/registry.ts";
@@ -19,7 +18,7 @@ export function publicationLeaf(
   publication: Publication,
   version: number = PUBLICATION_LEAF_VERSION,
 ): string {
-  return sha256(canonicalize(leafPayload(publication, version)));
+  return corePublicationLeaf(publication, nodeSha256, version);
 }
 
 /**

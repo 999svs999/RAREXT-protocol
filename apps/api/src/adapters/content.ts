@@ -1,59 +1,29 @@
-import { createHash } from "node:crypto";
-
+import {
+  base32Encode,
+  cidV1,
+} from "../../../../packages/core/src/index.ts";
 import type {
   AdapterInfo,
   AdapterReceipt,
   AdapterStatus,
+  SeedPin,
 } from "../../../../packages/core/src/index.ts";
 
+import { nodeSha256 } from "../digest.ts";
 import { statusFor } from "./types.ts";
 import type { RarextAdapter } from "./types.ts";
 
-const BASE32_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
-
-export function base32Encode(bytes: Uint8Array): string {
-  let bits = 0;
-  let value = 0;
-  let output = "";
-
-  for (const byte of bytes) {
-    value = (value << 8) | byte;
-    bits += 8;
-
-    while (bits >= 5) {
-      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-
-  if (bits > 0) {
-    output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
-  }
-
-  return output;
-}
+export { base32Encode };
+export type { SeedPin };
 
 /**
  * A CIDv1 over a raw sha2-256 multihash, which is what a content-addressed file
  * looks like to an IPFS or Arweave node. No dependency, no daemon: the digest is
- * the pointer.
- *
- *   CIDv1 = <0x01 version> <0x55 raw codec> <0x12 sha2-256> <0x20 length> <digest>
+ * the pointer. The composition lives in `@rarext/core`; this path supplies
+ * node:crypto as the digest, so there is one CID implementation.
  */
 export function cidV1Raw(bytes: Uint8Array): string {
-  const digest = createHash("sha256").update(bytes).digest();
-
-  const multihash = Buffer.concat([
-    Buffer.from([0x12, 0x20]),
-    digest,
-  ]);
-
-  const cid = Buffer.concat([
-    Buffer.from([0x01, 0x55]),
-    multihash,
-  ]);
-
-  return `b${base32Encode(cid)}`;
+  return cidV1(nodeSha256, bytes);
 }
 
 export interface PinOptions {
@@ -82,15 +52,6 @@ export interface PinResult {
   /** The configured service the CID was handed to, or null when it was not. */
   service: string | null;
 }
-
-/**
- * One line of `seed.pins` (docs/MIRRORS.md): either what a configured service
- * handed back, or the failure — recorded, not thrown, because a publish must
- * not crash on a pin it could not make.
- */
-export type SeedPin =
-  | { cid: string; service: string; reference: string }
-  | { cid: string; service: string; error: string };
 
 /**
  * The pinning service this process is configured to use: `RAREXT_PIN_SERVICE_URL`

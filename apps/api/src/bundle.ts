@@ -1,50 +1,21 @@
-import { canonicalize } from "../../../packages/core/src/index.ts";
+import { verifyBundleShape } from "../../../packages/core/src/index.ts";
 import type {
-  Anchor,
+  Bundle,
+  BundleVerification,
   Challenge,
   Publication,
+  SeedPin,
   Semantics,
 } from "../../../packages/core/src/index.ts";
 
 import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
-import { merkleRoot } from "./merkle.ts";
 import { cidV1Raw } from "./adapters/content.ts";
-import type { SeedPin } from "./adapters/content.ts";
+import { nodeSha256 } from "./digest.ts";
 import type { RarextStore } from "./store.ts";
 
 export const BUNDLE_VERSION = 1;
 
-export interface BundleManifest {
-  version: number;
-  root: string;
-  leafVersion: number;
-  anchorId: string | null;
-  anchorRoot: string | null;
-  createdAt: string;
-  publications: { id: string; leaf: string }[];
-  counts: {
-    publications: number;
-    anchors: number;
-    challenges: number;
-    semantics: number;
-  };
-}
-
-export interface Bundle {
-  manifest: BundleManifest;
-  publications: Publication[];
-  anchors: Anchor[];
-  challenges: Challenge[];
-  semantics: Semantics[];
-}
-
-export interface BundleVerification {
-  valid: boolean;
-  root: string;
-  computedRoot: string | null;
-  publications: number;
-  reason: string | null;
-}
+export type { Bundle, BundleManifest, BundleVerification } from "../../../packages/core/src/index.ts";
 
 /**
  * A bundle is the registry in a form anyone can hold: the publications that
@@ -103,40 +74,7 @@ export function buildBundle(
 }
 
 export function verifyBundle(bundle: Bundle): BundleVerification {
-  const leaves = bundle.publications.map((publication) =>
-    publicationLeaf(publication, bundle.manifest.leafVersion),
-  );
-
-  const computedRoot = merkleRoot(leaves);
-
-  if (computedRoot !== bundle.manifest.root) {
-    return {
-      valid: false,
-      root: bundle.manifest.root,
-      computedRoot,
-      publications: leaves.length,
-      reason: "the publications in this bundle do not rebuild the anchored root",
-    };
-  }
-
-  const listed = bundle.manifest.publications.map((entry) => entry.leaf);
-  if (canonicalize(listed) !== canonicalize(leaves)) {
-    return {
-      valid: false,
-      root: bundle.manifest.root,
-      computedRoot,
-      publications: leaves.length,
-      reason: "the manifest leaf list does not match the publications",
-    };
-  }
-
-  return {
-    valid: true,
-    root: bundle.manifest.root,
-    computedRoot,
-    publications: leaves.length,
-    reason: null,
-  };
+  return verifyBundleShape(bundle, nodeSha256);
 }
 
 export function bundleSummary(bundle: Bundle): string {
