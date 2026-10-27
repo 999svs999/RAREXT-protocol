@@ -29,7 +29,15 @@ root, and it has to land on the root the chain holds. A mirror that alters a tit
 rebuilds a different root, and the difference is visible. Pin the verifier to the
 chain root with `verify.html?root=<root>` when you need more than internal
 consistency: the page then rejects a bundle whose recomputed root differs from
-the root you supplied.
+the root you supplied. And every client that reads a bundle over HTTP —
+`bundleFromSeed`, the SDK's `findVerifiedBundle`, `verify-seed-mirrors.mjs`, and
+this page's own failover — refuses a response above `MAX_BUNDLE_RESPONSE_BYTES`
+(8 MiB, the shared cap in `@rarext/core`; honest bundles are ~21 KiB and grow
+with publications, so 8 MiB is generous headroom without being an amplifier)
+before the body is fully read, honoring `Content-Length` when it is declared and
+counting streamed bytes when it is not, so a hostile mirror is refused at the cap
+and skipped like any other bad candidate instead of handing every verifier a
+giant allocation.
 
 ## The mirror
 

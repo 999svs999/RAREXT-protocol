@@ -26,8 +26,43 @@
       import { verifyBundle } from "./verify.js";
       const out = document.getElementById("out");
 
+      // The same cap every client path shares (MAX_BUNDLE_RESPONSE_BYTES in
+      // @rarext/core): honest bundles are ~21 KiB and grow with publications;
+      // a response larger than 8 MiB is refused before it is read, so a
+      // hostile mirror cannot hand every visitor a giant allocation.
+      const MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
+
       const htmlRow = (label, value, cls) =>
         '<div class="row"><span class="dim">' + label + '</span><span class="' + (cls ?? "") + '">' + value + "</span></div>";
+
+      // Read the body through the cap: refuse a declared Content-Length above
+      // MAX_BUNDLE_BYTES before reading, and count bytes while reading so the
+      // cap holds even when the header is absent or lying.
+      async function readCapped(response) {
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
+          if (response.body && response.body.cancel) { try { await response.body.cancel(); } catch (error) { /* the refusal stands either way */ } }
+          throw new Error("declares " + declared + " bytes, above the " + MAX_BUNDLE_BYTES + " byte cap");
+        }
+        if (!response.body || !response.body.getReader) return null; // no stream: the caller falls back
+        const reader = response.body.getReader();
+        const chunks = [];
+        let total = 0;
+        for (;;) {
+          const step = await reader.read();
+          if (step.done) break;
+          total += step.value.byteLength;
+          if (total > MAX_BUNDLE_BYTES) {
+            try { await reader.cancel(); } catch (error) { /* the refusal stands either way */ }
+            throw new Error("streamed past the " + MAX_BUNDLE_BYTES + " byte cap (at least " + total + " bytes)");
+          }
+          chunks.push(step.value);
+        }
+        const bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        return new TextDecoder().decode(bytes);
+      }
 
       // Fail over between copies the way a client should: this mirror's own
       // bundle, then the sibling registry copy (whichever relative form this
@@ -53,7 +88,8 @@
           try {
             const response = await fetch(url);
             if (!response.ok) { refusals.push(url + ": HTTP " + response.status); continue; }
-            const value = await response.json();
+            const text = await readCapped(response);
+            const value = JSON.parse(text === null ? await response.text() : text);
             const probe = await verifyBundle(value, undefined, pinned ?? undefined);
             if (!probe.valid) { refusals.push(url + ": " + (probe.reason ?? "does not verify")); continue; }
             return { bundle: value, source: url, refusals: refusals };

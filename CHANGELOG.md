@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A bundle response is now capped before it is read, on every client path.** All four
+  fetch paths — `bundleFromSeed`, the SDK's `findVerifiedBundle`, `verify-seed-mirrors.mjs`,
+  and the proof page's failover — materialized the whole body before any check ran, so a
+  hostile or compromised mirror could hand every verifier, agent, checker, and visitor's
+  browser a 2 GiB allocation from a ~21 KiB honest bundle. Each path now reads through one
+  shared cap, `MAX_BUNDLE_RESPONSE_BYTES` (8 MiB in `@rarext/core`; generous headroom
+  without being an amplifier): a declared `Content-Length` above the cap is refused
+  unread, and the body is otherwise consumed in chunks with a running byte counter, so
+  the cap holds even when the header is absent or the server streams forever. A refusal
+  names the cap and the size when known, and lands in `refusals` like any other candidate
+  refusal — the next candidate is still tried. The pinning adapter's 64 KiB service cap
+  is unchanged.
 - **A mirror pointer is now a hash, not just a URL.** MIRRORS.md named content addressing for
   the bundle as federation's other missing half; the first half of it is implemented. The seed
   pins the bundle's content address — `bundleCid`, a CIDv1 over the raw sha2-256 of the exact

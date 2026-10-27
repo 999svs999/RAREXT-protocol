@@ -82,6 +82,75 @@ export function verifyBundleShape(
   };
 }
 
+/**
+ * The most bytes any client will materialize from a bundle response before
+ * checking it. Honest bundles are ~21 KiB and grow with publications; 8 MiB is
+ * generous headroom without being an amplifier a hostile mirror can aim at
+ * every verifier, browser, and agent that asks.
+ */
+export const MAX_BUNDLE_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+/** The shape a bundle fetch reads from: headers plus an optional streaming body. */
+export interface BundleResponse {
+  headers: { get(name: string): string | null };
+  body: ReadableStream<Uint8Array> | null;
+}
+
+/**
+ * Read a bundle response as bytes, refusing anything larger than `maxBytes`
+ * BEFORE the body is fully materialized. A declared Content-Length above the
+ * cap is refused unread, and the body is otherwise consumed in chunks with a
+ * running byte counter, so the cap holds even when the header is absent or
+ * lying: a server that streams forever is cut off at the cap instead of being
+ * read to its end. Every refusal names the cap and the size when it is known.
+ */
+export async function readBundleResponseBytes(
+  response: BundleResponse,
+  maxBytes: number = MAX_BUNDLE_RESPONSE_BYTES,
+): Promise<Uint8Array> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null) {
+    const length = Number(declared);
+    if (Number.isInteger(length) && length >= 0 && length > maxBytes) {
+      if (response.body) {
+        try {
+          await response.body.cancel();
+        } catch {
+          // Releasing the connection is best-effort; the refusal stands either way.
+        }
+      }
+      throw new Error(
+        `the response declares ${length} bytes, above the ${maxBytes} byte cap for a bundle`,
+      );
+    }
+  }
+  if (!response.body) {
+    return new Uint8Array(0);
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(
+        `the response streamed past the ${maxBytes} byte cap for a bundle (at least ${total} bytes)`,
+      );
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /** One line of a seed's `pins`, additive over `bundleCid`. */
 export type SeedPin =
   | { cid: string; service: string; reference: string }

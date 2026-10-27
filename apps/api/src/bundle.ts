@@ -1,4 +1,7 @@
-import { verifyBundleShape } from "../../../packages/core/src/index.ts";
+import {
+  readBundleResponseBytes,
+  verifyBundleShape,
+} from "../../../packages/core/src/index.ts";
 import type {
   Bundle,
   BundleVerification,
@@ -151,8 +154,10 @@ export async function bundleFromSeed(
       // Read the bytes, not a parsed shape: when the seed pins a CID, the hash
       // is taken over exactly what the mirror served. A re-serialized copy of
       // the same bundle fails here, which is the point — the pointer is a
-      // hash, and a hash cannot be re-serialized into being.
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      // hash, and a hash cannot be re-serialized into being. The read is
+      // capped: a mirror that declares a huge Content-Length, or streams
+      // forever, is refused at the cap and skipped like any other bad copy.
+      const bytes = await readBundleResponseBytes(response);
       if (seed.bundleCid) {
         const served = cidV1Raw(bytes);
         if (served !== seed.bundleCid) {

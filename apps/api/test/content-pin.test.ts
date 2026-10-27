@@ -13,6 +13,9 @@ import {
   pinServiceUrl,
 } from "../src/adapters/content.ts";
 import { checkPin, getBytes } from "../../../scripts/verify-seed-mirrors.mjs";
+import {
+  MAX_BUNDLE_RESPONSE_BYTES,
+} from "../../../packages/core/src/index.ts";
 
 /**
  * The pinning service, as a test double the way bundle-seed.test.ts builds one:
@@ -322,4 +325,78 @@ test("the live checker reports a pin that resolves elsewhere, or not at all", as
   const nowhere = await checkPin({ cid }, seed, async () => bytes);
   assert.equal(nowhere.ok, false);
   assert.match(nowhere.reason, /names no service or URL/);
+});
+
+test("the live checker's getBytes refuses a bundle response past the shared cap", async () => {
+  // No network: the fetch is injected, and the responses are the plain shapes
+  // the shared reader needs — headers.get plus an optional streaming body.
+  type FakeResponse = {
+    ok: boolean;
+    headers: { get(name: string): string | null };
+    body: ReadableStream<Uint8Array> | null;
+  };
+  const fakeFetch =
+    (response: FakeResponse) =>
+    async () => response;
+
+  // An honest small body passes through byte for byte.
+  const small = new TextEncoder().encode("the published bytes");
+  const served = await getBytes("https://mirror.example/bundle.json", fakeFetch({
+    ok: true,
+    headers: { get: () => String(small.length) },
+    body: new Response(small).body,
+  }));
+  assert.deepEqual(Buffer.from(served).toString("utf8"), "the published bytes");
+
+  // A LYING Content-Length (2 GiB declared, tiny body served) is refused
+  // before the body is read, naming the cap and the claimed size.
+  let pulled = 0;
+  const guarded = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled += 1;
+      controller.enqueue(new Uint8Array(8));
+      controller.close();
+    },
+  });
+  await assert.rejects(
+    () =>
+      getBytes("https://mirror.example/bundle.json", fakeFetch({
+        ok: true,
+        headers: { get: () => String(2 * 1024 * 1024 * 1024) },
+        body: guarded,
+      })),
+    (error: Error) => {
+      assert.match(error.message, /declares 2147483648 bytes/);
+      assert.match(error.message, new RegExp(`above the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+      return true;
+    },
+  );
+  assert.equal(pulled <= 1, true, "an oversized declaration is refused unread (the stream is not consumed)");
+
+  // A body that streams past the cap with no header at all is cut off
+  // mid-read by the byte counter.
+  const chunk = new Uint8Array(1024 * 1024);
+  let count = 0;
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      count += 1;
+      if (count > 64) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(chunk);
+    },
+  });
+  await assert.rejects(
+    () =>
+      getBytes("https://mirror.example/bundle.json", fakeFetch({
+        ok: true,
+        headers: { get: () => null },
+        body: endless,
+      })),
+    (error: Error) => {
+      assert.match(error.message, new RegExp(`streamed past the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+      return true;
+    },
+  );
 });

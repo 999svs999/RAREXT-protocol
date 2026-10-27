@@ -6,6 +6,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { bundleFromSeed, verifyBundle, type Bundle } from "../src/bundle.ts";
 import { cidV1Raw } from "../src/adapters/content.ts";
+import { MAX_BUNDLE_RESPONSE_BYTES } from "../../../packages/core/src/index.ts";
 
 /**
  * Federation's first step, exercised against hostile copies: the client tries
@@ -153,6 +154,118 @@ test("a client finds the mirror whose copy rebuilds the seed's pinned root", asy
         return true;
       },
       "a re-serialized copy of the same bundle must be refused by the CID pin",
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("a candidate that answers oversized is refused at the cap, and the next candidate still wins", async () => {
+  const honest = verifyBundle(committed);
+  assert.equal(honest.valid, true, honest.reason ?? undefined);
+  const pinnedRoot = honest.computedRoot!;
+
+  // Three hostile shapes a mirror can take, each answered before the body is
+  // fully materialized: a LYING Content-Length (declares a huge body, serves
+  // an honest one), an HONEST-but-huge Content-Length (declares 2 GiB), and a
+  // body that simply STREAMS past the cap with no Content-Length at all.
+  const streamedPast: number[] = [];
+  const server = createServer((request, response) => {
+    const url = request.url ?? "";
+    if (url === "/lying/bundle.json") {
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(4 * 1024 * 1024 * 1024),
+      });
+      response.end(JSON.stringify(committed));
+      return;
+    }
+    if (url === "/huge/bundle.json") {
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(2 * 1024 * 1024 * 1024),
+      });
+      response.end();
+      return;
+    }
+    if (url === "/streaming/bundle.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      const chunk = Buffer.alloc(256 * 1024, 0x61);
+      let written = 0;
+      const writeMore = () => {
+        while (written < 32 * 1024 * 1024) {
+          if (response.destroyed || request.destroyed) return;
+          written += chunk.length;
+          streamedPast.push(written);
+          if (!response.write(chunk)) {
+            response.once("drain", writeMore);
+            return;
+          }
+        }
+        response.end();
+      };
+      writeMore();
+      return;
+    }
+    if (url === "/mirror/bundle.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(committed));
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+
+    for (const hostile of ["lying", "huge", "streaming"]) {
+      const found = await bundleFromSeed({
+        bundle: `${base}/${hostile}/bundle.json`,
+        bundleRoot: pinnedRoot,
+        mirrors: [{ bundle: `${base}/mirror/bundle.json`, root: pinnedRoot }],
+      });
+      assert.equal(
+        found.source,
+        `${base}/mirror/bundle.json`,
+        `the honest candidate is still accepted after a ${hostile} mirror`,
+      );
+    }
+
+    // The streaming refusal happens WHILE READING — the client stops well
+    // before the server stops sending — and every refusal names the cap.
+    assert.ok(
+      streamedPast.at(-1)! <= 2 * MAX_BUNDLE_RESPONSE_BYTES,
+      `the server was cut off early (served ${streamedPast.at(-1)} bytes), not read to its end`,
+    );
+    await assert.rejects(
+      () =>
+        bundleFromSeed({
+          bundle: `${base}/lying/bundle.json`,
+          bundleRoot: pinnedRoot,
+        }),
+      (error: Error) => {
+        assert.match(error.message, /lying\/bundle\.json/);
+        assert.match(error.message, /declares 4294967296 bytes/);
+        assert.match(error.message, new RegExp(`above the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+        return true;
+      },
+    );
+    await assert.rejects(
+      () =>
+        bundleFromSeed({
+          bundle: `${base}/streaming/bundle.json`,
+          bundleRoot: pinnedRoot,
+        }),
+      (error: Error) => {
+        assert.match(error.message, /streaming\/bundle\.json/);
+        assert.match(error.message, new RegExp(`streamed past the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+        assert.match(error.message, /at least \d+ bytes/);
+        return true;
+      },
     );
   } finally {
     server.closeAllConnections();

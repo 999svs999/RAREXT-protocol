@@ -17,6 +17,7 @@
 
 import { pathToFileURL } from "node:url";
 
+import { MAX_BUNDLE_RESPONSE_BYTES, readBundleResponseBytes } from "../packages/core/src/index.ts";
 import { verifyBundle } from "../apps/api/src/bundle.ts";
 import { cidV1Raw } from "../apps/api/src/adapters/content.ts";
 
@@ -29,10 +30,16 @@ const getJson = async (url) => {
   return response.json();
 };
 
-export const getBytes = async (url) => {
-  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+/**
+ * A bundle response is read through the shared cap: a declared
+ * Content-Length above `MAX_BUNDLE_RESPONSE_BYTES` is refused unread, and the
+ * cap holds while reading even when the header is absent or lying. `fetchImpl`
+ * is injectable so the cap is testable without a network.
+ */
+export const getBytes = async (url, fetchImpl = fetch) => {
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  return readBundleResponseBytes(response, MAX_BUNDLE_RESPONSE_BYTES);
 };
 
 /**

@@ -794,7 +794,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   if (!doc.includes("Served from")) {
     fail("MIRRORS.md no longer describes the page reporting which location it verified");
   }
-  for (const marker of ["Served from", "../registry/bundle.json", "loadBundle", "rebuild"]) {
+  for (const marker of ["Served from", "../registry/bundle.json", "loadBundle", "rebuild", "MAX_BUNDLE_BYTES", "content-length"]) {
     if (!page.includes(marker)) {
       fail(`MIRRORS.md says the proof page fails over, but the page module has no "${marker}"`);
     }
@@ -810,14 +810,28 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs writes no bundleCid");
   }
   const bundleModule = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
-  for (const marker of ["bundleCid", "cidV1Raw"]) {
+  for (const marker of ["bundleCid", "cidV1Raw", "readBundleResponseBytes"]) {
     if (!bundleModule.includes(marker)) {
       fail(`MIRRORS.md says clients verify the CID, but bundle.ts has no "${marker}"`);
+    }
+  }
+  // The doc documents the response cap; the tree must hold it: the cap is one
+  // constant in core, and every fetch path reads through it.
+  if (!doc.includes("MAX_BUNDLE_RESPONSE_BYTES")) {
+    fail("MIRRORS.md no longer documents the bundle response cap (MAX_BUNDLE_RESPONSE_BYTES)");
+  }
+  const mirrorPage = readFileSync(new URL("site/registry/mirror/verify.html", root), "utf8");
+  for (const marker of ["MAX_BUNDLE_BYTES", "content-length"]) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`MIRRORS.md says the proof page refuses oversized responses, but the published verify.html has no "${marker}"`);
     }
   }
   const seedVerifier = sources.seedVerifier ?? readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
   if (!seedVerifier.includes("cidV1Raw")) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
+  }
+  if (!seedVerifier.includes("readBundleResponseBytes")) {
+    fail("MIRRORS.md says clients cap a bundle response, but verify-seed-mirrors reads without the cap");
   }
 
   // The SDK half of the same story: the doc says an agent can find and check a
@@ -826,7 +840,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("MIRRORS.md no longer documents the SDK's mirror client (findVerifiedBundle)");
   }
   const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
-  for (const marker of ["findVerifiedBundle", "bundleCid", "bundleRoot"]) {
+  for (const marker of ["findVerifiedBundle", "bundleCid", "bundleRoot", "readBundleResponseBytes"]) {
     if (!sdkSource.includes(marker)) {
       fail(`MIRRORS.md says the SDK finds and checks a copy, but the SDK source has no "${marker}"`);
     }
@@ -835,6 +849,11 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   for (const marker of ["verifyBundleShape", "cidV1"]) {
     if (!coreIndex.includes(marker)) {
       fail(`MIRRORS.md says the SDK and API share core primitives, but core exports no "${marker}"`);
+    }
+  }
+  for (const marker of ["MAX_BUNDLE_RESPONSE_BYTES", "readBundleResponseBytes"]) {
+    if (!coreIndex.includes(marker)) {
+      fail(`MIRRORS.md says clients cap a bundle response, but core exports no "${marker}"`);
     }
   }
 

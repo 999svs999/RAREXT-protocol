@@ -13,6 +13,7 @@ import {
   verifyBundle,
   type Bundle,
 } from "../src/index.ts";
+import { MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
 /**
  * The SDK's mirror client, exercised against hostile copies: it tries the
@@ -142,6 +143,108 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
     await assert.rejects(
       () => findVerifiedBundle({ bundle: "", bundleRoot: pinnedRoot }),
       /names no bundle or mirror/,
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("an oversized candidate is refused at the cap, and the honest mirror is still accepted", async () => {
+  const honest = verifyBundle(committed);
+  assert.equal(honest.valid, true, honest.reason ?? undefined);
+  const pinnedRoot = honest.computedRoot!;
+
+  // The same hostile shapes the API path meets: a lying Content-Length, an
+  // honest-but-huge one, and a body streaming past the cap with no header.
+  const server = createServer((request, response) => {
+    const url = request.url ?? "";
+    if (url === "/lying/bundle.json") {
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(4 * 1024 * 1024 * 1024),
+      });
+      response.end(JSON.stringify(committed));
+      return;
+    }
+    if (url === "/huge/bundle.json") {
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(2 * 1024 * 1024 * 1024),
+      });
+      response.end();
+      return;
+    }
+    if (url === "/streaming/bundle.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      const chunk = Buffer.alloc(256 * 1024, 0x61);
+      let written = 0;
+      const writeMore = () => {
+        while (written < 32 * 1024 * 1024) {
+          if (response.destroyed || request.destroyed) return;
+          written += chunk.length;
+          if (!response.write(chunk)) {
+            response.once("drain", writeMore);
+            return;
+          }
+        }
+        response.end();
+      };
+      writeMore();
+      return;
+    }
+    if (url === "/mirror/bundle.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(committed));
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+
+    for (const hostile of ["lying", "huge", "streaming"]) {
+      const found = await findVerifiedBundle({
+        bundle: `${base}/${hostile}/bundle.json`,
+        bundleRoot: pinnedRoot,
+        mirrors: [{ bundle: `${base}/mirror/bundle.json`, root: pinnedRoot }],
+      });
+      assert.equal(
+        found.source,
+        `${base}/mirror/bundle.json`,
+        `the honest mirror is still accepted after a ${hostile} candidate`,
+      );
+    }
+
+    // Each refusal is a candidate refusal naming the cap, not a thrown crash.
+    await assert.rejects(
+      () =>
+        findVerifiedBundle({
+          bundle: `${base}/huge/bundle.json`,
+          bundleRoot: pinnedRoot,
+        }),
+      (error: Error) => {
+        assert.match(error.message, /huge\/bundle\.json/);
+        assert.match(error.message, /declares 2147483648 bytes/);
+        assert.match(error.message, new RegExp(`above the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+        return true;
+      },
+    );
+    await assert.rejects(
+      () =>
+        findVerifiedBundle({
+          bundle: `${base}/streaming/bundle.json`,
+          bundleRoot: pinnedRoot,
+        }),
+      (error: Error) => {
+        assert.match(error.message, /streaming\/bundle\.json/);
+        assert.match(error.message, new RegExp(`streamed past the ${MAX_BUNDLE_RESPONSE_BYTES} byte cap`));
+        return true;
+      },
     );
   } finally {
     server.closeAllConnections();
