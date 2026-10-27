@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The client, the pin service and the checker had never been run against each other — and they
+  disagreed.** Starting from the belief that no pin service shipped here, the check that
+  prevented a duplicate implementation found `apps/api/src/pin-server.ts` already wired as
+  `npm run pin`, documented in OPERATIONS.md, with `/v1/pins` and GC. The duplicate was
+  discarded (deleting it rather than landing a second implementation is the whole discipline of
+  the last several cycles). What the sweep DID uncover is that nobody had ever driven the real
+  service with the real client: the service answers `GET /v1/pins/<cid>` with a JSON envelope
+  carrying base64 content, while `checkPin` hashed the raw response body — so every pin recorded
+  from the real service would have failed verification against itself, hashing the envelope
+  instead of the bundle. `pinContentBytes` now reads both honest shapes (raw bytes for a static
+  copy, the envelope's `content` for the service), the new end-to-end test drives the documented
+  command with `pinBundle`, reads the reference back, hashes it, verifies through `checkPin`,
+  and then tampers the store on disk to prove the check still catches it. A second test keeps
+  the raw-bytes path honest. Also corrected in this cycle's report: the earlier claim that
+  nothing here lets an operator run a pin service was wrong — the service existed; the gap was
+  the untested seam between the three pieces.
 - **An agent can now replay a verified bundle's AI claims with no server.** The SDK gained
   `findVerifiedBundle` two cycles ago, so a resident can find and check a copy of the
   registry from a seed document alone — but the only SDK path to an AI verdict was

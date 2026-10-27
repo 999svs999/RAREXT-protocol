@@ -66,6 +66,36 @@ export function pinUrl(pin) {
  * any of that returns `ok: false` with the reason — reported like a location
  * line, never silently dropped.
  */
+/**
+ * The CONTENT bytes behind a pin response.
+ *
+ * A pin can be served two honest ways: as raw bytes (a static copy at a URL the
+ * pin records), or as the reference service's JSON envelope
+ * (`{ ...record, content: <base64> }`). Hashing the envelope instead of the
+ * content made every pin from the real service fail its own check, which is
+ * what running the client, the service and this checker against each other
+ * exposed. Anything that is not a JSON envelope with a string `content` is
+ * treated as raw bytes, so a static pin keeps working.
+ */
+export function pinContentBytes(bytes) {
+  const raw = Buffer.from(bytes);
+
+  // Only a JSON object without a leading NUL/whitespace-free binary signature
+  // is worth parsing; a bundle is JSON too, so a bundle served raw must NOT be
+  // mistaken for an envelope. The envelope is identified by a base64 `content`
+  // string, and the decoded bytes are what get hashed either way.
+  if (raw.length === 0 || raw[0] !== 0x7b) return raw;
+  try {
+    const parsed = JSON.parse(raw.toString("utf8"));
+    if (parsed && typeof parsed === "object" && typeof parsed.content === "string") {
+      return Buffer.from(parsed.content, "base64");
+    }
+  } catch {
+    // Not JSON: raw bytes, as above.
+  }
+  return raw;
+}
+
 export async function checkPin(pin, seed, fetchBytes = getBytes) {
   const cid = typeof pin?.cid === "string" && pin.cid.length > 0 ? pin.cid : null;
   if (!cid) return { ok: false, reason: "names no content address" };
@@ -79,7 +109,14 @@ export async function checkPin(pin, seed, fetchBytes = getBytes) {
 
   try {
     const bytes = await fetchBytes(url);
-    const served = cidV1Raw(bytes);
+    // What gets hashed is the CONTENT, whichever way the pin is served. A
+    // static copy is raw bytes; the reference pin service
+    // (apps/api/src/pin-server.ts, `npm run pin`) answers GET /v1/pins/<cid>
+    // with a JSON envelope carrying base64 content. Reading only raw bytes
+    // meant every pin from the real service hashed the envelope instead of the
+    // bundle and failed — found by finally running the client, the service and
+    // this checker against each other.
+    const served = cidV1Raw(pinContentBytes(bytes));
     if (served !== cid) {
       return { ok: false, reason: `${url} — serves ${served}, the pin says ${cid}` };
     }
