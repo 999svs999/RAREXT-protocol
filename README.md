@@ -86,6 +86,7 @@ npm run dev:examples # every example app: board games, fair launch, one registry
 npm run test       # core + agent SDK + API + web i18n tests
 npm run test:examples # board-game and fair-launch verifier tests
 npm run demo:ai    # end-to-end proof that AI lives on RAREXT
+npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
 ```
 
 `npm run demo:ai` is the one-command proof a third party can run on their own
@@ -94,6 +95,13 @@ the live API flow, serves the resulting mirror over loopback HTTP, re-derives
 both AI renditions from the commitments alone, and checks the anchor pins the
 published root — printing a phase-by-phase receipt and exiting non-zero if any
 link breaks. It writes only to the gitignored `.ai-proof/` directory.
+
+`npm run demo:resident` is the outside-in view of the same thesis: from the
+published seed URL (its default) or one you pass, it finds a copy whose bytes
+rebuild the pinned root and CID, then replays that copy's AI claims offline —
+printing every candidate, every refusal by name, both verdicts with their
+evidence, and the root they tie to. It needs no keys and no server and writes
+nothing; `--local <dir>` runs the identical flow against a local tree.
 
 The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool. The same server exposes `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`, `rarext_storage_audit`, and `rarext_storage_pin`; configure `RAREXT_STORAGE_HOLDERS` (or `RAREXT_HOLDERS`) and `RAREXT_PIN_URL` first. The [MCP storage example](examples/mcp-storage) runs the whole path locally, including token-protected holders and a pin service; `apps/api/test/mcp-storage-agent.test.ts` runs that external-client path as part of `npm test`.
 

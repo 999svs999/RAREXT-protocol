@@ -120,11 +120,22 @@ export interface VerifiedBundleSource {
   source: string;
 }
 
+/**
+ * One step in the search for a verified copy. The demo prints these as they
+ * happen; the verification itself stays in `findVerifiedBundle`.
+ */
+export type FindVerifiedBundleEvent =
+  | { url: string; status: "trying" }
+  | { url: string; status: "refused"; reason: string }
+  | { url: string; status: "verified"; root: string };
+
 export interface FindVerifiedBundleOptions {
   fetch?: typeof fetch;
   /** The sha256 digest the client trusts; defaults to node:crypto. */
   sha256?: Sha256;
   timeoutMs?: number;
+  /** Observe each candidate as it is tried, refused, or accepted. */
+  onCandidate?: (event: FindVerifiedBundleEvent) => void;
 }
 
 /**
@@ -156,13 +167,18 @@ export async function findVerifiedBundle(
   }
 
   const refusals: string[] = [];
+  const refuse = (url: string, reason: string) => {
+    refusals.push(`${url}: ${reason}`);
+    options.onCandidate?.({ url, status: "refused", reason });
+  };
 
   for (const url of candidates) {
+    options.onCandidate?.({ url, status: "trying" });
     let value: unknown;
     try {
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) {
-        refusals.push(`${url}: HTTP ${response.status}`);
+        refuse(url, `HTTP ${response.status}`);
         continue;
       }
       // Read the bytes, not a parsed shape: when the seed pins a CID, the hash
@@ -175,31 +191,31 @@ export async function findVerifiedBundle(
       if (seed.bundleCid) {
         const served = cidV1(sha256, bytes);
         if (served !== seed.bundleCid) {
-          refusals.push(
-            `${url}: serves ${served}, the seed pins ${seed.bundleCid}`,
-          );
+          refuse(url, `serves ${served}, the seed pins ${seed.bundleCid}`);
           continue;
         }
       }
       value = JSON.parse(new TextDecoder().decode(bytes));
     } catch (error) {
-      refusals.push(`${url}: ${error instanceof Error ? error.message : "fetch failed"}`);
+      refuse(url, error instanceof Error ? error.message : "fetch failed");
       continue;
     }
 
     const verification = verifyBundleShape(value as Bundle, sha256);
     if (!verification.valid) {
-      refusals.push(`${url}: ${verification.reason ?? "the bundle does not verify"}`);
+      refuse(url, verification.reason ?? "the bundle does not verify");
       continue;
     }
 
     if (verification.computedRoot !== seed.bundleRoot) {
-      refusals.push(
-        `${url}: verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${seed.bundleRoot}`,
+      refuse(
+        url,
+        `verifies internally but rebuilds ${verification.computedRoot}, not the pinned ${seed.bundleRoot}`,
       );
       continue;
     }
 
+    options.onCandidate?.({ url, status: "verified", root: verification.computedRoot });
     return { bundle: value as Bundle, root: verification.computedRoot, source: url };
   }
 

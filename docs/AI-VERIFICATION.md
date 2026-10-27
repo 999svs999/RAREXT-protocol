@@ -147,6 +147,13 @@ all committed before the artifact is verified.
   challenge the bundle does not carry is an error verdict naming it, and a
   bundle that claims nothing AI returns an empty list. The result carries the
   bundle's manifest root, so verdicts tie to the copy that produced them.
+- **One command from the outside:** `npm run demo:resident` fetches the
+  published seed (or a URL you pass), uses the SDK's `findVerifiedBundle` to
+  reach a copy that rebuilds the pinned root and CID, and replays every AI claim
+  with `replayBundleAi`; it prints each candidate's refusal, every verdict with
+  its evidence, and the root they tie to. It needs no keys, no server, and no
+  write access, and `--local <dir>` runs the same flow against a local tree in
+  CI.
 - **Library:** `verifyGenerativeReplay` and `verifyBoundedReconstruction` are
   pure functions with no network dependency — independent tools can re-implement
   or re-run them.

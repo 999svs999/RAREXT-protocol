@@ -286,7 +286,7 @@ if (process.argv.includes("--self-test")) {
   // sentence is held to the export and to the committed bundle, so dropping it
   // is drift, not a rewording.
   const beforeAiReplay = failures;
-  const noReplayAiDoc = originalAiDoc.replace("replayBundleAi(bundle)", "replayClaimsOffline(bundle)");
+  const noReplayAiDoc = originalAiDoc.replaceAll("replayBundleAi", "replayClaimsOffline");
   checkAiVerificationDoc(noReplayAiDoc);
   const caughtAiReplay = failures > beforeAiReplay;
   if (!caughtAiReplay) fail("self-test: the checker accepted an AI verification doc that no longer names the SDK's bundle replay");
@@ -408,11 +408,23 @@ if (process.argv.includes("--self-test")) {
   // And a mirrors doc that stops naming the SDK's offline AI replay: the
   // sentence is held to the export and to the refusal it quotes.
   const beforeReplayDoc = failures;
-  const noReplayMirrorsDoc = originalMirrorsDoc.replace("`replayBundleAi(bundle)`", "`replayClaimsOffline(bundle)`");
+  const noReplayMirrorsDoc = originalMirrorsDoc.replaceAll("replayBundleAi", "replayClaimsOffline");
   checkMirrorsDoc(noReplayMirrorsDoc);
   const caughtReplayDoc = failures > beforeReplayDoc;
   if (!caughtReplayDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the SDK's bundle replay");
   caught = caught && caughtReplayDoc;
+  // And a mirrors doc that stops naming the resident demo must be reported:
+  // the command is held to the npm script and the script's SDK imports.
+  const beforeResidentDoc = failures;
+  const noResidentMirrorsDoc = originalMirrorsDoc.replaceAll(
+    "npm run demo:resident",
+    "npm run resident-demo",
+  );
+  checkMirrorsDoc(noResidentMirrorsDoc);
+  const caughtResidentDoc = failures > beforeResidentDoc;
+  if (!caughtResidentDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the resident demo");
+  caught = caught && caughtResidentDoc;
+  assertChanged(originalMirrorsDoc, noResidentMirrorsDoc, "mirrors-doc-resident");
   assertChanged(originalMirrorsDoc, noReplayMirrorsDoc, "mirrors-doc-replay");
   assertChanged(originalMirrorsDoc, unpinnedMirrorsDoc, "mirrors-doc-pinning");
   assertChanged(realPublishProof, doctoredPublishProof, "publish-flow-pins");
@@ -450,6 +462,17 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalChains, doctoredChains, "chain-surface");
   assertChanged(originalWorkDoc, doctoredWorkDoc, "reward-table");
   assertChanged(originalAiDoc, doctoredAiDoc, "ai-verification");
+  // And the AI doc's resident-demo sentence is held to the script as well.
+  const beforeResidentAi = failures;
+  const noResidentAiDoc = originalAiDoc.replaceAll(
+    "npm run demo:resident",
+    "npm run resident-demo",
+  );
+  checkAiVerificationDoc(noResidentAiDoc);
+  const caughtResidentAi = failures > beforeResidentAi;
+  if (!caughtResidentAi) fail("self-test: the checker accepted an AI doc that no longer names the resident demo");
+  caught = caught && caughtResidentAi;
+  assertChanged(originalAiDoc, noResidentAiDoc, "ai-verification-resident");
   assertChanged(originalAiDoc, noReplayAiDoc, "ai-verification-replay");
   assertChanged(originalSemanticsDoc, doctoredSemanticsDoc, "semantics-doc");
   assertChanged(originalOperations, doctoredSnapshotDoc, "snapshot-migration");
@@ -963,6 +986,32 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
   const ci = readFileSync(new URL("scripts/ci.sh", root), "utf8");
   const deploy = readFileSync(new URL("scripts/deploy-site.mjs", root), "utf8");
+
+  // The resident demo: the doc's one-command promise is held to the command
+  // that makes it true. The npm script must exist, the script must import the
+  // SDK's two verification exports rather than re-implement them, and its
+  // default seed must be the live published one the doc names.
+  if (!/npm run demo:resident(?![\w:-])/.test(doc)) {
+    fail("MIRRORS.md no longer documents the resident demo (npm run demo:resident)");
+  }
+  if (typeof pkg.scripts["demo:resident"] !== "string") {
+    fail("MIRRORS.md names npm run demo:resident, but package.json defines no such script");
+  }
+  const demoSource = readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
+  for (const marker of [
+    "packages/agent-sdk/src/index.ts",
+    "findVerifiedBundle",
+    "replayBundleAi",
+    "https://999svs999.github.io/RAREXT-protocol/registry/seed.json",
+    "--local",
+  ]) {
+    if (!demoSource.includes(marker)) {
+      fail(`MIRRORS.md's resident demo must use the SDK, default to the live seed, and support --local; demo-resident.mjs has no "${marker}"`);
+    }
+  }
+  if (!/no\s+keys/.test(doc) || !/no\s+server/.test(doc)) {
+    fail("MIRRORS.md no longer states that the resident demo needs no keys and no server");
+  }
 
   const guards = new Set();
   let currentMethod = null;
@@ -1820,6 +1869,25 @@ function checkAiVerificationDoc(docOverride, appOverride) {
     ) {
       fail("the forged claim's evidence does not show the expected output beside the forged one");
     }
+  }
+
+  // The resident demo is the doc's outside-in command: it must fetch the live
+  // seed by default and replay through the SDK, not a private checker.
+  if (!/npm run demo:resident(?![\w:-])/.test(doc)) {
+    fail("AI-VERIFICATION.md no longer documents the resident demo (npm run demo:resident)");
+  }
+  const residentDemo = readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
+  for (const marker of [
+    "findVerifiedBundle",
+    "replayBundleAi",
+    "https://999svs999.github.io/RAREXT-protocol/registry/seed.json",
+  ]) {
+    if (!residentDemo.includes(marker)) {
+      fail(`AI-VERIFICATION.md's resident demo must use the SDK and default to the live seed; demo-resident.mjs has no "${marker}"`);
+    }
+  }
+  if (!/no\s+keys/.test(doc) || !/no\s+server/.test(doc)) {
+    fail("AI-VERIFICATION.md no longer states that the resident demo needs no keys and no server");
   }
 
   console.log(

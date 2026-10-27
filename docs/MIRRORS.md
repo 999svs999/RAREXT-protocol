@@ -172,6 +172,20 @@ challenge the bundle does not carry is a verdict entry whose error reads
 `challenge <id> not in bundle` — reported, never skipped — and a bundle that
 claims nothing AI comes back with an empty list.
 
+### The resident demo
+
+`npm run demo:resident` is that path as one command. It fetches the published
+seed (default <https://999svs999.github.io/RAREXT-protocol/registry/seed.json>)
+or a seed URL you pass, calls the SDK's `findVerifiedBundle` to print every
+candidate tried and every refusal by name until a copy rebuilds the pinned root
+and CID, then calls `replayBundleAi` to print each AI claim's title,
+representation, `correct` verdict, and evidence, tied to that root. It needs no
+keys, no server, and no write access, and it exits non-zero when the bundle
+cannot be verified or any claim replays false. `npm run demo:resident -- --local
+<dir>` serves the same flow from a local tree (a `seed.json` beside the bundle
+paths it names) over loopback HTTP, so the end-to-end test runs the actual
+command without touching the network.
+
 ## The next step
 
 A mirror is a copy of one registry. Making the copy findable and keeping copies
