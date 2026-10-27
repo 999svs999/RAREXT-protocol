@@ -46,6 +46,7 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
       bundle: string;
       bundleRoot: string;
       bundleCid?: string;
+      pins?: { cid: string; service: string; reference?: string; error?: string }[];
       mirrors: { bundle: string; root: string }[];
     };
 
@@ -58,6 +59,25 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
     // bytes; a mirror pointer is a hash, not just a URL.
     assert.ok(typeof seed.bundleCid === "string" && seed.bundleCid.length > 0, "the seed must pin a bundleCid");
     assert.equal(cidV1Raw(bundleBytes), seed.bundleCid, "the served bytes must hash to the seed's pin");
+    // The publish's pinning call is recorded, never faked: the seed carries the
+    // array (empty when no service is configured, which is this tree's state
+    // and CI's), and every entry it does carry must name this published bundle,
+    // the service it went to, and exactly one of what came back or why nothing
+    // did — a pin is a record of an attempt, not an assertion of permanence.
+    assert.ok(Array.isArray(seed.pins), "the seed records a pins array");
+    if (!process.env.RAREXT_PIN_SERVICE_URL && !process.env.RAREXT_PIN_URL) {
+      assert.deepEqual(
+        seed.pins,
+        [],
+        "no pinning service is configured here, so the publish must record no pins at all",
+      );
+    }
+    for (const pin of seed.pins ?? []) {
+      assert.equal(pin.cid, seed.bundleCid, "a recorded pin names the published bundle's content address");
+      assert.ok(pin.service.length > 0, "a recorded pin says which service it went to");
+      const outcome = ["reference", "error"].filter((key) => key in pin);
+      assert.equal(outcome.length, 1, `a pin is a reference or an error, never both or neither (${outcome.join(",")})`);
+    }
     // A mirror entry must be a genuinely separate location that pins the same
     // root, and there must be at least one. This assertion previously required
     // mirror.bundle === seed.bundle — it ENCODED the duplication that made

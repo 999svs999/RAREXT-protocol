@@ -155,15 +155,32 @@ consistent is the federation problem, and it has two parts:
   is still missing is a live federation protocol: mirrors do not gossip, and
   the seed is still a file someone publishes;
 - **content addressing for the bundle itself**, so a mirror pointer is a hash
-  rather than a URL — the first half is implemented: the seed pins the bundle's
-  content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the exact
-  published bytes, computed by `publish-proof.mjs`), and every client path
+  rather than a URL — implemented for the copy the seed names: the seed pins the
+  bundle's content address (`bundleCid`, a CIDv1 over the raw sha2-256 of the
+  exact published bytes, computed by `publish-proof.mjs`), and every client path
   verifies it — `bundleFromSeed` hashes the bytes a mirror served and refuses a
   copy that hashes elsewhere even if it verifies and rebuilds the pinned root
   (a pointer that is a hash cannot be re-serialized into being), the deploy
   asserts the live bundle hashes to what the live seed pins, and
-  `verify-seed-mirrors.mjs` checks each candidate against the pin. What is
-  still missing is publishing THROUGH a content-addressed store: the CID is
-  computed and verified everywhere, but nothing yet hands it to IPFS or
-  Arweave, so the hash still resolves only at the URLs the seed lists. That is
-  the pinning adapter, whose slot exists in `apps/api/src/adapters/content.ts`.
+  `verify-seed-mirrors.mjs` checks each candidate against the pin. Publishing
+  THROUGH a content-addressed store is wired up too: `publish-proof.mjs` hands
+  the published bytes to `pinBundle` in `apps/api/src/adapters/content.ts`, which
+  computes the CID and, when a pinning service is configured
+  (`RAREXT_PIN_SERVICE_URL`, falling back to the adapter's `RAREXT_PIN_URL`, with
+  `RAREXT_PIN_TOKEN` for the bearer token), POSTs the CID and the bytes to it and
+  returns the service's own reference. The seed records what happened in
+  `seed.pins`: one `{ cid, service, reference }` entry per configured service,
+  `[]` when no service is configured — `bundleCid` carries the content address
+  either way — and `{ cid, service, error }` when a configured service refused
+  the pin, because a publish must not crash on a pin it could not make and must
+  never record a pin it did not make. `verify-seed-mirrors.mjs` then resolves
+  each recorded pin — a reference that is a URL fetched as recorded, a bare
+  `cid:<cid>` fetched from `${service}/${cid}` — hashes what comes back with the
+  same `cidV1Raw`, and reports a pin that does not resolve, serves other bytes,
+  or disagrees with `bundleCid` as a failing pin, one line per pin, without
+  failing the run while a location verifies: pins are redundant with the
+  locations, not a replacement for them. What is still missing is a real
+  configured service — the credentials and a deployment to pin to; with none
+  configured here `pins` stays `[]` and no pin can resolve — and IPFS/Arweave
+  native resolution: until a service is configured and reachable, the hash still
+  resolves only at the URLs the seed lists.

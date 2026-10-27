@@ -9,6 +9,7 @@ import type {
 import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./anchorer.ts";
 import { merkleRoot } from "./merkle.ts";
 import { cidV1Raw } from "./adapters/content.ts";
+import type { SeedPin } from "./adapters/content.ts";
 import type { RarextStore } from "./store.ts";
 
 export const BUNDLE_VERSION = 1;
@@ -156,6 +157,14 @@ export interface SeedDocument {
    * serves different bytes, and different bytes are a different artifact.
    */
   bundleCid?: string;
+  /**
+   * What the publisher handed to a pinning service, additive over `bundleCid`:
+   * one entry per configured service — `{ cid, service, reference }` when the
+   * service accepted the pin, `{ cid, service, error }` when it did not. Empty
+   * or absent when no service was configured, because a pin nobody accepted is
+   * not recorded as one. `verify-seed-mirrors.mjs` resolves each entry.
+   */
+  pins?: SeedPin[];
   mirrors?: Array<{ bundle: string; root: string }>;
 }
 

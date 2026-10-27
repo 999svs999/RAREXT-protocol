@@ -259,6 +259,7 @@ still assumes the placement root is the one the client intended.
 | `RAREXT_PIN_TOKEN` | pin server, content adapter, MCP pin | Shared bearer secret for the pin service. |
 | `RAREXT_STORAGE_HOLDERS` | MCP storage | `id=url` pairs; falls back to `RAREXT_HOLDERS`. |
 | `RAREXT_PIN_URL` | API content adapter, MCP pin | Base URL or full `/v1/pins` endpoint. |
+| `RAREXT_PIN_SERVICE_URL` | API content adapter, publish flow | Pinning service for `pinBundle` (the publish flow's pinning call); falls back to `RAREXT_PIN_URL`. |
 
 A token is authorization between processes that already trust each other; it is not a
 user identity, a capability, or a signature. It is sent over plain HTTP unless a

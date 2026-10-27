@@ -370,6 +370,35 @@ if (process.argv.includes("--self-test")) {
   const caughtMirrors = failures > beforeMirrors;
   if (!caughtMirrors) fail("self-test: the checker accepted a mirrors doc naming an undefined npm script");
   caught = caught && caughtMirrors;
+  // And a mirrors doc that stops naming the pinning call must be reported:
+  // the new sentences are held to the code, so dropping one is drift.
+  const beforePinDoc = failures;
+  const unpinnedMirrorsDoc = originalMirrorsDoc.replace("`pinBundle`", "`pinTheBundle`");
+  checkMirrorsDoc(unpinnedMirrorsDoc);
+  const caughtPinDoc = failures > beforePinDoc;
+  if (!caughtPinDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the pinning call");
+  caught = caught && caughtPinDoc;
+  // And a publish flow that stops recording what the pinning call returned must
+  // be reported — the doc's sentence is held to the code, not to itself.
+  const realPublishProof = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
+  const doctoredPublishProof = realPublishProof.replace("seed.pins =", "seed.recordedPins =");
+  const beforePinWrite = failures;
+  checkMirrorsDoc(undefined, { publishProof: doctoredPublishProof });
+  const caughtPinWrite = failures > beforePinWrite;
+  if (!caughtPinWrite) fail("self-test: the checker accepted a publish flow that writes no seed.pins");
+  caught = caught && caughtPinWrite;
+  // And a live checker with no pin check must be reported — a doc that says
+  // pins are verified while the script verifies none is the quiet drift.
+  const realSeedVerifier = readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
+  const doctoredSeedVerifier = realSeedVerifier.replace("export async function checkPin", "async function checkPinUnused");
+  const beforePinCheck = failures;
+  checkMirrorsDoc(undefined, { seedVerifier: doctoredSeedVerifier });
+  const caughtPinCheck = failures > beforePinCheck;
+  if (!caughtPinCheck) fail("self-test: the checker accepted a live checker that verifies no pin");
+  caught = caught && caughtPinCheck;
+  assertChanged(originalMirrorsDoc, unpinnedMirrorsDoc, "mirrors-doc-pinning");
+  assertChanged(realPublishProof, doctoredPublishProof, "publish-flow-pins");
+  assertChanged(realSeedVerifier, doctoredSeedVerifier, "seed-pins-verification");
   // And an audit-window number the code contradicts must be reported.
   const beforeWindow = failures;
   const doctoredOperationsWindow = originalOperations.replace(
@@ -752,8 +781,8 @@ function checkAppProtocol(docOverride) {
  * scripts/ci.sh, and the published artifacts to the deploy's own sources (which
  * are what make the doc's URLs resolve).
  */
-function checkMirrorsDoc(docOverride) {
-  console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""} vs tree):`);
+function checkMirrorsDoc(docOverride, sources = {}) {
+  console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""}${sources.publishProof ? ", PIN SOURCES DOCTORED" : ""} vs tree):`);
   const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
   // The doc says the proof page fails over and reports the location it
   // verified ("Served from"). That page lives in ONE module — it used to exist
@@ -776,7 +805,7 @@ function checkMirrorsDoc(docOverride) {
   if (!doc.includes("bundleCid")) {
     fail("MIRRORS.md no longer documents the seed's content-address pin");
   }
-  const publishProof = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
+  const publishProof = sources.publishProof ?? readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
   if (!publishProof.includes("seed.bundleCid = bundleCid")) {
     fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs writes no bundleCid");
   }
@@ -786,9 +815,43 @@ function checkMirrorsDoc(docOverride) {
       fail(`MIRRORS.md says clients verify the CID, but bundle.ts has no "${marker}"`);
     }
   }
-  const seedVerifier = readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
+  const seedVerifier = sources.seedVerifier ?? readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
   if (!seedVerifier.includes("cidV1Raw")) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
+  }
+
+  // The doc's other half of the same bullet: the pinning call is implemented,
+  // the publish records it in `seed.pins`, and the live checker resolves each
+  // pin. Three sentences, three files — checked in BOTH directions, so a doc
+  // that stops naming the call and a tree that drops what the doc names fail
+  // the same way. The doc is held exactly as strong as the code: it claims a
+  // pinning call, a recording of it, and a per-pin check, and nothing more.
+  if (!doc.includes("pinBundle")) {
+    fail("MIRRORS.md no longer documents the publish flow's pinning call (pinBundle)");
+  }
+  if (!doc.includes("seed.pins")) {
+    fail("MIRRORS.md no longer documents the seed recording what the pinning call returned");
+  }
+  const contentAdapter = sources.contentAdapter ?? readFileSync(
+    new URL("apps/api/src/adapters/content.ts", root),
+    "utf8",
+  );
+  for (const marker of ["export async function pinBundle", "export function pinServiceUrl", "RAREXT_PIN_SERVICE_URL", "RAREXT_PIN_TOKEN"]) {
+    if (!contentAdapter.includes(marker)) {
+      fail(`MIRRORS.md says the bundle is pinned through a configured service, but content.ts has no "${marker}"`);
+    }
+  }
+  if (!publishProof.includes("pinBundle(")) {
+    fail("MIRRORS.md says publish-proof.mjs pins the published bytes, but it never calls pinBundle");
+  }
+  if (!publishProof.includes("seed.pins =")) {
+    fail("MIRRORS.md says publish-proof.mjs records the pins, but it writes no seed.pins");
+  }
+  if (!seedVerifier.includes("export async function checkPin")) {
+    fail("MIRRORS.md says verify-seed-mirrors.mjs verifies each recorded pin, but it exports no pin check");
+  }
+  if (!seedVerifier.includes("pinUrl")) {
+    fail("MIRRORS.md says a pin's reference is resolved (URL or ${service}/${cid}), but the checker resolves nothing");
   }
 
   // The doc says the workbench refuses reads from a bundle it cannot verify —
@@ -887,7 +950,7 @@ function checkMirrorsDoc(docOverride) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin`,
   );
 }
 

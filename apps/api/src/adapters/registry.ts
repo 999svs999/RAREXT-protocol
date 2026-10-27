@@ -7,7 +7,7 @@ import type {
 } from "../../../../packages/core/src/index.ts";
 
 import { GitHubSourceAdapter } from "./github.ts";
-import { ContentPinAdapter } from "./content.ts";
+import { ContentPinAdapter, pinServiceUrl } from "./content.ts";
 import { RelayChainAdapter } from "../chains/relay.ts";
 import { RarextChainAdapter } from "../chains/rarext.ts";
 import { loadChainConfigs } from "../chains/registry.ts";
@@ -100,7 +100,7 @@ export function createDefaultRegistry(requestFetch: typeof fetch = fetch): Adapt
     new LocalAnchorAdapter(),
     new TracAnchorAdapter(),
     new ContentPinAdapter({
-      serviceUrl: process.env.RAREXT_PIN_URL ?? null,
+      serviceUrl: pinServiceUrl(),
       token: process.env.RAREXT_PIN_TOKEN || null,
       fetchImpl: requestFetch,
     }),

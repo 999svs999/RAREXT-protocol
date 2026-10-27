@@ -312,6 +312,12 @@ matches the bytes it receives, writes pins atomically, and stores no secrets. Se
 `RAREXT_PIN_TOKEN` on the service and every client to require a bearer token. Back up
 the pin directory with `.data/`; a pin is one replica, not a permanence guarantee.
 
+`npm run publish:proof` makes the same call for the published bundle when a service is
+configured (`RAREXT_PIN_SERVICE_URL`, falling back to `RAREXT_PIN_URL`) and records the
+result in the seed's `pins` array; with no service configured it records nothing and the
+seed's `bundleCid` still names the bytes. `node scripts/verify-seed-mirrors.mjs` resolves
+each recorded pin afterwards.
+
 ### Pin garbage-collection limits
 
 `POST /v1/pins/gc` reaps structural orphans and, when a `referenced` CID list is

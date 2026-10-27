@@ -98,7 +98,7 @@ for (const name of mirrorFiles) {
 // trusting whoever served it.
 const { bundleJson } = await import(join(root, "scripts/mirror-artifacts.mjs"));
 const bundleBytes = Buffer.from(bundleJson(bundle), "utf8");
-const { cidV1Raw } = await import(join(root, "apps/api/src/adapters/content.ts"));
+const { cidV1Raw, pinBundle, pinServiceUrl } = await import(join(root, "apps/api/src/adapters/content.ts"));
 const bundleCid = cidV1Raw(bundleBytes);
 
 writeFileSync(join(site, "bundle.json"), bundleBytes);
@@ -108,6 +108,32 @@ const seed = JSON.parse(readFileSync(seedPath, "utf8"));
 seed.updatedAt = new Date().toISOString();
 seed.bundleRoot = bundle.manifest.root;
 seed.bundleCid = bundleCid;
+
+// The pinning call, attempted only when a service is configured. Publish runs
+// without network by design: with no service the seed records NO pins (bundleCid
+// carries the content address either way), and a configured service that fails
+// is recorded as `{ cid, service, error }` rather than thrown — the publish must
+// not crash on a pin it could not make, and must never record a pin it did not
+// make. The entries below are exactly what pinBundle returned.
+const serviceUrl = pinServiceUrl();
+const pins = [];
+if (serviceUrl) {
+  try {
+    const pinned = await pinBundle(bundleBytes);
+    pins.push({
+      cid: pinned.cid,
+      service: pinned.service ?? serviceUrl,
+      reference: pinned.reference,
+    });
+  } catch (error) {
+    pins.push({
+      cid: bundleCid,
+      service: serviceUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+seed.pins = pins;
 
 for (const mirror of seed.mirrors ?? []) {
   mirror.root = bundle.manifest.root;
@@ -194,3 +220,14 @@ console.log(`published proof ${bundle.manifest.root}`);
 console.log(`  ${publications} publications, ${ai.length} AI representations, ${media.length} rendition`);
 console.log(`  ${rootUrl}/registry/bundle.json`);
 console.log(`  ${proofUrl}`);
+if (pins.length === 0) {
+  console.log(`  seed.pins is [] — no pinning service configured, bundleCid names the bytes`);
+} else {
+  for (const pin of pins) {
+    console.log(
+      "error" in pin
+        ? `  seed.pins records a failure at ${pin.service}: ${pin.error}`
+        : `  seed.pins records ${pin.cid} pinned at ${pin.service} (${pin.reference})`,
+    );
+  }
+}
