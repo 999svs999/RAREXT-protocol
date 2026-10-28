@@ -571,6 +571,21 @@ if (process.argv.includes("--self-test")) {
   const caughtFailOpen = failures > beforeFailOpen;
   if (!caughtFailOpen) fail("self-test: the checker accepted a fold that fails open on a revocation lookup");
   caught = caught && caughtFailOpen;
+  // And a fold that stops capping a nomination's lifetime — the immortal pointer
+  // the cap exists to prevent — must be reported.
+  const lifetimeSource = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  // Doctor the CONSTANT, not the branch: the guard checks the constant's value,
+  // so a doctored branch left it passing while injecting nothing — the stale
+  // injection this self-test exists to catch.
+  const doctoredLifetime = lifetimeSource.replace(
+    "MAX_ANNOUNCEMENT_LIFETIME_MS = 180 * 24",
+    "MAX_ANNOUNCEMENT_LIFETIME_MS = 400 * 24",
+  );
+  const beforeLifetime = failures;
+  checkMirrorsDoc(undefined, { announcements: doctoredLifetime });
+  const caughtLifetime = failures > beforeLifetime;
+  if (!caughtLifetime) fail("self-test: the checker accepted a fold with no lifetime cap");
+  caught = caught && caughtLifetime;
   // And a fold that stops comparing the handle against the seed's announcers —
   // the open question this loop answered — must be reported.
   const realAnnouncements = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
@@ -1813,6 +1828,25 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
     if (!/if \(!lookup\.ok\) \{/.test(foldSource)) {
       fail("the fold must refuse when the revocation lookup did not succeed");
+    }
+  }
+
+  // The doc states the lifetime cap and the skew. Both are claims about the fold,
+  // so the fold must carry the constants and refuse by name.
+  if (/180-day cap/.test(doc)) {
+    const foldSource =
+      sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+    if (!/MAX_ANNOUNCEMENT_LIFETIME_MS = 180 \* 24 \* 60 \* 60_000/.test(foldSource)) {
+      fail("MIRRORS.md states a 180-day lifetime cap, but core's constant is not that");
+    }
+    if (!/ANNOUNCEMENT_CLOCK_SKEW_MS = 5 \* 60_000/.test(foldSource)) {
+      fail("MIRRORS.md states a 5-minute skew, but core's constant is not that");
+    }
+    if (!/beyond the \$\{capDays\}-day cap a mirror nomination may have/.test(foldSource)) {
+      fail("the fold must refuse an over-long lifetime by name, not silently");
+    }
+    if (!/more than \$\{minutes\} minutes ahead of now/.test(foldSource)) {
+      fail("the fold must name the skew when it refuses a future-dated record");
     }
   }
 

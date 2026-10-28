@@ -416,3 +416,89 @@ test("a revocation check that could not run refuses the record", async () => {
     server.close();
   }
 });
+
+test("a nomination that would never expire is refused, and the cap is named", async () => {
+  const signer = announcementSigner();
+  const server = await fixture();
+  try {
+    // Ten years is not a long mirror nomination; it is a pointer nobody can
+    // retract by waiting, which is what a lifetime cap exists to prevent.
+    const record = signedAnnouncement(signer, {
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+      issuedAt: iso(-DAY),
+      expiresAt: iso(3650 * DAY),
+    });
+    server.publish([record]);
+    server.down("/registry/bundle.json");
+
+    const events: Event[] = [];
+    await assert.rejects(
+      () =>
+        bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
+          onAnnouncement: (event) => events.push(event as Event),
+        }),
+      /no candidate rebuilt the pinned root/,
+      "a record with no learnable lifetime is not a candidate",
+    );
+
+    const reason = refusals(events);
+    assert.match(reason, /lifetime of [0-9.]+ days/, `the refusal says how long it claims: ${reason}`);
+    assert.match(reason, /180-day cap/, "and names the cap it exceeds");
+  } finally {
+    server.close();
+  }
+});
+
+test("a record dated far in the future is a forgery, not a clock", async () => {
+  const signer = announcementSigner();
+  const server = await fixture();
+  try {
+    const record = signedAnnouncement(signer, {
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+      issuedAt: iso(60 * 60_000),
+      expiresAt: iso(30 * DAY),
+    });
+    server.publish([record]);
+    server.down("/registry/bundle.json");
+
+    const events: Event[] = [];
+    await assert.rejects(
+      () =>
+        bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
+          onAnnouncement: (event) => events.push(event as Event),
+        }),
+      /no candidate rebuilt the pinned root/,
+    );
+
+    assert.match(refusals(events), /more than 5 minutes ahead of now/, "the refusal names the tolerance");
+  } finally {
+    server.close();
+  }
+});
+
+test("a record dated seconds ahead is a clock, and is believed", async () => {
+  const signer = announcementSigner();
+  const server = await fixture();
+  try {
+    // Inside the skew: two clocks disagreeing by a couple of minutes is not
+    // evidence of anything, and refusing here would fail honest publishers.
+    const record = signedAnnouncement(signer, {
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+      issuedAt: iso(2 * 60_000),
+      expiresAt: iso(30 * DAY),
+    });
+    server.publish([record]);
+    server.down("/registry/bundle.json");
+
+    const found = await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer));
+    assert.equal(found.source, server.urls.mirror, "a record within the skew is believed");
+  } finally {
+    server.close();
+  }
+});

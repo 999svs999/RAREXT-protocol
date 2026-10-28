@@ -359,9 +359,18 @@ This is additive by construction.
    reason, which is also what removes the denial-of-service: the claim never
    enters the union, so the loud stop cannot be provoked by any key holder.
    Silence is therefore not permission to claim — and never a bar to mirroring.
-2. **How long may an announcement live, and who caps it?** A maximum lifetime,
-   a clock-skew allowance for `issuedAt`, and what a client treats as "now" are
-   all unspecified here.
+2. **How long may an announcement live, and who caps it?** — **ANSWERED: 180 days
+   by default, with a 5-minute clock-skew tolerance, both overridable by the
+   caller.** A nomination that never expires is a nomination nobody can retract:
+   the publisher must keep serving the record for as long as it is believed, so a
+   lost key means an immortal pointer. The cap is a REFUSAL, not a clamp —
+   shortening what a record claims would believe something its signer did not say.
+   The skew matches the tolerance the registry's own audit window uses, so a
+   deployment has one skew story rather than two: a record issued a couple of
+   minutes ahead is a clock, not a forgery. Expiry stays strict, and the asymmetry
+   is deliberate — a nomination that has run out is safe to drop, while one dated
+   far in the future is worth naming. The caller supplies "now"; core does not
+   consult an ambient clock for the decision.
 3. **Where does signature verification run?** `verifyPayload` lives in
    `apps/api/src/identity.ts` today; the SDK signs but does not export a
    signature verifier. Does a resident that reads announcements itself need a

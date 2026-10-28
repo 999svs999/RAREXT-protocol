@@ -314,7 +314,10 @@ consistent is the federation problem, and it has two parts:
    because the envelope never mints its own authority.
    An announcing key is resolved through the handle's key history: a key the
    handle does not vouch for is refused, a revoked key is refused even when the
-   window is valid, and a revocation lookup that could not be performed refuses
+   window is valid, a lifetime beyond the 180-day cap is refused rather than
+   clamped (a nomination that never expires is one nobody can retract) with a
+   5-minute clock-skew tolerance so a record issued slightly ahead is a clock and
+   not a forgery, and a revocation lookup that could not be performed refuses
    the record rather than reading a failed check as proof the key is good —
    "could not tell" is its own outcome, never "not revoked". The server's own
    store IS the resolver where a caller wires it: `bundleFromSeedForStore(seed, store, options)` answers the port

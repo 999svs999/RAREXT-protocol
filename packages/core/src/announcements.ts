@@ -70,6 +70,26 @@ export interface AnnouncementRevocation {
  * /v1/identities/:handle` and `GET /v1/identities/:handle/rotations` answer
  * with, and the shape `store.getIdentity`/`store.rotationsFor` hold.
  */
+/**
+ * RFC 0019's question 2, answered: how long may an announcement live, and what
+ * does a client treat as "now"?
+ *
+ * A mirror nomination that never expires is a nomination nobody can retract — the
+ * publisher would have to keep serving the record for as long as it is believed,
+ * and a lost key means an immortal pointer. So a lifetime is CAPPED, and the cap
+ * is a refusal rather than a clamp: silently shortening what a record claims would
+ * believe something the signer did not say.
+ *
+ * The clock skew is the other half: "now" is never exactly "now", so a record
+ * issued slightly ahead is not a forgery, it is a clock. Five minutes matches the
+ * tolerance the registry's own audit window uses, so a deployment has one skew
+ * story rather than two. An EXPIRED record is refused strictly — the asymmetry is
+ * deliberate: a nomination that has run out is safe to drop, while one dated far
+ * in the future is worth naming.
+ */
+export const ANNOUNCEMENT_CLOCK_SKEW_MS = 5 * 60_000;
+export const MAX_ANNOUNCEMENT_LIFETIME_MS = 180 * 24 * 60 * 60_000;
+
 export interface AnnouncementKeyHistory {
   identity: Identity;
   rotations: KeyRotation[];
@@ -369,6 +389,10 @@ export function verifyAnnouncement(
     /** The identity layer's revocation naming the record's key, or null. */
     revoked: AnnouncementRevocation | null;
     now?: Date;
+    /** How far ahead of `now` an issuedAt may be before it is named as a forgery. */
+    clockSkewMs?: number;
+    /** The longest lifetime a nomination may claim; beyond it, refused. */
+    maxLifetimeMs?: number;
   },
 ): AnnouncementVerdict {
   if (!isObject(record)) {
@@ -420,11 +444,24 @@ export function verifyAnnouncement(
   if (expiresAt.getTime() <= issuedAt.getTime()) {
     return { ok: false, reason: "the announcement's expiresAt is not later than its issuedAt" };
   }
-  const now = input.now ?? new Date();
-  if (now.getTime() < issuedAt.getTime()) {
+  const maxLifetimeMs = input.maxLifetimeMs ?? MAX_ANNOUNCEMENT_LIFETIME_MS;
+  const lifetimeMs = expiresAt.getTime() - issuedAt.getTime();
+  if (lifetimeMs > maxLifetimeMs) {
+    const days = (lifetimeMs / (24 * 60 * 60_000)).toFixed(1);
+    const capDays = Math.round(maxLifetimeMs / (24 * 60 * 60_000));
     return {
       ok: false,
-      reason: `the announcement is not yet valid (issuedAt ${payload.issuedAt})`,
+      reason: `the announcement claims a lifetime of ${days} days, beyond the ${capDays}-day cap a mirror nomination may have`,
+    };
+  }
+
+  const now = input.now ?? new Date();
+  const skewMs = input.clockSkewMs ?? ANNOUNCEMENT_CLOCK_SKEW_MS;
+  if (now.getTime() + skewMs < issuedAt.getTime()) {
+    const minutes = Math.round(skewMs / 60_000);
+    return {
+      ok: false,
+      reason: `the announcement is not yet valid (issuedAt ${payload.issuedAt} is more than ${minutes} minutes ahead of now)`,
     };
   }
   if (now.getTime() > expiresAt.getTime()) {
@@ -573,6 +610,15 @@ export async function foldAnnouncements(
     fetch: typeof fetch;
     timeoutMs?: number;
     onAnnouncement?: (event: AnnouncementEvent) => void;
+    /**
+     * The clock the window is judged against, and the policy around it. A caller
+     * that trusts a timestamp should say which one, and an operator may set a
+     * different cap than the default — refusing a lifetime is policy, and policy
+     * is the caller's to choose.
+     */
+    now?: Date;
+    clockSkewMs?: number;
+    maxLifetimeMs?: number;
   },
 ): Promise<BundleSeed[]> {
   const request = input.fetch;
@@ -686,6 +732,9 @@ export async function foldAnnouncements(
         verifier: input.verifier,
         history,
         revoked,
+        ...(input.now === undefined ? {} : { now: input.now }),
+        ...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+        ...(input.maxLifetimeMs === undefined ? {} : { maxLifetimeMs: input.maxLifetimeMs }),
       });
       if (verdict.ok) {
         // RFC 0019's open question, answered mechanically: a location is open to
