@@ -149,7 +149,12 @@ all committed before the artifact is verified.
   committed model on the agent's own node, reproduces the published output, and
   the claim it signs then REPLAYS CORRECT from the bundle alone — the challenge
   and semantics travel with it, because a claim whose rule does not travel cannot
-  be checked by anyone else. `buildBundle(publications, …)` BUILDS a bundle
+  be checked by anyone else. The demo also makes a LOSSY one, the representation
+  real model classes take: `selfPublishBounded(signer, …)` measures the distance
+  to the committed reference on the agent's own node, and the demo checks both
+  directions — a reconstruction within its bound replays correct, and one pushed
+  past the bound is refused, because a promise about a bound is worth nothing
+  unless breaking it is caught. `buildBundle(publications, …)` BUILDS a bundle
   offline — an agent with no server assembles the leaves, the Merkle root and the
   manifest through core's own `assembleBundle`, the same function the registry's
   builder calls, so the artifact a resident makes is the artifact the registry

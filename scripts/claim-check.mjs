@@ -755,6 +755,15 @@ if (process.argv.includes("--self-test")) {
   const caughtNoGeneration = failures > beforeNoGeneration;
   if (!caughtNoGeneration) fail("self-test: the checker accepted a demo with no generation in it");
   caught = caught && caughtNoGeneration;
+
+  // And a demo that only ever tries reconstructions that PASS — the negative
+  // removed, the promise kept in prose — must be reported.
+  const noNegativeDemo = selfPublishDemoReal.replace("outsideReplay.claims[0].correct === false", "true");
+  const beforeNoNegative = failures;
+  checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noNegativeDemo });
+  const caughtNoNegative = failures > beforeNoNegative;
+  if (!caughtNoNegative) fail("self-test: the checker accepted a demo with no refusal in it");
+  caught = caught && caughtNoNegative;
   if (!caughtSelfPublishDemo) fail("self-test: the checker accepted a self-publish demo that calls nothing");
   caught = caught && caughtSelfPublishDemo;
 
@@ -2759,6 +2768,19 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
       }
       if (!/export function selfPublishGenerative\(/.test(sdkSource)) {
         fail("AI-VERIFICATION.md names selfPublishGenerative, but the SDK does not export it");
+      }
+    }
+    // The bounded representation, and its NEGATIVE: the doc promises the demo
+    // catches a reconstruction past the bound, so the demo must try one.
+    if (/selfPublishBounded/.test(doc)) {
+      if (!/sdk\.selfPublishBounded\(/.test(demo)) {
+        fail("the doc says the demo makes a bounded reconstruction, but the demo never calls selfPublishBounded");
+      }
+      if (!/export function selfPublishBounded\(/.test(sdkSource)) {
+        fail("AI-VERIFICATION.md names selfPublishBounded, but the SDK does not export it");
+      }
+      if (!/outsideReplay\.claims\[0\]\.correct === false/.test(demo)) {
+        fail("the demo must check a reconstruction OUTSIDE its bound is refused, not only one inside it");
       }
     }
     const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));

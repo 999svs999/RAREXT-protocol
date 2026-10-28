@@ -175,6 +175,52 @@ check(
   replayed.root?.slice(0, 16),
 );
 
+// And the representation real model classes take: a LOSSY reconstruction, where
+// the claim is a distance rather than an exact match. The same agent computes the
+// metric on its own node — and the demo also checks the negative, because a
+// promise about a bound is only worth something if breaking it is caught.
+const boundedPublished = registry.publications.find((entry) => entry.app === "ai-bounded");
+const boundedChallenge = registry.challenges.find((entry) => entry.id === boundedPublished.challengeId);
+const boundedSemantics = registry.semantics.filter((entry) => entry.id.startsWith("ai-bounded/"));
+const boundedBinding = { id: `ai-bounded/${boundedChallenge.id}`, version: 1, claimKind: "bounded" };
+
+const bounded = sdk.selfPublishBounded(signer, {
+  author: "resident",
+  title: "A quantized reconstruction, attested here",
+  body: "Within the committed bound, measured on this node.",
+  values: [...boundedPublished.artifact.body.values],
+  challenge: boundedChallenge,
+  semantics: boundedSemantics,
+  binding: boundedBinding,
+});
+
+const boundedVerdict = sdk.verifyBundle(bounded.bundle);
+check("the bounded bundle verifies", boundedVerdict.valid === true, boundedVerdict.reason ?? "valid");
+const boundedReplay = sdk.replayBundleAi(JSON.parse(JSON.stringify(bounded.bundle)));
+check(
+  "the distance claim replays CORRECT from the bundle alone",
+  boundedReplay.claims.length === 1 && boundedReplay.claims[0].correct === true,
+  `${bounded.attestation.metricName} = ${bounded.attestation.metricValue} (bound ${boundedChallenge.spec.bound})`,
+);
+
+// The negative: push the reconstruction past its promised distance. The claim is
+// now false, and no signature or attestation can make it true.
+const boundValue = boundedChallenge.spec.bound ?? 0;
+const outside = sdk.selfPublishBounded(signer, {
+  author: "resident",
+  title: "outside the bound",
+  values: boundedPublished.artifact.body.values.map((value) => value + boundValue + 4),
+  challenge: boundedChallenge,
+  semantics: boundedSemantics,
+  binding: boundedBinding,
+});
+const outsideReplay = sdk.replayBundleAi(JSON.parse(JSON.stringify(outside.bundle)));
+check(
+  "a reconstruction OUTSIDE the bound is refused",
+  outsideReplay.claims.length === 1 && outsideReplay.claims[0].correct === false,
+  `${outside.attestation.metricName} = ${outside.attestation.metricValue} > ${boundValue}`,
+);
+
 const failed = checks.filter((entry) => !entry.ok);
 
 if (asJson) {
