@@ -241,10 +241,19 @@ consistent is the federation problem, and it has two parts:
   rather than trusted: a digest covers the ENTRIES (never the server's own
   `self` description, so reaching a server at another hostname is not a change in
   which registries exist), and `registriesFromPublishedList(url, { expectDigest })`
-  refuses a list whose entries do not match, naming both digests. Honest scope:
-  this repository's published list is not anchored anywhere yet, so a caller that
-  passes no expectation is trusting whoever controls the URL — checkable exists,
-  anchored does not. The static seed above is a
+  refuses a list whose entries do not match, naming both digests. Where the
+  expectation can come from is RFC 0020's subject: the digest is committed to as
+  an ordinary PUBLICATION (`app: "federation"`,
+  `artifact.kind: "registry-list-commitment"`), which the SDK reads back with
+  `federationCommitment(bundle)` — so a client that trusts a root takes its
+  expectation from the root-pinned artifact rather than from the URL it is
+  checking. That shape is not cosmetic: the bundle's root is a Merkle root over
+  PUBLICATION LEAVES only, so a new bundle field would have been editable while
+  the root still verified. Honest scope: this repository's published list carries
+  no commitment yet — publishing one changes the bundle's root, and re-pinning it
+  without producing a new anchor would leave the live bundle unanchored, which is
+  the very property the change is for. Checkable exists and is exercised by test;
+  anchored awaits the next anchor. The static seed above is a
   first step, and its consumption is implemented: `bundleFromSeed` in
   `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
   order, and accepts only a copy that **rebuilds the root the seed pins**

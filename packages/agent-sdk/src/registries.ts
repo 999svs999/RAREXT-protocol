@@ -260,3 +260,57 @@ export async function joinRegistryNetwork(
 
   return result;
 }
+
+/**
+ * The federation commitment, read out of a bundle a client already verified.
+ *
+ * RFC 0020: the seed list's digest is committed to as an ordinary PUBLICATION —
+ * an artifact of `app: "federation"`, `kind: "registry-list-commitment"` — and
+ * therefore covered by the bundle's Merkle root, and therefore anchored by
+ * whichever anchor covers that batch. No new bundle field could have done that:
+ * the root covers publication leaves only, so a field would have been editable
+ * while the root still verified.
+ *
+ * A client that trusts a root can use the digest it finds here as the
+ * `expectDigest` for the list — the expectation coming from the verified
+ * artifact rather than from the URL being checked, which is the whole point.
+ * `null` when the bundle carries no commitment: an absent commitment is an
+ * absence, not a zero.
+ */
+export interface FederationCommitment {
+  listUrl: string;
+  digest: string;
+  generatedAt: string | null;
+}
+
+export const FEDERATION_APP = "federation";
+export const REGISTRY_LIST_COMMITMENT_KIND = "registry-list-commitment";
+
+export function federationCommitment(bundle: {
+  publications?: Array<{ artifact?: { app?: unknown; kind?: unknown; body?: unknown } }>;
+}): FederationCommitment | null {
+  for (const publication of bundle.publications ?? []) {
+    const artifact = publication.artifact;
+    if (!artifact || artifact.app !== FEDERATION_APP) continue;
+    if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;
+    const body = artifact.body;
+    const record = typeof body === "string" ? safeParse(body) : body;
+    if (!record || typeof record !== "object") continue;
+    const { listUrl, digest, generatedAt } = record as Record<string, unknown>;
+    if (typeof listUrl !== "string" || typeof digest !== "string") continue;
+    return {
+      listUrl,
+      digest,
+      generatedAt: typeof generatedAt === "string" ? generatedAt : null,
+    };
+  }
+  return null;
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}

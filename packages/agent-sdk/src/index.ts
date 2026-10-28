@@ -138,11 +138,15 @@ export {
 export {
   DEFAULT_REGISTRY_TIMEOUT_MS,
   findVerifiedBundlesFromRegistryList,
+  FEDERATION_APP,
+  REGISTRY_LIST_COMMITMENT_KIND,
+  federationCommitment,
   joinRegistryNetwork,
   registriesFromPublishedList,
   registryListDigestOf,
 } from "./registries.ts";
 export type {
+  FederationCommitment,
   NetworkJoinOptions,
   NetworkJoinResult,
   RegistryListOptions,

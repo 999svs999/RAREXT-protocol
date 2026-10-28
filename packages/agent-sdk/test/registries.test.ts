@@ -3,8 +3,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import type { Bundle } from "../../../packages/core/src/index.ts";
-import { MAX_BUNDLE_RESPONSE_BYTES, parseRegistrySeedList, registrySeedUrl } from "@rarext/core";
+import { createHash } from "node:crypto";
 import {
+  MAX_BUNDLE_RESPONSE_BYTES,
+  PUBLICATION_LEAF_VERSION,
+  merkleRoot,
+  parseRegistrySeedList,
+  publicationLeaf,
+  registrySeedUrl,
+} from "@rarext/core";
+import {
+  FEDERATION_APP,
+  REGISTRY_LIST_COMMITMENT_KIND,
+  federationCommitment,
   findVerifiedBundlesFromRegistryList,
   joinRegistryNetwork,
   registriesFromPublishedList,
@@ -322,4 +333,102 @@ test("without an expectation, the reader behaves exactly as before", async () =>
   });
   const entries = await registriesFromPublishedList("https://list.example/registries", { fetch: net.doFetch });
   assert.equal(entries.length, 1, "no expectation means no new failure mode");
+});
+
+const nodeSha256 = (bytes: Uint8Array): Uint8Array =>
+  new Uint8Array(createHash("sha256").update(bytes).digest());
+
+test("the commitment lives INSIDE the root, which is what makes it anchorable", async () => {
+  // RFC 0020: the digest is committed to as a PUBLICATION, because the bundle's
+  // root covers publication leaves and nothing else. This test is the proof of
+  // that claim rather than a restatement of it: changing the commitment's digest
+  // must change the root.
+  const entries = parseRegistrySeedList([
+    { id: "a", url: "https://a.example" },
+  ]);
+  const digest = registryListDigestOf(entries);
+  const listUrl = "https://list.example/registries";
+
+  const sample = committed.publications[0];
+  const commitment = {
+    ...sample,
+    id: "pub-federation-commitment",
+    title: "The federation list this bundle commits to",
+    artifact: {
+      app: FEDERATION_APP,
+      kind: REGISTRY_LIST_COMMITMENT_KIND,
+      version: 1,
+      mediaType: "application/json",
+      body: JSON.stringify({ listUrl, digest, generatedAt: "2026-10-28T00:00:00.000Z" }),
+    },
+  };
+
+  const leaf = publicationLeaf(commitment as never, nodeSha256, PUBLICATION_LEAF_VERSION);
+  const root = merkleRoot([leaf], nodeSha256);
+  const bundle = {
+    manifest: {
+      version: 1,
+      root,
+      leafVersion: PUBLICATION_LEAF_VERSION,
+      anchorId: null,
+      anchorRoot: null,
+      createdAt: "2026-10-28T00:00:00.000Z",
+      publications: [{ id: commitment.id, leaf }],
+      counts: { publications: 1, anchors: 0, challenges: 0, semantics: 0 },
+    },
+    publications: [commitment],
+    anchors: [],
+    challenges: [],
+    semantics: [],
+  };
+
+  const verification = verifyBundle(bundle as never);
+  assert.equal(verification.valid, true, verification.reason ?? undefined);
+
+  const found = federationCommitment(bundle as never);
+  assert.ok(found, "the commitment is found in a verified bundle");
+  assert.equal(found.digest, digest);
+  assert.equal(found.listUrl, listUrl);
+  assert.equal(found.generatedAt, "2026-10-28T00:00:00.000Z");
+
+  // THE claim, tested: a different digest in the commitment is a different root.
+  const altered = {
+    ...commitment,
+    artifact: { ...commitment.artifact, body: JSON.stringify({ listUrl, digest: "0".repeat(64) }) },
+  };
+  const alteredRoot = merkleRoot(
+    [publicationLeaf(altered as never, nodeSha256, PUBLICATION_LEAF_VERSION)],
+    nodeSha256,
+  );
+  assert.notEqual(alteredRoot, root, "the commitment must be covered by the root, not merely carried by the bundle");
+
+  // And the digest found there is what checks the list: expectation from the
+  // verified artifact, list checked against it.
+  const net = stubNetwork({
+    "https://list.example/registries": JSON.stringify([{ id: "a", url: "https://a.example" }]),
+  });
+  const read = await registriesFromPublishedList(listUrl, {
+    fetch: net.doFetch,
+    expectDigest: found.digest,
+  });
+  assert.equal(read.length, 1, "a list matching the anchored digest is accepted");
+
+  const tampered = stubNetwork({
+    "https://list.example/registries": JSON.stringify([{ id: "a", url: "https://evil.example" }]),
+  });
+  await assert.rejects(
+    async () => {
+      await registriesFromPublishedList(listUrl, { fetch: tampered.doFetch, expectDigest: found.digest });
+    },
+    /does not match the expected digest/,
+  );
+});
+
+test("a bundle with no commitment answers null, not a zero", () => {
+  assert.equal(federationCommitment({ publications: [] }), null);
+  assert.equal(
+    federationCommitment({ publications: [{ artifact: { app: "logic", kind: "netlist", body: "{}" } }] }),
+    null,
+    "another app's artifact is not a federation commitment",
+  );
 });

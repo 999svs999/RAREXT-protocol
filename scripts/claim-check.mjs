@@ -483,6 +483,18 @@ if (process.argv.includes("--self-test")) {
   const caughtDemo = failures > beforeDemo;
   if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
   caught = caught && caughtDemo;
+  // And a commitment reader that stops checking the artifact's KIND — now it
+  // accepts any artifact with a matching field name — must be reported.
+  const commitmentSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+  const doctoredCommitment = commitmentSource.replace(
+    "if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;",
+    "// kind ignored",
+  );
+  const beforeCommitment = failures;
+  checkMirrorsDoc(undefined, { registryClient: doctoredCommitment });
+  const caughtCommitment = failures > beforeCommitment;
+  if (!caughtCommitment) fail("self-test: the checker accepted a commitment reader that ignores the artifact kind");
+  caught = caught && caughtCommitment;
   // And a client that computes a digest and then ignores the mismatch — the check
   // the doc promises, in the shape of a no-op — must be reported.
   const digestClientSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
@@ -1616,6 +1628,25 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // are claims about the tree: the client must fold through the SDK's own
   // announcement path with a resolver built from the same convention module, and
   // the demo must use that module too rather than hardcoding one surface.
+  // The doc names the federation commitment and RFC 0020's mechanism. Both are
+  // claims about the tree: the SDK must export the reader and must identify the
+  // artifact by its APP and KIND rather than guessing, and the RFC must be there
+  // to be read.
+  if (/federationCommitment/.test(doc)) {
+    const clientSource =
+      sources.registryClient ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+    if (!/export function federationCommitment\(/.test(clientSource)) {
+      fail("MIRRORS.md names federationCommitment, but the SDK does not export it");
+    }
+    if (!/artifact\.kind !== REGISTRY_LIST_COMMITMENT_KIND/.test(clientSource)) {
+      fail("the commitment reader must identify the artifact by kind, not by position");
+    }
+    const rfc = readFileSync(new URL("rfcs/0020-anchoring-the-seed-list.md", root), "utf8");
+    if (!/Merkle root over \*\*publication leaves only\*\*/.test(rfc)) {
+      fail("RFC 0020 must record the constraint that decides the design, quoted from the code");
+    }
+  }
+
   // The doc says a list can be checked by digest. That is a claim about the
   // client: it must compute the digest through core's function and refuse on a
   // mismatch — the comparison itself, not a mention of one.
