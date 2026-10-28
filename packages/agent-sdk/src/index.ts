@@ -24,6 +24,8 @@ import {
   verifyGenerativeReplay,
 } from "@rarext/core";
 import type {
+  AnnouncementDocumentCache,
+  AnnouncementDocumentCacheEntry,
   AnnouncementEvent,
   AnnouncementIdentity,
   AnnouncementVerifier,
@@ -78,6 +80,8 @@ import type {
 } from "@rarext/core";
 
 export type {
+  AnnouncementDocumentCache,
+  AnnouncementDocumentCacheEntry,
   AnnouncementIdentity,
   AnnouncementKeyHistory,
   AnnouncementRevocation,
@@ -130,6 +134,16 @@ export {
   identityFromPublishedDocuments,
   identityFromPublishedOrigin,
 } from "./published-identity.ts";
+/**
+ * RFC 0019's question 5, on the resident's side of reading announcements: the
+ * document cache the fold consults. See `./announcement-cache.ts` for what it
+ * holds and what it deliberately never holds.
+ */
+export {
+  DEFAULT_ANNOUNCEMENT_CACHE_ENTRIES,
+  MemoryAnnouncementCache,
+} from "./announcement-cache.ts";
+export type { MemoryAnnouncementCacheOptions } from "./announcement-cache.ts";
 /**
  * The federation query: a published seed list, read and asked registry by
  * registry for a copy of ITS bundle. A registry that does not answer is
@@ -206,6 +220,18 @@ export interface FindVerifiedBundleOptions {
    * never mints its own authority.
    */
   identity?: AnnouncementIdentity;
+  /**
+   * RFC 0019 question 5: an optional document cache (the SDK ships
+   * `MemoryAnnouncementCache`). Whatever it answers, the record loop verifies
+   * the cached document fully, every fold — a cache holds the DOCUMENT, never
+   * a decided verdict, so revocation and expiry still bite on a hit.
+   */
+  cache?: AnnouncementDocumentCache;
+  /**
+   * The caller's TTL over cached entries, in ms; an entry older than this is a
+   * miss and is refetched. Omitted means the caller chose no TTL.
+   */
+  cacheMaxAgeMs?: number;
 }
 
 /**
@@ -296,6 +322,8 @@ export async function findVerifiedBundleFromSeeds(
     fetch: request,
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
+    ...(options.cache === undefined ? {} : { cache: options.cache }),
+    ...(options.cacheMaxAgeMs === undefined ? {} : { cacheMaxAgeMs: options.cacheMaxAgeMs }),
   });
 
   const plan = planSeedUnion(pool);

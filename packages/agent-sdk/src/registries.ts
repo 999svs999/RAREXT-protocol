@@ -172,8 +172,10 @@ export interface NetworkJoinResult {
     | { id: string; url: string; status: "unreachable"; reason: string }
   >;
   verified: Array<{ id: string; url: string; bundle: VerifiedBundleSource }>;
-  /** Every announcement event, attributed to the registry whose seed listed it. */
-  announcements: Array<{ registry: string; url: string; status: string; reason?: string; mirror?: string }>;
+  /** Every announcement event, attributed to the registry whose seed listed it.
+   *  A `document` event carries the cache-port half the fold reported (RFC 0019
+   *  question 5): whether the fold read the bytes fresh or from a cache. */
+  announcements: Array<{ registry: string; url: string; status: string; reason?: string; mirror?: string; source?: string }>;
 }
 
 export interface NetworkJoinOptions extends RegistryListOptions {
@@ -231,12 +233,16 @@ export async function joinRegistryNetwork(
         identity,
         onAnnouncement: (event) => {
           // The event union says what it carries: an accepted record names its
-          // mirror, a refused one names its reason. Narrowing rather than
-          // spreading optional fields keeps that distinction in the report.
+          // mirror, a refused one names its reason, and (RFC 0019 question 5) a
+          // document event names where the fold read the announcement from.
+          // Narrowing rather than spreading optional fields keeps that
+          // distinction in the report.
           const attributed =
             event.status === "accepted"
               ? { registry: entry.id, url: event.url, status: event.status, mirror: event.mirror }
-              : { registry: entry.id, url: event.url, status: event.status, reason: event.reason };
+              : event.status === "document"
+                ? { registry: entry.id, url: event.url, status: event.status, source: event.source }
+                : { registry: entry.id, url: event.url, status: event.status, reason: event.reason };
           result.announcements.push(attributed);
           options.onAnnouncement?.(attributed);
         },

@@ -11,9 +11,11 @@ import {
   cidV1Raw,
   findVerifiedBundle,
   findVerifiedBundleFromSeeds,
+  MemoryAnnouncementCache,
   replayBundleAi,
   verifyBundle,
   type AnnouncementEvent,
+  type AnnouncementIdentity,
   type Bundle,
   type SeedDocument,
 } from "../src/index.ts";
@@ -953,6 +955,321 @@ test("a seed without announcements behaves exactly as before, and no announcemen
       return true;
     },
   );
+});
+
+/**
+ * RFC 0019's question 5, answered mechanically: announcement DOCUMENTS may be
+ * cached, VERDICTS never are. A cache hit skips only the fetch-and-parse; the
+ * cached bytes re-enter the same record loop a fresh fetch would enter —
+ * signature, key resolution, window, lifetime cap, and the per-fold
+ * revocation lookup — so the tests below drive a cached document through all
+ * four of those and through the reporting that must distinguish a hit from a
+ * miss. The fixtures are the same signed ones every other announcement test
+ * uses, so a cache cannot pass against hand-rolled crypto or its own shape.
+ */
+
+test("two folds sharing one cache fetch the announcement document once, and both accept", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const honestCid = cidV1Raw(Buffer.from(JSON.stringify(committed), "utf8"));
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    bundleCid: honestCid,
+    announcers: ["operator-alice"],
+    announcements: [announcementUrl],
+  };
+
+  // The seed's own URL is dead, so the announced mirror is the copy that has
+  // to win — the seed's honesty to fall back on, removed.
+  const routes = {
+    [registry]: { status: 404, body: "{}" },
+    [announcedMirror]: { body: JSON.stringify(committed) },
+    [announcementUrl]: { body: JSON.stringify([record]) },
+  };
+  const calls: string[] = [];
+  const announcementFetches = () => calls.filter((u) => u === announcementUrl).length;
+  const cache = new MemoryAnnouncementCache();
+
+  const first = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes, calls),
+    identity: announcerIdentity(),
+    cache,
+    cacheMaxAgeMs: 60_000,
+    onAnnouncement: () => {},
+  });
+  assert.equal(first.source, announcedMirror, "the announced mirror verifies on the first fold");
+  const firstCount = announcementFetches();
+  assert.equal(
+    firstCount,
+    1,
+    "the cold fold fetches the announcement document exactly once",
+  );
+
+  // The second fold must not re-download the bytes it just cached, and a
+  // verified record must still be accepted — the cache holds no verdict, so
+  // the fold re-derives the acceptance from the cached document itself.
+  const events: AnnouncementEvent[] = [];
+  const second = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes, calls),
+    identity: announcerIdentity(),
+    cache,
+    cacheMaxAgeMs: 60_000,
+    onAnnouncement: (event) => events.push(event),
+  });
+  assert.equal(second.source, announcedMirror, "the announced mirror verifies from the cached document");
+  assert.equal(
+    announcementFetches(),
+    firstCount,
+    "the warm fold fetches the announcement document ONCE total across both folds",
+  );
+  assert.ok(
+    events.some((event) => event.url === announcementUrl && event.status === "document" && event.source === "cache"),
+    "the warm fold reports that it read the document from the cache",
+  );
+});
+
+test("a cached document still dies when its key is revoked, because the verdict was never cached", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
+    announcements: [announcementUrl],
+  };
+
+  // The seed's own URL is dead: before revocation the ANNOUNCED mirror is the
+  // only copy the resident can land on, so after revocation the refusal is
+  // observable as a louder failure rather than a quiet fallback.
+  const routes = {
+    [registry]: { status: 404, body: "{}" },
+    [announcedMirror]: { body: JSON.stringify(committed) },
+    [announcementUrl]: { body: JSON.stringify([record]) },
+  };
+
+  // First fold: the record verifies and its DOCUMENT enters the cache.
+  const cache = new MemoryAnnouncementCache();
+  const calls: string[] = [];
+  const accepted = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes, calls),
+    identity: announcerIdentity(),
+    cache,
+  });
+  assert.equal(accepted.source, announcedMirror, "the record is believed before the key is revoked");
+
+  // Second fold, same cache, same document — but the identity layer now
+  // publishes the `key` revocation naming this announcing key. The fold must
+  // refuse the record from the CACHED document: the document may live in
+  // memory for years, the decision may not outlive its revocation check.
+  const revokedIdentity: AnnouncementIdentity = {
+    ...announcerIdentity(),
+    revokedKey: async () => ({
+      id: "revocation-1",
+      kind: "key",
+      target: announcementSigner().keyId,
+      reason: "compromised",
+    }),
+  };
+  const events: AnnouncementEvent[] = [];
+  const callsBeforeSecondFold = calls.filter((u) => u === announcementUrl).length;
+  await assert.rejects(
+    () =>
+      findVerifiedBundleFromSeeds([seed], {
+        fetch: stubFetch(routes, calls),
+        identity: revokedIdentity,
+        cache,
+        cacheMaxAgeMs: 5 * 60_000,
+        onAnnouncement: (event) => events.push(event),
+      }),
+    (error: Error) => {
+      assert.match(error.message, /no candidate rebuilt the pinned root/);
+      return true;
+    },
+    "with the key revoked, the cached record's mirror is no longer a candidate",
+  );
+
+  assert.equal(
+    calls.filter((u) => u === announcementUrl).length,
+    callsBeforeSecondFold,
+    "the document was served from the cache, not refetched",
+  );
+  const documentEvent = events.find((event) => event.status === "document");
+  assert.ok(
+    documentEvent && documentEvent.status === "document" && documentEvent.source === "cache",
+    "the refusal happened on CACHED bytes, which is the point",
+  );
+  assert.deepEqual(
+    events.filter((event) => event.status === "skipped"),
+    [
+      {
+        url: announcementUrl,
+        status: "skipped",
+        reason: `record 0: the announcing key ${announcementSigner().keyId} is revoked (revocation-1: compromised)`,
+      },
+    ],
+    "the cached record is refused by the revocation exactly as a fresh fetch would be",
+  );
+});
+
+test("an entry older than cacheMaxAgeMs is a miss: refetched, not silently used", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const honestCid = cidV1Raw(Buffer.from(JSON.stringify(committed), "utf8"));
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    bundleCid: honestCid,
+    announcers: ["operator-alice"],
+    announcements: [announcementUrl],
+  };
+
+  // The seed's own URL is dead, so the announced mirror is the copy that wins.
+  const routes = {
+    [registry]: { status: 404, body: "{}" },
+    [announcedMirror]: { body: JSON.stringify(committed) },
+    [announcementUrl]: { body: JSON.stringify([record]) },
+  };
+
+  const calls: string[] = [];
+  const cache = new MemoryAnnouncementCache();
+
+  // A FRESH entry is used without a fetch: the fold trusts the caller's TTL.
+  await cache.set({
+    url: announcementUrl,
+    document: JSON.parse(JSON.stringify([record])),
+    fetchedAt: Date.now(),
+  });
+  const events: AnnouncementEvent[] = [];
+  const freshFold = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes, calls),
+    identity: announcerIdentity(),
+    cache,
+    cacheMaxAgeMs: 60_000,
+    onAnnouncement: (event) => events.push(event),
+  });
+  assert.equal(freshFold.source, announcedMirror, "the cached record verifies and its mirror wins");
+  assert.equal(
+    calls.filter((u) => u === announcementUrl).length,
+    0,
+    "a fresh entry is used without refetching the document",
+  );
+  assert.ok(
+    events.some((event) => event.status === "document" && event.source === "cache"),
+  );
+
+  // The SAME entry aged beyond the TTL must be a miss: the fold reports the
+  // miss by fetching, rather than silently believing old bytes.
+  await cache.set({
+    url: announcementUrl,
+    document: JSON.parse(JSON.stringify([record])),
+    fetchedAt: Date.now() - 10 * 60_000,
+  });
+  const staleEvents: AnnouncementEvent[] = [];
+  const stillVerified = await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes, calls),
+    identity: announcerIdentity(),
+    cache,
+    cacheMaxAgeMs: 60_000,
+    onAnnouncement: (event) => staleEvents.push(event),
+  });
+  assert.equal(
+    calls.filter((u) => u === announcementUrl).length,
+    1,
+    "an entry older than the caller's TTL is refetched, never used",
+  );
+  assert.ok(
+    staleEvents.some((event) => event.status === "document" && event.source === "fetched"),
+    "the refetch is reported as the miss it is",
+  );
+  assert.equal(stillVerified.source, announcedMirror, "the freshly fetched record still verifies");
+});
+
+test("a cache miss and a cache hit are both reported, and they are distinguishable", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const registry = "https://registry.example/bundle.json";
+  const announcementUrl = "https://announcer.example/announcements.json";
+  const announcedMirror = "https://announcer.example/bundle.json";
+
+  const record = signedAnnouncement(announcementSigner(), {
+    bundle: registry,
+    mirror: announcedMirror,
+    bundleRoot: pinnedRoot,
+  });
+
+  const seed: SeedDocument = {
+    url: "https://registry.example/seed.json",
+    bundle: registry,
+    bundleRoot: pinnedRoot,
+    announcers: ["operator-alice"],
+    announcements: [announcementUrl],
+  };
+
+  const routes = {
+    [registry]: { body: JSON.stringify(committed) },
+    [announcementUrl]: { body: JSON.stringify([record]) },
+  };
+  const cache = new MemoryAnnouncementCache();
+
+  // Cold: the cache is configured, but empty — a MISS, reported as fetched.
+  const missEvents: AnnouncementEvent[] = [];
+  await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes),
+    identity: announcerIdentity(),
+    cache,
+    onAnnouncement: (event) => missEvents.push(event),
+  });
+  assert.deepEqual(missEvents, [
+    { url: announcementUrl, status: "document", source: "fetched" },
+    { url: announcementUrl, status: "accepted", mirror: announcedMirror },
+  ]);
+
+  // Warm: the same URL now answers from the cache — a HIT, reported as cache.
+  const hitEvents: AnnouncementEvent[] = [];
+  await findVerifiedBundleFromSeeds([seed], {
+    fetch: stubFetch(routes),
+    identity: announcerIdentity(),
+    cache,
+    onAnnouncement: (event) => hitEvents.push(event),
+  });
+  assert.deepEqual(hitEvents, [
+    { url: announcementUrl, status: "document", source: "cache" },
+    { url: announcementUrl, status: "accepted", mirror: announcedMirror },
+  ]);
 });
 
 test("an announcement URL that 404s is reported and skipped, and everything else works", async () => {

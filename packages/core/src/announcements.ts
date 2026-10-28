@@ -148,6 +148,38 @@ export type AnnouncementVerdict =
   | { ok: true; seed: BundleSeed }
   | { ok: false; reason: string };
 
+/**
+ * RFC 0019's question 5, answered in a type: CACHE THE DOCUMENT, NEVER THE
+ * VERDICT. An entry carries the document's body plus when it was fetched —
+ * nothing more, and never a decided outcome. A cached document goes back
+ * through the SAME verification a fresh fetch gets (signature, handle binding,
+ * window, lifetime cap, and the per-fold revocation lookup), so a record whose
+ * key has since been revoked, or whose window has since closed, dies exactly as
+ * it would have had the bytes been re-downloaded.
+ */
+export interface AnnouncementDocumentCacheEntry {
+  /** The document was fetched FROM this URL — the port's key, carried for attribution. */
+  url: string;
+  /** The parsed document (the JSON value), not a verdict over it. */
+  document: unknown;
+  /** Epoch ms when the document was fetched. Ageing is judged against the `now` the caller injected. */
+  fetchedAt: number;
+}
+
+/**
+ * The cache port a caller may inject, so core does no I/O of its own — the same
+ * inject-everything style as `fetch` and the identity port. `get` answers the
+ * entry for a URL or null (a miss, or an unusable cache, which is a miss); a
+ * miss is followed by the ordinary fetch. The TTL is the CALLER's policy, never
+ * stored in the port: the fold takes `cacheMaxAgeMs` separately.
+ */
+export interface AnnouncementDocumentCache {
+  get(
+    url: string,
+  ): AnnouncementDocumentCacheEntry | null | Promise<AnnouncementDocumentCacheEntry | null>;
+  set(entry: AnnouncementDocumentCacheEntry): void | Promise<void>;
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -561,10 +593,21 @@ export function verifyAnnouncement(
   return { ok: true, seed };
 }
 
-/** What folding a seed's announcements reports: one event per record or document. */
+/**
+ * What folding a seed's announcements reports: one event per record or document.
+ */
 export type AnnouncementEvent =
   | { url: string; status: "accepted"; mirror: string }
-  | { url: string; status: "skipped"; reason: string };
+  | { url: string; status: "skipped"; reason: string }
+  /**
+   * Where this fold got the announcement document. Added with the cache port
+   * (RFC 0019 question 5): a cache hit must be distinguishable from a fetch so
+   * a caller can see that a decision travelled on CACHED bytes — the purpose
+   * is exactly to make "the verdict was cached" visible by its absence. Only
+   * reported when a cache port is configured, so folds without one are
+   * byte-for-byte unchanged.
+   */
+  | { url: string; status: "document"; source: "fetched" | "cache" };
 
 /**
  * RFC 0019 step 1: THE announcement fold — fetch every announcement document
@@ -598,6 +641,19 @@ export type AnnouncementEvent =
  * no fetch is made, and the returned pool is the seeds, byte for byte — which
  * is why the callers can pass it unconditionally and stay additive.
  *
+ * RFC 0019's question 5: each announcement document MAY be read through an
+ * injected cache, and the cache holds the DOCUMENT, never the VERDICT. A hit
+ * skips only the fetch-and-parse; the record loop below treats the cached body
+ * exactly like a freshly fetched one — full verification, per fold — so
+ * revocation, expiry, and rotation all still apply on the second visit. The
+ * entry's age is judged against the caller's injected `now` and the caller's
+ * `cacheMaxAgeMs`: an entry older than that is a MISS that is refetched over,
+ * never silently used, and with no `cacheMaxAgeMs` set the caller has chosen
+ * no TTL. A cache that cannot be asked or written is a miss, not a failure —
+ * the fold falls through to the fetch it would have made without a cache.
+ * Whether the fold reached for bytes or for an entry is reported (see the
+ * `document` event), and only when a cache is configured.
+ *
  * I/O and cryptography are injected: `fetch` and `timeoutMs` are the caller's
  * (node fetch in both twins today), and `verifier` is the caller's identity
  * primitives. Core stays pure, and a caller cannot reimplement the sequence
@@ -619,6 +675,17 @@ export async function foldAnnouncements(
     now?: Date;
     clockSkewMs?: number;
     maxLifetimeMs?: number;
+    /**
+     * RFC 0019 question 5: the optional document cache. Core decides nothing
+     * about what is cached — it consults the port, verifies whatever body the
+     * port answers with, and reports misses and hits distinguishably.
+     */
+    cache?: AnnouncementDocumentCache;
+    /**
+     * The caller's TTL over cached entries, in ms; an entry older than this is
+     * treated as a miss and refetched. Omitted means the caller chose no TTL.
+     */
+    cacheMaxAgeMs?: number;
   },
 ): Promise<BundleSeed[]> {
   const request = input.fetch;
@@ -682,18 +749,58 @@ export async function foldAnnouncements(
   const announcementUrls = [...listingSeeds.keys()];
   for (const url of announcementUrls) {
     let document: unknown;
-    try {
-      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const bytes = await readBundleResponseBytes(response);
-      document = JSON.parse(new TextDecoder().decode(bytes));
-    } catch (error) {
-      input.onAnnouncement?.({
-        url,
-        status: "skipped",
-        reason: error instanceof Error ? error.message : "the announcement document could not be fetched",
-      });
-      continue;
+    let fromCache = false;
+    // RFC 0019 question 5: ask the cache port first, and judge the entry's age
+    // against the caller's injected `now` and the caller's own TTL — the caller's
+    // decision, like the lifetime cap and the skew tolerance.
+    let entry: AnnouncementDocumentCacheEntry | null = null;
+    if (input.cache) {
+      try {
+        entry = (await input.cache.get(url)) ?? null;
+      } catch {
+        // a cache that cannot be asked is a miss, not a failure
+        entry = null;
+      }
+    }
+    if (entry && input.cacheMaxAgeMs !== undefined) {
+      const nowMs = (input.now ?? new Date()).getTime();
+      if (nowMs - entry.fetchedAt > input.cacheMaxAgeMs) {
+        // The TTL is the caller's policy, and an entry older than it is a MISS:
+        // reported as the miss it is (the fetched event below), refetched, and
+        // never silently used.
+        entry = null;
+      }
+    }
+    if (entry) {
+      document = entry.document;
+      fromCache = true;
+    }
+    if (!fromCache) {
+      try {
+        const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = await readBundleResponseBytes(response);
+        document = JSON.parse(new TextDecoder().decode(bytes));
+        if (Array.isArray(document) && input.cache) {
+          try {
+            // Cached into the port: the DOCUMENT, never a verdict over it. A
+            // cached body re-enters the record loop below exactly as a fresh
+            // fetch would, with every rule re-run beside it.
+            const fetchedAt = (input.now ?? new Date()).getTime();
+            await input.cache.set({ url, document, fetchedAt });
+          } catch {
+            // a cache that cannot be written costs the fold nothing: the
+            // document is already in hand, and the next fold will fetch again.
+          }
+        }
+      } catch (error) {
+        input.onAnnouncement?.({
+          url,
+          status: "skipped",
+          reason: error instanceof Error ? error.message : "the announcement document could not be fetched",
+        });
+        continue;
+      }
     }
     if (!Array.isArray(document)) {
       input.onAnnouncement?.({
@@ -702,6 +809,16 @@ export async function foldAnnouncements(
         reason: "the announcement document is not a JSON array of signed records",
       });
       continue;
+    }
+    if (input.cache) {
+      // Cached bytes must be VISIBLE as cached bytes: a caller (and every test)
+      // can see that this fold decided on an entry rather than on a fetch. With
+      // no cache configured the fold is exactly as it was before — no event.
+      input.onAnnouncement?.({
+        url,
+        status: "document",
+        source: fromCache ? "cache" : "fetched",
+      });
     }
     for (const [index, record] of document.entries()) {
       // The resolution reads only the two fields the lookup is keyed by; every

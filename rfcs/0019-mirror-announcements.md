@@ -386,10 +386,33 @@ This is additive by construction.
    enumerations (the type, the route's validation, the adapter's scan): a kind
    added to two of three validates and is never consulted, which is worse than no
    kind at all.
-5. **Are announcement documents cached, and for how long?** A fetch per client
-   per seed per refresh is a new dependency on a mirror's availability; the
-   refusal-recording behaviour of the existing sequence suggests the answer but
-   does not fix it.
+5. **Are announcement documents cached, and for how long?** — **ANSWERED: the
+   DOCUMENT may be cached, never the VERDICT.** A fetch per client per seed per
+   refresh is a new dependency on a mirror's availability, and a resident that
+   folds the same seed repeatedly re-downloads the same bytes. So the fold
+   takes an optional injected cache port (`AnnouncementDocumentCache`), and an
+   entry carries the document's parsed body plus `fetchedAt` — nothing more,
+   and never a decided outcome. A cached document re-enters the SAME record
+   verification a fresh fetch gets — the signature, the key resolution through
+   the handle's history, the window, the lifetime cap, and the revocation
+   check, which runs per fold — because a verdict that outlived its checks
+   would let a record outlive its key's revocation or its own expiry, the
+   failure the protocol's rules exist to prevent. A cache that cannot be asked
+   or written is a miss, not a failure: the fold falls through to the fetch it
+   would have made without a cache.
+   How long an entry is believed for is the CALLER's policy: the fold takes
+   `cacheMaxAgeMs` and treats an entry older than that as a miss — reported as
+   the miss it is (`document`, `source: "fetched"`), refetched over, never
+   silently used; with no TTL set the caller has chosen none, and the verdicts
+   being re-derived every fold is what makes even that safe. Both outcomes are
+   reported: a hit is distinguishable from a fetch (`document`, `source`),
+   because a caller should be able to see that a decision travelled on cached
+   bytes rather than have it hidden.
+   The SDK ships one implementation a resident can inject
+   (`MemoryAnnouncementCache`): in memory only, so there is no persistence —
+   it is an optimisation, never a source of truth — and bounded (`maxEntries`,
+   oldest-insertion eviction), because an unbounded cache in a long-lived
+   resident is a leak.
 6. **Should the announcement list itself be pinned?** If the seed's
    `announcements[]` can be edited by whoever serves the seed, a hostile edit
    removes or redirects discovery without touching the pins.
@@ -406,6 +429,8 @@ records into the union, resolution runs through the announcing handle's key
 history, and open question 1 is answered by the `announcers` rule — with a test
 proving that an unvouched contradiction is refused and discovery still
 completes, so the denial-of-service shape is closed rather than described.
-Questions 2–5 (lifetime caps, where verification runs, a revocation kind for
-keys, and caching) remain open, and a seed without `announcements` still behaves
-exactly as it did before.
+Questions 2, 4, and 5 are answered in their sections above (the lifetime cap,
+the `key` revocation kind, and caching documents but never verdicts); where a
+resident's signature verifier lives (question 3) remains open, as do questions
+6 and 7, and a seed without `announcements` still behaves exactly as it did
+before.

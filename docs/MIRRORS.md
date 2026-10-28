@@ -321,7 +321,20 @@ consistent is the federation problem, and it has two parts:
    5-minute clock-skew tolerance so a record issued slightly ahead is a clock and
    not a forgery, and a revocation lookup that could not be performed refuses
    the record rather than reading a failed check as proof the key is good —
-   "could not tell" is its own outcome, never "not revoked". The server's own
+   "could not tell" is its own outcome, never "not revoked". An announcement
+   document may be cached, and the verdict never is: the fold takes an optional
+   injected port (`AnnouncementDocumentCache`) whose entry is the parsed
+   document plus when it was fetched, and a cached document re-enters the same
+   verification a fresh fetch gets — the signature, the key resolution, the
+   window, the lifetime cap, and the per-fold revocation lookup — so a record
+   whose key is revoked dies on the second fold exactly as it would have on a
+   fresh fetch. How long an entry is believed for is the caller's policy
+   (`cacheMaxAgeMs`): an entry older than it is a miss, refetched rather than
+   silently used, and both outcomes are reported, because a caller should see
+   whether a decision travelled on cached bytes. The SDK's
+   `MemoryAnnouncementCache` is bounded (an unbounded cache in a long-lived
+   resident is a leak) and in memory only, with no persistence — it is an
+   optimisation, never a source of truth. The server's own
    store IS the resolver where a caller wires it: `bundleFromSeedForStore(seed, store, options)` answers the port
    straight from the identities, rotations and revocations the API already
    serves, so a keyless record resolves through the store that owns it and is

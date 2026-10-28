@@ -127,7 +127,14 @@ export async function discoverPublishedBundle(input: DiscoveryInput): Promise<Di
       error instanceof Error ? error.message : String(error),
       announcements
         .filter((event) => event.status !== "accepted")
-        .map((event) => `${event.url}: ${event.reason ?? event.status}`)
+        // The union says what it carries: a skipped record names its reason, a
+        // document event (RFC 0019 question 5) names where the fold read the
+        // announcement from — reported, since the read is the event's news.
+        .map((event) =>
+          event.status === "skipped"
+            ? `${event.url}: ${event.reason}`
+            : `${event.url}: document (${event.source})`,
+        )
         .concat(refusals),
     );
   }

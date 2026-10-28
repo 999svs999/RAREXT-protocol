@@ -607,6 +607,23 @@ if (process.argv.includes("--self-test")) {
   const caughtAnnouncers = failures > beforeAnnouncers;
   if (!caughtAnnouncers) fail("self-test: the checker accepted a fold that ignores the seed's announcers");
   caught = caught && caughtAnnouncers;
+  // And a fold that stops CONSULTING its cache — RFC 0019's question 5, whose
+  // answer the doc states — must be reported. The injection doctors exactly
+  // what the guard reads, the literal call string, not a name beside it: an
+  // injection pointed at something the guard does not match injects nothing,
+  // and the self-test would then report "the checker accepted a doctored row"
+  // while proving nothing.
+  const cacheFoldReal = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  const doctoredCacheFold = cacheFoldReal.replace(
+    "input.cache.get(url)",
+    "doctoredCacheGet(url)",
+  );
+  if (doctoredCacheFold === cacheFoldReal) fail("self-test: the cache fixture no longer changes its input");
+  const beforeCacheFold = failures;
+  checkMirrorsDoc(undefined, { announcements: doctoredCacheFold });
+  const caughtCacheFold = failures > beforeCacheFold;
+  if (!caughtCacheFold) fail("self-test: the checker accepted a fold that never consults its cache");
+  caught = caught && caughtCacheFold;
   // And an identity adapter that starts DECIDING — packing a rotation window
   // of its own — must be reported. Core decides; the adapter answers.
   const realIdentityAdapter = readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
@@ -1663,7 +1680,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   }
 
   console.log(
-    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1)`,
+    `  ${bundleRoutes.length} bundle route(s) handled | ${named.length} npm script(s) defined | takedown in CI | published copy present | proof page fails over (Served from) with the generator carrying it | workbench gate refuses unverified bundles | pinning call (pinBundle) recorded in seed.pins and verified per pin | SDK finds a copy (findVerifiedBundle) and replays its AI claims offline (replayBundleAi) | multi-seed discovery (findVerifiedBundleFromSeeds / bundleFromSeeds) with a loud disagreement rule in core | announcements verified into the union (verifyAnnouncement, RFC 0019 step 1) | announcement documents cached, verdicts never (AnnouncementDocumentCache, RFC 0019 question 5)`,
   );
   // The doc names the one-call join and the surface convention behind it. Both
   // are claims about the tree: the client must fold through the SDK's own
@@ -1894,6 +1911,31 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
     if (!/not contradict them/.test(announcementsSource)) {
       fail("the fold must refuse an unvouched contradiction of the pins");
+    }
+  }
+
+  // RFC 0019's question 5: the doc says announcement documents may be cached,
+  // and verdicts never are. That is a claim about the fold, so the fold must
+  // carry the cache port — a CALL, not a mention — and must read the caller's
+  // TTL rather than holding a policy of its own. The SDK must also carry the
+  // bounded in-memory cache the doc names a resident.
+  if (/AnnouncementDocumentCache/.test(doc)) {
+    const cacheFoldSource =
+      sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+    if (!cacheFoldSource.includes("AnnouncementDocumentCache")) {
+      fail("MIRRORS.md names an announcement document cache, but core defines no such port");
+    }
+    if (!cacheFoldSource.includes("input.cache.get(url)")) {
+      fail("MIRRORS.md says the fold consults its cache, but core never calls the port (a mention is not a consultation)");
+    }
+    if (!cacheFoldSource.includes("cacheMaxAgeMs")) {
+      fail("MIRRORS.md says the TTL is the caller's policy, but the fold reads no cacheMaxAgeMs");
+    }
+    if (!/source: fromCache \? "cache" : "fetched"/.test(cacheFoldSource)) {
+      fail("MIRRORS.md says hits and misses are both reported, but the fold reports neither");
+    }
+    if (typeof sdk.MemoryAnnouncementCache !== "function" || !sdkSource.includes("MemoryAnnouncementCache")) {
+      fail("MIRRORS.md names MemoryAnnouncementCache, but the SDK exports no such cache");
     }
   }
 

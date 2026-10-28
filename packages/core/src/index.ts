@@ -105,6 +105,8 @@ export {
 } from "./bundle.ts";
 export type { BundleResponse } from "./bundle.ts";
 export type {
+  AnnouncementDocumentCache,
+  AnnouncementDocumentCacheEntry,
   AnnouncementEvent,
   AnnouncementIdentity,
   AnnouncementKeyHistory,
