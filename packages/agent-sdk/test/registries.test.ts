@@ -8,6 +8,7 @@ import {
   findVerifiedBundlesFromRegistryList,
   joinRegistryNetwork,
   registriesFromPublishedList,
+  registryListDigestOf,
 } from "../src/registries.ts";
 import { verifyBundle } from "../src/index.ts";
 import {
@@ -251,4 +252,74 @@ test("a network join refuses an announcement whose key that registry revoked", a
   assert.ok(refusal, `the refusal is reported: ${JSON.stringify(result.announcements)}`);
   assert.equal(refusal.registry, "c");
   assert.match(String(refusal.reason), /revok/i, "and names the revocation");
+});
+
+test("a seed list can be CHECKED rather than trusted, and the wrapper is not what is checked", async () => {
+  const entries = [
+    { id: "a", url: "https://a.example", operator: "aye", chains: ["base"], note: "n", seed: null },
+    { id: "b", url: "https://b.example", operator: "", chains: [], note: null, seed: "https://b.example/s.json" },
+  ];
+  const digest = registryListDigestOf(entries as never);
+
+  const list = (registries: unknown[], self: unknown = { url: "https://list.example", chain: ["base"] }) =>
+    JSON.stringify({ self, registries });
+
+  // The correct digest passes.
+  const good = stubNetwork({ "https://list.example/registries": list(entries) });
+  const read = await registriesFromPublishedList("https://list.example/registries", {
+    fetch: good.doFetch,
+    expectDigest: digest,
+  });
+  assert.equal(read.length, 2);
+
+  // The SAME list with one entry's chains changed is refused, naming both.
+  const tampered = entries.map((entry, index) => (index === 0 ? { ...entry, chains: ["solana"] } : entry));
+  const bad = stubNetwork({ "https://list.example/registries": list(tampered) });
+  await assert.rejects(
+    async () => {
+      await registriesFromPublishedList("https://list.example/registries", {
+        fetch: bad.doFetch,
+        expectDigest: digest,
+      });
+    },
+    (error: Error) => {
+      assert.match(error.message, new RegExp(digest));
+      assert.match(error.message, /computed [0-9a-f]{64}/);
+      return true;
+    },
+  );
+
+  // A different SELF description does not change what is checked: the server
+  // reaching itself at another hostname is not a change in which registries exist.
+  const otherSelf = stubNetwork({
+    "https://list.example/registries": list(entries, { url: "http://127.0.0.1:9999", chain: ["base", "cosmos"] }),
+  });
+  const stillRead = await registriesFromPublishedList("https://list.example/registries", {
+    fetch: otherSelf.doFetch,
+    expectDigest: digest,
+  });
+  assert.equal(stillRead.length, 2, "a server describing itself differently is not a different list");
+
+  // And field order inside an entry is not a change either.
+  const reordered = stubNetwork({
+    "https://list.example/registries": JSON.stringify({
+      registries: [
+        { seed: null, note: "n", chains: ["base"], operator: "aye", url: "https://a.example", id: "a" },
+        { id: "b", url: "https://b.example", seed: "https://b.example/s.json", note: null, operator: "", chains: [] },
+      ],
+    }),
+  });
+  const reorderedRead = await registriesFromPublishedList("https://list.example/registries", {
+    fetch: reordered.doFetch,
+    expectDigest: digest,
+  });
+  assert.equal(reorderedRead.length, 2, "canonical form: order in the document is not order in the meaning");
+});
+
+test("without an expectation, the reader behaves exactly as before", async () => {
+  const net = stubNetwork({
+    "https://list.example/registries": JSON.stringify([{ id: "a", url: "https://a.example" }]),
+  });
+  const entries = await registriesFromPublishedList("https://list.example/registries", { fetch: net.doFetch });
+  assert.equal(entries.length, 1, "no expectation means no new failure mode");
 });

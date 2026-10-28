@@ -1,3 +1,6 @@
+import { canonicalize } from "./canonical.ts";
+import { sha256Hex, type Sha256 } from "./digest.ts";
+
 /**
  * The seed list: the registries a client can look for.
  *
@@ -12,6 +15,7 @@
  * Pure: no I/O, no hashing. Whatever holds the bytes (a file, a response body)
  * is the caller's business.
  */
+
 
 export interface RegistrySeedEntry {
   /** The registry's short id, e.g. "apesdaily". */
@@ -82,4 +86,36 @@ export function resolveRegistryUrl(url: string, base: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * What a digest of the seed list covers: the ENTRIES, in order, each reduced to
+ * its documented fields.
+ *
+ * Not the whole served document, and that is the point. `GET /v1/registries`
+ * answers `{ self: { url, chain }, registries: [...] }` — the server describing
+ * itself — and a digest that covered `self` would change every time the server
+ * was reached at a different hostname or picked up a new chain, without a single
+ * registry changing. A client believes things about REGISTRIES, so that is what
+ * is committed to. `canonicalize` makes field order inside an entry irrelevant.
+ */
+export function registryListDigestSource(entries: RegistrySeedEntry[]): string {
+  return canonicalize(
+    entries.map((entry) => ({
+      id: entry.id,
+      url: entry.url,
+      operator: entry.operator,
+      chains: entry.chains,
+      note: entry.note,
+      seed: entry.seed,
+    })),
+  );
+}
+
+/**
+ * The list's digest, with the hash INJECTED: core owns no hashing dependency,
+ * so the caller supplies sha256 (node's, in the SDK).
+ */
+export function registryListDigest(entries: RegistrySeedEntry[], sha256: Sha256): string {
+  return sha256Hex(sha256, registryListDigestSource(entries));
 }

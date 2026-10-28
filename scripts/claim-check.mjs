@@ -483,6 +483,18 @@ if (process.argv.includes("--self-test")) {
   const caughtDemo = failures > beforeDemo;
   if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
   caught = caught && caughtDemo;
+  // And a client that computes a digest and then ignores the mismatch — the check
+  // the doc promises, in the shape of a no-op — must be reported.
+  const digestClientSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+  const doctoredDigest = digestClientSource.replace(
+    "if (actual !== options.expectDigest) {",
+    "if (false) {",
+  );
+  const beforeDigest = failures;
+  checkMirrorsDoc(undefined, { registryClient: doctoredDigest });
+  const caughtDigest = failures > beforeDigest;
+  if (!caughtDigest) fail("self-test: the checker accepted a digest check that never refuses");
+  caught = caught && caughtDigest;
   // And a one-call join that stops folding announcements — the doc's sentence is
   // then describing something the client does not do.
   const networkJoinSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
@@ -1604,6 +1616,24 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // are claims about the tree: the client must fold through the SDK's own
   // announcement path with a resolver built from the same convention module, and
   // the demo must use that module too rather than hardcoding one surface.
+  // The doc says a list can be checked by digest. That is a claim about the
+  // client: it must compute the digest through core's function and refuse on a
+  // mismatch — the comparison itself, not a mention of one.
+  if (/expectDigest/.test(doc)) {
+    const clientSource =
+      sources.registryClient ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+    if (!/registryListDigest\(entries, \(bytes\)/.test(clientSource)) {
+      fail("MIRRORS.md says a seed list can be checked, but the SDK never computes the digest through core's injected hash");
+    }
+    if (!/if \(actual !== options\.expectDigest\) \{/.test(clientSource)) {
+      fail("the client must COMPARE the computed digest with the expectation and refuse on a mismatch");
+    }
+    const coreRegistries = readFileSync(new URL("packages/core/src/registries.ts", root), "utf8");
+    if (!/export function registryListDigest\(/.test(coreRegistries)) {
+      fail("the digest over the list's entries must live in core, where the server and the client share it");
+    }
+  }
+
   if (/joinRegistryNetwork/.test(doc)) {
     const networkSource =
       sources.registryClient ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");

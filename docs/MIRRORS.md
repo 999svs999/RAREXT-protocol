@@ -237,7 +237,14 @@ consistent is the federation problem, and it has two parts:
   surface)` knows the two shapes (`api` = `/v1/identities/<handle>`, `static-tree`
   = `/identities/<handle>.json`), because pointing a resident at the wrong surface
   does not raise an error — every handle simply reads as unknown, and a publisher
-  that published everything stops being believed. The static seed above is a
+  that published everything stops being believed. A list can also be CHECKED
+  rather than trusted: a digest covers the ENTRIES (never the server's own
+  `self` description, so reaching a server at another hostname is not a change in
+  which registries exist), and `registriesFromPublishedList(url, { expectDigest })`
+  refuses a list whose entries do not match, naming both digests. Honest scope:
+  this repository's published list is not anchored anywhere yet, so a caller that
+  passes no expectation is trusting whoever controls the URL — checkable exists,
+  anchored does not. The static seed above is a
   first step, and its consumption is implemented: `bundleFromSeed` in
   `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
   order, and accepts only a copy that **rebuilds the root the seed pins**

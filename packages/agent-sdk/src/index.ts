@@ -140,6 +140,7 @@ export {
   findVerifiedBundlesFromRegistryList,
   joinRegistryNetwork,
   registriesFromPublishedList,
+  registryListDigestOf,
 } from "./registries.ts";
 export type {
   NetworkJoinOptions,

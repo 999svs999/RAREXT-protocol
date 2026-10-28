@@ -1,9 +1,11 @@
 import {
   parseRegistrySeedList,
+  registryListDigest,
   registrySeedUrl,
   resolveRegistryUrl,
   readBundleResponseBytes,
 } from "@rarext/core";
+import { createHash } from "node:crypto";
 import type { RegistrySeedEntry } from "@rarext/core";
 
 import { findVerifiedBundle, findVerifiedBundleFromSeeds, type SeedDocument, type VerifiedBundleSource } from "./index.ts";
@@ -29,6 +31,12 @@ export const DEFAULT_REGISTRY_TIMEOUT_MS = 15_000;
 export interface RegistryListOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /**
+   * The digest the list's entries must match, when the caller has one from
+   * somewhere it trusts more than the URL (an anchor, say). Absent means the
+   * location is the trust.
+   */
+  expectDigest?: string;
   /** Called for every registry, in order, before any bundle is verified. */
   onRegistry?: (event: RegistryOutcome) => void;
 }
@@ -59,14 +67,41 @@ async function readJson(url: string, doFetch: typeof fetch, timeoutMs: number): 
  * that serves this list uses the same function, so a client and a server cannot
  * disagree about what the list says.
  */
+/** sha256 over the entries, bound to node's crypto — the SDK's side of core's injected hash. */
+export function registryListDigestOf(entries: RegistrySeedEntry[]): string {
+  return registryListDigest(entries, (bytes) => new Uint8Array(createHash("sha256").update(bytes).digest()));
+}
+
+/**
+ * Read and normalise a published seed list. The parsing is core's — the server
+ * that serves this list uses the same function, so a client and a server cannot
+ * disagree about what the list says.
+ *
+ * `expectDigest` is how a caller stops trusting the URL and starts checking the
+ * CONTENT: the digest covers the entries, so a list that grew an extra registry
+ * — or lost one, or had a URL swapped — does not match. Without it, the caller is
+ * trusting whoever controls the location, which is stated rather than implied.
+ */
 export async function registriesFromPublishedList(
   listUrl: string,
-  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  options: { fetch?: typeof fetch; timeoutMs?: number; expectDigest?: string } = {},
 ): Promise<RegistrySeedEntry[]> {
   const doFetch = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_REGISTRY_TIMEOUT_MS;
   const parsed = await readJson(listUrl, doFetch, timeoutMs);
-  return parseRegistrySeedList(parsed);
+  const entries = parseRegistrySeedList(parsed);
+
+  if (options.expectDigest !== undefined) {
+    const actual = registryListDigestOf(entries);
+    if (actual !== options.expectDigest) {
+      throw new Error(
+        `the seed list at ${listUrl} does not match the expected digest: ` +
+          `expected ${options.expectDigest}, computed ${actual}`,
+      );
+    }
+  }
+
+  return entries;
 }
 
 /** Ask every registry on the list for a copy that rebuilds the root IT pins. */
@@ -77,7 +112,11 @@ export async function findVerifiedBundlesFromRegistryList(
   const doFetch = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_REGISTRY_TIMEOUT_MS;
 
-  const entries = await registriesFromPublishedList(listUrl, { fetch: doFetch, timeoutMs });
+  const entries = await registriesFromPublishedList(listUrl, {
+    fetch: doFetch,
+    timeoutMs,
+    ...(options.expectDigest === undefined ? {} : { expectDigest: options.expectDigest }),
+  });
   const verified: RegistryListResult["verified"] = [];
   const failures: RegistryListResult["failures"] = [];
 
@@ -146,7 +185,11 @@ export async function joinRegistryNetwork(
   const doFetch = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_REGISTRY_TIMEOUT_MS;
 
-  const entries = await registriesFromPublishedList(listUrl, { fetch: doFetch, timeoutMs });
+  const entries = await registriesFromPublishedList(listUrl, {
+    fetch: doFetch,
+    timeoutMs,
+    ...(options.expectDigest === undefined ? {} : { expectDigest: options.expectDigest }),
+  });
   const result: NetworkJoinResult = { list: listUrl, entries, registries: [], verified: [], announcements: [] };
 
   for (const entry of entries) {
