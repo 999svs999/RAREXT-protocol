@@ -506,6 +506,16 @@ if (process.argv.includes("--self-test")) {
   const beforeCommitment = failures;
   checkMirrorsDoc(undefined, { registryClient: commitmentSource, coreShape: doctoredCommitment });
 
+  // And a core that declares the announcement bound but no longer APPLIES it —
+  // the doc still true in prose, the bound gone from the fold — must be reported.
+  const coreAnn = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+  const unappliedBound = coreAnn.replace("input.maxAnnouncementDocuments ?? MAX_ANNOUNCEMENT_DOCUMENTS", "Number.MAX_SAFE_INTEGER");
+  const beforeBound = failures;
+  checkMirrorsDoc(undefined, { coreAnnouncements: unappliedBound });
+  const caughtBound = failures > beforeBound;
+  if (!caughtBound) fail("self-test: the checker accepted a declared bound that the fold does not apply");
+  caught = caught && caughtBound;
+
   // And an API twin that does not apply the shared policy — the doc says both
   // callers do — must be reported.
   const apiBundleReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
@@ -1465,6 +1475,33 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
     if (!/truncated/.test(sdkRegistries)) {
       fail("the doc says a truncation is reported, but the walk reports none");
+    }
+  }
+
+  // docs/HARDENING.md writes down what a resident accepts from strangers, beside
+  // what is still not handled. A written-down bound is a claim about the tree: the
+  // constant exists, the code USES it, and the drop is reported rather than
+  // silent. (The URL policy is guarded above; this is the other half.)
+  const hardening =
+    sources.hardeningDoc ?? readFileSync(new URL("docs/HARDENING.md", root), "utf8");
+  if (/MAX_ANNOUNCEMENT_DOCUMENTS/.test(hardening)) {
+    const announcements = sources.coreAnnouncements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
+    if (!/export const MAX_ANNOUNCEMENT_DOCUMENTS = 64;/.test(announcements)) {
+      fail("HARDENING.md states the announcement-document bound, but core does not declare it as 64");
+    }
+    if (!/maxAnnouncementDocuments \?\? MAX_ANNOUNCEMENT_DOCUMENTS/.test(announcements)) {
+      fail("the fold does not apply the announcement-document bound it declares");
+    }
+    if (!/announcement documents were named and only/.test(announcements)) {
+      fail("HARDENING.md says a truncated fold is reported, but the fold reports no count");
+    }
+  }
+  if (/MAX_GENERATIVE_STEPS|MAX_BOUNDED_LENGTH/.test(hardening)) {
+    const validate = sources.sdkValidate ?? readFileSync(new URL("packages/agent-sdk/src/validate.ts", root), "utf8");
+    for (const constant of ["MAX_GENERATIVE_STEPS", "MAX_BOUNDED_LENGTH"]) {
+      if (!new RegExp(constant).test(validate)) {
+        fail(`HARDENING.md states a bound (${constant}) that the SDK's input boundary does not enforce`);
+      }
     }
   }
   // The doc says the proof page fails over and reports the location it

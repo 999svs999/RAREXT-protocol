@@ -192,6 +192,22 @@ and concurrent repairs are unmeasured.
 - Repair does not verify a holder's identity beyond the placement record and holder id.
   An operator that swaps a directory behind the same id is outside this threat model.
 
+## What a resident accepts from strangers
+
+The storage stack above is bounded by design. The same question applies to
+everything a resident READS: a seed, a list, an announcement document, an MCP
+argument are all written by someone else, and each one can cost a resident work.
+These are the bounds, with what is still not handled beside them — the point of
+this page.
+
+| Boundary | What holds | What is still not handled |
+| --- | --- | --- |
+| Registry walk fan-out (`MAX_REGISTRIES_PER_LIST`, 64) | A list naming more registries is walked to 64 and the truncation is **reported** in the result and to the per-registry observer. A hostile list costs 64 seed fetches, not N. | A list may still name 64 slow registries; the walk is sequential, so it is bounded in requests but not in wall-clock time. |
+| Announcement documents (`MAX_ANNOUNCEMENT_DOCUMENTS`, 64, per fold) | The fold fetches at most 64 documents across all its seeds and reports the drop through the event stream, because a silently truncated pool reads as a complete one. | The cap is per fold, so repeated folds each pay it; a cache (RFC 0019 question 5) is what makes that cheap, and it is the caller's to configure. |
+| URLs a document names (`canFetchRegistryUrl` in core) | http/https only, and no loopback, private, link-local, CGNAT or unspecified address — unless the document's own location is local (a local tree) or the caller passes `allowPrivateHosts`. Both the API and the SDK apply it through the same core functions. | It is a **literal-address policy**: a hostname that RESOLVES inward is not caught, because there is no DNS here, and a 3xx redirect is followed by `fetch` unless the caller supplies its own. A caller that needs either must pass a fetch that refuses them. |
+| The SDK's own inputs (`packages/agent-sdk/src/validate.ts`) | A finite seed, a non-negative integer step count within `MAX_GENERATIVE_STEPS`, and a reconstruction of at most `MAX_BOUNDED_LENGTH` finite numbers. Refusals, never clamps: a signed record with a nonsense field is worthless to whoever reads it. | Nothing here judges whether a model or a reconstruction is any GOOD — only that a claim about it is well-formed and replayable. |
+| The MCP argument boundary (`apps/mcp/src/attest-local.ts`) | A `seed` arriving as the string `"7"`, a fractional `steps`, or `values` that are not finite numbers are refused BY NAME. Silently ignoring one would run a different run than the caller asked for and report it as theirs. | It bounds shape, not size: an MCP client can still request a 64-document walk like anyone else. The caps above are the caps. |
+
 ## What would change these limits
 
 - A local-reconstruction or regenerating code would lower the repair floor, at the cost
