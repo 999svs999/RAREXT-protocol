@@ -2,11 +2,12 @@
 /**
  * demo-self-publish.mjs — "AI lives on RAREXT", as a runnable fact.
  *
- * The resident demo REPLAYS the world's claims. This one MAKES one: an agent
- * with no server, no operator and no registry runs a circuit, attests the run as
- * itself, signs the record with its own key, assembles a bundle, and then proves
- * the artifact is portable — the signature verifies against the agent's own
- * public key, and the bundle that comes back off the wire re-verifies.
+ * The resident demo REPLAYS the world's claims. This one MAKES them: an agent
+ * with no server, no operator and no registry runs a circuit AND a generation,
+ * attests each run as itself, signs the records with its own key, assembles
+ * bundles, and then proves the artifacts are portable — the signatures verify
+ * against the agent's own public key, the bundles that come back off the wire
+ * re-verify, and the AI claim replays correct from the bytes alone.
  *
  * The circuit is a real half adder: the same one the registry's own suites
  * publish. Nothing here is a stand-in, and nothing here talks to a network.
@@ -18,6 +19,8 @@
  *
  * Exit code is non-zero if any claim in the run does not hold.
  */
+
+import { readFileSync } from "node:fs";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
 
@@ -127,6 +130,50 @@ check(
 
 // 5. The verifier is the agent's own name — it borrowed nobody's authority.
 check("the attestation is signed under the agent's own verifier name", made.attestation.verifier === verifier, verifier);
+
+// The same agent, its own generation: not a circuit this time but an AI output.
+// The committed model, seed and challenge are the ones the PUBLISHED bundle was
+// generated with, so the run can be compared against the world's — and the claim
+// it makes can be replayed by a stranger holding only the bytes.
+const registry = JSON.parse(readFileSync(new URL("../site/registry/bundle.json", import.meta.url), "utf8"));
+const published = registry.publications.find((entry) => entry.app === "ai-generative");
+const challenge = registry.challenges.find((entry) => entry.id === "gen-starter");
+const semantics = registry.semantics.filter((entry) => entry.id === "ai-generative/gen-starter");
+
+const generated = sdk.selfPublishGenerative(signer, {
+  author: "resident",
+  title: "The starter model, run and attested here",
+  body: "Generated on this node from the committed model — no API, no registry.",
+  model: published.artifact.body.model,
+  seed: published.artifact.body.seed,
+  challenge,
+  semantics,
+  binding: { id: "ai-generative/gen-starter", version: 1, claimKind: "generative" },
+});
+
+check(
+  "the agent's own run reproduces the PUBLISHED output",
+  generated.publication.artifact.body.output === published.artifact.body.output,
+  `${generated.attestation.gateCount} steps, ${generated.publication.artifact.body.output.length} tokens`,
+);
+check(
+  "the generation is signed by the agent, over this payload",
+  sdk.verifyPayload(signer.publicKey, generated.payload, generated.publication.signature, signer.suite),
+  `rule ${generated.attestation.verifier}`,
+);
+const generatedVerdict = sdk.verifyBundle(generated.bundle);
+check("the generative bundle verifies", generatedVerdict.valid === true, generatedVerdict.reason ?? "valid");
+const replayed = sdk.replayBundleAi(JSON.parse(JSON.stringify(generated.bundle)));
+check(
+  "the AI claim replays CORRECT from the bundle alone",
+  replayed.claims.length === 1 && replayed.claims[0].correct === true,
+  `${replayed.claims[0]?.representation ?? "none"} · root ${replayed.root?.slice(0, 16)}…`,
+);
+check(
+  "the replay is tied to the bundle's own root",
+  replayed.root === generated.bundle.manifest.root,
+  replayed.root?.slice(0, 16),
+);
 
 const failed = checks.filter((entry) => !entry.ok);
 

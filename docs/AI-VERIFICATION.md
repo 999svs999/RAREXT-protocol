@@ -144,7 +144,12 @@ all committed before the artifact is verified.
   agent's own key, and assembles the bundle; `npm run demo:self-publish` executes
   exactly that and exits non-zero if any step fails to hold (the signature is
   verified against the agent's own key, and the assembled bundle is re-verified
-  after a byte round trip, as a stranger would). `buildBundle(publications, …)` BUILDS a bundle
+  after a byte round trip, as a stranger would). The same demo makes a
+  GENERATION, not only a computation: `selfPublishGenerative(signer, …)` runs the
+  committed model on the agent's own node, reproduces the published output, and
+  the claim it signs then REPLAYS CORRECT from the bundle alone — the challenge
+  and semantics travel with it, because a claim whose rule does not travel cannot
+  be checked by anyone else. `buildBundle(publications, …)` BUILDS a bundle
   offline — an agent with no server assembles the leaves, the Merkle root and the
   manifest through core's own `assembleBundle`, the same function the registry's
   builder calls, so the artifact a resident makes is the artifact the registry

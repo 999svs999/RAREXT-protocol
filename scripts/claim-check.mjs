@@ -747,6 +747,14 @@ if (process.argv.includes("--self-test")) {
   const beforeSelfPublishDemo = failures;
   checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: doctoredSelfPublishDemo });
   const caughtSelfPublishDemo = failures > beforeSelfPublishDemo;
+  // And a demo that makes a computation but no GENERATION, while the doc says it
+  // does, must be reported too.
+  const noGenerationDemo = selfPublishDemoReal.replace("sdk.selfPublishGenerative(", "sdk.notThat(");
+  const beforeNoGeneration = failures;
+  checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noGenerationDemo });
+  const caughtNoGeneration = failures > beforeNoGeneration;
+  if (!caughtNoGeneration) fail("self-test: the checker accepted a demo with no generation in it");
+  caught = caught && caughtNoGeneration;
   if (!caughtSelfPublishDemo) fail("self-test: the checker accepted a self-publish demo that calls nothing");
   caught = caught && caughtSelfPublishDemo;
 
@@ -2739,6 +2747,19 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     }
     if (!/verifyPayload\(/.test(demo) || !/process\.exit\(/.test(demo)) {
       fail("the demo must verify the signature it made and fail loudly when a check does not hold");
+    }
+    // The doc promises a GENERATION, so the demo must make one and the SDK must
+    // be the thing that can.
+    if (/selfPublishGenerative/.test(doc)) {
+      if (!/sdk\.selfPublishGenerative\(/.test(demo)) {
+        fail("the doc says the demo makes a generation, but the demo never calls selfPublishGenerative");
+      }
+      if (!/replayBundleAi\(/.test(demo)) {
+        fail("a generation the reader cannot replay is a promise the demo does not keep");
+      }
+      if (!/export function selfPublishGenerative\(/.test(sdkSource)) {
+        fail("AI-VERIFICATION.md names selfPublishGenerative, but the SDK does not export it");
+      }
     }
     const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
     if (!pkg.scripts?.["demo:self-publish"]) {
