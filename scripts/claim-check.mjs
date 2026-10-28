@@ -505,6 +505,16 @@ if (process.argv.includes("--self-test")) {
   );
   const beforeCommitment = failures;
   checkMirrorsDoc(undefined, { registryClient: commitmentSource, coreShape: doctoredCommitment });
+
+  // And an API twin that does not apply the shared policy — the doc says both
+  // callers do — must be reported.
+  const apiBundleReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+  const noPolicyTwin = apiBundleReal.replaceAll("canFetchRegistryUrl(", "someOtherCheck(");
+  const beforeTwin = failures;
+  checkMirrorsDoc(undefined, { apiBundle: noPolicyTwin });
+  const caughtTwin = failures > beforeTwin;
+  if (!caughtTwin) fail("self-test: the checker accepted an API twin without the shared URL policy");
+  caught = caught && caughtTwin;
   const caughtCommitment = failures > beforeCommitment;
   if (!caughtCommitment) fail("self-test: the checker accepted a commitment reader that ignores the artifact kind");
   caught = caught && caughtCommitment;
@@ -668,9 +678,13 @@ if (process.argv.includes("--self-test")) {
   // reported: the sentence is held to the SDK export, the API twin, and the
   // disagreement rule living in core.
   const beforeMultiSeed = failures;
+  // replaceAll, not replace: the injection means "this doc no longer names these
+  // functions ANYWHERE", and a first-occurrence doctor silently becomes a no-op
+  // the moment an earlier sentence mentions them — which is exactly what a new
+  // paragraph did to it.
   const noMultiSeedMirrorsDoc = originalMirrorsDoc
-    .replace("findVerifiedBundleFromSeeds", "findVerifiedBundleEnsemble")
-    .replace("bundleFromSeeds", "bundleEnsemble");
+    .replaceAll("findVerifiedBundleFromSeeds", "findVerifiedBundleEnsemble")
+    .replaceAll("bundleFromSeeds", "bundleEnsemble");
   checkMirrorsDoc(noMultiSeedMirrorsDoc);
   const caughtMultiSeed = failures > beforeMultiSeed;
   if (!caughtMultiSeed) fail("self-test: the checker accepted a mirrors doc that no longer names multi-seed discovery");
@@ -1424,6 +1438,35 @@ function checkAppProtocol(docOverride) {
 function checkMirrorsDoc(docOverride, sources = {}) {
   console.log(`mirrors doc (docs/MIRRORS.md${docOverride ? ", DOCTORED" : ""}${sources.publishProof ? ", PIN SOURCES DOCTORED" : ""} vs tree):`);
   const doc = docOverride ?? readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+
+  // The doc makes two claims about the federation walk that are cheap to state and
+  // expensive to keep: that a list is CAPPED and says so, and that BOTH callers
+  // apply one URL policy. The second is the one that rots — a policy added to the
+  // SDK alone is a policy the API twin does not have, which the twin tests would
+  // eventually catch and a reader would never know.
+  if (/MAX_REGISTRIES_PER_LIST/.test(doc)) {
+    const coreUrls = readFileSync(new URL("packages/core/src/urls.ts", root), "utf8");
+    if (!/canFetchRegistryUrl|allowPrivateFromSeeds/.test(coreUrls)) {
+      fail("MIRRORS.md describes a URL policy, but core does not hold one");
+    }
+    const sdkIndex =
+      sources.sdkIndex ?? readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+    const apiBundle =
+      sources.apiBundle ?? readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+    for (const [who, source] of [["the SDK", sdkIndex], ["the API twin", apiBundle]]) {
+      if (!/canFetchRegistryUrl\(/.test(source)) {
+        fail(`${who} does not apply core's URL policy, and the doc says both do`);
+      }
+    }
+    const sdkRegistries =
+      sources.sdkRegistries ?? readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
+    if (!/slice\(0, MAX_REGISTRIES_PER_LIST\)/.test(sdkRegistries)) {
+      fail("the doc says a list is capped, but the walk does not slice to the cap");
+    }
+    if (!/truncated/.test(sdkRegistries)) {
+      fail("the doc says a truncation is reported, but the walk reports none");
+    }
+  }
   // The doc says the proof page fails over and reports the location it
   // verified ("Served from"). That page lives in ONE module — it used to exist
   // twice, once per generator, and a failover fix landed in the copy that was

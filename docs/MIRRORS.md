@@ -255,7 +255,19 @@ consistent is the federation problem, and it has two parts:
   the property as a standing assertion: the committed digest equals the digest of
   the published list, the anchor's root equals the bundle's root, `leafCount`
   matches the publications, and the commitment is not counted as an AI
-  representation. What that test catches is the whole failure mode of running
+  representation. **The walk is bounded and its URLs are not taken on trust:**
+  a list may name at most `MAX_REGISTRIES_PER_LIST` (64) registries, and a
+  truncation is REPORTED in the result and to the per-registry observer, because a
+  silently truncated walk reads as a complete federation. Every URL a list or a
+  seed names — a registry's seed, a mirror, an announcement's document — is
+  checked against core's URL policy before it is fetched: http or https only, and
+  no loopback, private, link-local, CGNAT or unspecified address unless the
+  document's OWN location is local (a local tree earns the allowance; a public
+  document naming a private bundle does not), with `allowPrivateHosts` for a caller
+  who means it. Both callers of the walk, the API's `bundleFromSeeds` and the
+  SDK's `findVerifiedBundleFromSeeds`, apply it through the same core functions,
+  because a guard on one side of a shared rule is how a shared rule becomes two.
+  What that test catches is the whole failure mode of running
   RFC 0020's sequence out of order: a new bundle without a re-anchor, a list
   edited without the digest following, a mirror left holding older bytes. The
   static seed above is a
