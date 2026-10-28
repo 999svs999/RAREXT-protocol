@@ -66,6 +66,7 @@ import {
   type ChallengeEvent,
   type SponsorRegistry,
 } from "./sponsorship.ts";
+import { publicationFromSignedInput, type PublishInput } from "./publications.ts";
 import { RarextStore } from "./store.ts";
 import { tapeOutIndex, tapeOutStatus } from "./tapeout.ts";
 import {
@@ -778,28 +779,6 @@ async function serveStatic(
   }
 }
 
-interface PublishInput {
-  author: string;
-  title: string;
-  body: string;
-  app: string;
-  challengeId: string;
-  artifact: Artifact;
-  circuit?: Circuit;
-  parentId: string | null;
-  source: PublicationSource | null;
-  createdAt: string;
-  authorKey: string | null;
-  delegatedBy?: string | null;
-  verified: boolean;
-  signature: string | null;
-  nonce: string | null;
-  claim?: { kind?: ClaimKind; scope?: ClaimScope | null };
-  operatorAttestation?: OperatorAttestation | null;
-  visibility?: Visibility;
-  artifactCommitment?: string | null;
-  attestation?: Attestation;
-}
 
 type PublishResult =
   | { status: number; body: Publication }
@@ -1063,36 +1042,16 @@ export function createApp(options: AppOptions = {}): AppServer {
       };
     }
 
-    const publication: Publication = {
-      id: randomUUID(),
-      author: input.author,
-      authorKey: input.authorKey,
-      delegatedBy: input.delegatedBy ?? null,
-      signatureAlgorithm: suite,
-      title: input.title,
-      body: input.body,
-      app: input.app,
-      challengeId: challenge.id,
-      artifact:
-        input.visibility === "sealed"
-          ? { ...input.artifact, body: null }
-          : input.artifact,
-      taskId: challenge.id,
-      circuit: input.circuit,
-      visibility: input.visibility ?? "public",
-      artifactCommitment: input.artifactCommitment ?? null,
-      parentId: input.parentId,
-      source: input.source,
-      createdAt: input.createdAt,
-      attestedAt: attestation.createdAt,
-      verified: input.verified,
-      signature: input.signature,
-      nonce: input.nonce,
+    // The field mapping lives in ONE place now — see publications.ts. The route
+    // keeps only what is the registry's business: deciding the attestation.
+    const publication = publicationFromSignedInput(input, {
       attestation,
       verification,
       attestationKeyId,
       attestationSignature,
-    };
+      challenge,
+      suite,
+    });
 
     store.addPublication(publication);
     return { status: 201, body: observeDurability(publication) };
