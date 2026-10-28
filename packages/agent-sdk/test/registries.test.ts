@@ -432,3 +432,92 @@ test("a bundle with no commitment answers null, not a zero", () => {
     "another app's artifact is not a federation commitment",
   );
 });
+
+/**
+ * A joining agent is pointed at places by a document someone ELSE published. The
+ * walk had no cap and no scheme or address policy at all: a list could name a
+ * hundred thousand registries, or one `file://` URL, or the instance metadata
+ * service, and the agent would fetch whatever it was told.
+ */
+const entryFor = (id: string, url: string, seed: string | null) => ({
+  id,
+  url,
+  operator: "",
+  chains: ["base"],
+  note: null,
+  seed,
+});
+
+const listBody = (registries: unknown[]) =>
+  JSON.stringify({ self: { url: "https://list.example", chain: ["base"] }, registries });
+
+test("a public list cannot send a joining agent to its own disk or inward", async () => {
+  const net = stubNetwork({
+    "https://list.example/registries": listBody([
+      entryFor("file", "https://f.example", "file:///etc/passwd"),
+      entryFor("meta", "https://m.example", "http://169.254.169.254/latest/meta-data/"),
+      entryFor("loop", "https://l.example", "http://127.0.0.1:9999/seed.json"),
+      entryFor("ok", "https://ok.example", "https://ok.example/seed.json"),
+    ]),
+  });
+
+  const result = await joinRegistryNetwork("https://list.example/registries", { fetch: net.doFetch });
+  const status = (id: string) => result.registries.find((entry) => entry.id === id);
+
+  const refused = (id: string): string => {
+    const found = status(id);
+    assert.equal(found?.status, "refused", `${id} must be refused`);
+    return found?.status === "refused" ? found.reason : "";
+  };
+  assert.match(refused("file"), /not fetchable/, "a file: URL would read the agent's disk");
+  assert.match(refused("meta"), /private or link-local/, "the metadata service is not a registry");
+  refused("loop");
+  assert.equal(status("loop")?.status, "refused");
+
+  // And the refusals are real: nothing was requested from the refused URLs.
+  assert.ok(
+    !net.calls.some((url) => url.startsWith("file:") || url.includes("169.254") || url.includes("127.0.0.1")),
+    `refused URLs were still fetched: ${net.calls.join(", ")}`,
+  );
+  // The legitimate one WAS attempted (the stub 404s, so it is unreachable — but
+  // it was tried, which is the difference between a policy and a blanket).
+  assert.ok(net.calls.includes("https://ok.example/seed.json"), "a public registry must still be reachable");
+});
+
+test("a local tree works without a flag, because its list is local too", async () => {
+  const net = stubNetwork({
+    "http://127.0.0.1:8123/registries": listBody([
+      entryFor("local", "http://127.0.0.1:8123", "http://127.0.0.1:8123/seed.json"),
+    ]),
+  });
+
+  const result = await joinRegistryNetwork("http://127.0.0.1:8123/registries", { fetch: net.doFetch });
+  assert.equal(result.registries[0]?.status, "unreachable", "attempted (and 404 here), not refused");
+  assert.ok(net.calls.includes("http://127.0.0.1:8123/seed.json"), "a private LIST earns private entries");
+});
+
+test("the fan-out is capped, and the truncation is reported rather than silent", async () => {
+  const many = Array.from({ length: 70 }, (_, index) =>
+    entryFor(`r${index}`, `https://r${index}.example`, `https://r${index}.example/seed.json`),
+  );
+  const net = stubNetwork({ "https://list.example/registries": listBody(many) });
+
+  const result = await joinRegistryNetwork("https://list.example/registries", { fetch: net.doFetch });
+  assert.equal(result.entries.length, 64, "sixty-four registries, not seventy");
+  assert.deepEqual(result.truncated, { limit: 64, dropped: 6 }, "and the six it did not read are named");
+  assert.equal(net.calls.length, 65, "one list fetch plus sixty-four attempts — not seventy");
+
+  // A list under the cap reports no truncation, so the field means something.
+  const small = stubNetwork({ "https://list.example/registries": listBody([entryFor("a", "https://a.example", "https://a.example/s.json")]) });
+  const under = await joinRegistryNetwork("https://list.example/registries", { fetch: small.doFetch });
+  assert.equal(under.truncated, undefined);
+});
+
+test("a list URL this agent will not fetch is refused outright", async () => {
+  const net = stubNetwork({});
+  await assert.rejects(
+    () => joinRegistryNetwork("file:///etc/registries.json", { fetch: net.doFetch }),
+    /refusing to join from/,
+    "an agent asked to join from a file should not read the file",
+  );
+});
