@@ -571,6 +571,15 @@ if (process.argv.includes("--self-test")) {
   const caughtFailOpen = failures > beforeFailOpen;
   if (!caughtFailOpen) fail("self-test: the checker accepted a fold that fails open on a revocation lookup");
   caught = caught && caughtFailOpen;
+  // And a kinds list that loses the `key` kind — the statement RFC 0019 Q4 asked
+  // for — must be reported.
+  const kindsReal = readFileSync(new URL("apps/api/src/revocations.ts", root), "utf8");
+  const doctoredKinds = kindsReal.replace('"artifact", "key"', '"artifact"');
+  const beforeKinds = failures;
+  checkMirrorsDoc(undefined, { revocations: doctoredKinds });
+  const caughtKinds = failures > beforeKinds;
+  if (!caughtKinds) fail("self-test: the checker accepted a kinds list without the key kind");
+  caught = caught && caughtKinds;
   // And a fold that stops capping a nomination's lifetime — the immortal pointer
   // the cap exists to prevent — must be reported.
   const lifetimeSource = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
@@ -1833,6 +1842,27 @@ function checkMirrorsDoc(docOverride, sources = {}) {
 
   // The doc states the lifetime cap and the skew. Both are claims about the fold,
   // so the fold must carry the constants and refuse by name.
+  // The doc names the `key` revocation kind. That is a claim about the tree, and
+  // the failure it guards against is precise: a kind in the type but not in the
+  // adapter's scan validates and is never consulted.
+  if (/key\` revocation kind/.test(doc)) {
+    const kindsSource =
+      sources.revocations ?? readFileSync(new URL("apps/api/src/revocations.ts", root), "utf8");
+    if (!/REVOCATION_KINDS = \[[^\]]*"key"\]/.test(kindsSource)) {
+      fail("MIRRORS.md names a `key` revocation kind, but the kinds list does not carry it");
+    }
+    const adapter = readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
+    // Wide enough for the adapter's own comment explaining the order: the guard
+    // is about "key" being the FIRST entry consulted, and a tight character
+    // window would fail on the prose that documents it.
+    if (!/KEY_REVOCATION_KINDS[\s\S]{0,600}?\n\s*"key",/.test(adapter)) {
+      fail("the announcement adapter must consult the `key` kind — and consult it first");
+    }
+    if (!/REVOCATION_KINDS/.test(adapter)) {
+      fail("the adapter must take the kinds from the shared list, not a copy of it");
+    }
+  }
+
   if (/180-day cap/.test(doc)) {
     const foldSource =
       sources.announcements ?? readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");

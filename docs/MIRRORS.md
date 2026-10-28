@@ -314,7 +314,9 @@ consistent is the federation problem, and it has two parts:
    because the envelope never mints its own authority.
    An announcing key is resolved through the handle's key history: a key the
    handle does not vouch for is refused, a revoked key is refused even when the
-   window is valid, a lifetime beyond the 180-day cap is refused rather than
+   window is valid — including by the `key` revocation kind, the one statement
+   that says "do not trust this key" rather than "here is the next one" — a
+   lifetime beyond the 180-day cap is refused rather than
    clamped (a nomination that never expires is one nobody can retract) with a
    5-minute clock-skew tolerance so a record issued slightly ahead is a clock and
    not a forgery, and a revocation lookup that could not be performed refuses

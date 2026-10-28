@@ -3,6 +3,8 @@ import type {
   AnnouncementKeyHistory,
   AnnouncementRevocation,
 } from "../../../packages/core/src/index.ts";
+import { REVOCATION_KINDS } from "./revocations.ts";
+import type { RevocationKind } from "./revocations.ts";
 import type { RarextStore } from "./store.ts";
 
 /**
@@ -27,7 +29,12 @@ import type { RarextStore } from "./store.ts";
  * order and the first hit answers. The order is part of the answer, so it is
  * written down rather than left to map iteration.
  */
-const KEY_REVOCATION_KINDS = ["capability", "verifier", "artifact"] as const;
+const KEY_REVOCATION_KINDS: readonly RevocationKind[] = [
+  // `key` first: it is the statement ABOUT a key, and the general kinds only
+  // happen to name one. A specific answer should not lose to a general one.
+  "key",
+  ...REVOCATION_KINDS.filter((kind) => kind !== "key"),
+];
 
 export function announcementIdentityForStore(store: RarextStore): AnnouncementIdentity {
   return {

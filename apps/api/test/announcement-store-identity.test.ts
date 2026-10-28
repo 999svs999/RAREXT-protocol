@@ -502,3 +502,42 @@ test("a record dated seconds ahead is a clock, and is believed", async () => {
     server.close();
   }
 });
+
+test("a key revoked as a KEY refuses the record, and the kind is the specific one", async () => {
+  const signer = announcementSigner();
+  const server = await fixture();
+  try {
+    const record = signedAnnouncement(signer, {
+      bundle: server.urls.registry,
+      mirror: server.urls.mirror,
+      bundleRoot: pinnedRoot,
+    });
+    server.publish([record]);
+    server.down("/registry/bundle.json");
+
+    const store = storeKnowing(signer);
+    // RFC 0019 Q4's kind: rotation and expiry can retire a key, but neither is a
+    // "do not trust this key" statement. This is one, and the fold must consult it.
+    store.addRevocation({
+      id: "rev-key-1",
+      kind: "key",
+      target: signer.keyId,
+      reason: "do not trust this key",
+      issuer: ANNOUNCER,
+      issuedAt: iso(0),
+    });
+
+    const events: Event[] = [];
+    await assert.rejects(
+      () =>
+        bundleFromSeedForStore(seedPointingAt(server.urls), store, {
+          onAnnouncement: (event) => events.push(event as Event),
+        }),
+      /no candidate rebuilt the pinned root/,
+    );
+
+    assert.match(refusals(events), /revok/i, "the key revocation is what refused it");
+  } finally {
+    server.close();
+  }
+});

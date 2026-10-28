@@ -4,12 +4,28 @@ import type { JsonWebKey } from "../../../packages/core/src/index.ts";
 
 import { verifyPayload } from "./identity.ts";
 
-export type RevocationKind = "capability" | "verifier" | "artifact";
+/**
+ * The revocation kinds, in ONE place.
+ *
+ * `key` is RFC 0019's question 4: rotation plus expiry can retire an announcing
+ * key, but neither is a "do not trust this key" statement a client can fetch.
+ * This is. The list was written out three times — the type, the route's
+ * validation, and the announcement adapter's scan — and a new kind added to two
+ * of them is a kind that validates and is never consulted, which is worse than
+ * no kind at all.
+ */
+export const REVOCATION_KINDS = ["capability", "verifier", "artifact", "key"] as const;
+
+export type RevocationKind = (typeof REVOCATION_KINDS)[number];
+
+export function isRevocationKind(value: unknown): value is RevocationKind {
+  return typeof value === "string" && (REVOCATION_KINDS as readonly string[]).includes(value);
+}
 
 export interface Revocation {
   id: string;
   kind: RevocationKind;
-  /** A capability nonce, a verifier hash, or an artifact id. */
+  /** A capability nonce, a verifier hash, an artifact id, or a key id. */
   target: string;
   reason: string;
   issuer: string;
@@ -63,7 +79,7 @@ function asRevocation(value: unknown): Revocation | null {
   if (
     typeof record.id !== "string" ||
     typeof record.target !== "string" ||
-    !["capability", "verifier", "artifact"].includes(String(record.kind))
+    !isRevocationKind(record.kind)
   ) {
     return null;
   }

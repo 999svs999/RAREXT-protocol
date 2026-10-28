@@ -128,6 +128,7 @@ import {
   type RevocationKind,
 } from "./revocations.ts";
 import { registrySeedList } from "./registries.ts";
+import { isRevocationKind } from "./revocations.ts";
 import { buildLaunchTrajectory, type LaunchCheckInput } from "./trajectory.ts";
 import type {
   OperatorAttestation,
@@ -1605,7 +1606,7 @@ export function createApp(options: AppOptions = {}): AppServer {
         if (
           typeof record.id !== "string" ||
           typeof record.target !== "string" ||
-          !["capability", "verifier", "artifact"].includes(String(record.kind))
+          !isRevocationKind(record.kind)
         ) {
           send(res, 400, {
             error: "a revocation needs an id, a kind, and a target",

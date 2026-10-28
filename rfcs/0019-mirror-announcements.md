@@ -375,9 +375,17 @@ This is additive by construction.
    `apps/api/src/identity.ts` today; the SDK signs but does not export a
    signature verifier. Does a resident that reads announcements itself need a
    verifier export, or does verification stay behind the API?
-4. **Does revoking an announcing key need a new revocation kind?** The kinds
-   today are `capability`, `verifier`, and `artifact`. Rotation plus expiry works
-   but is not a "do not trust this key" statement a client can fetch.
+4. **Does revoking an announcing key need a new revocation kind?** — **ANSWERED:
+   yes, `key`.** Rotation plus expiry can retire an announcing key, but neither is
+   a "do not trust this key" statement a client can fetch: rotation says which key
+   comes next, and expiry says when a record stops counting, while a compromise
+   needs saying now and about the key itself. `key` targets a key id, and the
+   announcement fold consults it FIRST — it is the statement about a key, while
+   the general kinds only happen to name one, and a specific answer should not lose
+   to a general one. The kinds are now one exported list rather than three
+   enumerations (the type, the route's validation, the adapter's scan): a kind
+   added to two of three validates and is never consulted, which is worse than no
+   kind at all.
 5. **Are announcement documents cached, and for how long?** A fetch per client
    per seed per refresh is a new dependency on a mirror's availability; the
    refusal-recording behaviour of the existing sequence suggests the answer but
