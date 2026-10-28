@@ -18,6 +18,23 @@ import {
 } from "../../../packages/agent-sdk/test/announcement-fixtures.ts";
 
 /**
+ * These fixtures are LOCAL servers behind nominal operator URLs — the shape the
+ * address policy refuses by default, because a public document naming a private
+ * bundle is how an agent gets pointed at its own network. The wrapper says this
+ * file means the local case; the unwrapped function still refuses it.
+ */
+const localBundleFromSeedForStore = (
+  ...args: Parameters<typeof bundleFromSeedForStore>
+): ReturnType<typeof bundleFromSeedForStore> =>
+  bundleFromSeedForStore(args[0], args[1], { allowPrivateHosts: true, ...(args[2] ?? {}) });
+
+const localBundleFromSeeds = (
+  ...args: Parameters<typeof bundleFromSeeds>
+): ReturnType<typeof bundleFromSeeds> =>
+  bundleFromSeeds(args[0], { allowPrivateHosts: true, ...(args[1] ?? {}) });
+
+
+/**
  * The API resolving announcements from ITS OWN store.
  *
  * Before this, the server owned the identities, the rotations and the
@@ -149,7 +166,7 @@ test("a keyless record is believed through the API's own store", async () => {
     server.down("/registry/bundle.json");
 
     const events: Event[] = [];
-    const found = await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
+    const found = await localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
       onAnnouncement: (event) => events.push(event as Event),
     });
 
@@ -177,7 +194,7 @@ test("the same keyless record is refused when the store vouches for a different 
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(otherSigner()), {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(otherSigner()), {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,
@@ -214,7 +231,7 @@ test("a revoked key is refused even though its window is valid", async () => {
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), store, {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), store, {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,
@@ -244,7 +261,7 @@ test("an unknown handle is refused, and the store is what decides", async () => 
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), new RarextStore(), {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), new RarextStore(), {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,
@@ -253,7 +270,7 @@ test("an unknown handle is refused, and the store is what decides", async () => 
 
     // The contrast is the proof that the STORE decided: byte-identical record,
     // believed by a store that knows the handle.
-    const found = await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer));
+    const found = await localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer));
     assert.equal(found.source, server.urls.mirror, "believed once the store knows the handle");
   } finally {
     server.close();
@@ -304,7 +321,7 @@ test("a handle the seed does not name may still mirror what it pins", async () =
     server.down("/registry/bundle.json"); // only resolution can produce a candidate
 
     const events: Event[] = [];
-    const found = await bundleFromSeedForStore(
+    const found = await localBundleFromSeedForStore(
       seedPointingAt(server.urls),
       storeKnowingBoth(signer, other),
       { onAnnouncement: (event) => events.push(event as Event) },
@@ -334,7 +351,7 @@ test("an unvouched contradiction is refused, and cannot reach the union's loud s
     server.publish([record]);
 
     const events: Event[] = [];
-    const found = await bundleFromSeedForStore(
+    const found = await localBundleFromSeedForStore(
       seedPointingAt(server.urls),
       storeKnowingBoth(signer, other),
       { onAnnouncement: (event) => events.push(event as Event) },
@@ -365,7 +382,7 @@ test("an unvouched handle may not introduce a registry the seed does not pin", a
     server.publish([record]);
 
     const events: Event[] = [];
-    await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowingBoth(signer, other), {
+    await localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowingBoth(signer, other), {
       onAnnouncement: (event) => events.push(event as Event),
     });
 
@@ -401,7 +418,7 @@ test("a revocation check that could not run refuses the record", async () => {
     };
 
     const events: Event[] = [];
-    const found = await bundleFromSeeds([seedPointingAt(server.urls)], {
+    const found = await localBundleFromSeeds([seedPointingAt(server.urls)], {
       identity: unreachable,
       onAnnouncement: (event) => events.push(event as Event),
     });
@@ -436,7 +453,7 @@ test("a nomination that would never expire is refused, and the cap is named", as
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,
@@ -468,7 +485,7 @@ test("a record dated far in the future is a forgery, not a clock", async () => {
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer), {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,
@@ -496,7 +513,7 @@ test("a record dated seconds ahead is a clock, and is believed", async () => {
     server.publish([record]);
     server.down("/registry/bundle.json");
 
-    const found = await bundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer));
+    const found = await localBundleFromSeedForStore(seedPointingAt(server.urls), storeKnowing(signer));
     assert.equal(found.source, server.urls.mirror, "a record within the skew is believed");
   } finally {
     server.close();
@@ -530,7 +547,7 @@ test("a key revoked as a KEY refuses the record, and the kind is the specific on
     const events: Event[] = [];
     await assert.rejects(
       () =>
-        bundleFromSeedForStore(seedPointingAt(server.urls), store, {
+        localBundleFromSeedForStore(seedPointingAt(server.urls), store, {
           onAnnouncement: (event) => events.push(event as Event),
         }),
       /no candidate rebuilt the pinned root/,

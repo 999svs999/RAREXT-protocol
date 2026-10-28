@@ -69,6 +69,12 @@ export type {
 } from "./types.ts";
 
 export { attestRun, traceHashOf } from "./attest.ts";
+export {
+  allowPrivateFromSeeds,
+  canFetchRegistryHost,
+  canFetchRegistryScheme,
+  canFetchRegistryUrl,
+} from "./urls.ts";
 export { publicationFromSignedInput } from "./publications.ts";
 export type { PublishInput } from "./publications.ts";
 export type { AttestationBinding } from "./attest.ts";

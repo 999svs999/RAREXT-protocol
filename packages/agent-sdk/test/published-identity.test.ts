@@ -14,6 +14,18 @@ import {
 } from "./announcement-fixtures.ts";
 
 /**
+ * These fixtures are LOCAL servers behind nominal operator URLs — the shape the
+ * address policy refuses by default, because a public document naming a private
+ * bundle is how an agent gets pointed at its own network. The wrapper says this
+ * file means the local case; the unwrapped function still refuses it.
+ */
+const localFindVerifiedBundleFromSeeds = (
+  ...args: Parameters<typeof findVerifiedBundleFromSeeds>
+): ReturnType<typeof findVerifiedBundleFromSeeds> =>
+  findVerifiedBundleFromSeeds(args[0], { allowPrivateHosts: true, ...(args[1] ?? {}) });
+
+
+/**
  * A resident with no server: the keys of the world it lives in, read from
  * published documents. This is the half of "AI lives on RAREXT" that was
  * missing — the demo's resident could READ a registry, but believing an
@@ -188,7 +200,7 @@ test("a resident believes a KEYLESS announcement whose key its documents vouch f
   // candidate — and only if the published documents are what resolve the key.
   net.down(`${base}/registry/bundle.json`);
 
-  const found = await findVerifiedBundleFromSeeds(
+  const found = await localFindVerifiedBundleFromSeeds(
     [
       {
         url: `${base}/seed.json`,

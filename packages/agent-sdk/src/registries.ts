@@ -218,70 +218,23 @@ export const MAX_REGISTRIES_PER_LIST = 64;
  * A local tree keeps working without a flag: a list that is ITSELF private lives
  * in a local environment, and its entries are allowed to be local too.
  */
-/** The scheme policy: a registry is http or https, never anything else. */
-export function canFetchRegistryScheme(url: string): { ok: true } | { ok: false; reason: string } {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return { ok: false, reason: `${url} is not a URL` };
-  }
+import {
+  allowPrivateFromSeeds as coreAllowPrivateFromSeeds,
+  canFetchRegistryHost as coreCanFetchHost,
+  canFetchRegistryScheme as coreCanFetchScheme,
+  canFetchRegistryUrl as coreCanFetchUrl,
+} from "../../../packages/core/src/urls.ts";
 
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return { ok: false, reason: `${parsed.protocol}// is not fetchable: a registry must be http or https` };
-  }
+// Re-exported unchanged: these were the SDK's own, and they are core's now so the
+// API twin can call the same ones. Callers see no difference.
+export {
+  coreAllowPrivateFromSeeds as allowPrivateFromSeeds,
+  coreCanFetchHost as canFetchRegistryHost,
+  coreCanFetchScheme as canFetchRegistryScheme,
+  coreCanFetchUrl as canFetchRegistryUrl,
+};
 
-  return { ok: true };
-}
 
-/**
- * The address policy, separate from the scheme ON PURPOSE: "not fetchable at
- * all" and "not fetchable without an allowance" are different answers, and
- * conflating them is how a `file://` list got treated as a local environment and
- * its scheme check skipped.
- */
-export function canFetchRegistryHost(url: string): { ok: true } | { ok: false; reason: string } {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return { ok: false, reason: `${url} is not a URL` };
-  }
-
-  const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost")) {
-    return { ok: false, reason: `${host} is a local host` };
-  }
-
-  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    const private4 =
-      a === 0 || a === 10 || a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127);
-    if (private4) return { ok: false, reason: `${host} is a private or link-local address` };
-  }
-
-  const v6 = host.includes(":");
-  if (v6) {
-    if (host === "::" || host === "::1") return { ok: false, reason: `${host} is a local address` };
-    const head = parseInt(host.split(":")[0] || "0", 16);
-    if ((head & 0xfe00) === 0xfe00) return { ok: false, reason: `${host} is a link-local address` };
-    if ((head & 0xfe00) === 0xfc00) return { ok: false, reason: `${host} is a unique-local address` };
-  }
-
-  return { ok: true };
-}
-
-export function canFetchRegistryUrl(url: string, options: { allowPrivate?: boolean } = {}): { ok: true } | { ok: false; reason: string } {
-  const scheme = canFetchRegistryScheme(url);
-  if (!scheme.ok) return scheme;
-  if (options.allowPrivate) return { ok: true };
-  return canFetchRegistryHost(url);
-}
 
 export async function joinRegistryNetwork(
   listUrl: string,
@@ -293,10 +246,10 @@ export async function joinRegistryNetwork(
   // The list's SCHEME is always enforced — a `file:` list is never a network,
   // private or not. Its ADDRESS decides whether its entries may be local too: a
   // private list lives in a local environment, a public list does not.
-  const listScheme = canFetchRegistryScheme(listUrl);
+  const listScheme = coreCanFetchScheme(listUrl);
   if (!listScheme.ok) throw new Error(`refusing to join from ${listUrl}: ${listScheme.reason}`);
 
-  const listIsPrivate = !canFetchRegistryHost(listUrl).ok;
+  const listIsPrivate = !coreCanFetchHost(listUrl).ok;
   const allowPrivate = options.allowPrivateHosts ?? listIsPrivate;
 
   const listed = await registriesFromPublishedList(listUrl, {
@@ -323,7 +276,7 @@ export async function joinRegistryNetwork(
   };
 
   for (const entry of entries) {
-    const allowed = canFetchRegistryUrl(
+    const allowed = coreCanFetchUrl(
       resolveRegistryUrl(registrySeedUrl(entry), listUrl),
       { allowPrivate },
     );

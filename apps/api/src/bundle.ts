@@ -11,6 +11,10 @@ import {
   type BundleSeed,
   assembleBundle,
 } from "../../../packages/core/src/index.ts";
+import {
+  allowPrivateFromSeeds,
+  canFetchRegistryUrl,
+} from "../../../packages/core/src/urls.ts";
 import type {
   Bundle,
   BundleVerification,
@@ -125,6 +129,8 @@ export interface SeedDocument extends BundleSeed {
 
 /** What both discovery entry points accept: the caller's fetch and observers. */
 export interface BundleDiscoveryOptions {
+  /** Allow mirror and announcement URLs at private/loopback hosts (local trees). */
+  allowPrivateHosts?: boolean;
   fetch?: typeof fetch;
   timeoutMs?: number;
   /** Observe each announcement record as it is accepted or reported and skipped. */
@@ -236,9 +242,22 @@ export async function bundleFromSeeds(
     ...(options.identity ?? unresolvedIdentity),
     ...announcementPrimitives,
   };
+  // The URL policy is core's, and it is applied HERE exactly as the SDK's twin
+  // applies it: the two are held to byte-identical behaviour, and a guard on one
+  // side only is how a shared rule drifts into two rules.
+  const allowPrivate = options.allowPrivateHosts ?? allowPrivateFromSeeds(seeds);
+  const guardUrl = (url: string): void => {
+    const allowed = canFetchRegistryUrl(url, { allowPrivate });
+    if (!allowed.ok) throw new Error(allowed.reason);
+  };
+
   const pool = await foldAnnouncements(seeds, {
     verifier,
-    fetch: request,
+    fetch: (url, init) => {
+      const target = typeof url === "string" ? url : url instanceof URL ? url.href : String(url);
+      guardUrl(target);
+      return request(target, init as RequestInit);
+    },
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
   });
@@ -255,6 +274,7 @@ export async function bundleFromSeeds(
     attribute: pool.length > 1,
     sha256: nodeSha256,
     fetchBytes: async (url) => {
+      guardUrl(url);
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return readBundleResponseBytes(response);

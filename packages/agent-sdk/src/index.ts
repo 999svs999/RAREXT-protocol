@@ -29,6 +29,10 @@ import {
   verifyCandidates,
   verifyGenerativeReplay,
 } from "@rarext/core";
+import {
+  allowPrivateFromSeeds,
+  canFetchRegistryUrl,
+} from "../../../packages/core/src/urls.ts";
 import { requireFiniteSeed, requireSteps, requireValues } from "./validate.ts";
 import type {
   AttestationBinding,
@@ -243,6 +247,11 @@ export interface FindVerifiedBundleOptions {
    * miss and is refetched. Omitted means the caller chose no TTL.
    */
   cacheMaxAgeMs?: number;
+  /**
+   * Allow mirror and announcement URLs at private/loopback hosts. Off by default;
+   * a LOCAL seed grants it automatically, because its own environment is local.
+   */
+  allowPrivateHosts?: boolean;
 }
 
 /**
@@ -312,6 +321,24 @@ export async function findVerifiedBundleFromSeeds(
   const sha256 = options.sha256 ?? nodeSha256;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
+  // Mirrors and announcement documents are named by the SEEDS, not by this
+  // caller — so they are third-party URLs, and the same two policies that guard a
+  // registry list guard them: http/https only, and no loopback or private host
+  // unless the seed that nominated it is itself local, which means a local tree
+  // and not a public document pointing inward. An `allowPrivateHosts` option
+  // overrides for a caller who means it.
+  // "Is this seed local?" is asked of the URL the seed ITSELF points at — its own
+  // location, or failing that its primary bundle — not of the mirrors, because
+  // those are exactly what the policy is about. A fixture (or a demo tree) whose
+  // primary location is on loopback is a local environment and earns the
+  // allowance; a public seed naming a private MIRROR does not.
+  const allowPrivate = options.allowPrivateHosts ?? allowPrivateFromSeeds(seeds);
+  const guard = (url: string): void => {
+    const allowed = canFetchRegistryUrl(url, { allowPrivate });
+    if (!allowed.ok) throw new Error(allowed.reason);
+  };
+
+
   // RFC 0019 step 1: core's fold fetches each announcement document the seeds
   // name, verifies every record with this package's identity primitives, and
   // pools the survivors with the trusted seeds BEFORE the union is planned. A
@@ -330,7 +357,15 @@ export async function findVerifiedBundleFromSeeds(
   };
   const pool = await foldAnnouncements(seeds, {
     verifier,
-    fetch: request,
+    // Guarded with core's policy, exactly as the API's twin guards it: a record's
+    // document URL is third-party content, and a refusal here lands in the fold's
+    // own refusal record with this reason.
+    fetch: (url, init) => {
+      const target = typeof url === "string" ? url : url instanceof URL ? url.href : String(url);
+      const allowed = canFetchRegistryUrl(target, { allowPrivate });
+      if (!allowed.ok) throw new Error(allowed.reason);
+      return request(target, init as RequestInit);
+    },
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
     ...(options.cache === undefined ? {} : { cache: options.cache }),
@@ -350,6 +385,7 @@ export async function findVerifiedBundleFromSeeds(
     sha256,
     onCandidate: options.onCandidate,
     fetchBytes: async (url) => {
+      guard(url);
       const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return readBundleResponseBytes(response);

@@ -29,6 +29,22 @@ import {
 import { canonicalize, MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 
 /**
+ * Every fixture in this file is a LOCAL server behind nominal operator URLs — the
+ * shape the address policy refuses by default, because a public document naming a
+ * private bundle is how an agent gets pointed at its own network. The flag says
+ * this file means it.
+ */
+const localFindVerifiedBundleFromSeeds = (
+  ...args: Parameters<typeof findVerifiedBundleFromSeeds>
+): ReturnType<typeof findVerifiedBundleFromSeeds> =>
+  findVerifiedBundleFromSeeds(args[0], { allowPrivateHosts: true, ...(args[1] ?? {}) });
+const localFindVerifiedBundle = (
+  ...args: Parameters<typeof findVerifiedBundle>
+): ReturnType<typeof findVerifiedBundle> =>
+  findVerifiedBundle(args[0], { allowPrivateHosts: true, ...(args[1] ?? {}) });
+
+
+/**
  * The SDK's mirror client, exercised against hostile copies: it tries the
  * seed's own URL and then each mirror, reads BYTES, and accepts only a copy
  * that hashes to the CID the seed pins and rebuilds the pinned root. A
@@ -91,7 +107,7 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
 
     // The seed's own copy is tampered (and therefore hashes elsewhere); the
     // mirror is honest, so the client falls through and accepts it.
-    const found = await findVerifiedBundle({
+    const found = await localFindVerifiedBundle({
       bundle: `${base}/registry/bundle.json`,
       bundleRoot: pinnedRoot,
       bundleCid: honestCid,
@@ -105,7 +121,7 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
     // A tampered copy is refused by the shape check, and the refusal names it.
     await assert.rejects(
       () =>
-        findVerifiedBundle({
+        localFindVerifiedBundle({
           bundle: `${base}/registry/bundle.json`,
           bundleRoot: pinnedRoot,
         }),
@@ -121,7 +137,7 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
     // pinned root, but its bytes hash elsewhere, so it is refused.
     await assert.rejects(
       () =>
-        findVerifiedBundle({
+        localFindVerifiedBundle({
           bundle: `${base}/reserialized/bundle.json`,
           bundleRoot: pinnedRoot,
           bundleCid: honestCid,
@@ -137,7 +153,7 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
     // Every candidate failing names every candidate's reason.
     await assert.rejects(
       () =>
-        findVerifiedBundle({
+        localFindVerifiedBundle({
           bundle: `${base}/absent.json`,
           bundleRoot: pinnedRoot,
           mirrors: [{ bundle: `${base}/registry/bundle.json`, root: pinnedRoot }],
@@ -154,7 +170,7 @@ test("the SDK finds the mirror whose bytes rebuild the seed's pinned root", asyn
 
     // A seed naming nothing at all is refused before any request.
     await assert.rejects(
-      () => findVerifiedBundle({ bundle: "", bundleRoot: pinnedRoot }),
+      () => localFindVerifiedBundle({ bundle: "", bundleRoot: pinnedRoot }),
       /names no bundle or mirror/,
     );
   } finally {
@@ -221,7 +237,7 @@ test("an oversized candidate is refused at the cap, and the honest mirror is sti
     const base = `http://127.0.0.1:${port}`;
 
     for (const hostile of ["lying", "huge", "streaming"]) {
-      const found = await findVerifiedBundle({
+      const found = await localFindVerifiedBundle({
         bundle: `${base}/${hostile}/bundle.json`,
         bundleRoot: pinnedRoot,
         mirrors: [{ bundle: `${base}/mirror/bundle.json`, root: pinnedRoot }],
@@ -236,7 +252,7 @@ test("an oversized candidate is refused at the cap, and the honest mirror is sti
     // Each refusal is a candidate refusal naming the cap, not a thrown crash.
     await assert.rejects(
       () =>
-        findVerifiedBundle({
+        localFindVerifiedBundle({
           bundle: `${base}/huge/bundle.json`,
           bundleRoot: pinnedRoot,
         }),
@@ -249,7 +265,7 @@ test("an oversized candidate is refused at the cap, and the honest mirror is sti
     );
     await assert.rejects(
       () =>
-        findVerifiedBundle({
+        localFindVerifiedBundle({
           bundle: `${base}/streaming/bundle.json`,
           bundleRoot: pinnedRoot,
         }),
@@ -287,7 +303,7 @@ test("from a seed document alone: find the bundle, then replay both AI claims wi
     const { port } = server.address() as AddressInfo;
     const base = `http://127.0.0.1:${port}`;
 
-    const found = await findVerifiedBundle({
+    const found = await localFindVerifiedBundle({
       bundle: `${base}/registry/bundle.json`,
       bundleRoot: pinnedRoot,
       bundleCid: cidV1Raw(bytes),
@@ -462,7 +478,7 @@ test("two agreeing seeds pool their mirrors: a copy only one operator nominated 
     seedA.mirrors![0].bundle = `${base}/mirror-a/bundle.json`;
     seedB.bundle = `${base}/mirror-b/bundle.json`;
 
-    const found = await findVerifiedBundleFromSeeds([seedA, seedB]);
+    const found = await localFindVerifiedBundleFromSeeds([seedA, seedB]);
 
     assert.equal(
       found.source,
@@ -483,7 +499,7 @@ test("two agreeing seeds pool their mirrors: a copy only one operator nominated 
     seedA.bundle = `${base}/absent-a.json`;
     seedA.mirrors = [];
     await assert.rejects(
-      () => findVerifiedBundleFromSeeds([seedA, seedC]),
+      () => localFindVerifiedBundleFromSeeds([seedA, seedC]),
       (error: Error) => {
         assert.match(error.message, /absent-a\.json/);
         assert.match(error.message, /absent-c\.json/);
@@ -520,7 +536,7 @@ test("seeds disagreeing about the registry stop loudly, before anything is fetch
 
   await assert.rejects(
     () =>
-      findVerifiedBundleFromSeeds(
+      localFindVerifiedBundleFromSeeds(
         [
           opSeed("https://operator-a.example/seed.json", {
             bundle: registry,
@@ -548,7 +564,7 @@ test("seeds disagreeing about the registry stop loudly, before anything is fetch
 
   await assert.rejects(
     () =>
-      findVerifiedBundleFromSeeds(
+      localFindVerifiedBundleFromSeeds(
         [
           opSeed("https://operator-a.example/seed.json", {
             bundle: registry,
@@ -580,7 +596,7 @@ test("seeds disagreeing about the registry stop loudly, before anything is fetch
   // its value and the seed that pinned it.
   await assert.rejects(
     () =>
-      findVerifiedBundleFromSeeds(
+      localFindVerifiedBundleFromSeeds(
         [
           opSeed("https://operator-a.example/seed.json", {
             bundle: registry,
@@ -639,7 +655,7 @@ test("a seed without a bundleCid beside one that has it is coexistence, not cont
     seedB.bundle = seedA.bundle;
 
     await assert.rejects(
-      () => findVerifiedBundleFromSeeds([seedA, seedB]),
+      () => localFindVerifiedBundleFromSeeds([seedA, seedB]),
       (error: Error) => {
         assert.doesNotMatch(error.message, /the seeds disagree about the registry/);
         assert.match(error.message, /serves .* the seed pins /);
@@ -664,7 +680,7 @@ test("a seed without a bundleCid beside one that has it is coexistence, not cont
     const { port } = honestServer.address() as AddressInfo;
     seedA.bundle = `http://127.0.0.1:${port}/reserialized/bundle.json`;
     seedB.bundle = seedA.bundle;
-    const found = await findVerifiedBundleFromSeeds([seedA, seedB]);
+    const found = await localFindVerifiedBundleFromSeeds([seedA, seedB]);
     assert.equal(found.source, seedA.bundle);
     assert.deepEqual(found.seeds, [seedA.url, seedB.url]);
     assert.equal(found.candidates, 1);
@@ -732,7 +748,7 @@ test("a verified announcement nominates its mirror, and that mirror wins when th
   };
 
   const events: AnnouncementEvent[] = [];
-  const found = await findVerifiedBundleFromSeeds([seed], {
+  const found = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch({
       [registry]: { body: JSON.stringify(tampered) },
       "https://dead.example/bundle.json": { status: 404, body: "{}" },
@@ -787,7 +803,7 @@ test("a forged announcement is reported and skipped, and the seed's own candidat
 
   const calls: string[] = [];
   const events: AnnouncementEvent[] = [];
-  const found = await findVerifiedBundleFromSeeds([seed], {
+  const found = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(
       {
         [registry]: { body: JSON.stringify(committed) },
@@ -840,7 +856,7 @@ test("an expired announcement is discarded before the union, so its mirror is ne
 
   const calls: string[] = [];
   const events: AnnouncementEvent[] = [];
-  const found = await findVerifiedBundleFromSeeds([seed], {
+  const found = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(
       {
         [registry]: { body: JSON.stringify(committed) },
@@ -888,7 +904,7 @@ test("a valid announcement claiming a different root for the same registry trips
   const calls: string[] = [];
   await assert.rejects(
     () =>
-      findVerifiedBundleFromSeeds([seed], {
+      localFindVerifiedBundleFromSeeds([seed], {
         fetch: stubFetch({ [announcementUrl]: { body: JSON.stringify([record]) } }, calls),
         // Valid and resolvable: the disagreement is the union's to raise, not
         // resolution's to pre-empt.
@@ -931,7 +947,7 @@ test("a seed without announcements behaves exactly as before, and no announcemen
     return stubFetch({ [mirror]: { body: JSON.stringify(committed) } }, calls)(u);
   }) as typeof fetch;
 
-  const found = await findVerifiedBundle({
+  const found = await localFindVerifiedBundle({
     bundle: registry,
     bundleRoot: pinnedRoot,
     mirrors: [{ bundle: mirror, root: pinnedRoot }],
@@ -946,7 +962,7 @@ test("a seed without announcements behaves exactly as before, and no announcemen
   // And the failure wording is the one the no-announcement path has always
   // produced, byte for byte: a single seed, one refusal, no attribution.
   await assert.rejects(
-    () => findVerifiedBundle({ bundle: `${registry}.absent`, bundleRoot: pinnedRoot }, { fetch: poisoned }),
+    () => localFindVerifiedBundle({ bundle: `${registry}.absent`, bundleRoot: pinnedRoot }, { fetch: poisoned }),
     (error: Error) => {
       assert.equal(
         error.message,
@@ -1002,7 +1018,7 @@ test("two folds sharing one cache fetch the announcement document once, and both
   const announcementFetches = () => calls.filter((u) => u === announcementUrl).length;
   const cache = new MemoryAnnouncementCache();
 
-  const first = await findVerifiedBundleFromSeeds([seed], {
+  const first = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes, calls),
     identity: announcerIdentity(),
     cache,
@@ -1021,7 +1037,7 @@ test("two folds sharing one cache fetch the announcement document once, and both
   // verified record must still be accepted — the cache holds no verdict, so
   // the fold re-derives the acceptance from the cached document itself.
   const events: AnnouncementEvent[] = [];
-  const second = await findVerifiedBundleFromSeeds([seed], {
+  const second = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes, calls),
     identity: announcerIdentity(),
     cache,
@@ -1073,7 +1089,7 @@ test("a cached document still dies when its key is revoked, because the verdict 
   // First fold: the record verifies and its DOCUMENT enters the cache.
   const cache = new MemoryAnnouncementCache();
   const calls: string[] = [];
-  const accepted = await findVerifiedBundleFromSeeds([seed], {
+  const accepted = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes, calls),
     identity: announcerIdentity(),
     cache,
@@ -1097,7 +1113,7 @@ test("a cached document still dies when its key is revoked, because the verdict 
   const callsBeforeSecondFold = calls.filter((u) => u === announcementUrl).length;
   await assert.rejects(
     () =>
-      findVerifiedBundleFromSeeds([seed], {
+      localFindVerifiedBundleFromSeeds([seed], {
         fetch: stubFetch(routes, calls),
         identity: revokedIdentity,
         cache,
@@ -1174,7 +1190,7 @@ test("an entry older than cacheMaxAgeMs is a miss: refetched, not silently used"
     fetchedAt: Date.now(),
   });
   const events: AnnouncementEvent[] = [];
-  const freshFold = await findVerifiedBundleFromSeeds([seed], {
+  const freshFold = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes, calls),
     identity: announcerIdentity(),
     cache,
@@ -1199,7 +1215,7 @@ test("an entry older than cacheMaxAgeMs is a miss: refetched, not silently used"
     fetchedAt: Date.now() - 10 * 60_000,
   });
   const staleEvents: AnnouncementEvent[] = [];
-  const stillVerified = await findVerifiedBundleFromSeeds([seed], {
+  const stillVerified = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes, calls),
     identity: announcerIdentity(),
     cache,
@@ -1247,7 +1263,7 @@ test("a cache miss and a cache hit are both reported, and they are distinguishab
 
   // Cold: the cache is configured, but empty — a MISS, reported as fetched.
   const missEvents: AnnouncementEvent[] = [];
-  await findVerifiedBundleFromSeeds([seed], {
+  await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes),
     identity: announcerIdentity(),
     cache,
@@ -1260,7 +1276,7 @@ test("a cache miss and a cache hit are both reported, and they are distinguishab
 
   // Warm: the same URL now answers from the cache — a HIT, reported as cache.
   const hitEvents: AnnouncementEvent[] = [];
-  await findVerifiedBundleFromSeeds([seed], {
+  await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch(routes),
     identity: announcerIdentity(),
     cache,
@@ -1288,7 +1304,7 @@ test("an announcement URL that 404s is reported and skipped, and everything else
   };
 
   const events: AnnouncementEvent[] = [];
-  const found = await findVerifiedBundleFromSeeds([seed], {
+  const found = await localFindVerifiedBundleFromSeeds([seed], {
     fetch: stubFetch({
       [registry]: { body: JSON.stringify(committed) },
       [announcementUrl]: { status: 404, body: JSON.stringify({ error: "not found" }) },
@@ -1301,4 +1317,51 @@ test("an announcement URL that 404s is reported and skipped, and everything else
   assert.deepEqual(events, [
     { url: announcementUrl, status: "skipped", reason: "HTTP 404" },
   ]);
+});
+
+/**
+ * A seed's mirrors and announcement documents are named by the SEED, not by the
+ * caller: a resident that trusts one operator's document is handed URLs by it.
+ * These two call the UNWRAPPED function on purpose — they are about the default.
+ */
+test("a seed cannot send the resident to its own disk or a metadata service", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const calls: string[] = [];
+  const recording = (async (url: unknown) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify(committed), { status: 200 });
+  }) as typeof fetch;
+
+  const hostile = opSeed("https://operator-a.example/seed.json", {
+    bundle: "file:///etc/passwd",
+    bundleRoot: pinnedRoot,
+    mirrors: [{ bundle: "http://169.254.169.254/latest/meta-data/", root: pinnedRoot }],
+  });
+
+  await assert.rejects(
+    () => findVerifiedBundleFromSeeds([hostile], { fetch: recording }),
+    (error: Error) => {
+      assert.match(error.message, /not fetchable/, "the file: candidate says why it was refused");
+      assert.match(error.message, /private or link-local/, "and so does the metadata one");
+      return true;
+    },
+  );
+  assert.deepEqual(calls, [], `refused URLs were still requested: ${calls.join(", ")}`);
+});
+
+test("a local seed still reaches its local mirrors without a flag", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const calls: string[] = [];
+  const recording = (async (url: unknown) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify(committed), { status: 200 });
+  }) as typeof fetch;
+
+  // No `url` field: the seed's own location IS its bundle, and it is local.
+  const local = { bundle: "http://127.0.0.1:9/registry/bundle.json", bundleRoot: pinnedRoot };
+  await findVerifiedBundleFromSeeds([local], { fetch: recording });
+  assert.ok(calls.length > 0, "the local candidate was attempted");
+  assert.ok(calls.every((url) => url.startsWith("http://127.0.0.1:9/")), calls.join(", "));
 });
