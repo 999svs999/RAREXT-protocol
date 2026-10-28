@@ -471,7 +471,17 @@ export function selfPublish(
   signer: AgentSigner,
   input: SelfPublishInput,
   options: { verifier?: string } = {},
-): { attestation: Attestation; publication: Publication; bundle: Bundle } {
+): {
+  attestation: Attestation;
+  publication: Publication;
+  bundle: Bundle;
+  /**
+   * The exact payload that was signed. Returned so a caller can verify the
+   * signature it just made against its own public key — the difference between
+   * "there is a signature" and "the signature is over this record".
+   */
+  payload: PublicationPayload;
+} {
   const createdAt = input.createdAt ?? new Date().toISOString();
 
   const attestation = attestRun({
@@ -529,7 +539,7 @@ export function selfPublish(
     },
   );
 
-  return { attestation, publication, bundle: buildBundle([publication], { createdAt }) };
+  return { attestation, publication, bundle: buildBundle([publication], { createdAt }), payload };
 }
 
 export function buildBundle(

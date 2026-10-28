@@ -740,6 +740,16 @@ if (process.argv.includes("--self-test")) {
   const caughtResidentAi = failures > beforeResidentAi;
   if (!caughtResidentAi) fail("self-test: the checker accepted an AI doc that no longer names the resident demo");
   caught = caught && caughtResidentAi;
+  // And a demo that stops CALLING selfPublish — the sentence still in the doc,
+  // the work gone — must be reported.
+  const selfPublishDemoReal = readFileSync(new URL("scripts/demo-self-publish.mjs", root), "utf8");
+  const doctoredSelfPublishDemo = selfPublishDemoReal.replace("sdk.selfPublish(", "sdk.assembleSomething(");
+  const beforeSelfPublishDemo = failures;
+  checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: doctoredSelfPublishDemo });
+  const caughtSelfPublishDemo = failures > beforeSelfPublishDemo;
+  if (!caughtSelfPublishDemo) fail("self-test: the checker accepted a self-publish demo that calls nothing");
+  caught = caught && caughtSelfPublishDemo;
+
   // And a registry builder that keeps its own assembly — the drift the one shared
   // function exists to prevent — must be reported.
   const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
@@ -2714,6 +2724,28 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
   // publication yielding a correct verdict with evidence, and a forged output
   // next to them failing with the mismatch visible. This is the doc's trust
   // model executed rather than described.
+  // The doc names a demo that makes, attests and signs. A demo that stops CALLING
+  // the SDK would leave the sentence true in prose and false in the tree, so the
+  // script must actually call selfPublish, the export must exist, and the npm
+  // script the doc tells a reader to run must be there to run.
+  if (/demo:self-publish/.test(doc)) {
+    const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+    if (!/export function selfPublish\(/.test(sdkSource)) {
+      fail("AI-VERIFICATION.md names a self-publishing demo, but the SDK does not export selfPublish");
+    }
+    const demo = sources.selfPublishDemo ?? readFileSync(new URL("scripts/demo-self-publish.mjs", root), "utf8");
+    if (!/sdk\.selfPublish\(/.test(demo)) {
+      fail("the self-publish demo must CALL the SDK's selfPublish, not merely describe it");
+    }
+    if (!/verifyPayload\(/.test(demo) || !/process\.exit\(/.test(demo)) {
+      fail("the demo must verify the signature it made and fail loudly when a check does not hold");
+    }
+    const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
+    if (!pkg.scripts?.["demo:self-publish"]) {
+      fail("AI-VERIFICATION.md tells a reader to run npm run demo:self-publish, but package.json defines no such script");
+    }
+  }
+
   // And the doc's other direction: a resident can BUILD the bundle it replays.
   // Held to the tree — the SDK exports the builder, assembles through core, and
   // the registry's own builder delegates to the same assembly, or the two drift.

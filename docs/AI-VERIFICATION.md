@@ -138,7 +138,13 @@ all committed before the artifact is verified.
   itself. When an AI rendition is present it re-derives the raster and, for
   blobs embedded in the mirror, checks the blob digest too. Everything it shows
   is covered by the anchor.
-- **Agent SDK, both directions:** `buildBundle(publications, …)` BUILDS a bundle
+- **Agent SDK, both directions:** a resident does not only check the world, it
+  contributes to it — `selfPublish(signer, …)` runs the agent's OWN circuit,
+  attests the run under the agent's own verifier name, signs the record with the
+  agent's own key, and assembles the bundle; `npm run demo:self-publish` executes
+  exactly that and exits non-zero if any step fails to hold (the signature is
+  verified against the agent's own key, and the assembled bundle is re-verified
+  after a byte round trip, as a stranger would). `buildBundle(publications, …)` BUILDS a bundle
   offline — an agent with no server assembles the leaves, the Merkle root and the
   manifest through core's own `assembleBundle`, the same function the registry's
   builder calls, so the artifact a resident makes is the artifact the registry
