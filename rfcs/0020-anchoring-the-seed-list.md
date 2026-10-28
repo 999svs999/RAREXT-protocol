@@ -63,13 +63,26 @@ is checking.
 
 ## Why not now (the write side)
 
-Publishing the commitment changes the bundle's root, and that root is what the
-existing anchor points at. Adding the publication and re-pinning `bundleRoot`
-without producing a NEW anchor would leave the live bundle unanchored — breaking
-the very property the change exists to provide, and doing it silently. So the
-generator is not wired until an anchor can be produced for the new root, and
-until then the honest statement in `docs/MIRRORS.md` stands: checkable exists,
-anchored does not.
+Publishing the commitment changes the bundle's root, and the live bundle's
+existing anchor (`fe9eb461…`, root `793915a9…`, `adapter: "local"`) points at the
+OLD root — verified, not assumed. Adding the publication and re-pinning
+`bundleRoot` without producing a NEW anchor would leave the live copy unanchored,
+breaking the very property the change exists to provide, and doing it silently.
+
+The remaining action is therefore not a design question but a sequence:
+
+1. `scripts/publish-ai-proof.mjs` publishes the commitment as one more artifact
+   through the same API flow, before the anchor step it already performs — so the
+   anchor covers it with no new mechanism;
+2. `npm run publish:proof` copies the new bundle and re-pins `bundleRoot` and
+   `bundleCid` (it already does both from the bundle);
+3. `npm run deploy:site` publishes the committed `site/` tree and verifies the
+   live bytes and the live seed's pin;
+4. and the honest sentence in `docs/MIRRORS.md` changes from "awaits the next
+   anchor" to the reference the new anchor recorded.
+
+Until that sequence runs, the statement stands: checkable exists and is proven;
+anchored awaits the next anchor.
 
 ## Open questions
 

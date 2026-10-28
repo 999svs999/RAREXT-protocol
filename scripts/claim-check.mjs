@@ -486,12 +486,13 @@ if (process.argv.includes("--self-test")) {
   // And a commitment reader that stops checking the artifact's KIND — now it
   // accepts any artifact with a matching field name — must be reported.
   const commitmentSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
-  const doctoredCommitment = commitmentSource.replace(
-    "if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;",
+  const coreShapeSource = readFileSync(new URL("packages/core/src/registries.ts", root), "utf8");
+  const doctoredCommitment = coreShapeSource.replace(
+    "if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) return null;",
     "// kind ignored",
   );
   const beforeCommitment = failures;
-  checkMirrorsDoc(undefined, { registryClient: doctoredCommitment });
+  checkMirrorsDoc(undefined, { registryClient: commitmentSource, coreShape: doctoredCommitment });
   const caughtCommitment = failures > beforeCommitment;
   if (!caughtCommitment) fail("self-test: the checker accepted a commitment reader that ignores the artifact kind");
   caught = caught && caughtCommitment;
@@ -1638,8 +1639,16 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     if (!/export function federationCommitment\(/.test(clientSource)) {
       fail("MIRRORS.md names federationCommitment, but the SDK does not export it");
     }
-    if (!/artifact\.kind !== REGISTRY_LIST_COMMITMENT_KIND/.test(clientSource)) {
-      fail("the commitment reader must identify the artifact by kind, not by position");
+    // The comparison moved into core when the WRITER and the READER were given
+    // one definition of the shape (RFC 0020): the SDK must CALL that parser, and
+    // core must be the place that checks the app and the kind.
+    if (!/parseFederationCommitmentArtifact\(artifact\)/.test(clientSource)) {
+      fail("the commitment reader must parse through core's shared shape, not one of its own");
+    }
+    const coreShape =
+      sources.coreShape ?? readFileSync(new URL("packages/core/src/registries.ts", root), "utf8");
+    if (!/artifact\.kind !== REGISTRY_LIST_COMMITMENT_KIND/.test(coreShape)) {
+      fail("core must identify a commitment by its artifact kind, not by position");
     }
     const rfc = readFileSync(new URL("rfcs/0020-anchoring-the-seed-list.md", root), "utf8");
     if (!/Merkle root over \*\*publication leaves only\*\*/.test(rfc)) {

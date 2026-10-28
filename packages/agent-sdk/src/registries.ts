@@ -1,4 +1,7 @@
 import {
+  FEDERATION_APP,
+  REGISTRY_LIST_COMMITMENT_KIND,
+  parseFederationCommitmentArtifact,
   parseRegistrySeedList,
   registryListDigest,
   registrySeedUrl,
@@ -283,34 +286,24 @@ export interface FederationCommitment {
   generatedAt: string | null;
 }
 
-export const FEDERATION_APP = "federation";
-export const REGISTRY_LIST_COMMITMENT_KIND = "registry-list-commitment";
+// Re-exported from core: the writer and the reader share one definition of what
+// a commitment looks like (RFC 0020).
+export { FEDERATION_APP, REGISTRY_LIST_COMMITMENT_KIND };
 
 export function federationCommitment(bundle: {
   publications?: Array<{ artifact?: { app?: unknown; kind?: unknown; body?: unknown } }>;
 }): FederationCommitment | null {
   for (const publication of bundle.publications ?? []) {
     const artifact = publication.artifact;
-    if (!artifact || artifact.app !== FEDERATION_APP) continue;
-    if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;
-    const body = artifact.body;
-    const record = typeof body === "string" ? safeParse(body) : body;
-    if (!record || typeof record !== "object") continue;
-    const { listUrl, digest, generatedAt } = record as Record<string, unknown>;
-    if (typeof listUrl !== "string" || typeof digest !== "string") continue;
+    if (!artifact) continue;
+    const body = parseFederationCommitmentArtifact(artifact);
+    if (!body) continue;
     return {
-      listUrl,
-      digest,
-      generatedAt: typeof generatedAt === "string" ? generatedAt : null,
+      listUrl: body.listUrl,
+      digest: body.digest,
+      generatedAt: body.generatedAt === "" ? null : body.generatedAt,
     };
   }
   return null;
 }
 
-function safeParse(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}

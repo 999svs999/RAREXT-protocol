@@ -71,13 +71,17 @@ export type {
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
 export {
+  FEDERATION_APP,
+  REGISTRY_LIST_COMMITMENT_KIND,
+  federationCommitmentArtifact,
+  parseFederationCommitmentArtifact,
   parseRegistrySeedList,
   registryListDigest,
   registryListDigestSource,
   registrySeedUrl,
   resolveRegistryUrl,
 } from "./registries.ts";
-export type { RegistrySeedEntry } from "./registries.ts";
+export type { FederationCommitmentBody, RegistrySeedEntry } from "./registries.ts";
 export type { Bundle, BundleManifest, BundleVerification, SeedPin } from "./bundle.ts";
 export type {
   BundleSeed,

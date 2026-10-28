@@ -119,3 +119,66 @@ export function registryListDigestSource(entries: RegistrySeedEntry[]): string {
 export function registryListDigest(entries: RegistrySeedEntry[], sha256: Sha256): string {
   return sha256Hex(sha256, registryListDigestSource(entries));
 }
+
+/**
+ * The federation commitment — RFC 0020.
+ *
+ * The list's digest is committed to as an ordinary PUBLICATION, because the
+ * bundle's root is a Merkle root over publication leaves and nothing else: a
+ * bundle FIELD carrying the digest would be editable while the root still
+ * verified. The shape lives here so the side that WRITES the commitment and the
+ * side that READS it cannot disagree about what one looks like.
+ */
+export const FEDERATION_APP = "federation";
+export const REGISTRY_LIST_COMMITMENT_KIND = "registry-list-commitment";
+
+export interface FederationCommitmentBody {
+  listUrl: string;
+  digest: string;
+  generatedAt: string;
+}
+
+/** The artifact a commitment publication carries. */
+export function federationCommitmentArtifact(body: FederationCommitmentBody): {
+  app: string;
+  kind: string;
+  version: number;
+  mediaType: string;
+  body: string;
+} {
+  return {
+    app: FEDERATION_APP,
+    kind: REGISTRY_LIST_COMMITMENT_KIND,
+    version: 1,
+    mediaType: "application/json",
+    body: JSON.stringify(body),
+  };
+}
+
+/** Read a commitment body out of an artifact, or null when it is not one. */
+export function parseFederationCommitmentArtifact(artifact: {
+  app?: unknown;
+  kind?: unknown;
+  body?: unknown;
+}): FederationCommitmentBody | null {
+  if (artifact.app !== FEDERATION_APP) return null;
+  if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) return null;
+  const raw = artifact.body;
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { listUrl, digest, generatedAt } = parsed as Record<string, unknown>;
+  // Non-empty, not merely a string: a commitment with an empty digest commits to
+  // nothing, and accepting it would make "committed" true of a document that
+  // says nothing. Same rule as the seed list's own parser, which drops an entry
+  // that does not say where to look rather than guessing.
+  if (typeof listUrl !== "string" || listUrl.length === 0) return null;
+  if (typeof digest !== "string" || digest.length === 0) return null;
+  return { listUrl, digest, generatedAt: typeof generatedAt === "string" ? generatedAt : "" };
+}
