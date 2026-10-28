@@ -1365,3 +1365,41 @@ test("a local seed still reaches its local mirrors without a flag", async () => 
   assert.ok(calls.length > 0, "the local candidate was attempted");
   assert.ok(calls.every((url) => url.startsWith("http://127.0.0.1:9/")), calls.join(", "));
 });
+
+/**
+ * A seed names announcement DOCUMENTS, and every one is a fetch this resident
+ * pays for. The registry walk got a cap; the fold had none, so a seed naming two
+ * hundred documents cost two hundred requests before anything was verified.
+ */
+test("a seed cannot make the fold fetch unbounded announcement documents", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const named = Array.from({ length: 200 }, (_, index) => `https://ann.example/${index}.json`);
+  const calls: string[] = [];
+  const recording = (async (input: unknown) => {
+    const url = typeof input === "string" ? input : String(input);
+    calls.push(url);
+    return new Response(JSON.stringify(committed), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const events: Array<{ status: string; reason?: string }> = [];
+  const seed = { bundle: "https://ok.example/bundle.json", bundleRoot: pinnedRoot, announcements: named };
+  try {
+    await findVerifiedBundleFromSeeds([seed], {
+      fetch: recording,
+      onAnnouncement: (event) => events.push(event as { status: string; reason?: string }),
+    });
+  } catch {
+    // A refusal is fine here: the assertion is about how many documents were
+    // REQUESTED, before any of them could be judged.
+  }
+
+  const fetched = calls.filter((url) => url.includes("ann.example"));
+  assert.equal(fetched.length, 64, `a hundred and ninety-two were named and 64 is the bound, not ${fetched.length}`);
+
+  // And it is reported rather than silent: a truncated pool that reads as a
+  // complete one is the failure this event exists to prevent.
+  const truncated = events.find((event) => (event.reason ?? "").includes("announcement documents were named"));
+  assert.ok(truncated, `the truncation must be reported in the event stream: ${JSON.stringify(events.slice(0, 3))}`);
+  assert.match(String(truncated.reason), /200 announcement documents were named and only 64 are read/);
+});

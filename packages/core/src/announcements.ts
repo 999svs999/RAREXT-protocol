@@ -90,6 +90,18 @@ export interface AnnouncementRevocation {
 export const ANNOUNCEMENT_CLOCK_SKEW_MS = 5 * 60_000;
 export const MAX_ANNOUNCEMENT_LIFETIME_MS = 180 * 24 * 60 * 60_000;
 
+/**
+ * How many announcement DOCUMENTS one fold will fetch, across all its seeds.
+ *
+ * A seed is a document someone else publishes, and every URL it names is a fetch
+ * this resident pays for. Without a bound, a seed naming a hundred thousand
+ * announcements is a hundred thousand requests — the same denial of service the
+ * registry walk caps, in the other place a stranger can put URLs. The cap is
+ * REPORTED through the event stream, because a silently truncated fold reads as a
+ * complete pool.
+ */
+export const MAX_ANNOUNCEMENT_DOCUMENTS = 64;
+
 export interface AnnouncementKeyHistory {
   identity: Identity;
   rotations: KeyRotation[];
@@ -674,6 +686,8 @@ export async function foldAnnouncements(
      */
     now?: Date;
     clockSkewMs?: number;
+    /** How many announcement documents this fold will fetch; default 64. */
+    maxAnnouncementDocuments?: number;
     maxLifetimeMs?: number;
     /**
      * RFC 0019 question 5: the optional document cache. Core decides nothing
@@ -746,7 +760,20 @@ export async function foldAnnouncements(
       listingSeeds.set(url, listed);
     }
   }
-  const announcementUrls = [...listingSeeds.keys()];
+  const namedDocuments = [...listingSeeds.keys()];
+  const documentLimit = input.maxAnnouncementDocuments ?? MAX_ANNOUNCEMENT_DOCUMENTS;
+  const announcementUrls = namedDocuments.slice(0, documentLimit);
+  if (namedDocuments.length > announcementUrls.length) {
+    // Reported, not silent: the caller sees that the pool is incomplete and by how
+    // much, which is the difference between a bounded fold and one that lies by
+    // omission. `skipped` carries a reason, and the reason is the count.
+    input.onAnnouncement?.({
+      url: seeds[0]?.url ?? announcementUrls[0] ?? "",
+      status: "skipped",
+      reason: `${namedDocuments.length} announcement documents were named and only ${announcementUrls.length} are read: a fold fetches at most ${documentLimit}`,
+    });
+  }
+
   for (const url of announcementUrls) {
     let document: unknown;
     let fromCache = false;
