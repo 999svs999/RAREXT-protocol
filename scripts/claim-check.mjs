@@ -767,6 +767,16 @@ if (process.argv.includes("--self-test")) {
   if (!caughtSelfPublishDemo) fail("self-test: the checker accepted a self-publish demo that calls nothing");
   caught = caught && caughtSelfPublishDemo;
 
+  // And an MCP verb registered but never dispatched — a tool listed to clients
+  // that answers nothing — must be reported.
+  const serverReal = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
+  const registeredOnly = serverReal.replace('case "rarext_attest_local":', 'case "rarext_nothing":');
+  const beforeDispatch = failures;
+  checkAiVerificationDoc(undefined, undefined, { mcpServer: registeredOnly });
+  const caughtDispatch = failures > beforeDispatch;
+  if (!caughtDispatch) fail("self-test: the checker accepted a registered-but-undispatched MCP verb");
+  caught = caught && caughtDispatch;
+
   // And a registry builder that keeps its own assembly — the drift the one shared
   // function exists to prevent — must be reported.
   const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
@@ -2786,6 +2796,40 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
     if (!pkg.scripts?.["demo:self-publish"]) {
       fail("AI-VERIFICATION.md tells a reader to run npm run demo:self-publish, but package.json defines no such script");
+    }
+  }
+
+  // The architecture doc names an MCP verb that MAKES AI artifacts locally. That
+  // is a claim about the tree with three parts: the module exists, the server
+  // registers AND dispatches the verb (a registered verb with no case is a tool
+  // that answers nothing), and the module calls core's own assemblies rather than
+  // re-deriving what a proof is.
+  const architecture =
+    sources.architecture ?? readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+  if (/rarext_attest_local/.test(architecture)) {
+    let module = null;
+    try {
+      module = readFileSync(new URL("apps/mcp/src/attest-local.ts", root), "utf8");
+    } catch {
+      fail("ARCHITECTURE.md names rarext_attest_local, but apps/mcp/src/attest-local.ts does not exist");
+    }
+    if (module) {
+      if (!/attestGenerativeRun\(/.test(module) || !/attestBoundedRun\(/.test(module)) {
+        fail("the local-attest verb must attest through core's assemblies for both representations");
+      }
+      if (!/verifyAiLocally\(/.test(module)) {
+        fail("the verdict must come from the same local verifier the checking verb uses");
+      }
+      if (!/signed: false/.test(module)) {
+        fail("an MCP server holds no key: the local attestation must say it is unsigned");
+      }
+    }
+    const server = sources.mcpServer ?? readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
+    if (!/name: "rarext_attest_local"/.test(server)) {
+      fail("ARCHITECTURE.md names rarext_attest_local, but the server does not register it");
+    }
+    if (!/case "rarext_attest_local":/.test(server)) {
+      fail("the verb is registered but never dispatched — a tool that answers nothing");
     }
   }
 

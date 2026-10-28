@@ -17,6 +17,7 @@ import {
   removeAgentKeyfile,
   writeAgentKeyfile,
 } from "../../../packages/agent-sdk/src/index.ts";
+import { attestAiLocally } from "./attest-local.ts";
 import { verifyAiLocally } from "./verify-ai.ts";
 import {
   storageAudit,
@@ -379,6 +380,21 @@ const tools = [
     },
   },
   {
+    name: "rarext_attest_local",
+    description:
+      "MAKE an AI artifact locally and return the attestation that proves it, using the rule's own name and no key: run the committed generative model from a seed, or measure a reconstruction against the challenge's committed reference. Nothing is published and nothing is signed — this is an AI contributing a verifiable artifact, which it signs with its own key if it chooses.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challengeId: { type: "string" },
+        seed: { type: "number" },
+        steps: { type: "number" },
+        values: { type: "array", items: { type: "number" } },
+      },
+      required: ["challengeId"],
+    },
+  },
+  {
     name: "rarext_anchor",
     description:
       "Batch all unanchored publications into a Merkle root. Uses TRAC_ANCHOR_URL when configured, otherwise stores a local anchor.",
@@ -667,6 +683,16 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         args.artifact as Artifact,
         client,
       );
+
+    case "rarext_attest_local":
+      // The other half of local AI: the artifact is MADE here and proved here,
+      // with no key and nothing published — an AI contributing rather than
+      // judging. Whoever wants their identity on the record signs it themselves.
+      return attestAiLocally(String(args.challengeId ?? ""), client, {
+        ...(typeof args.seed === "number" ? { seed: args.seed } : {}),
+        ...(typeof args.steps === "number" ? { steps: args.steps } : {}),
+        ...(Array.isArray(args.values) ? { values: args.values as number[] } : {}),
+      });
 
     case "rarext_anchor":
       return client.anchor();
