@@ -29,6 +29,7 @@ import {
   verifyCandidates,
   verifyGenerativeReplay,
 } from "@rarext/core";
+import { requireFiniteSeed, requireSteps, requireValues } from "./validate.ts";
 import type {
   AttestationBinding,
   AnnouncementDocumentCache,
@@ -552,7 +553,7 @@ export function selfPublishBounded(
   const createdAt = input.createdAt ?? new Date().toISOString();
   const app = "ai-bounded";
   const challengeId = input.challenge.id;
-  const body: BoundedBody = { values: input.values };
+  const body: BoundedBody = { values: requireValues(input.values) };
   const artifact: Artifact = {
     app,
     kind: "ai.bounded",
@@ -632,10 +633,14 @@ export function selfPublishGenerative(
   const createdAt = input.createdAt ?? new Date().toISOString();
   const app = "ai-generative";
   const challengeId = input.challenge.id;
-  const steps = input.steps ?? (input.challenge.spec as { steps?: number }).steps ?? 0;
+  // Validated before anything is computed or signed: a record with a fractional
+  // gate count or an output generated from a NaN seed is not a weak claim, it is
+  // a claim nobody can use.
+  const steps = requireSteps(input.steps ?? (input.challenge.spec as { steps?: number }).steps ?? 0);
+  const seed = requireFiniteSeed(input.seed);
 
   // The agent runs the model itself — the output is computed, never claimed.
-  const output = generate(input.model, input.seed, steps);
+  const output = generate(input.model, seed, steps);
   const body: GenerativeBody = { model: input.model, seed: input.seed, output };
   const artifact: Artifact = {
     app,

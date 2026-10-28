@@ -94,3 +94,25 @@ test("a reconstruction OUTSIDE the bound is refused, however well it is attested
     `the attestation carries the distance that made the claim false (${made.attestation.metricValue} > ${bound})`,
   );
 });
+
+test("the SDK refuses a reconstruction it cannot carry, before signing anything", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const call = (values: unknown) =>
+    selfPublishBounded(signer, {
+      author: "resident",
+      title: "nonsense",
+      values: values as number[],
+      challenge: challenge as never,
+      semantics: semantics as never,
+      binding,
+      createdAt: "2026-10-28T00:00:00.000Z",
+    });
+
+  assert.throws(() => call([1, 2, Number.NaN]), /array of finite numbers/, "NaN is a number that is not one");
+  assert.throws(() => call([1, "2"]), /array of finite numbers/);
+  assert.throws(() => call(3), /array of finite numbers/);
+  // A REAL oversized array, not a fake one: an object with a `length` property
+  // would trip the array check and prove nothing about the cap it claims to test.
+  const oversized = new Array<number>(1_048_577).fill(0);
+  assert.throws(() => call(oversized), /must not exceed/, "the cap is on length, and it is core's number");
+});

@@ -125,3 +125,36 @@ test("an output that is not the model's is refused, however well it is attested"
 function generatedOutput(publication: { artifact: { body: unknown } }): string {
   return (publication.artifact.body as { output: string }).output;
 }
+
+test("the SDK refuses to make a record with nonsense in it", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const call = (overrides: Record<string, unknown>) =>
+    selfPublishGenerative(signer, {
+      author: "resident",
+      title: "nonsense",
+      model: model as never,
+      seed,
+      challenge: challenge as never,
+      semantics: semantics as never,
+      binding,
+      createdAt: "2026-10-28T00:00:00.000Z",
+      ...overrides,
+    } as never);
+
+  // Each of these was ACCEPTED before this boundary existed, and each produced a
+  // signed record with the nonsense field visible in it.
+  assert.throws(() => call({ steps: -3 }), /steps must be a non-negative integer/, "a negative gate count is not a run");
+  assert.throws(() => call({ steps: 2.5 }), /steps must be a non-negative integer/, "nor is a fractional one");
+  assert.throws(() => call({ seed: Number.NaN }), /seed must be a finite number/, "and a NaN seed produced an output, which is worse than refusing");
+  assert.throws(() => call({ seed: "42" }), /seed must be a finite number/, "a string seed is not a seed");
+  assert.throws(
+    () => call({ steps: 1_000_000_000 }),
+    /must not exceed/,
+    "an enormous step count would materialise gigabytes from a model: a denial of service wearing the shape of a parameter",
+  );
+
+  // The boundary is not a blanket: zero steps is a legitimate (if useless) run,
+  // and the smallest real one still works.
+  const zero = call({ steps: 0 });
+  assert.equal(zero.attestation.gateCount, 0);
+});
