@@ -3,10 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { canonicalize } from "../../../packages/core/src/index.ts";
 
 import {
+  attestGenerativeRun,
   generate,
   isGenerativeBody,
   isGenerativeMedia,
   isGenerativeSpec,
+  modelDigestOf,
   renderRaster,
   MAX_GENERATIVE_OUTPUT_LENGTH,
   MAX_GENERATIVE_STEPS,
@@ -42,8 +44,9 @@ export {
 };
 export type { GenerativeBody, GenerativeSpec, XorshiftModel };
 
+/** The registry's binding to core's model digest (one implementation). */
 export function modelDigest(model: XorshiftModel): string {
-  return createHash("sha256").update(canonicalize(model)).digest("hex");
+  return modelDigestOf(model, sha256Of);
 }
 
 /**
@@ -55,26 +58,6 @@ export function modelDigest(model: XorshiftModel): string {
  * about the text being good. Larger model classes slot in later through the
  * `bounded` representation kind; this path proves the generative plumbing.
  */
-
-/**
- * Does the rendition in this body hold up against the commitment? `null` means
- * no rendition was shipped. A malformed one throws: a shape that cannot be
- * checked must not be attested. A rendition whose raster does not re-derive
- * from the committed model and seed returns false — it is not this model's
- * picture, whatever the blob beside it happens to contain.
- */
-function generativeRenditionHolds(body: GenerativeBody): boolean | null {
-  if (body.media === undefined) return null;
-
-  if (!isGenerativeMedia(body.media)) {
-    throw new Error(
-      "ai.generative media must be a committed rendition: { mediaType: image/png, rule, blob, raster, size, bytes }",
-    );
-  }
-
-  const raster = renderRaster(body.model, body.seed, body.media.size);
-  return createHash("sha256").update(raster).digest("hex") === body.media.raster;
-}
 
 const GENERATIVE_APP = "ai-generative";
 const GENERATIVE_KIND = "ai.generative";
@@ -105,6 +88,10 @@ export function verifyGenerativeReplay(
   return { ...replay, digest: modelDigest(body.model) };
 }
 
+/** The registry's sha256: node's, over text or bytes. */
+const sha256Of = (value: string | Uint8Array): string =>
+  createHash("sha256").update(value).digest("hex");
+
 export function generativeVerifier(
   semantics: SemanticsRegistry | null,
 ): AppVerifier {
@@ -131,50 +118,33 @@ export function generativeVerifier(
       }
 
       const body = artifact.body;
-      const replay = verifyGenerativeReplay(body, challenge.spec);
 
-      // An artifact may ship a picture of its own output. That picture is a
-      // function of the commitment, so the serving side has to check it too:
-      // otherwise the attestation blesses a byte count while the image beside
-      // it is anything at all. A malformed rendition is refused outright; a
-      // rendition that is not the function of its own model makes the claim
-      // false, because the claim covers the rendition as well as the text.
-      const rendition = generativeRenditionHolds(body);
-
+      // The replay, the rendition check and the trace hash all happen inside
+      // core's assembly now — one implementation, shared with any resident that
+      // runs the same model. The registry keeps what is its business: who it is,
+      // and which semantics this challenge binds.
       const bound = semantics
         ? semanticsForChallenge(semantics, challenge)
         : null;
 
-      const trace = {
-        modelDigest: replay.digest,
-        seed: body.seed,
-        steps: challenge.spec.steps,
-        expected: replay.expected,
-      };
-
-      const attestation: Attestation = {
-        id: randomUUID(),
-        verifier: GENERATIVE_VERIFIER_MANIFEST.algorithm,
+      // The assembly is core's, so a resident replaying the same model attests
+      // the same run. What the registry supplies is its own identity (name and
+      // manifest), its semantics binding, its clock and a fresh id.
+      const attestation = attestGenerativeRun({
+        artifact,
+        body,
+        spec: challenge.spec,
         app: GENERATIVE_APP,
         challengeId: challenge.id,
-        taskId: challenge.id,
-        circuitHash: hashValue(artifact),
-        traceHash: hashValue(trace),
-        correct: replay.correct && rendition !== false,
-        score: replay.correct && rendition !== false ? 100 : 0,
-        gateCount: challenge.spec.steps,
-        semanticsId: bound?.id ?? `${GENERATIVE_APP}/${challenge.id}`,
-        semanticsVersion: bound?.version ?? 1,
-        semanticsHash: bound ? hashValue(bound) : "",
-        claimKind: bound?.claimKind ?? "satisfies",
-        representation: "generative",
-        scope: null,
-        proofKind: "recomputable",
-        signatureAlgorithm: "ecdsa-p256",
-        cryptoProfile: "classical",
-        verifierHash: generativeVerifierHash(),
+        verifier: GENERATIVE_VERIFIER_MANIFEST.algorithm,
+        verifierManifest: GENERATIVE_VERIFIER_MANIFEST,
+        bound: bound
+          ? { id: bound.id, version: bound.version, claimKind: bound.claimKind }
+          : null,
+        id: randomUUID(),
         createdAt: new Date().toISOString(),
-      };
+        sha256: sha256Of,
+      });
 
       return attestation;
     },

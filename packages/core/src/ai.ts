@@ -1,4 +1,5 @@
-import type { Artifact, Challenge } from "./types.ts";
+import type { Artifact, Attestation, Challenge, ClaimKind } from "./types.ts";
+import { canonicalize } from "./canonical.ts";
 
 /**
  * The pure AI representation math every surface shares: the API verifiers,
@@ -522,4 +523,107 @@ function clampByte(value: number): number {
   if (value <= 0) return 0;
   if (value >= 255) return 255;
   return Math.round(value);
+}
+
+/**
+ * A sha256, injected: core keeps no crypto dependency. It accepts bytes as well
+ * as strings because a rendition is hashed as a raster, not as text.
+ */
+export type HashFn = (value: string | Uint8Array) => string;
+
+/** The digest a committed model is bound by — the one both sides compute. */
+export function modelDigestOf(model: XorshiftModel, sha256: HashFn): string {
+  return sha256(canonicalize(model));
+}
+
+/**
+ * Does the rendition in this body hold up against the commitment? `null` means
+ * no rendition was shipped. A malformed one throws: a shape that cannot be
+ * checked must not be attested. A rendition whose raster does not re-derive
+ * from the committed model and seed returns false — it is not this model's
+ * picture, whatever the blob beside it happens to contain.
+ */
+export function generativeRenditionHolds(body: GenerativeBody, sha256: HashFn): boolean | null {
+  if (body.media === undefined) return null;
+
+  if (!isGenerativeMedia(body.media)) {
+    throw new Error(
+      "ai.generative media must be a committed rendition: { mediaType: image/png, rule, blob, raster, size, bytes }",
+    );
+  }
+
+  const raster = renderRaster(body.model, body.seed, body.media.size);
+  return sha256(raster) === body.media.raster;
+}
+
+/**
+ * Attest a generative run — the record of what the replay proved.
+ *
+ * This lived inside the registry's verifier, so a resident could replay a
+ * generative claim and never make one: "AI lives on RAREXT" stopped at the
+ * registry's door for exactly the artifacts the vision is about. The replay was
+ * always pure — a committed model, a seed, a claimed output, recomputed — so the
+ * assembly is here, where the replay is.
+ *
+ * What the registry used to read from its surroundings is a parameter: the
+ * verifier's NAME and the hash of ITS manifest (an agent attesting as itself
+ * says so, and is hashed as itself), the semantics binding, the clock, the id
+ * and the hash function. `representation` and `claimKind` describe what was
+ * proved, and the claim covers the rendition as well as the text: an artifact
+ * that shipped a picture of its own output is refused when the picture is not
+ * that model's, because otherwise the attestation would bless one field while
+ * the field beside it was anything at all.
+ */
+export function attestGenerativeRun(input: {
+  artifact: Artifact;
+  body: GenerativeBody;
+  spec: GenerativeSpec;
+  /** The app whose rule was replayed, and the challenge this run answers. */
+  app: string;
+  challengeId: string;
+  /** Who is asserting this: the registry, or the agent that ran it. */
+  verifier: string;
+  /** The verifier's own manifest, hashed as its identity. */
+  verifierManifest: unknown;
+  /** The semantics binding, or null when there is none to bind. */
+  bound: { id: string; version: number; claimKind: ClaimKind } | null;
+  id: string;
+  createdAt: string;
+  sha256: HashFn;
+}): Attestation {
+  const replay = verifyGenerativeReplay(input.body, input.spec);
+  const digest = modelDigestOf(input.body.model, input.sha256);
+  const rendition = generativeRenditionHolds(input.body, input.sha256);
+  const correct = replay.correct && rendition !== false;
+
+  const trace = {
+    modelDigest: digest,
+    seed: input.body.seed,
+    steps: input.spec.steps,
+    expected: replay.expected,
+  };
+
+  return {
+    id: input.id,
+    verifier: input.verifier,
+    app: input.app,
+    challengeId: input.challengeId,
+    taskId: input.challengeId,
+    circuitHash: input.sha256(canonicalize(input.artifact)),
+    traceHash: input.sha256(canonicalize(trace)),
+    correct,
+    score: correct ? 100 : 0,
+    gateCount: input.spec.steps,
+    semanticsId: input.bound?.id ?? `ai-generative/${input.challengeId}`,
+    semanticsVersion: input.bound?.version ?? 1,
+    semanticsHash: input.bound ? input.sha256(canonicalize(input.bound)) : "",
+    claimKind: input.bound?.claimKind ?? "satisfies",
+    representation: "generative",
+    scope: null,
+    proofKind: "recomputable",
+    signatureAlgorithm: "ecdsa-p256",
+    cryptoProfile: "classical",
+    verifierHash: input.sha256(canonicalize(input.verifierManifest)),
+    createdAt: input.createdAt,
+  } as Attestation;
 }

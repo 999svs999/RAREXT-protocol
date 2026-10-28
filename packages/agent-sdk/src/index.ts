@@ -13,9 +13,11 @@ import { dirname, join } from "node:path";
 
 import {
   assembleBundle,
+  attestGenerativeRun,
   attestRun,
   canonicalize,
   cidV1,
+  generate,
   foldAnnouncements,
   planSeedUnion,
   publicationFromSignedInput,
@@ -64,6 +66,7 @@ import type {
   DelegationScope,
   InputValues,
   KeyRotation,
+  XorshiftModel,
   KeyRotationPayload,
   LeaderboardEntry,
   OperatorAttestation,
@@ -467,6 +470,137 @@ export interface SelfPublishInput {
  * borrow the registry's name. The bundle is then built from that publication by
  * the same `buildBundle`, so the artifact it makes is one anybody can verify.
  */
+
+export interface SelfPublishGenerativeInput {
+  author: string;
+  title: string;
+  body?: string;
+  /** The committed model, the seed, and how many tokens to generate. */
+  model: XorshiftModel;
+  seed: number;
+  /**
+   * How many tokens to generate. Defaults to what the challenge asks for — an
+   * agent that generates a different number has answered a different question,
+   * and its claim will be refused.
+   */
+  steps?: number;
+  /**
+   * The task this run answers, carried INTO the bundle. A claim replayed by a
+   * stranger needs the challenge as much as the output: without it there is
+   * nothing to check the output AGAINST, and the verdict is "challenge not in
+   * bundle" rather than a pass.
+   */
+  challenge: Challenge;
+  binding: { id: string; version: number; claimKind: ClaimKind };
+  /**
+   * The semantics record this claim is bound by, carried INTO the bundle. A
+   * claim whose semantics travel with it can be replayed by a stranger; one that
+   * does not is a claim about a rule the reader has to find elsewhere.
+   */
+  semantics?: Semantics[];
+  visibility?: Visibility;
+  createdAt?: string;
+}
+
+/**
+ * Make AND prove an AI output: run the committed model here, attest the run
+ * under the agent's own verifier name, sign it, and assemble the bundle.
+ *
+ * The circuit path (`selfPublish`) proves a computation; this proves a
+ * GENERATION — the artifact the vision is actually about. The agent does not ask
+ * anyone what the model produced: it runs the committed model itself and the
+ * attestation records what the replay found. The verifier manifest is the
+ * agent's own, hashed as its identity, so a stranger can see which rule was run
+ * rather than a borrowed name.
+ */
+export function selfPublishGenerative(
+  signer: AgentSigner,
+  input: SelfPublishGenerativeInput,
+): { attestation: Attestation; publication: Publication; bundle: Bundle; payload: PublicationPayload } {
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  const app = "ai-generative";
+  const challengeId = input.challenge.id;
+  const steps = input.steps ?? (input.challenge.spec as { steps?: number }).steps ?? 0;
+
+  // The agent runs the model itself — the output is computed, never claimed.
+  const output = generate(input.model, input.seed, steps);
+  const body: GenerativeBody = { model: input.model, seed: input.seed, output };
+  const artifact: Artifact = {
+    app,
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body,
+  };
+
+  const attestation = attestGenerativeRun({
+    artifact,
+    body,
+    spec: { steps } as GenerativeSpec,
+    app,
+    challengeId,
+    // The name and manifest describe the RULE that was run, not who ran it —
+    // an agent replaying the committed model is running `xorshift32-replay`
+    // exactly as the registry does, and saying otherwise would make its claim
+    // unverifiable. WHO ran it is the signature, which is not borrowed.
+    verifier: "xorshift32-replay",
+    verifierManifest: { app, version: 1, algorithm: "xorshift32-replay", representation: "generative" },
+    bound: input.binding,
+    id: randomUUID(),
+    createdAt,
+    sha256: (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex"),
+  });
+
+  const payload = signer.artifactPayload({
+    author: input.author,
+    title: input.title,
+    ...(input.body === undefined ? {} : { body: input.body }),
+    artifact,
+    challengeId,
+    ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+    createdAt,
+  });
+
+  const publication = publicationFromSignedInput(
+    {
+      author: payload.author!,
+      title: payload.title!,
+      body: payload.body!,
+      app: payload.app!,
+      challengeId: payload.challengeId!,
+      artifact: payload.artifact!,
+      parentId: payload.parentId ?? null,
+      source: payload.source ?? null,
+      createdAt: payload.createdAt!,
+      authorKey: payload.authorKey!,
+      verified: true,
+      signature: signer.sign(payload),
+      nonce: payload.nonce ?? null,
+      visibility: payload.visibility ?? "public",
+    },
+    {
+      attestation,
+      verification: "recomputed",
+      attestationKeyId: null,
+      attestationSignature: null,
+      challenge: input.challenge,
+      suite: signer.suite,
+      id: randomUUID(),
+    },
+  );
+
+  return {
+    attestation,
+    publication,
+    bundle: buildBundle([publication], {
+      challenges: [input.challenge],
+      ...(input.semantics === undefined ? {} : { semantics: input.semantics }),
+      createdAt,
+    }),
+    payload,
+  };
+}
+
 export function selfPublish(
   signer: AgentSigner,
   input: SelfPublishInput,
