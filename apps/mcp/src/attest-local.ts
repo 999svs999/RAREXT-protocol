@@ -167,3 +167,50 @@ export function supportsAttestLocal(app: string): boolean {
 }
 
 export { isGenerativeBody, isBoundedBody, canonicalize };
+
+/**
+ * Turn untrusted MCP arguments into the typed input, refusing what cannot be
+ * meant rather than quietly dropping it.
+ *
+ * This boundary is where a client's JSON becomes something a proof is made from,
+ * so it is the part most worth holding still: a `seed` that arrives as the string
+ * "7", or `values` that arrives as a number instead of a list, must not be
+ * silently ignored — an agent that asked for a specific run and got a different
+ * one has been lied to by omission. Anything present but unusable refuses by name,
+ * and the server's dispatch is a one-liner through this function so the coercion
+ * under test is the coercion in production.
+ */
+export async function attestLocalFromArgs(
+  challengeId: string,
+  registry: { challenge(id: string): Promise<Challenge> },
+  args: Record<string, unknown>,
+): Promise<LocalAttestation> {
+  // `async` for a reason that is not stylistic: a validation failure must REJECT,
+  // not throw before the promise exists. A caller awaiting this (or chaining
+  // .catch) would otherwise get an unhandled synchronous throw — the boundary
+  // refusing in a way its own signature says it cannot.
+  const input: AttestLocalInput = {};
+
+  if (args.seed !== undefined) {
+    if (typeof args.seed !== "number" || !Number.isFinite(args.seed)) {
+      throw new Error("seed must be a finite number");
+    }
+    input.seed = args.seed;
+  }
+
+  if (args.steps !== undefined) {
+    if (typeof args.steps !== "number" || !Number.isInteger(args.steps) || args.steps < 0) {
+      throw new Error("steps must be a non-negative integer");
+    }
+    input.steps = args.steps;
+  }
+
+  if (args.values !== undefined) {
+    if (!Array.isArray(args.values) || !args.values.every((value) => typeof value === "number" && Number.isFinite(value))) {
+      throw new Error("values must be an array of finite numbers");
+    }
+    input.values = args.values as number[];
+  }
+
+  return attestAiLocally(challengeId, registry, input);
+}

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { Challenge } from "../../../packages/core/src/index.ts";
 import { generate } from "../src/generative.ts";
-import { attestAiLocally } from "../../mcp/src/attest-local.ts";
+import { attestAiLocally, attestLocalFromArgs } from "../../mcp/src/attest-local.ts";
 
 /**
  * The MCP verb that MAKES an artifact instead of judging one.
@@ -120,4 +120,39 @@ test("a bounded challenge without values, and an app this verb does not serve, b
     () => attestAiLocally("logic-1", registryFor(logic)),
     /this verb attests ai-generative and ai-bounded/,
   );
+});
+
+test("the argument boundary refuses what cannot be meant, by name", async () => {
+  const registry = registryFor(generativeChallenge);
+
+  // A seed arriving as a string is not a seed. Silently ignoring it would run a
+  // DIFFERENT generation than the caller asked for, and report it as theirs.
+  await assert.rejects(
+    () => attestLocalFromArgs("gen-1", registry, { seed: "7" }),
+    /seed must be a finite number/,
+  );
+  await assert.rejects(
+    () => attestLocalFromArgs("gen-1", registry, { seed: Number.NaN }),
+    /seed must be a finite number/,
+  );
+  await assert.rejects(
+    () => attestLocalFromArgs("gen-1", registry, { steps: 1.5 }),
+    /steps must be a non-negative integer/,
+  );
+  await assert.rejects(
+    () => attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values: 3 }),
+    /values must be an array of finite numbers/,
+  );
+  await assert.rejects(
+    () => attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values: [1, 2, Number.NaN] }),
+    /values must be an array of finite numbers/,
+  );
+});
+
+test("a well-formed argument set goes straight through the boundary", async () => {
+  const made = await attestLocalFromArgs("gen-1", registryFor(generativeChallenge), { seed: 5, steps: 4 });
+  const body = made.artifact.body as { seed: number; output: string };
+  assert.equal(body.seed, 5);
+  assert.equal(body.output, generate(model, 5, 4), "the coerced values are the ones that ran");
+  assert.equal(made.attestation.gateCount, 4);
 });

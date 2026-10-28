@@ -777,6 +777,15 @@ if (process.argv.includes("--self-test")) {
   if (!caughtDispatch) fail("self-test: the checker accepted a registered-but-undispatched MCP verb");
   caught = caught && caughtDispatch;
 
+  // And a server that dispatches AROUND the tested boundary — the case doing its
+  // own coercion, which no test would ever reach — must be reported.
+  const aroundBoundary = serverReal.replace("attestLocalFromArgs(", "attestAiLocally(");
+  const beforeAround = failures;
+  checkAiVerificationDoc(undefined, undefined, { mcpServer: aroundBoundary });
+  const caughtAround = failures > beforeAround;
+  if (!caughtAround) fail("self-test: the checker accepted a dispatch that bypasses the tested boundary");
+  caught = caught && caughtAround;
+
   // And a registry builder that keeps its own assembly — the drift the one shared
   // function exists to prevent — must be reported.
   const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
@@ -2830,6 +2839,14 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     }
     if (!/case "rarext_attest_local":/.test(server)) {
       fail("the verb is registered but never dispatched — a tool that answers nothing");
+    }
+    // And the dispatch must go THROUGH the tested coercion: an argument boundary
+    // inlined in the case would be the one code path no test ever runs.
+    if (!/attestLocalFromArgs\(/.test(server)) {
+      fail("the server must dispatch through the tested argument boundary, not around it");
+    }
+    if (!/attestLocalFromArgs\(/.test(module ?? "")) {
+      fail("the argument boundary must live in the tested module");
     }
   }
 

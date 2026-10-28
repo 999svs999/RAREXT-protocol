@@ -17,7 +17,7 @@ import {
   removeAgentKeyfile,
   writeAgentKeyfile,
 } from "../../../packages/agent-sdk/src/index.ts";
-import { attestAiLocally } from "./attest-local.ts";
+import { attestLocalFromArgs } from "./attest-local.ts";
 import { verifyAiLocally } from "./verify-ai.ts";
 import {
   storageAudit,
@@ -688,11 +688,9 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
       // The other half of local AI: the artifact is MADE here and proved here,
       // with no key and nothing published — an AI contributing rather than
       // judging. Whoever wants their identity on the record signs it themselves.
-      return attestAiLocally(String(args.challengeId ?? ""), client, {
-        ...(typeof args.seed === "number" ? { seed: args.seed } : {}),
-        ...(typeof args.steps === "number" ? { steps: args.steps } : {}),
-        ...(Array.isArray(args.values) ? { values: args.values as number[] } : {}),
-      });
+      // The argument coercion lives in the module, under test, rather than in
+      // this case where only a text check would ever see it.
+      return attestLocalFromArgs(String(args.challengeId ?? ""), client, args);
 
     case "rarext_anchor":
       return client.anchor();
