@@ -1,9 +1,11 @@
 import { canonicalize } from "./canonical.ts";
 import { cidV1 } from "./content.ts";
 import type { Sha256 } from "./digest.ts";
-import { publicationLeaf } from "./leaf.ts";
+import { PUBLICATION_LEAF_VERSION, publicationLeaf } from "./leaf.ts";
 import { merkleRoot } from "./merkle.ts";
 import type { Anchor, Challenge, Publication, Semantics } from "./types.ts";
+
+export const BUNDLE_VERSION = 1;
 
 export interface BundleManifest {
   version: number;
@@ -500,4 +502,78 @@ export async function verifyCandidates(
       )
       .join("\n  ");
   return { status: "refused", refusals, message, candidates: plan.nominations.length };
+}
+
+/**
+ * Assemble a bundle from publications — the BUILDING half of the rule whose
+ * verifying half is `verifyBundleShape` above.
+ *
+ * They belong together because they are the same rule read in two directions: a
+ * leaf, a Merkle root, a manifest that lists those leaves. The registry's own
+ * builder had the only copy, so an agent with no server could verify a bundle and
+ * never make one — which is half a protocol. Now the assembly lives here, the
+ * registry delegates to it, and a resident builds the same artifact offline that
+ * the registry would have built for it.
+ *
+ * When an anchor is supplied its root must equal the computed one — asserted here
+ * rather than discovered later by whoever fetched the bundle: an anchor covering
+ * different publications is a bundle that cannot verify, and saying so at
+ * assembly names both numbers while they are still in hand.
+ */
+export function assembleBundle(input: {
+  publications: Publication[];
+  anchors?: Anchor[];
+  challenges?: Challenge[];
+  semantics?: Semantics[];
+  /** Which anchor the manifest names; defaults to the first, if any. */
+  anchor?: Anchor | null;
+  leafVersion?: number;
+  /** When the bundle was made. Injected: core reads no clock. */
+  createdAt: string;
+  /** The bundle format version; defaults to the current one. */
+  bundleVersion?: number;
+  sha256: Sha256;
+}): Bundle {
+  const publications = input.publications;
+  const anchors = input.anchors ?? [];
+  const challenges = input.challenges ?? [];
+  const semantics = input.semantics ?? [];
+  const leafVersion = input.leafVersion ?? PUBLICATION_LEAF_VERSION;
+  const anchor = input.anchor ?? anchors[0] ?? null;
+
+  const leaves = publications.map((publication) =>
+    publicationLeaf(publication, input.sha256, leafVersion),
+  );
+  const root = merkleRoot(leaves, input.sha256);
+
+  if (anchor && anchor.root !== root) {
+    throw new Error(
+      `the anchor covers root ${anchor.root}, but these publications rebuild ${root}`,
+    );
+  }
+
+  return {
+    manifest: {
+      version: input.bundleVersion ?? BUNDLE_VERSION,
+      root,
+      leafVersion,
+      anchorId: anchor?.id ?? null,
+      anchorRoot: anchor?.root ?? null,
+      createdAt: input.createdAt,
+      publications: publications.map((publication, index) => ({
+        id: publication.id,
+        leaf: leaves[index]!,
+      })),
+      counts: {
+        publications: publications.length,
+        anchors: anchors.length,
+        challenges: challenges.length,
+        semantics: semantics.length,
+      },
+    },
+    publications,
+    anchors,
+    challenges,
+    semantics,
+  };
 }

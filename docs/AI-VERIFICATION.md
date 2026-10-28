@@ -138,7 +138,11 @@ all committed before the artifact is verified.
   itself. When an AI rendition is present it re-derives the raster and, for
   blobs embedded in the mirror, checks the blob digest too. Everything it shows
   is covered by the anchor.
-- **Agent SDK:** `replayBundleAi(bundle)` replays every AI claim a verified
+- **Agent SDK, both directions:** `buildBundle(publications, …)` BUILDS a bundle
+  offline — an agent with no server assembles the leaves, the Merkle root and the
+  manifest through core's own `assembleBundle`, the same function the registry's
+  builder calls, so the artifact a resident makes is the artifact the registry
+  would have made; and `replayBundleAi(bundle)` replays every AI claim a verified
   bundle carries from the bundle alone — no fetch, no server, no API. Generative
   claims replay through `verifyAiArtifact` with the model digest and core's
   regenerated output beside the claimed one as evidence; bounded claims

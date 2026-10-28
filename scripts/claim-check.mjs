@@ -740,6 +740,16 @@ if (process.argv.includes("--self-test")) {
   const caughtResidentAi = failures > beforeResidentAi;
   if (!caughtResidentAi) fail("self-test: the checker accepted an AI doc that no longer names the resident demo");
   caught = caught && caughtResidentAi;
+  // And a registry builder that keeps its own assembly — the drift the one shared
+  // function exists to prevent — must be reported.
+  const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+  const doctoredBuilder = builderReal.replace("return assembleBundle({", "return {");
+  const beforeBuilder = failures;
+  checkAiVerificationDoc(undefined, undefined, { registryBuilder: doctoredBuilder });
+  const caughtBuilder = failures > beforeBuilder;
+  if (!caughtBuilder) fail("self-test: the checker accepted a registry builder with its own assembly");
+  caught = caught && caughtBuilder;
+
   assertChanged(originalAiDoc, noResidentAiDoc, "ai-verification-resident");
   assertChanged(originalAiDoc, noReplayAiDoc, "ai-verification-replay");
   assertChanged(originalSemanticsDoc, doctoredSemanticsDoc, "semantics-doc");
@@ -2527,7 +2537,7 @@ function checkRepairRecord(record) {
  * verifier module routes. Every published name/number must match the code that
  * implements it.
  */
-function checkAiVerificationDoc(docOverride, appOverride) {
+function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
   console.log(`AI verification doc (docs/AI-VERIFICATION.md${docOverride ? ", DOCTORED" : ""} vs code):`);
   const doc = docOverride ?? readFileSync(new URL("docs/AI-VERIFICATION.md", root), "utf8");
   const app = appOverride ?? readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
@@ -2704,6 +2714,28 @@ function checkAiVerificationDoc(docOverride, appOverride) {
   // publication yielding a correct verdict with evidence, and a forged output
   // next to them failing with the mismatch visible. This is the doc's trust
   // model executed rather than described.
+  // And the doc's other direction: a resident can BUILD the bundle it replays.
+  // Held to the tree — the SDK exports the builder, assembles through core, and
+  // the registry's own builder delegates to the same assembly, or the two drift.
+  if (/buildBundle\(publications/.test(doc)) {
+    const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+    if (!/export function buildBundle\(/.test(sdkSource)) {
+      fail("AI-VERIFICATION.md says a resident can build a bundle, but the SDK does not export buildBundle");
+    }
+    if (!/return assembleBundle\(\{/.test(sdkSource)) {
+      fail("the SDK's builder must assemble through core's function, not a copy of the rule");
+    }
+    const coreBundleSource = readFileSync(new URL("packages/core/src/bundle.ts", root), "utf8");
+    if (!/export function assembleBundle\(/.test(coreBundleSource)) {
+      fail("the assembly must live in core, where the verifier already is");
+    }
+    const registryBuilder =
+      sources.registryBuilder ?? readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+    if (!/return assembleBundle\(\{/.test(registryBuilder)) {
+      fail("the registry's builder must delegate to the same assembly, or the two can drift");
+    }
+  }
+
   if (!doc.includes("replayBundleAi")) {
     fail("AI-VERIFICATION.md no longer documents the SDK's offline bundle replay (replayBundleAi)");
   }

@@ -9,6 +9,7 @@ import {
   type AnnouncementIdentity,
   type AnnouncementVerifier,
   type BundleSeed,
+  assembleBundle,
 } from "../../../packages/core/src/index.ts";
 import type {
   Bundle,
@@ -69,35 +70,21 @@ export function buildBundle(
     .map((id) => store.getPublication(id))
     .filter((publication): publication is Publication => publication !== null);
 
-  const leafVersion = anchor.leafVersion ?? 1;
-  const leaves = publications.map((publication) =>
-    publicationLeaf(publication, leafVersion),
-  );
-
-  return {
-    manifest: {
-      version: BUNDLE_VERSION,
-      root: anchor.root,
-      leafVersion,
-      anchorId: anchor.id,
-      anchorRoot: anchor.root,
-      createdAt: anchor.createdAt,
-      publications: publications.map((publication, index) => ({
-        id: publication.id,
-        leaf: leaves[index]!,
-      })),
-      counts: {
-        publications: publications.length,
-        anchors: anchors.length,
-        challenges: challenges.length,
-        semantics: semantics.length,
-      },
-    },
+  // The assembly — leaves, root, manifest — lives in core, because the VERIFIER
+  // lives there and the two are one rule read in two directions. This function
+  // keeps only what is the registry's business: choosing which anchored batch to
+  // serve.
+  return assembleBundle({
     publications,
     anchors,
     challenges,
     semantics,
-  };
+    anchor,
+    leafVersion: anchor.leafVersion ?? 1,
+    createdAt: anchor.createdAt,
+    sha256: nodeSha256,
+    bundleVersion: BUNDLE_VERSION,
+  });
 }
 
 export function verifyBundle(bundle: Bundle): BundleVerification {

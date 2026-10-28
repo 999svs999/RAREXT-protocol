@@ -96,6 +96,7 @@ export type {
 } from "./bundle.ts";
 export {
   MAX_BUNDLE_RESPONSE_BYTES,
+  assembleBundle,
   pinGroups,
   planSeedUnion,
   readBundleResponseBytes,

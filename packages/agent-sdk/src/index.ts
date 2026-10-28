@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  assembleBundle,
   canonicalize,
   cidV1,
   foldAnnouncements,
@@ -421,6 +422,42 @@ export interface BundleAiReplay {
  * reports core's own error, and a bundle that claims nothing AI comes back
  * with an empty list.
  */
+
+/**
+ * Build a bundle offline: the publishing half of the rule the SDK already
+ * verifies.
+ *
+ * Until this, an agent with no server could verify a bundle and replay its AI
+ * claims, and could not MAKE one — half a protocol. The assembly is core's (the
+ * same function the registry's own builder calls), the hash is node's, and the
+ * createdAt is the caller's clock because a bundle's creation time is not part of
+ * its root: it records when the artifact was made, not what it says.
+ */
+export function buildBundle(
+  publications: Publication[],
+  options: {
+    anchors?: Anchor[];
+    challenges?: Challenge[];
+    semantics?: Semantics[];
+    anchor?: Anchor | null;
+    leafVersion?: number;
+    createdAt?: string;
+    bundleVersion?: number;
+  } = {},
+): Bundle {
+  return assembleBundle({
+    publications,
+    ...(options.anchors === undefined ? {} : { anchors: options.anchors }),
+    ...(options.challenges === undefined ? {} : { challenges: options.challenges }),
+    ...(options.semantics === undefined ? {} : { semantics: options.semantics }),
+    ...(options.anchor === undefined ? {} : { anchor: options.anchor }),
+    ...(options.leafVersion === undefined ? {} : { leafVersion: options.leafVersion }),
+    ...(options.bundleVersion === undefined ? {} : { bundleVersion: options.bundleVersion }),
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    sha256: nodeSha256,
+  });
+}
+
 export function replayBundleAi(bundle: Bundle): BundleAiReplay {
   const challenges = new Map(
     (bundle.challenges ?? []).map((challenge) => [challenge.id, challenge] as const),
