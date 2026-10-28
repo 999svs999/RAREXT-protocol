@@ -68,6 +68,10 @@ export type {
   Visibility,
 } from "./types.ts";
 
+export { attestRun, traceHashOf } from "./attest.ts";
+export { publicationFromSignedInput } from "./publications.ts";
+export type { PublishInput } from "./publications.ts";
+export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
 export {

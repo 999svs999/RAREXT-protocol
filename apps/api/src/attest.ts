@@ -1,30 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { canonicalize, score, simulate } from "../../../packages/core/src/index.ts";
+import { attestRun } from "../../../packages/core/src/index.ts";
 import type {
   Attestation,
+  AttestationBinding,
   Circuit,
-  ClaimKind,
-  ClaimScope,
-  CryptoProfile,
-  ProofKind,
-  SignatureSuite,
   Task,
 } from "../../../packages/core/src/index.ts";
 
-const VERIFIER = process.env.RAREXT_VERIFIER ?? "rarext-v0";
+export type { AttestationBinding };
 
-export interface AttestationBinding {
-  semanticsId: string;
-  semanticsVersion: number;
-  semanticsHash: string;
-  claimKind: ClaimKind;
-  scope: ClaimScope | null;
-  verifierHash: string;
-  proofKind: ProofKind;
-  signatureAlgorithm: SignatureSuite;
-  cryptoProfile: CryptoProfile;
-}
+const VERIFIER = process.env.RAREXT_VERIFIER ?? "rarext-v0";
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -35,35 +21,16 @@ export function attest(
   task: Task,
   binding: AttestationBinding,
 ): Attestation {
-  const result = score(circuit, task);
-  const runs = task.cases.map((testCase) => simulate(circuit, testCase.inputs));
-
-  const trace = runs.map((run) => ({
-    outputs: run.outputs,
-    values: run.values,
-    settled: run.settled,
-    iterations: run.iterations,
-    trace: run.trace,
-  }));
-
-  return {
-    id: randomUUID(),
+  // The assembly is core's, so a resident running the same circuit attests the
+  // same run. What the registry supplies here is what is genuinely ITS business:
+  // the name it verifies under, its clock, and a fresh id.
+  return attestRun({
+    circuit,
+    task,
+    binding,
     verifier: VERIFIER,
-    taskId: task.id,
-    circuitHash: sha256(canonicalize(circuit)),
-    traceHash: sha256(canonicalize(trace)),
-    correct: result.correct,
-    score: result.score,
-    gateCount: result.gateCount,
-    semanticsId: binding.semanticsId,
-    semanticsVersion: binding.semanticsVersion,
-    semanticsHash: binding.semanticsHash,
-    claimKind: binding.claimKind,
-    scope: binding.scope,
-    verifierHash: binding.verifierHash,
-    proofKind: binding.proofKind,
-    signatureAlgorithm: binding.signatureAlgorithm,
-    cryptoProfile: binding.cryptoProfile,
+    id: randomUUID(),
     createdAt: new Date().toISOString(),
-  };
+    sha256,
+  });
 }

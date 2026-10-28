@@ -13,10 +13,12 @@ import { dirname, join } from "node:path";
 
 import {
   assembleBundle,
+  attestRun,
   canonicalize,
   cidV1,
   foldAnnouncements,
   planSeedUnion,
+  publicationFromSignedInput,
   readBundleResponseBytes,
   unresolvedIdentity,
   verifyAiArtifact,
@@ -25,6 +27,7 @@ import {
   verifyGenerativeReplay,
 } from "@rarext/core";
 import type {
+  AttestationBinding,
   AnnouncementDocumentCache,
   AnnouncementDocumentCacheEntry,
   AnnouncementEvent,
@@ -433,6 +436,102 @@ export interface BundleAiReplay {
  * createdAt is the caller's clock because a bundle's creation time is not part of
  * its root: it records when the artifact was made, not what it says.
  */
+
+export interface SelfPublishInput {
+  author: string;
+  title: string;
+  body?: string;
+  artifact: Artifact;
+  /** The run the agent performed itself — the thing being attested. */
+  circuit: Circuit;
+  task: Task;
+  binding: AttestationBinding;
+  visibility?: Visibility;
+  createdAt?: string;
+}
+
+/**
+ * Make AND prove: attest a run the agent performed, sign the record, and assemble
+ * a bundle — with no server anywhere.
+ *
+ * This is the write half of "AI lives on RAREXT" in one function. Until now the
+ * pieces existed apart: core could attest a run and assemble a bundle, the SDK
+ * could sign a payload, and the registry was the only place they met — so an
+ * agent with no server could replay the world's claims and contribute none of its
+ * own.
+ *
+ * The honesty of it rests on two choices. The attestation comes from core's
+ * `attestRun`, the same assembly the registry uses, so a resident's record and
+ * the registry's describe the same run the same way — and the verifier is named by
+ * the caller, because an agent attesting as itself should say so rather than
+ * borrow the registry's name. The bundle is then built from that publication by
+ * the same `buildBundle`, so the artifact it makes is one anybody can verify.
+ */
+export function selfPublish(
+  signer: AgentSigner,
+  input: SelfPublishInput,
+  options: { verifier?: string } = {},
+): { attestation: Attestation; publication: Publication; bundle: Bundle } {
+  const createdAt = input.createdAt ?? new Date().toISOString();
+
+  const attestation = attestRun({
+    circuit: input.circuit,
+    task: input.task,
+    binding: input.binding,
+    verifier: options.verifier ?? "resident",
+    id: randomUUID(),
+    createdAt,
+    sha256: (value: string) => createHash("sha256").update(value).digest("hex"),
+  });
+
+  const payload = signer.artifactPayload({
+    author: input.author,
+    title: input.title,
+    ...(input.body === undefined ? {} : { body: input.body }),
+    artifact: input.artifact,
+    challengeId: input.task.id,
+    ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+    createdAt,
+  });
+  const signature = signer.sign(payload);
+
+  // The non-null assertions are exact: `artifactPayload` sets author, title,
+  // body, app, challengeId, artifact, authorKey, createdAt and nonce
+  // unconditionally. The payload TYPE is loose because a payload read off the
+  // wire may lack them — a difference between what is built here and what is
+  // accepted from elsewhere, not an uncertainty about this object.
+  const publication = publicationFromSignedInput(
+    {
+      author: payload.author!,
+      title: payload.title!,
+      body: payload.body!,
+      app: payload.app!,
+      challengeId: payload.challengeId!,
+      artifact: payload.artifact!,
+      circuit: input.circuit,
+      parentId: payload.parentId ?? null,
+      source: payload.source ?? null,
+      createdAt: payload.createdAt!,
+      authorKey: payload.authorKey!,
+      verified: true,
+      signature,
+      nonce: payload.nonce ?? null,
+      visibility: payload.visibility ?? "public",
+    },
+    {
+      attestation,
+      verification: "recomputed",
+      attestationKeyId: null,
+      attestationSignature: null,
+      challenge: { id: input.task.id },
+      suite: signer.suite,
+      id: randomUUID(),
+    },
+  );
+
+  return { attestation, publication, bundle: buildBundle([publication], { createdAt }) };
+}
+
 export function buildBundle(
   publications: Publication[],
   options: {
