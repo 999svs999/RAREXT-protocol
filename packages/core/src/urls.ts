@@ -91,3 +91,51 @@ export function allowPrivateFromSeeds(seeds: Array<{ url?: string | undefined; b
     return typeof primary === "string" && !canFetchRegistryHost(primary).ok;
   });
 }
+
+/**
+ * Fetch a URL only if the policy allows it, and only to where the policy allows —
+ * checking every HOP.
+ *
+ * The address policy alone was walkable-around: a public URL could answer 302 with
+ * a private `Location`, and `fetch` would follow it to the instance metadata
+ * service without ever asking. So the request is made with `redirect: "manual"`,
+ * each 3xx target is resolved against the current URL and re-checked against the
+ * same policy, and the chain is capped. A registry that legitimately moved still
+ * works — one or two hops are followed — while a redirect INTO a private address
+ * is refused at the hop, by name, before anything is requested from it.
+ *
+ * This lives in core for the reason the policy does: the API and the SDK must not
+ * be able to disagree about what a hop is.
+ */
+export async function fetchWithUrlPolicy(
+  url: string,
+  init: RequestInit,
+  options: { fetch: typeof fetch; allowPrivate?: boolean; maxRedirects?: number },
+): Promise<Response> {
+  const maxRedirects = options.maxRedirects ?? 2;
+  let target = url;
+
+  for (let hop = 0; ; hop += 1) {
+    const allowed = canFetchRegistryUrl(target, {
+      ...(options.allowPrivate === undefined ? {} : { allowPrivate: options.allowPrivate }),
+    });
+    if (!allowed.ok) {
+      throw new Error(
+        hop === 0 ? allowed.reason : `${allowed.reason} (reached by ${hop} redirect${hop === 1 ? "" : "s"} from ${url})`,
+      );
+    }
+
+    const response = await options.fetch(target, { ...init, redirect: "manual" });
+
+    if (response.status < 300 || response.status >= 400) return response;
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error(`${target} answered ${response.status} without a Location`);
+    }
+    if (hop >= maxRedirects) {
+      throw new Error(`${url} redirected more than ${maxRedirects} times — a chain this long is not a registry moving`);
+    }
+    target = new URL(location, target).href;
+  }
+}

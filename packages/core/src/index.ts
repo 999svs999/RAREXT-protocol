@@ -74,6 +74,7 @@ export {
   canFetchRegistryHost,
   canFetchRegistryScheme,
   canFetchRegistryUrl,
+  fetchWithUrlPolicy,
 } from "./urls.ts";
 export { publicationFromSignedInput } from "./publications.ts";
 export type { PublishInput } from "./publications.ts";

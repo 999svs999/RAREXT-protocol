@@ -13,7 +13,7 @@ import {
 } from "../../../packages/core/src/index.ts";
 import {
   allowPrivateFromSeeds,
-  canFetchRegistryUrl,
+  fetchWithUrlPolicy,
 } from "../../../packages/core/src/urls.ts";
 import type {
   Bundle,
@@ -246,17 +246,11 @@ export async function bundleFromSeeds(
   // applies it: the two are held to byte-identical behaviour, and a guard on one
   // side only is how a shared rule drifts into two rules.
   const allowPrivate = options.allowPrivateHosts ?? allowPrivateFromSeeds(seeds);
-  const guardUrl = (url: string): void => {
-    const allowed = canFetchRegistryUrl(url, { allowPrivate });
-    if (!allowed.ok) throw new Error(allowed.reason);
-  };
-
   const pool = await foldAnnouncements(seeds, {
     verifier,
     fetch: (url, init) => {
       const target = typeof url === "string" ? url : url instanceof URL ? url.href : String(url);
-      guardUrl(target);
-      return request(target, init as RequestInit);
+      return fetchWithUrlPolicy(target, (init ?? {}) as RequestInit, { fetch: request, allowPrivate });
     },
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
@@ -274,8 +268,11 @@ export async function bundleFromSeeds(
     attribute: pool.length > 1,
     sha256: nodeSha256,
     fetchBytes: async (url) => {
-      guardUrl(url);
-      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      // Every hop is checked, exactly as the SDK's twin checks it.
+      const response = await fetchWithUrlPolicy(url, { signal: AbortSignal.timeout(timeoutMs) }, {
+        fetch: request,
+        allowPrivate,
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return readBundleResponseBytes(response);
     },

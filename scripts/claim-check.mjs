@@ -506,6 +506,16 @@ if (process.argv.includes("--self-test")) {
   const beforeCommitment = failures;
   checkMirrorsDoc(undefined, { registryClient: commitmentSource, coreShape: doctoredCommitment });
 
+  // And an API twin that stops checking hops — the doc's redirect sentence gone
+  // false in the tree — must be reported.
+  const apiTwinReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
+  const noHopCheck = apiTwinReal.replaceAll("fetchWithUrlPolicy(", "request(");
+  const beforeHop = failures;
+  checkMirrorsDoc(undefined, { apiBundle: noHopCheck });
+  const caughtHop = failures > beforeHop;
+  if (!caughtHop) fail("self-test: the checker accepted a caller that does not check redirect hops");
+  caught = caught && caughtHop;
+
   // And a core that declares the announcement bound but no longer APPLIES it —
   // the doc still true in prose, the bound gone from the fold — must be reported.
   const coreAnn = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
@@ -519,7 +529,10 @@ if (process.argv.includes("--self-test")) {
   // And an API twin that does not apply the shared policy — the doc says both
   // callers do — must be reported.
   const apiBundleReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
-  const noPolicyTwin = apiBundleReal.replaceAll("canFetchRegistryUrl(", "someOtherCheck(");
+  // The shape moved (the policy is applied through core's hop-checking fetch), so
+  // the injection names what the tree holds NOW: a stale doctor injects nothing and
+  // the case passes for the wrong reason.
+  const noPolicyTwin = apiBundleReal.replaceAll("fetchWithUrlPolicy(", "someOtherCheck(");
   const beforeTwin = failures;
   checkMirrorsDoc(undefined, { apiBundle: noPolicyTwin });
   const caughtTwin = failures > beforeTwin;
@@ -1464,7 +1477,10 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     const apiBundle =
       sources.apiBundle ?? readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
     for (const [who, source] of [["the SDK", sdkIndex], ["the API twin", apiBundle]]) {
-      if (!/canFetchRegistryUrl\(/.test(source)) {
+      // The policy is applied THROUGH core's hop-checking fetch now, so the guard
+      // asks for the application, not for one particular inner call — the shape
+      // moved and the claim did not.
+      if (!/fetchWithUrlPolicy\(/.test(source)) {
         fail(`${who} does not apply core's URL policy, and the doc says both do`);
       }
     }
@@ -1494,6 +1510,24 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
     if (!/announcement documents were named and only/.test(announcements)) {
       fail("HARDENING.md says a truncated fold is reported, but the fold reports no count");
+    }
+  }
+  if (/each hop is resolved against the current URL and re-checked/.test(hardening)) {
+    const coreUrlsSource = readFileSync(new URL("packages/core/src/urls.ts", root), "utf8");
+    if (!/export async function fetchWithUrlPolicy\(/.test(coreUrlsSource)) {
+      fail("HARDENING.md says every redirect hop is re-checked, but core exports no such fetch");
+    }
+    for (const [who, relative] of [
+      ["the SDK", "packages/agent-sdk/src/index.ts"],
+      ["the API twin", "apps/api/src/bundle.ts"],
+    ]) {
+      const source = sources[who === "the SDK" ? "sdkIndex" : "apiBundle"] ?? readFileSync(new URL(relative, root), "utf8");
+      if (!/fetchWithUrlPolicy\(/.test(source)) {
+        fail(`${who} does not check redirect hops, and HARDENING.md says both callers do`);
+      }
+      if (/redirect: "manual"/.test(source)) {
+        fail(`${who} sets its own redirect mode instead of using core's hop-checking fetch`);
+      }
     }
   }
   if (/MAX_GENERATIVE_STEPS|MAX_BOUNDED_LENGTH/.test(hardening)) {

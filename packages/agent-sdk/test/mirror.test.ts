@@ -1403,3 +1403,76 @@ test("a seed cannot make the fold fetch unbounded announcement documents", async
   assert.ok(truncated, `the truncation must be reported in the event stream: ${JSON.stringify(events.slice(0, 3))}`);
   assert.match(String(truncated.reason), /200 announcement documents were named and only 64 are read/);
 });
+
+/**
+ * The address policy was walkable-around: a public URL could answer 302 with a
+ * private Location and `fetch` would follow it to the instance metadata service
+ * without ever asking. Every hop is checked now, and each of these asserts on what
+ * was REQUESTED rather than on what was returned.
+ */
+const redirectingFetch = (routes: Record<string, { status: number; location?: string; body?: string }>) => {
+  const calls: string[] = [];
+  const doFetch = (async (input: unknown) => {
+    const url = typeof input === "string" ? input : String(input);
+    calls.push(url);
+    const route = routes[url];
+    if (!route) return new Response("{}", { status: 404 });
+    if (route.location) return new Response(null, { status: route.status, headers: { location: route.location } });
+    return new Response(route.body ?? "{}", { status: route.status, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  return { doFetch, calls };
+};
+
+test("a 3xx into a private address is refused AT THE HOP, and never requested", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const net = redirectingFetch({
+    "https://public.example/bundle.json": { status: 302, location: "http://169.254.169.254/latest/meta-data/" },
+  });
+
+  const seed = { bundle: "https://public.example/bundle.json", bundleRoot: pinnedRoot };
+  await assert.rejects(
+    () => findVerifiedBundleFromSeeds([seed], { fetch: net.doFetch }),
+    (error: Error) => {
+      assert.match(error.message, /private or link-local/);
+      assert.match(error.message, /reached by 1 redirect/, "and it says where the policy was walked to");
+      return true;
+    },
+  );
+  assert.deepEqual(
+    net.calls.filter((url) => url.includes("169.254")),
+    [],
+    `the redirect target was requested anyway: ${net.calls.join(", ")}`,
+  );
+});
+
+test("a redirect BETWEEN public addresses is followed, because registries move", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const net = redirectingFetch({
+    "https://old.example/bundle.json": { status: 301, location: "https://new.example/bundle.json" },
+    "https://new.example/bundle.json": { status: 200, body: JSON.stringify(committed) },
+  });
+
+  const seed = { bundle: "https://old.example/bundle.json", bundleRoot: pinnedRoot };
+  const found = await findVerifiedBundleFromSeeds([seed], { fetch: net.doFetch });
+  assert.equal(found.root, pinnedRoot, "the moved registry still serves a copy that rebuilds the pin");
+  assert.deepEqual(net.calls, ["https://old.example/bundle.json", "https://new.example/bundle.json"]);
+});
+
+test("a redirect chain longer than the cap is refused, naming the chain", async () => {
+  const honest = verifyBundle(committed);
+  const pinnedRoot = honest.computedRoot!;
+  const net = redirectingFetch({
+    "https://a.example/bundle.json": { status: 302, location: "https://b.example/bundle.json" },
+    "https://b.example/bundle.json": { status: 302, location: "https://c.example/bundle.json" },
+    "https://c.example/bundle.json": { status: 302, location: "https://d.example/bundle.json" },
+  });
+
+  const seed = { bundle: "https://a.example/bundle.json", bundleRoot: pinnedRoot };
+  await assert.rejects(
+    () => findVerifiedBundleFromSeeds([seed], { fetch: net.doFetch }),
+    /redirected more than 2 times/,
+  );
+  assert.ok(!net.calls.includes("https://d.example/bundle.json"), "the fourth hop was never requested");
+});

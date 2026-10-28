@@ -31,7 +31,7 @@ import {
 } from "@rarext/core";
 import {
   allowPrivateFromSeeds,
-  canFetchRegistryUrl,
+  fetchWithUrlPolicy,
 } from "../../../packages/core/src/urls.ts";
 import { requireFiniteSeed, requireSteps, requireValues } from "./validate.ts";
 import type {
@@ -333,11 +333,6 @@ export async function findVerifiedBundleFromSeeds(
   // primary location is on loopback is a local environment and earns the
   // allowance; a public seed naming a private MIRROR does not.
   const allowPrivate = options.allowPrivateHosts ?? allowPrivateFromSeeds(seeds);
-  const guard = (url: string): void => {
-    const allowed = canFetchRegistryUrl(url, { allowPrivate });
-    if (!allowed.ok) throw new Error(allowed.reason);
-  };
-
 
   // RFC 0019 step 1: core's fold fetches each announcement document the seeds
   // name, verifies every record with this package's identity primitives, and
@@ -362,9 +357,7 @@ export async function findVerifiedBundleFromSeeds(
     // own refusal record with this reason.
     fetch: (url, init) => {
       const target = typeof url === "string" ? url : url instanceof URL ? url.href : String(url);
-      const allowed = canFetchRegistryUrl(target, { allowPrivate });
-      if (!allowed.ok) throw new Error(allowed.reason);
-      return request(target, init as RequestInit);
+      return fetchWithUrlPolicy(target, (init ?? {}) as RequestInit, { fetch: request, allowPrivate });
     },
     timeoutMs,
     onAnnouncement: options.onAnnouncement,
@@ -385,8 +378,12 @@ export async function findVerifiedBundleFromSeeds(
     sha256,
     onCandidate: options.onCandidate,
     fetchBytes: async (url) => {
-      guard(url);
-      const response = await request(url, { signal: AbortSignal.timeout(timeoutMs) });
+      // Every hop is checked, not just the URL: a 3xx into a private address is
+      // the walk-around the policy would otherwise have.
+      const response = await fetchWithUrlPolicy(url, { signal: AbortSignal.timeout(timeoutMs) }, {
+        fetch: request,
+        allowPrivate,
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return readBundleResponseBytes(response);
     },
