@@ -53,6 +53,76 @@ for (const expected of ["generative", "bounded"]) {
   }
 }
 
+// RFC 0020: the published bundle COMMITS to the federation seed list. The
+// commitment is an ordinary publication — a Merkle leaf, not a bundle field —
+// because the root covers publication leaves and nothing else, so anything else
+// would be editable while the root still verified.
+const {
+  parseRegistrySeedList,
+  registryListDigest,
+  federationCommitmentArtifact,
+  FEDERATION_APP,
+  REGISTRY_LIST_COMMITMENT_KIND,
+} = await import(join(root, "packages/core/src/index.ts"));
+const { nodeSha256 } = await import(join(root, "apps/api/src/digest.ts"));
+
+const listUrl = `${rootUrlForSeed()}/registry/seed.json`;
+const seedForList = JSON.parse(readFileSync(join(site, "seed.json"), "utf8"));
+const listEntries = parseRegistrySeedList(seedForList);
+if (listEntries.length === 0) {
+  throw new Error("the seed list names no registries, so there is nothing to commit to");
+}
+const listDigest = registryListDigest(listEntries, nodeSha256);
+
+if (!(bundle.publications ?? []).some((publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND)) {
+  const template = bundle.publications[0];
+  // The leaf REQUIRES an attestation, and the AI verification surface selects its
+  // claims by `representation` — so keeping the template's would have published
+  // the commitment as a THIRD AI claim, a fake model result inside the very
+  // surface that exists to prove AI results. Strip it: this publication is a
+  // commitment, not a rendition, and the leaf's other fields can stay.
+  const attestation = { ...template.attestation };
+  delete attestation.representation;
+  bundle.publications.push({
+    ...template,
+    id: "pub-federation-commitment",
+    title: "The federation seed list this bundle commits to",
+    attestation,
+    artifact: {
+      ...template.artifact,
+      ...federationCommitmentArtifact({
+        listUrl,
+        digest: listDigest,
+        generatedAt: new Date().toISOString(),
+      }),
+    },
+  });
+}
+
+// The manifest describes what is actually in the bundle, and the ROOT is
+// recomputed over the new leaves: a bundle whose manifest still lists the old
+// publications under the old root does not verify, which is the check below.
+const { publicationLeaf } = await import(join(root, "apps/api/src/anchorer.ts"));
+const { merkleRoot: apiMerkleRoot } = await import(join(root, "apps/api/src/merkle.ts"));
+
+bundle.manifest.publications = bundle.publications.map((publication) => ({
+  id: publication.id,
+  leaf: publicationLeaf(publication),
+}));
+bundle.manifest.counts.publications = bundle.publications.length;
+bundle.manifest.root = apiMerkleRoot(bundle.manifest.publications.map((entry) => entry.leaf));
+
+// Re-verify AFTER the change: the bundle that gets published is the one whose
+// root covers the commitment, and that is checked here rather than assumed.
+const afterCommitment = verifyBundle(bundle);
+if (!afterCommitment.valid) {
+  throw new Error(`the bundle with the commitment does not verify: ${afterCommitment.reason}`);
+}
+
+function rootUrlForSeed() {
+  return "https://999svs999.github.io/RAREXT-protocol";
+}
+
 const encoded = new Map(
   (Array.isArray(blobs.blobs) ? blobs.blobs : [])
     .filter((blob) => typeof blob.hash === "string" && typeof blob.content === "string")
@@ -71,17 +141,20 @@ for (const rendition of media) {
   }
 }
 
+// Files COPIED from the proof. The generated ones are not here on purpose:
+// `bundle.json`, `bundle.js` and `verify.html` come from the bundle and from
+// their single source module below. Copying a generated file reproduces whatever
+// the proof directory happened to hold — a `verify.html` from before the response
+// cap lost the cap on the published page, which is exactly the kind of stale win
+// this list must not allow.
 const mirrorFiles = [
   "app.js",
   "blobs.json",
-  "bundle.js",
-  "bundle.json",
   "favicon.svg",
   "gallery.html",
   "index.html",
   "leaderboard.html",
   "styles.css",
-  "verify.html",
   "verify.js",
 ];
 
@@ -96,18 +169,55 @@ for (const name of mirrorFiles) {
 // bundle's CID (a CIDv1 over the raw sha2-256 multihash), so a mirror pointer
 // is a hash rather than a URL and any copy can be checked against it without
 // trusting whoever served it.
-const { bundleJson } = await import(join(root, "scripts/mirror-artifacts.mjs"));
-const bundleBytes = Buffer.from(bundleJson(bundle), "utf8");
+const { bundleJson, writeBundleFiles } = await import(join(root, "scripts/mirror-artifacts.mjs"));
 const { cidV1Raw, pinBundle, pinServiceUrl } = await import(join(root, "apps/api/src/adapters/content.ts"));
-const bundleCid = cidV1Raw(bundleBytes);
 
-writeFileSync(join(site, "bundle.json"), bundleBytes);
+// The anchor must cover the NEW root — the previous anchor (verified:
+// adapter "local") points at the root without the commitment, so re-pinning
+// without re-anchoring would leave the published copy unanchored.
+const { RarextStore } = await import(join(root, "apps/api/src/store.ts"));
+const { anchorPending } = await import(join(root, "apps/api/src/anchorer.ts"));
+
+const anchorStore = new RarextStore();
+for (const publication of bundle.publications) anchorStore.addPublication(publication, false);
+const anchor = await anchorPending(anchorStore);
+if (!anchor) {
+  throw new Error("the publications did not anchor, so the published copy would be unanchored");
+}
+if (anchor.root !== bundle.manifest.root) {
+  throw new Error(
+    `the anchor covers root ${anchor.root}, but the bundle's publications rebuild ${bundle.manifest.root}`,
+  );
+}
+bundle.anchors = [anchor];
+bundle.manifest.anchorId = anchor.id;
+bundle.manifest.anchorRoot = anchor.root;
+bundle.manifest.counts.anchors = 1;
+
+const anchoredBytes = Buffer.from(bundleJson(bundle), "utf8");
+const anchoredCid = cidV1Raw(anchoredBytes);
+writeFileSync(join(site, "bundle.json"), anchoredBytes);
+// The mirror's own copy is regenerated from the SAME bundle: a mirror holding the
+// pre-commitment bytes would no longer rebuild the pinned root, which is exactly
+// what the live seed check looks for.
+writeBundleFiles(mirrorTarget, bundle);
+const { mirrorVerifyPage } = await import(join(root, "scripts/mirror-verify-page.mjs"));
+writeFileSync(
+  join(mirrorTarget, "verify.html"),
+  mirrorVerifyPage({
+    title: "Mirror verification — AI claims included",
+    heading:
+      "This mirror is a copy. Here is whether it is a faithful one — and whether its AI claims replay.",
+  }),
+);
 
 const seedPath = join(site, "seed.json");
 const seed = JSON.parse(readFileSync(seedPath, "utf8"));
 seed.updatedAt = new Date().toISOString();
+// Pinned to the ANCHORED bundle: its root covers the federation commitment, and
+// its CID is over the exact bytes written above.
 seed.bundleRoot = bundle.manifest.root;
-seed.bundleCid = bundleCid;
+seed.bundleCid = anchoredCid;
 
 // The pinning call, attempted only when a service is configured. Publish runs
 // without network by design: with no service the seed records NO pins (bundleCid
@@ -119,7 +229,7 @@ const serviceUrl = pinServiceUrl();
 const pins = [];
 if (serviceUrl) {
   try {
-    const pinned = await pinBundle(bundleBytes);
+    const pinned = await pinBundle(anchoredBytes);
     pins.push({
       cid: pinned.cid,
       service: pinned.service ?? serviceUrl,
@@ -127,7 +237,7 @@ if (serviceUrl) {
     });
   } catch (error) {
     pins.push({
-      cid: bundleCid,
+      cid: anchoredCid,
       service: serviceUrl,
       error: error instanceof Error ? error.message : String(error),
     });

@@ -1,23 +1,27 @@
 {
   "manifest": {
     "version": 1,
-    "root": "793915a94988fdc2a756e531a3c7fc2f6f44fcaae6c13a91a5c97c8ab8878497",
+    "root": "ba6713be693bb43b76bf12a4aea127f48d46748a515b01022ccecdfdd69a240f",
     "leafVersion": 4,
-    "anchorId": "fe9eb461-c9ec-46d6-b146-023c49593ba7",
-    "anchorRoot": "793915a94988fdc2a756e531a3c7fc2f6f44fcaae6c13a91a5c97c8ab8878497",
-    "createdAt": "2026-10-25T07:35:37.455Z",
+    "anchorId": "0f1da071-5449-4d9c-8ce2-c9176901977c",
+    "anchorRoot": "ba6713be693bb43b76bf12a4aea127f48d46748a515b01022ccecdfdd69a240f",
+    "createdAt": "2026-10-26T12:13:28.407Z",
     "publications": [
       {
-        "id": "3e57ad4f-ea5b-41ba-8c13-c241d6896f95",
-        "leaf": "7300a3cbdaa72ce19c6fbb4052c03120ad83fb2d0dd9881a1a4b40626125788c"
+        "id": "1a1f9b83-f365-46c8-861b-d872b94b91e2",
+        "leaf": "3f312ff49dc1d5fa9e058a62729f73ca732ee723c86186cdbfd7eddad24c3014"
       },
       {
-        "id": "a09b3009-2397-485d-9ce0-b5d72bae0f22",
-        "leaf": "816b65523ef8e11bdb54c13f9dd69a4a0e6877621c62cf779a63a03f93d6c7e9"
+        "id": "9d6a4b54-9f70-49a2-a2cc-b50f351874bc",
+        "leaf": "ffdf279c84518a08c76a0205d94fc1e9666a7ef0f405df76a2ad579712a05d5f"
+      },
+      {
+        "id": "pub-federation-commitment",
+        "leaf": "aeb65dcd70d204b32f70da9a89de1aecd7d303708321da157c14cef4754452f1"
       }
     ],
     "counts": {
-      "publications": 2,
+      "publications": 3,
       "anchors": 1,
       "challenges": 5,
       "semantics": 5
@@ -25,9 +29,9 @@
   },
   "publications": [
     {
-      "id": "3e57ad4f-ea5b-41ba-8c13-c241d6896f95",
+      "id": "1a1f9b83-f365-46c8-861b-d872b94b91e2",
       "author": "ai-proof",
-      "authorKey": "ca2a63e5f975bfb681485e27fcdc6f0e6589579e063162505deb15fcbdd66fe5",
+      "authorKey": "8f17318ea68df5775a8d1b04ac31337a8b2cce4a9be8e05b7f9c17802d088712",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -71,13 +75,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T07:35:37.441Z",
-      "attestedAt": "2026-10-25T07:35:37.445Z",
+      "createdAt": "2026-10-26T12:13:28.393Z",
+      "attestedAt": "2026-10-26T12:13:28.397Z",
       "verified": true,
-      "signature": "CvVlKAfC+oqDXQSE1xfVzP/P9fIx65mwzU3ffp4xK8bVtH2Dkf1ns/Vjs4dqNbvISer7BRUWBYKFzAPHnDLPnQ==",
-      "nonce": "8b072514-b8f8-4f70-9b54-c211b9d1ac93",
+      "signature": "SpAUpt20SUHPUxv4xQ46nkgSqCkCreGndlvBUCw3aYHUlIxNMiwJT7Xlzw158eS5Tb4fh/6FSU35vVXio8wQCQ==",
+      "nonce": "b22149b4-8366-4f96-8404-74c50410554c",
       "attestation": {
-        "id": "51210c14-1aac-459b-a560-afd2ba1598e4",
+        "id": "689354fb-6a17-4de7-8200-415d51ef8a0e",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -97,16 +101,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-25T07:35:37.445Z"
+        "createdAt": "2026-10-26T12:13:28.397Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "a09b3009-2397-485d-9ce0-b5d72bae0f22",
+      "id": "9d6a4b54-9f70-49a2-a2cc-b50f351874bc",
       "author": "ai-proof",
-      "authorKey": "ca2a63e5f975bfb681485e27fcdc6f0e6589579e063162505deb15fcbdd66fe5",
+      "authorKey": "8f17318ea68df5775a8d1b04ac31337a8b2cce4a9be8e05b7f9c17802d088712",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -145,13 +149,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-25T07:35:37.447Z",
-      "attestedAt": "2026-10-25T07:35:37.449Z",
+      "createdAt": "2026-10-26T12:13:28.399Z",
+      "attestedAt": "2026-10-26T12:13:28.401Z",
       "verified": true,
-      "signature": "5mAU952HhNMWLEOgjlYS6R/4kBLlRl8y1inidvEkjBt+46hF9HYR5dUYJRGuTB/aGpReYQg1wShe6+rMWOB00Q==",
-      "nonce": "3c7d5e48-1c85-419f-bc6c-b5a7b7ebe5a2",
+      "signature": "us1D0rAOmD1qBaHmpuHTSBO3h8/kWULV/fcGFZOxSSkOOVMd+mPCceH/+PXOOCYm1NiGM9L7P9Iw3w0eHLUVxg==",
+      "nonce": "a2a95d16-1568-4e4e-950b-783b7955c8fd",
       "attestation": {
-        "id": "4f49f50b-d307-49f7-96a0-0c7be600d112",
+        "id": "e91bd649-dbd2-40a3-9378-44324d07a5b4",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -173,7 +177,60 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-25T07:35:37.449Z"
+        "createdAt": "2026-10-26T12:13:28.401Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "pub-federation-commitment",
+      "author": "ai-proof",
+      "authorKey": "8f17318ea68df5775a8d1b04ac31337a8b2cce4a9be8e05b7f9c17802d088712",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "The federation seed list this bundle commits to",
+      "body": "Generated on this node by the digest-bound xorshift32 starter model from seed 42; replay it yourself.",
+      "app": "ai-generative",
+      "challengeId": "gen-starter",
+      "artifact": {
+        "app": "federation",
+        "kind": "registry-list-commitment",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"b04e820b72cd276ab368c403d1000ba2b0e7d9b237d181f19c98ba7a67c4def4\",\"generatedAt\":\"2026-10-28T03:40:06.927Z\"}"
+      },
+      "taskId": "gen-starter",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-10-26T12:13:28.393Z",
+      "attestedAt": "2026-10-26T12:13:28.397Z",
+      "verified": true,
+      "signature": "SpAUpt20SUHPUxv4xQ46nkgSqCkCreGndlvBUCw3aYHUlIxNMiwJT7Xlzw158eS5Tb4fh/6FSU35vVXio8wQCQ==",
+      "nonce": "b22149b4-8366-4f96-8404-74c50410554c",
+      "attestation": {
+        "id": "689354fb-6a17-4de7-8200-415d51ef8a0e",
+        "verifier": "xorshift32-replay",
+        "app": "ai-generative",
+        "challengeId": "gen-starter",
+        "taskId": "gen-starter",
+        "circuitHash": "7dce90a5dfbec33634b60ab651251dd3b4f4556c7b29c3f66a4126d1d6f3e7f8",
+        "traceHash": "ee29cd38c1586b0ceb280712a25aaa451b45f36c25619c0d9fa267034ed36ba5",
+        "correct": true,
+        "score": 100,
+        "gateCount": 32,
+        "semanticsId": "ai-generative/gen-starter",
+        "semanticsVersion": 1,
+        "semanticsHash": "a7e0a656caba5a3aee85e281d37591f96f994f1e3a561d6390aeef9d1eefa8af",
+        "claimKind": "generative",
+        "scope": null,
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
+        "createdAt": "2026-10-26T12:13:28.397Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -182,22 +239,23 @@
   ],
   "anchors": [
     {
-      "id": "fe9eb461-c9ec-46d6-b146-023c49593ba7",
-      "root": "793915a94988fdc2a756e531a3c7fc2f6f44fcaae6c13a91a5c97c8ab8878497",
+      "id": "0f1da071-5449-4d9c-8ce2-c9176901977c",
+      "root": "ba6713be693bb43b76bf12a4aea127f48d46748a515b01022ccecdfdd69a240f",
       "publicationIds": [
-        "3e57ad4f-ea5b-41ba-8c13-c241d6896f95",
-        "a09b3009-2397-485d-9ce0-b5d72bae0f22"
+        "1a1f9b83-f365-46c8-861b-d872b94b91e2",
+        "9d6a4b54-9f70-49a2-a2cc-b50f351874bc",
+        "pub-federation-commitment"
       ],
-      "leafCount": 2,
+      "leafCount": 3,
       "leafVersion": 4,
-      "createdAt": "2026-10-25T07:35:37.455Z",
+      "createdAt": "2026-10-28T03:40:06.943Z",
       "adapter": "local",
-      "reference": "local:793915a94988fdc2",
+      "reference": "local:ba6713be693bb43b",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:793915a94988fdc2"
+          "reference": "local:ba6713be693bb43b"
         },
         {
           "adapter": "trac",
@@ -208,7 +266,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreigvi57fhoyxr2m7f73fcfy6kzv2qnqmpzgjfilz5rl3bzewnv2rqa"
+          "reference": "cid:bafkreiccanki7eaxfvk6oyz4cerfvzzwq4hyofngxi6aisrfyucyuqcbte"
         }
       ]
     }

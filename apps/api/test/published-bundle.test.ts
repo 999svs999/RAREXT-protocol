@@ -5,6 +5,11 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import {
+  REGISTRY_LIST_COMMITMENT_KIND,
+  parseRegistrySeedList,
+} from "../../../packages/core/src/index.ts";
+import { federationCommitment, registryListDigestOf } from "../../../packages/agent-sdk/src/index.ts";
 import { verifyBundle, type Bundle } from "../src/bundle.ts";
 import { cidV1Raw } from "../src/adapters/content.ts";
 
@@ -96,4 +101,49 @@ test("the published registry bundle is readable over HTTP and verifies", { timeo
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+/**
+ * The federation commitment, as a standing property of the PUBLISHED artifacts:
+ * the committed bundle must commit to the committed list, and be anchored at its
+ * own root. This is the assertion that would have caught every step of RFC 0020's
+ * sequence being run out of order — a new bundle without a re-anchor, a list
+ * changed without the digest following, a mirror left holding older bytes.
+ */
+test("the published bundle commits to the published seed list, anchored at its own root", () => {
+  const bundle = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as Bundle;
+  const seed = JSON.parse(readFileSync("site/registry/seed.json", "utf8")) as unknown;
+
+  const commitment = federationCommitment(bundle as never);
+  assert.ok(commitment, "the published bundle carries a federation commitment");
+
+  const entries = parseRegistrySeedList(seed);
+  assert.ok(entries.length > 0, "the published list names at least one registry");
+  const digest = registryListDigestOf(entries);
+  assert.equal(
+    commitment.digest,
+    digest,
+    "the committed digest must be the digest of the list that is actually published",
+  );
+
+  // Anchored at its own root, and the anchor says so.
+  assert.equal(bundle.anchors.length, 1, "the published bundle carries one anchor");
+  assert.equal(bundle.anchors[0].root, bundle.manifest.root, "the anchor covers the published root");
+  assert.equal(bundle.manifest.anchorRoot, bundle.manifest.root);
+  assert.equal(
+    bundle.anchors[0].leafCount,
+    bundle.publications.length,
+    "the anchor says how many leaves it covers",
+  );
+  assert.ok(
+    bundle.publications.some((publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND),
+    "and the commitment is one of them",
+  );
+
+  // The commitment is NOT an AI claim: the surface that proves AI results must
+  // not be padded by a publication that proves nothing about a model.
+  const ai = bundle.publications.filter(
+    (publication) => (publication.attestation as { representation?: unknown } | undefined)?.representation,
+  );
+  assert.equal(ai.length, 2, "two AI representations, and the commitment is not one of them");
 });

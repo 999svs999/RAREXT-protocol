@@ -168,7 +168,11 @@ test("a pin served as raw bytes still verifies — the decoder reads both shapes
     const base = `http://127.0.0.1:${port}`;
     const seed = {
       bundle: "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
-      bundleRoot: "793915a94988fdc2a756e531a3c7fc2f6f44fcaae6c13a91a5c97c8ab8878497",
+      // Read from the published seed rather than pinned here: a literal live root
+      // is a test that breaks whenever the registry republishes, for no reason
+      // about pins.
+      bundleRoot: (JSON.parse(readFileSync("site/registry/seed.json", "utf8")) as { bundleRoot: string })
+        .bundleRoot,
       bundleCid: cid,
       pins: [{ cid, service: base, reference: `${base}/${cid}` }],
     };

@@ -37,16 +37,27 @@ assert.equal(committed.manifest.leafVersion, PUBLICATION_LEAF_VERSION);
 /** A publication shaped like the registry's own, carrying the commitment. */
 function commitmentPublication(listUrl: string, digest: string): Publication {
   const sample = committed.publications[0];
+  // Same shape the publisher produces, including the stripped AI attestation:
+  // a commitment is not a rendition, and the fixture should not be able to hide
+  // that by looking different from the real thing.
+  const attestation = { ...(sample.attestation as unknown as Record<string, unknown>) };
+  delete attestation.representation;
   return {
     ...sample,
     id: "pub-federation-commitment",
     title: "The federation list this bundle commits to",
+    attestation: attestation as never,
     artifact: {
       ...sample.artifact,
       ...federationCommitmentArtifact({ listUrl, digest, generatedAt: "2026-10-28T00:00:00.000Z" }),
     },
   } as Publication;
 }
+
+/** The live bundle's publications WITHOUT any commitment, as the baseline. */
+const withoutCommitment = committed.publications.filter(
+  (publication) => publication.artifact?.kind !== REGISTRY_LIST_COMMITMENT_KIND,
+);
 
 test("a commitment publication is inside the ANCHOR, not merely beside it", async () => {
   const listUrl = "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
@@ -57,14 +68,14 @@ test("a commitment publication is inside the ANCHOR, not merely beside it", asyn
   const digest = registryListDigest(entries, nodeSha256);
 
   const store = new RarextStore();
-  for (const publication of committed.publications) store.addPublication(publication);
+  for (const publication of withoutCommitment) store.addPublication(publication);
   const before = await anchorPending(store);
   assert.ok(before, "the store's publications anchor");
   const rootWithoutCommitment = before.root;
 
   // Now the same publications, plus the commitment.
   const store2 = new RarextStore();
-  for (const publication of committed.publications) store2.addPublication(publication);
+  for (const publication of withoutCommitment) store2.addPublication(publication);
   const commitment = commitmentPublication(listUrl, digest);
   store2.addPublication(commitment);
 
@@ -78,7 +89,7 @@ test("a commitment publication is inside the ANCHOR, not merely beside it", asyn
 
   // The anchor's root is the root over the publications INCLUDING the commitment,
   // recomputed here by the test rather than taken from the anchorer.
-  const publications = [committed.publications[0], committed.publications[1], commitment];
+  const publications = [...withoutCommitment, commitment];
   const leaves = publications.map((publication) =>
     publicationLeaf(publication),
   );
@@ -113,7 +124,7 @@ test("a tampered commitment cannot rebuild the anchored root", async () => {
   const digest = registryListDigest(entries, nodeSha256);
 
   const store = new RarextStore();
-  for (const publication of committed.publications) store.addPublication(publication);
+  for (const publication of withoutCommitment) store.addPublication(publication);
   store.addPublication(commitmentPublication(listUrl, digest));
   const anchor = await anchorPending(store);
   assert.ok(anchor);
@@ -121,7 +132,7 @@ test("a tampered commitment cannot rebuild the anchored root", async () => {
   // Swap the committed digest for another list's. The anchored root no longer
   // matches, which is the ONLY reason to anchor it at all.
   const tampered = commitmentPublication(listUrl, "0".repeat(64));
-  const leaves = [committed.publications[0], committed.publications[1], tampered].map((publication) =>
+  const leaves = [...withoutCommitment, tampered].map((publication) =>
     publicationLeaf(publication),
   );
   assert.notEqual(

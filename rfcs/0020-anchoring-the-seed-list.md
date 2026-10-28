@@ -1,7 +1,9 @@
 # RFC 0020 — Anchoring the seed list
 
-**Status:** Draft. The read side is implemented; the write side waits for the next
-anchor, for the reason in "Why not now".
+**Status:** Implemented. The read side ships in the agent SDK; the write side runs in
+`scripts/publish-proof.mjs`, which commits the digest and re-anchors the new root
+through the `local` rail. The published bundle is anchored at that root today, and
+`published-bundle.test.ts` holds the property.
 
 ## The problem
 

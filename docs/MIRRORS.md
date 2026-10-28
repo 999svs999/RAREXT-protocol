@@ -249,11 +249,16 @@ consistent is the federation problem, and it has two parts:
   expectation from the root-pinned artifact rather than from the URL it is
   checking. That shape is not cosmetic: the bundle's root is a Merkle root over
   PUBLICATION LEAVES only, so a new bundle field would have been editable while
-  the root still verified. Honest scope: this repository's published list carries
-  no commitment yet — publishing one changes the bundle's root, and re-pinning it
-  without producing a new anchor would leave the live bundle unanchored, which is
-  the very property the change is for. Checkable exists and is exercised by test;
-  anchored awaits the next anchor. The static seed above is a
+  the root still verified. And it is LIVE: the published bundle carries that
+  commitment — one more publication, so the anchor covers it — and was re-anchored
+  at its own root through the `local` rail, with `published-bundle.test.ts` holding
+  the property as a standing assertion: the committed digest equals the digest of
+  the published list, the anchor's root equals the bundle's root, `leafCount`
+  matches the publications, and the commitment is not counted as an AI
+  representation. What that test catches is the whole failure mode of running
+  RFC 0020's sequence out of order: a new bundle without a re-anchor, a list
+  edited without the digest following, a mirror left holding older bytes. The
+  static seed above is a
   first step, and its consumption is implemented: `bundleFromSeed` in
   `apps/api/src/bundle.ts` tries the seed's own URL and then each mirror, in
   order, and accepts only a copy that **rebuilds the root the seed pins**

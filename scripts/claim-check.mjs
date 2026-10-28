@@ -483,6 +483,18 @@ if (process.argv.includes("--self-test")) {
   const caughtDemo = failures > beforeDemo;
   if (!caughtDemo) fail("self-test: the checker accepted a demo that never calls the resolver it documents");
   caught = caught && caughtDemo;
+  // And a standing test that stops comparing the committed digest with the
+  // published list's — the live property, downgraded to a presence check.
+  const standingSource = readFileSync(new URL("apps/api/test/published-bundle.test.ts", root), "utf8");
+  const doctoredStanding = standingSource.replace(
+    "commitment.digest,\n    digest,",
+    "commitment.digest,\n    commitment.digest,",
+  );
+  const beforeStanding = failures;
+  checkMirrorsDoc(undefined, { standingTest: doctoredStanding });
+  const caughtStanding = failures > beforeStanding;
+  if (!caughtStanding) fail("self-test: the checker accepted a standing test that compares a digest with itself");
+  caught = caught && caughtStanding;
   // And a commitment reader that stops checking the artifact's KIND — now it
   // accepts any artifact with a matching field name — must be reported.
   const commitmentSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
@@ -1337,8 +1349,12 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("MIRRORS.md no longer documents the seed's content-address pin");
   }
   const publishProof = sources.publishProof ?? readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
-  if (!publishProof.includes("seed.bundleCid = bundleCid")) {
-    fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs writes no bundleCid");
+  // Behaviour, not a variable name: the seed must be pinned to a CID the
+  // publisher computed from the bytes it wrote. (The name changed when the
+  // publisher started pinning the ANCHORED bytes, and the old literal made a
+  // correct publisher look broken.)
+  if (!/seed\.bundleCid = \w+;/.test(publishProof) || !/cidV1Raw\(/.test(publishProof)) {
+    fail("MIRRORS.md says the seed pins a CID, but publish-proof.mjs does not pin the bytes it writes");
   }
   const bundleModule = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
   for (const marker of ["bundleCid", "verifyCandidates", "readBundleResponseBytes"]) {
@@ -1629,6 +1645,33 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // are claims about the tree: the client must fold through the SDK's own
   // announcement path with a resolver built from the same convention module, and
   // the demo must use that module too rather than hardcoding one surface.
+  // The doc says the PUBLISHED bundle carries the commitment and was re-anchored at
+  // its own root. That is a claim about artifacts, so it is held by the test the doc
+  // names — and by the generator that has to produce them.
+  if (/the published bundle carries that/.test(doc)) {
+    const standing =
+      sources.standingTest ?? readFileSync(new URL("apps/api/test/published-bundle.test.ts", root), "utf8");
+    if (!/federationCommitment\(bundle/.test(standing)) {
+      fail("MIRRORS.md says the published bundle carries a commitment, but the standing test never reads one");
+    }
+    if (!/commitment\.digest,\n\s*digest,/.test(standing)) {
+      fail("the standing test must compare the committed digest with the digest of the published list");
+    }
+    if (!/anchors\[0\]\.root, bundle\.manifest\.root/.test(standing)) {
+      fail("the standing test must check the anchor covers the published root");
+    }
+    if (!/ai\.length, 2/.test(standing)) {
+      fail("the standing test must check the commitment is not counted as an AI claim");
+    }
+    const publisher = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
+    if (!/await anchorPending\(anchorStore\)/.test(publisher)) {
+      fail("the publisher must anchor the bundle it publishes, or the published root is unanchored");
+    }
+    if (!/federationCommitmentArtifact\(/.test(publisher)) {
+      fail("the publisher must commit the list's digest, using the shared shape");
+    }
+  }
+
   // The doc names the federation commitment and RFC 0020's mechanism. Both are
   // claims about the tree: the SDK must export the reader and must identify the
   // artifact by its APP and KIND rather than guessing, and the RFC must be there
