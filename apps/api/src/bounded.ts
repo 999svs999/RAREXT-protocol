@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  attestBoundedRun,
   boundedScore,
   computeBoundedMetric,
   isBoundedBody,
@@ -39,6 +40,10 @@ export {
 export type { BoundedBody, BoundedMetric, BoundedSpec };
 export { MAX_BOUNDED_LENGTH } from "../../../packages/core/src/index.ts";
 
+/** The registry's sha256: node's, over text or bytes. */
+const sha256Of = (value: string | Uint8Array): string =>
+  createHash("sha256").update(value).digest("hex");
+
 /** Pure metric check with the exact same contract as before the core hoist. */
 export const verifyBoundedReconstruction = reconstructBounded;
 
@@ -56,30 +61,6 @@ export const verifyBoundedReconstruction = reconstructBounded;
  * tables. The artifact carries the lossy reconstruction. Verification is a
  * pure metric computation — recomputable by anyone.
  */
-
-/**
- * The plotted rendition has to hold up the same way the generative one does: it
- * is a function of the committed reference and this artifact's own
- * reconstruction, so a picture taken from anywhere else makes the claim false
- * instead of being quietly blessed. `null` means no rendition was shipped.
- */
-function boundedRenditionHolds(body: BoundedBody, spec: BoundedSpec): boolean | null {
-  if (body.media === undefined) return null;
-
-  if (!isBoundedMedia(body.media)) {
-    throw new Error(
-      "ai.bounded media must be a committed rendition: { mediaType: image/png, rule, blob, raster, width, height, bytes }",
-    );
-  }
-
-  const raster = renderBoundedRaster(
-    spec.reference,
-    body.values,
-    body.media.width,
-    body.media.height,
-  );
-  return createHash("sha256").update(raster).digest("hex") === body.media.raster;
-}
 
 const BOUNDED_APP = "ai-bounded";
 const BOUNDED_KIND = "ai.bounded";
@@ -121,55 +102,31 @@ export function boundedVerifier(
       }
 
       const body = artifact.body;
-      const check = reconstructBounded(body, challenge.spec);
 
-      if ("error" in check) {
-        throw new Error(check.error);
-      }
-
+      // The metric check, the rendition check and the trace hash all happen
+      // inside core's assembly now — one implementation, shared with any
+      // resident that computes the same metric under the same bound. The
+      // registry keeps what is its business: who it is, and which semantics this
+      // challenge binds.
       const bound = semantics
         ? semanticsForChallenge(semantics, challenge)
         : null;
 
-      // A rendition that is not this measurement's picture makes the claim false.
-      const rendition = boundedRenditionHolds(body, challenge.spec);
-
-      const trace = {
-        metric: challenge.spec.metric,
-        metricValue: check.metricValue,
-        bound: challenge.spec.bound,
-        referenceDigest: hashValue(challenge.spec.reference),
-        reconstructionDigest: hashValue(body.values),
-      };
-
-      const attestation: Attestation = {
-        id: randomUUID(),
-        verifier: "bounded-metric-replay",
+      const attestation = attestBoundedRun({
+        artifact,
+        body,
+        spec: challenge.spec,
         app: BOUNDED_APP,
         challengeId: challenge.id,
-        taskId: challenge.id,
-        circuitHash: hashValue(artifact),
-        traceHash: hashValue(trace),
-        correct: check.correct && rendition !== false,
-        score:
-          check.correct && rendition !== false
-            ? boundedScore(check.metricValue, challenge.spec.bound)
-            : 0,
-        gateCount: body.values.length,
-        semanticsId: bound?.id ?? `${BOUNDED_APP}/${challenge.id}`,
-        semanticsVersion: bound?.version ?? 1,
-        semanticsHash: bound ? hashValue(bound) : "",
-        claimKind: bound?.claimKind ?? "satisfies",
-        representation: "bounded",
-        metricName: challenge.spec.metric,
-        metricValue: check.metricValue,
-        scope: null,
-        proofKind: "recomputable",
-        signatureAlgorithm: "ecdsa-p256",
-        cryptoProfile: "classical",
-        verifierHash: boundedVerifierHash(),
+        // The rule's name, not the operator's: an agent computing the same
+        // metric under the same bound is running `bounded-metric-replay`.
+        verifier: "bounded-metric-replay",
+        verifierManifest: BOUNDED_VERIFIER_MANIFEST,
+        bound: bound ? { id: bound.id, version: bound.version, claimKind: bound.claimKind } : null,
+        id: randomUUID(),
         createdAt: new Date().toISOString(),
-      };
+        sha256: sha256Of,
+      });
 
       return attestation;
     },

@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 
 import {
   assembleBundle,
+  attestBoundedRun,
   attestGenerativeRun,
   attestRun,
   canonicalize,
@@ -56,6 +57,8 @@ import type {
   Challenge,
   Circuit,
   ClaimKind,
+  BoundedSpec,
+  BoundedBody,
   ClaimScope,
   DesignScore,
   Identity,
@@ -513,6 +516,115 @@ export interface SelfPublishGenerativeInput {
  * agent's own, hashed as its identity, so a stranger can see which rule was run
  * rather than a borrowed name.
  */
+
+export interface SelfPublishBoundedInput {
+  author: string;
+  title: string;
+  body?: string;
+  /** The lossy reconstruction: what the agent's own model produced. */
+  values: number[];
+  /** The task, carrying the committed reference, metric and bound. */
+  challenge: Challenge;
+  binding: { id: string; version: number; claimKind: ClaimKind };
+  semantics?: Semantics[];
+  visibility?: Visibility;
+  createdAt?: string;
+}
+
+/**
+ * Make AND prove a LOSSY output — the representation real model classes take.
+ *
+ * `ai-generative` demands exact replay. That is the right demand for a small
+ * deterministic model and the wrong one for a quantized network, a compressed
+ * embedding, or a neural codec: nobody can hash-compare a float tensor
+ * regenerated on other hardware. This path instead promises a DISTANCE — "the
+ * max absolute error against the committed reference is within the bound" — and
+ * the metric is recomputed by anyone holding the challenge and the values.
+ *
+ * The agent computes the metric itself and attests under the RULE's name
+ * (`bounded-metric-replay`), because that is the rule it ran; who ran it is the
+ * signature.
+ */
+export function selfPublishBounded(
+  signer: AgentSigner,
+  input: SelfPublishBoundedInput,
+): { attestation: Attestation; publication: Publication; bundle: Bundle; payload: PublicationPayload } {
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  const app = "ai-bounded";
+  const challengeId = input.challenge.id;
+  const body: BoundedBody = { values: input.values };
+  const artifact: Artifact = {
+    app,
+    kind: "ai.bounded",
+    version: 1,
+    mediaType: "application/json",
+    body,
+  };
+
+  const attestation = attestBoundedRun({
+    artifact,
+    body,
+    spec: input.challenge.spec as BoundedSpec,
+    app,
+    challengeId,
+    verifier: "bounded-metric-replay",
+    verifierManifest: { app, version: 1, metrics: ["maxAbsError", "meanAbsError"], representation: "bounded" },
+    bound: input.binding,
+    id: randomUUID(),
+    createdAt,
+    sha256: (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex"),
+  });
+
+  const payload = signer.artifactPayload({
+    author: input.author,
+    title: input.title,
+    ...(input.body === undefined ? {} : { body: input.body }),
+    artifact,
+    challengeId,
+    ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+    createdAt,
+  });
+
+  const publication = publicationFromSignedInput(
+    {
+      author: payload.author!,
+      title: payload.title!,
+      body: payload.body!,
+      app: payload.app!,
+      challengeId: payload.challengeId!,
+      artifact: payload.artifact!,
+      parentId: payload.parentId ?? null,
+      source: payload.source ?? null,
+      createdAt: payload.createdAt!,
+      authorKey: payload.authorKey!,
+      verified: true,
+      signature: signer.sign(payload),
+      nonce: payload.nonce ?? null,
+      visibility: payload.visibility ?? "public",
+    },
+    {
+      attestation,
+      verification: "recomputed",
+      attestationKeyId: null,
+      attestationSignature: null,
+      challenge: input.challenge,
+      suite: signer.suite,
+      id: randomUUID(),
+    },
+  );
+
+  return {
+    attestation,
+    publication,
+    bundle: buildBundle([publication], {
+      challenges: [input.challenge],
+      ...(input.semantics === undefined ? {} : { semantics: input.semantics }),
+      createdAt,
+    }),
+    payload,
+  };
+}
+
 export function selfPublishGenerative(
   signer: AgentSigner,
   input: SelfPublishGenerativeInput,

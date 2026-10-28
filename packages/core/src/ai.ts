@@ -625,5 +625,101 @@ export function attestGenerativeRun(input: {
     cryptoProfile: "classical",
     verifierHash: input.sha256(canonicalize(input.verifierManifest)),
     createdAt: input.createdAt,
-  } as Attestation;
+  };
+}
+
+/**
+ * Does the plotted rendition hold up against the committed reference and this
+ * artifact's own reconstruction? `null` means no rendition was shipped. A picture
+ * taken from anywhere else makes the claim false rather than being quietly
+ * blessed.
+ */
+export function boundedRenditionHolds(
+  body: BoundedBody,
+  spec: BoundedSpec,
+  sha256: HashFn,
+): boolean | null {
+  if (body.media === undefined) return null;
+
+  if (!isBoundedMedia(body.media)) {
+    throw new Error(
+      "ai.bounded media must be a committed rendition: { mediaType: image/png, rule, blob, raster, width, height, bytes }",
+    );
+  }
+
+  const raster = renderBoundedRaster(spec.reference, body.values, body.media.width, body.media.height);
+  return sha256(raster) === body.media.raster;
+}
+
+/**
+ * Attest a bounded run — the record of what the metric computation proved.
+ *
+ * The second representation, beside `attestGenerativeRun`, and here for the same
+ * reason: the assembly lived in the registry, so an agent with no server could
+ * replay a bounded claim and never make one. This is the representation real
+ * model classes take onto the chain — nobody can hash-compare a float tensor
+ * regenerated on other hardware, but everyone can agree that "maxAbsError <= 2 of
+ * 255" is a meaningful, checkable promise — so leaving it registry-only would
+ * have left most real AI outside the vision.
+ *
+ * As with the generative assembly: the verifier's name and manifest are the
+ * caller's (and describe the RULE, not the runner — an agent computing the same
+ * metric under the same bound is running the same rule), the semantics binding,
+ * the clock, the id and the hash are parameters, and the claim covers the
+ * rendition as well as the values.
+ */
+export function attestBoundedRun(input: {
+  artifact: Artifact;
+  body: BoundedBody;
+  spec: BoundedSpec;
+  app: string;
+  challengeId: string;
+  verifier: string;
+  verifierManifest: unknown;
+  bound: { id: string; version: number; claimKind: ClaimKind } | null;
+  id: string;
+  createdAt: string;
+  sha256: HashFn;
+}): Attestation {
+  const check = verifyBoundedReconstruction(input.body, input.spec);
+  if ("error" in check) {
+    throw new Error(check.error);
+  }
+
+  const rendition = boundedRenditionHolds(input.body, input.spec, input.sha256);
+  const correct = check.correct && rendition !== false;
+
+  const trace = {
+    metric: input.spec.metric,
+    metricValue: check.metricValue,
+    bound: input.spec.bound,
+    referenceDigest: input.sha256(canonicalize(input.spec.reference)),
+    reconstructionDigest: input.sha256(canonicalize(input.body.values)),
+  };
+
+  return {
+    id: input.id,
+    verifier: input.verifier,
+    app: input.app,
+    challengeId: input.challengeId,
+    taskId: input.challengeId,
+    circuitHash: input.sha256(canonicalize(input.artifact)),
+    traceHash: input.sha256(canonicalize(trace)),
+    correct,
+    score: correct ? boundedScore(check.metricValue, input.spec.bound) : 0,
+    gateCount: input.body.values.length,
+    semanticsId: input.bound?.id ?? `${input.app}/${input.challengeId}`,
+    semanticsVersion: input.bound?.version ?? 1,
+    semanticsHash: input.bound ? input.sha256(canonicalize(input.bound)) : "",
+    claimKind: input.bound?.claimKind ?? "satisfies",
+    representation: "bounded",
+    metricName: input.spec.metric,
+    metricValue: check.metricValue,
+    scope: null,
+    proofKind: "recomputable",
+    signatureAlgorithm: "ecdsa-p256",
+    cryptoProfile: "classical",
+    verifierHash: input.sha256(canonicalize(input.verifierManifest)),
+    createdAt: input.createdAt,
+  };
 }
