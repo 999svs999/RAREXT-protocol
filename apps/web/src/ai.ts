@@ -7,6 +7,13 @@ import {
   verifyBoundedReconstruction,
   verifyGenerativeReplay,
 } from "@rarext/core";
+import {
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  RASTER_RULE,
+  renderBoundedRaster,
+  renderRaster,
+} from "@rarext/core";
 import type {
   BoundedBody,
   BoundedMetric,
@@ -47,6 +54,12 @@ export const STARTER_STEPS = 32;
 /** sha256, the browser's way — the same bytes in, the same hex out. */
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** The same digest for bytes: a raster is hashed as bytes, never as a hex string. */
+export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -217,4 +230,33 @@ export function checkBoundedClaim(
 ): { correct: boolean; metricValue?: number; error?: string } {
   const check = verifyBoundedReconstruction({ values }, { metric, bound, reference });
   return "error" in check ? { correct: false, error: check.error } : { correct: check.correct, metricValue: check.metricValue };
+}
+
+/**
+ * The picture a generative run's evidence commits to, rendered from the commitment
+ * itself — the model and seed inside the body — so the page draws what the artifact
+ * recorded rather than a picture beside it. It refuses a rule this page does not
+ * implement: a page that draws something for an unknown rule is inventing evidence,
+ * not showing it.
+ */
+export function renderProofPicture(
+  body: { model: XorshiftModel; seed: number; media?: { rule?: string } },
+  size: number,
+): Uint8Array {
+  if (body.media?.rule && body.media.rule !== RASTER_RULE) {
+    throw new Error(`renderProofPicture: this page does not implement the rendition rule ${String(body.media.rule)}`);
+  }
+  return renderRaster(body.model, body.seed, size);
+}
+
+/** The picture a lossy claim's evidence commits to: reference against reconstruction. */
+export function renderBoundedPicture(
+  reference: number[],
+  values: number[],
+  size: { width?: number; height?: number; rule?: string } = {},
+): Uint8Array {
+  if (size.rule && size.rule !== BOUNDED_RASTER_RULE) {
+    throw new Error(`renderBoundedPicture: this page does not implement the rendition rule ${size.rule}`);
+  }
+  return renderBoundedRaster(reference, values, size.width, size.height ?? BOUNDED_RASTER_HEIGHT);
 }

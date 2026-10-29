@@ -13,6 +13,8 @@ import {
   runBoundedProof,
   runCommittedModel,
   sha256Hex,
+  renderBoundedPicture,
+  renderProofPicture,
 } from "../src/ai.ts";
 
 /**
@@ -131,4 +133,39 @@ test("the lossy path refuses what it cannot mean, by name", async () => {
     /finite numbers/,
   );
   await assert.rejects(() => runBoundedProof(boundedSpec.reference, values, boundedSpec.metric, Number.NaN), /bound must be a finite number/);
+});
+
+test("the picture the page draws is the published one, both representations", () => {
+  // The same file the page fetches beside itself: `./bundle.json` is the mirror's
+  // bundle, and the lossy reference lives in the CHALLENGE spec — exactly where
+  // `loadBoundedFixture` reads it. Rendering here in the browser runtime and
+  // matching the published raster digests is what makes the page's picture the
+  // artifact's picture rather than a picture that happens to look right.
+  const bundle = JSON.parse(
+    readFileSync(new URL("../../../site/registry/mirror/bundle.json", import.meta.url), "utf8"),
+  ) as {
+    publications: Array<{ app?: string; challengeId?: string; artifact: { body: any } }>;
+    challenges: Array<{ id?: string; spec?: { reference?: number[] } }>;
+  };
+
+  const generative = bundle.publications.find((entry) => entry.app === "ai-generative")!;
+  const genBody = generative.artifact.body;
+  const genBytes = renderProofPicture(genBody, genBody.media.size);
+  assert.equal(createHash("sha256").update(genBytes).digest("hex"), genBody.media.raster);
+  assert.equal(genBytes.length, genBody.media.size * genBody.media.size * 3);
+
+  const bounded = bundle.publications.find((entry) => entry.app === "ai-bounded")!;
+  const boundedBody = bounded.artifact.body;
+  const challenge = bundle.challenges.find((entry) => entry.id === bounded.challengeId)!;
+  const media = boundedBody.media;
+  const strip = renderBoundedPicture(challenge.spec!.reference!, boundedBody.values, {
+    width: media.width,
+    height: media.height,
+    rule: media.rule,
+  });
+  assert.equal(createHash("sha256").update(strip).digest("hex"), media.raster);
+
+  // And a rule this page does not implement is refused, not drawn.
+  assert.throws(() => renderProofPicture({ ...genBody, media: { rule: "someone-elses-v9" } }, 64));
+  assert.throws(() => renderBoundedPicture(challenge.spec!.reference!, boundedBody.values, { rule: "someone-elses-v9" }));
 });

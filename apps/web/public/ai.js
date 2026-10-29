@@ -100,9 +100,88 @@ function boundedScore(metricValue, bound) {
   const ratio = metricValue / bound;
   return Math.max(1, Math.round(100 * (1 - ratio)));
 }
+var RASTER_RULE = "xorshift32-image-v1";
+var MAX_RASTER_SIZE = 512;
+function renderRaster(model, seed, size) {
+  if (!isXorshiftModel(model)) throw new Error("renderRaster: malformed model");
+  if (!Number.isInteger(size) || size < 1 || size > MAX_RASTER_SIZE) {
+    throw new Error(`renderRaster: size must be 1..${MAX_RASTER_SIZE}`);
+  }
+  const { a, b, c } = model.params;
+  let state = seed >>> 0;
+  const out = new Uint8Array(size * size * 3);
+  for (let i = 0; i < out.length; i++) {
+    state ^= state << a >>> 0;
+    state ^= state >>> b;
+    state ^= state << c >>> 0;
+    state >>>= 0;
+    out[i] = state & 255;
+  }
+  return out;
+}
+var BOUNDED_RASTER_RULE = "bounded-strip-v1";
+var BOUNDED_RASTER_SCALE = 16;
 var BOUNDED_RASTER_LANE = 48;
 var BOUNDED_RASTER_GUTTER = 4;
+var BOUNDED_RASTER_GAIN = 32;
+var MAX_BOUNDED_RASTER_WIDTH = 4096;
 var BOUNDED_RASTER_HEIGHT = 3 * BOUNDED_RASTER_LANE + 2 * BOUNDED_RASTER_GUTTER;
+function renderBoundedRaster(reference, reconstruction, width, height = BOUNDED_RASTER_HEIGHT) {
+  if (!Array.isArray(reference) || reference.length < 1) {
+    throw new Error("renderBoundedRaster: reference must be a non-empty array");
+  }
+  if (!Array.isArray(reconstruction) || reconstruction.length !== reference.length) {
+    throw new Error("renderBoundedRaster: reconstruction must match the reference length");
+  }
+  if (reference.length > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: at most ${MAX_BOUNDED_RASTER_WIDTH} values`);
+  }
+  const w = width ?? reference.length * BOUNDED_RASTER_SCALE;
+  if (!Number.isInteger(w) || w < 1 || w > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: width must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+  if (!Number.isInteger(height) || height < 1 || height > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: height must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
+  }
+  const raster = new Uint8Array(w * height * 3);
+  const lane = BOUNDED_RASTER_LANE;
+  const gutter = BOUNDED_RASTER_GUTTER;
+  const laneStarts = [0, lane + gutter, 2 * (lane + gutter)];
+  for (let x = 0; x < w; x++) {
+    const index = Math.min(
+      reference.length - 1,
+      Math.floor(x * reference.length / w)
+    );
+    const grey = clampByte(reference[index]);
+    const reconstructionGrey = clampByte(reconstruction[index]);
+    const error = clampByte(Math.abs(reference[index] - reconstruction[index]) * BOUNDED_RASTER_GAIN);
+    for (let y = 0; y < height; y++) {
+      const offset = (y * w + x) * 3;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      if (y < lane) {
+        r = g = b = grey;
+      } else if (y < lane + gutter) {
+      } else if (y < laneStarts[1] + lane) {
+        r = g = b = reconstructionGrey;
+      } else if (y < laneStarts[1] + lane + gutter) {
+      } else if (y < laneStarts[2] + lane) {
+        r = error;
+      }
+      raster[offset] = r;
+      raster[offset + 1] = g;
+      raster[offset + 2] = b;
+    }
+  }
+  return raster;
+}
+function clampByte(value) {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  if (value >= 255) return 255;
+  return Math.round(value);
+}
 
 // apps/web/src/ai.ts
 var STARTER_MODEL = {
@@ -114,6 +193,10 @@ var STARTER_SEED = 42;
 var STARTER_STEPS = 32;
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function sha256Bytes(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 async function runCommittedModel(model, seed, steps = STARTER_STEPS) {
@@ -202,6 +285,18 @@ function checkBoundedClaim(reference, values, metric, bound) {
   const check = verifyBoundedReconstruction({ values }, { metric, bound, reference });
   return "error" in check ? { correct: false, error: check.error } : { correct: check.correct, metricValue: check.metricValue };
 }
+function renderProofPicture(body, size) {
+  if (body.media?.rule && body.media.rule !== RASTER_RULE) {
+    throw new Error(`renderProofPicture: this page does not implement the rendition rule ${String(body.media.rule)}`);
+  }
+  return renderRaster(body.model, body.seed, size);
+}
+function renderBoundedPicture(reference, values, size = {}) {
+  if (size.rule && size.rule !== BOUNDED_RASTER_RULE) {
+    throw new Error(`renderBoundedPicture: this page does not implement the rendition rule ${size.rule}`);
+  }
+  return renderBoundedRaster(reference, values, size.width, size.height ?? BOUNDED_RASTER_HEIGHT);
+}
 
 // apps/web/src/ai-page.ts
 var $ = (id) => {
@@ -226,6 +321,10 @@ async function run() {
     const { output, proof } = await runCommittedModel(STARTER_MODEL, seed, steps);
     const took = Math.round(performance.now() - started);
     outputPre.textContent = output;
+    const rasterBytes = renderProofPicture(proof.body, RENDITION_SIZE);
+    drawRaster(picture, rasterBytes, RENDITION_SIZE, RENDITION_SIZE);
+    lastRasterDigest = await sha256Bytes(rasterBytes);
+    refreshPictureNote();
     evidencePre.textContent = JSON.stringify(
       {
         artifact: { app: "ai-generative", kind: "ai.generative", version: 1, mediaType: "application/json", body: proof.body },
@@ -233,6 +332,10 @@ async function run() {
         modelDigest: proof.modelDigest,
         traceHash: proof.traceHash,
         artifactHash: proof.artifactHash,
+        // The page's own measurement of the picture it drew: these bytes, this size.
+        // It is NOT the artifact's media (this run has no PNG), and the note below
+        // refers to this field rather than to a media block that is not there.
+        rendition: { size: RENDITION_SIZE, raster: lastRasterDigest },
         correct: proof.correct
       },
       null,
@@ -265,12 +368,52 @@ async function loadBoundedFixture() {
     const published = bundle.publications?.find((entry) => entry.app === "ai-bounded");
     const challenge = bundle.challenges?.find((entry) => entry.id === published?.challengeId);
     const spec = challenge?.spec;
+    const generative = bundle.publications?.find((entry) => entry.app === "ai-generative");
+    const genMedia = generative?.artifact?.body?.media ?? {};
+    publishedRendition = genMedia.raster ? { raster: genMedia.raster, size: genMedia.size } : null;
+    refreshPictureNote();
     if (!spec?.reference || !spec.metric || typeof spec.bound !== "number") return null;
-    return { reference: spec.reference, metric: spec.metric, bound: spec.bound };
+    const media = published?.artifact?.body?.media ?? {};
+    return {
+      published: { raster: genMedia.raster, size: genMedia.size },
+      reference: spec.reference,
+      metric: spec.metric,
+      bound: spec.bound,
+      rendition: { width: media.width, height: media.height, rule: media.rule }
+    };
   } catch {
     return null;
   }
 }
+function drawRaster(canvas, raster, width, height) {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const image = context.createImageData(width, height);
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    image.data[pixel * 4] = raster[pixel * 3] ?? 0;
+    image.data[pixel * 4 + 1] = raster[pixel * 3 + 1] ?? 0;
+    image.data[pixel * 4 + 2] = raster[pixel * 3 + 2] ?? 0;
+    image.data[pixel * 4 + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
+}
+var picture = $("picture");
+var pictureNote = $("picture-note");
+var RENDITION_SIZE = 64;
+var lastRasterDigest = null;
+var publishedRendition = null;
+function refreshPictureNote() {
+  if (lastRasterDigest === null) return;
+  const published = publishedRendition;
+  if (published?.raster && published.size === RENDITION_SIZE) {
+    pictureNote.textContent = published.raster === lastRasterDigest ? "This is the PUBLISHED raster \u2014 the rendition.raster digest in the evidence below is these exact bytes." : "This run's picture. Its digest differs from the published raster because the seed differs; the picture is still a function of the seed, not beside it.";
+    return;
+  }
+  pictureNote.textContent = "This run's picture, re-derived from the model and seed above \u2014 the rendition.raster digest in the evidence below is these bytes.";
+}
+var boundedPicture = $("bounded-picture");
 var boundedInput = $("reconstruction");
 var boundedResult = $("bounded-result");
 var boundedEvidence = $("bounded-evidence");
@@ -293,9 +436,16 @@ $("check-bounded").addEventListener("click", () => {
     if (claim.error) {
       boundedResult.textContent = claim.error;
       boundedEvidence.textContent = "";
+      boundedPicture.width = 0;
       return;
     }
     boundedResult.textContent = claim.correct ? `WITHIN the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is true by recomputation.` : `OUTSIDE the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is false, and no signature can make it true.`;
+    drawRaster(
+      boundedPicture,
+      renderBoundedPicture(boundedFixture.reference, parsed, boundedFixture.rendition),
+      boundedFixture.rendition.width ?? boundedFixture.reference.length,
+      boundedFixture.rendition.height ?? 152
+    );
     void runBoundedProof(boundedFixture.reference, parsed, boundedFixture.metric, boundedFixture.bound).then((proof) => {
       boundedEvidence.textContent = JSON.stringify(proof, null, 2);
     });

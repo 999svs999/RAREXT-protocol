@@ -26,6 +26,8 @@
 
       <p id="verdict" role="status"></p>
       <pre id="output" aria-label="generated output"></pre>
+      <canvas id="picture" width="64" height="64" aria-label="the rendition the evidence commits to"></canvas>
+      <p id="picture-note" class="hint" role="status"></p>
       <details>
         <summary>The evidence an attestation would carry</summary>
         <pre id="evidence"></pre>
@@ -51,6 +53,7 @@
       <textarea id="reconstruction" rows="3" placeholder="paste a reconstruction: numbers, comma or space separated"></textarea>
       <button id="check-bounded" type="button">Measure it against the committed reference</button>
       <p id="bounded-result" role="status"></p>
+      <canvas id="bounded-picture" width="128" height="152" aria-label="the lossy strip the claim is drawn as"></canvas>
       <details>
         <summary>The evidence an attestation would carry for this distance</summary>
         <pre id="bounded-evidence"></pre>
