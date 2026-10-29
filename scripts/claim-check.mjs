@@ -83,6 +83,24 @@ const fail = (message) => {
  * Routing every injection through this makes a stale one impossible to miss: the
  * mutation must differ from its input, or the self-test fails naming it.
  */
+/**
+ * Assert that a guard's CONDITION holds on the real tree.
+ *
+ * `doctor` proves an injection changes something; this proves the guard it feeds
+ * actually RUNS. The two failures look identical from a green gate: a guard whose
+ * condition is false never fires, and a guard with nothing to report also never
+ * fires. A regex written with doubled backslashes did exactly this — it matched a
+ * literal backslash, so it could never be true, and the only thing that noticed was
+ * testing the guard against the real file rather than through its injection.
+ *
+ * Every conditional guard added in this loop gets one of these.
+ */
+const requireCondition = (label, condition) => {
+  if (!condition) {
+    fail(`self-test: the guard "${label}" does not run on the real tree — its condition is false, so it protects nothing`);
+  }
+};
+
 const doctor = (original, label, mutate) => {
   const doctored = mutate(original);
   if (doctored === original) {
@@ -211,6 +229,25 @@ if (process.argv.includes("--self-test")) {
   // A doctored input that equals its original proves nothing: the anchor
   // silently no-op'd, and the self-test would pass while testing the real
   // input. Every fixture must actually differ before its result is trusted.
+  // The guards added through this loop, each asserted to be RUNNING on the real
+  // tree — not just to fire when injected. A guard whose condition is false is
+  // indistinguishable from a guard with nothing to report.
+  {
+    const aiDocReal = readFileSync(new URL("docs/AI-VERIFICATION.md", root), "utf8");
+    const mirrorsReal = readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
+    const hardeningReal = readFileSync(new URL("docs/HARDENING.md", root), "utf8");
+    const archReal = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+    requireCondition("browser proof page", aiDocReal.includes("mirror/ai.html"));
+    requireCondition("bundle builder", aiDocReal.includes("buildBundle(publications"));
+    requireCondition("resident self-publish", aiDocReal.includes("selfPublishGenerative"));
+    requireCondition("local attest verb", archReal.includes("rarext_attest_local"));
+    requireCondition("registry list cap", mirrorsReal.includes("MAX_REGISTRIES_PER_LIST"));
+    requireCondition("key revocation kind", mirrorsReal.includes("key` revocation kind"));
+    requireCondition("announcement-document bound", hardeningReal.includes("MAX_ANNOUNCEMENT_DOCUMENTS"));
+    requireCondition("redirect hop checks", hardeningReal.includes("each hop is resolved against the current URL and re-checked"));
+    requireCondition("SDK input bounds", hardeningReal.includes("MAX_GENERATIVE_STEPS"));
+  }
+
   const assertChanged = (before, after, label) => {
     const changed = before !== after;
     if (!changed) fail(`self-test: the ${label} fixture no longer changes its input (anchor rot)`);
