@@ -246,6 +246,10 @@ if (process.argv.includes("--self-test")) {
     requireCondition("announcement-document bound", hardeningReal.includes("MAX_ANNOUNCEMENT_DOCUMENTS"));
     requireCondition("redirect hop checks", hardeningReal.includes("each hop is resolved against the current URL and re-checked"));
     requireCondition("SDK input bounds", hardeningReal.includes("MAX_GENERATIVE_STEPS"));
+    const aiModuleReal = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
+    const aiPageReal = readFileSync(new URL("apps/web/src/ai-page.ts", root), "utf8");
+    requireCondition("page fixture parser", aiModuleReal.includes("export function fixtureFromBundle"));
+    requireCondition("page delegates parsing", aiPageReal.includes("fixtureFromBundle("));
   }
 
   const assertChanged = (before, after, label) => {
@@ -3062,14 +3066,27 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
         continue;
       }
       if (!/ai\.js/.test(text)) fail(`${relative} does not load the module that makes the proof`);
+      if (!/id="picture"|picture-note/.test(text)) fail(`${relative} does not carry the picture element the doc describes`);
     }
     const module = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
-    for (const marker of ["runCommittedModel", "runBoundedProof"]) {
+    for (const marker of ["runCommittedModel", "runBoundedProof", "renderProofPicture", "renderBoundedPicture", "fixtureFromBundle"]) {
       if (!new RegExp(`export (async )?function ${marker}`).test(module)) {
         fail(`the doc says the page makes both kinds of proof, but ai.ts exports no ${marker}`);
       }
     }
     const webTest = sources.webProofTest ?? readFileSync(new URL("apps/web/test/ai-proof.test.ts", root), "utf8");
+    // The page must PARSE the bundle through the tested function rather than search
+    // it itself. The parsing bug fixed this cycle was only findable because it moved
+    // OUT of the page; a page that reads publications directly puts it back out of
+    // reach, where only loading it in a browser can catch it.
+    const aiPage = readFileSync(new URL("apps/web/src/ai-page.ts", root), "utf8");
+    if (!aiPage.includes("fixtureFromBundle(")) {
+      fail("the page no longer parses the bundle beside it through the tested fixtureFromBundle");
+    }
+    if (aiPage.includes("publications?.find(")) {
+      fail("the page searches the bundle's publications itself — that parsing belongs in fixtureFromBundle, where a test can reach it");
+    }
+
     // CALL forms, not bare words: the file's own prose says "compared to
     // createHash", so a mention check passed while the injection removed the
     // call — the usage-versus-mention trap this project keeps naming, this time

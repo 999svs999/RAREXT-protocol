@@ -1,6 +1,8 @@
-import { renderBoundedPicture,
+import { fixtureFromBundle,
+  renderBoundedPicture,
   renderProofPicture,
   sha256Bytes,
+  type PublishedFixture,
   STARTER_MODEL,
   STARTER_SEED,
   STARTER_STEPS,
@@ -96,74 +98,17 @@ void run();
  * the artifact it is talking about — and if the bundle is not there, it says so
  * instead of inventing a reference.
  */
-interface BoundedFixture {
-  /** What the published generative edition recorded, so the note can be a comparison, not a claim. */
-  published: { raster?: string; size?: number };
-  reference: number[];
-  metric: "maxAbsError" | "meanAbsError";
-  bound: number;
-  /** The published rendition's own shape, read from the artifact — not invented here. */
-  rendition: { width?: number; height?: number; rule?: string };
-}
-
-async function loadBoundedFixture(): Promise<BoundedFixture | null> {
+async function loadFixture(): Promise<PublishedFixture | null> {
   try {
     const response = await fetch("./bundle.json", { cache: "no-cache" });
     if (!response.ok) return null;
-    const bundle = (await response.json()) as {
-      publications?: Array<{
-        app?: string;
-        challengeId?: string;
-        artifact?: {
-          body?: {
-            media?: { width?: number; height?: number; rule?: string; raster?: string; size?: number };
-          };
-        };
-      }>;
-      challenges?: Array<{ id?: string; spec?: { metric?: string; bound?: number; reference?: number[] } }>;
-    };
-    const published = bundle.publications?.find((entry) => entry.app === "ai-bounded");
-    const challenge = bundle.challenges?.find((entry) => entry.id === published?.challengeId);
-    const spec = challenge?.spec;
-
-    // The generative edition's raster is read FIRST and independently of the lossy
-    // half: the two representations are separate publications, and the picture note
-    // must not go quiet because the bounded one is missing. (Reading it from the
-    // bounded publication drew the picture but could never say it was the published
-    // one — caught by loading this page in a browser, not by the type checker.)
-    const generative = bundle.publications?.find((entry) => entry.app === "ai-generative");
-    const genMedia = generative?.artifact?.body?.media ?? {};
-    publishedRendition = genMedia.raster ? { raster: genMedia.raster, size: genMedia.size } : null;
+    const parsed = fixtureFromBundle(await response.json());
+    publishedRendition = parsed?.picture.raster ? { raster: parsed.picture.raster, size: parsed.picture.size } : null;
     refreshPictureNote();
-
-    if (!spec?.reference || !spec.metric || typeof spec.bound !== "number") return null;
-    const media = published?.artifact?.body?.media ?? {};
-    return {
-      published: { raster: genMedia.raster, size: genMedia.size },
-      reference: spec.reference,
-      metric: spec.metric as "maxAbsError" | "meanAbsError",
-      bound: spec.bound,
-      rendition: { width: media.width, height: media.height, rule: media.rule },
-    };
+    return parsed;
   } catch {
     return null;
   }
-}
-
-/** Paint a raw RGB raster — the rendering IS the evidence, so it is not decoded from a file. */
-function drawRaster(canvas: HTMLCanvasElement, raster: Uint8Array, width: number, height: number): void {
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  const image = context.createImageData(width, height);
-  for (let pixel = 0; pixel < width * height; pixel++) {
-    image.data[pixel * 4] = raster[pixel * 3] ?? 0;
-    image.data[pixel * 4 + 1] = raster[pixel * 3 + 1] ?? 0;
-    image.data[pixel * 4 + 2] = raster[pixel * 3 + 2] ?? 0;
-    image.data[pixel * 4 + 3] = 255;
-  }
-  context.putImageData(image, 0, 0);
 }
 
 const picture = $("picture") as HTMLCanvasElement;
@@ -192,22 +137,38 @@ function refreshPictureNote(): void {
     "This run's picture, re-derived from the model and seed above — the rendition.raster digest in the evidence below is these bytes.";
 }
 
+/** Paint a raw RGB raster — the rendering IS the evidence, so it is not decoded from a file. */
+function drawRaster(canvas: HTMLCanvasElement, raster: Uint8Array, width: number, height: number): void {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const image = context.createImageData(width, height);
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    image.data[pixel * 4] = raster[pixel * 3] ?? 0;
+    image.data[pixel * 4 + 1] = raster[pixel * 3 + 1] ?? 0;
+    image.data[pixel * 4 + 2] = raster[pixel * 3 + 2] ?? 0;
+    image.data[pixel * 4 + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
+}
+
 const boundedPicture = $("bounded-picture") as HTMLCanvasElement;
 const boundedInput = $("reconstruction") as HTMLTextAreaElement;
 const boundedResult = $("bounded-result");
 const boundedEvidence = $("bounded-evidence") as HTMLPreElement;
-const boundedFixture = await loadBoundedFixture();
+const fixture = await loadFixture();
 
-if (!boundedFixture) {
+if (!fixture?.lossy) {
   boundedResult.textContent =
     "This page is not beside a mirror bundle, so there is no committed reference to measure against. Open it from the published mirror.";
 } else {
-  boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${boundedFixture.reference.length} values, ${boundedFixture.metric} within ${boundedFixture.bound}.`;
-  boundedInput.placeholder = `e.g. ${boundedFixture.reference.slice(0, 4).join(", ")}, …`;
+  boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${fixture.lossy.reference.length} values, ${fixture.lossy.metric} within ${fixture.lossy.bound}.`;
+  boundedInput.placeholder = `e.g. ${fixture.lossy.reference.slice(0, 4).join(", ")}, …`;
 }
 
 $("check-bounded").addEventListener("click", () => {
-  if (!boundedFixture) return;
+  if (!fixture?.lossy) return;
   const parsed = boundedInput.value
     .split(/[\s,]+/)
     .filter((token) => token.length > 0)
@@ -218,7 +179,7 @@ $("check-bounded").addEventListener("click", () => {
   }
 
   try {
-    const claim = checkBoundedClaim(boundedFixture.reference, parsed, boundedFixture.metric, boundedFixture.bound);
+    const claim = checkBoundedClaim(fixture.lossy.reference, parsed, fixture.lossy.metric, fixture.lossy.bound);
     if (claim.error) {
       boundedResult.textContent = claim.error;
       boundedEvidence.textContent = "";
@@ -228,15 +189,15 @@ $("check-bounded").addEventListener("click", () => {
       return;
     }
     boundedResult.textContent = claim.correct
-      ? `WITHIN the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is true by recomputation.`
-      : `OUTSIDE the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is false, and no signature can make it true.`;
+      ? `WITHIN the bound: ${fixture.lossy.metric} = ${claim.metricValue} (bound ${fixture.lossy.bound}). The claim is true by recomputation.`
+      : `OUTSIDE the bound: ${fixture.lossy.metric} = ${claim.metricValue} (bound ${fixture.lossy.bound}). The claim is false, and no signature can make it true.`;
     drawRaster(
       boundedPicture,
-      renderBoundedPicture(boundedFixture.reference, parsed, boundedFixture.rendition),
-      boundedFixture.rendition.width ?? boundedFixture.reference.length,
-      boundedFixture.rendition.height ?? 152,
+      renderBoundedPicture(fixture.lossy.reference, parsed, fixture.lossy.rendition),
+      fixture.lossy.rendition.width ?? fixture.lossy.reference.length,
+      fixture.lossy.rendition.height ?? 152,
     );
-    void runBoundedProof(boundedFixture.reference, parsed, boundedFixture.metric, boundedFixture.bound).then((proof) => {
+    void runBoundedProof(fixture.lossy.reference, parsed, fixture.lossy.metric, fixture.lossy.bound).then((proof) => {
       boundedEvidence.textContent = JSON.stringify(proof, null, 2);
     });
   } catch (error) {

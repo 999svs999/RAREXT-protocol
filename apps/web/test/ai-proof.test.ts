@@ -13,6 +13,7 @@ import {
   runBoundedProof,
   runCommittedModel,
   sha256Hex,
+  fixtureFromBundle,
   renderBoundedPicture,
   renderProofPicture,
 } from "../src/ai.ts";
@@ -168,4 +169,47 @@ test("the picture the page draws is the published one, both representations", ()
   // And a rule this page does not implement is refused, not drawn.
   assert.throws(() => renderProofPicture({ ...genBody, media: { rule: "someone-elses-v9" } }, 64));
   assert.throws(() => renderBoundedPicture(challenge.spec!.reference!, boundedBody.values, { rule: "someone-elses-v9" }));
+});
+
+const mirrorBundle = () =>
+  JSON.parse(
+    readFileSync(new URL("../../../site/registry/mirror/bundle.json", import.meta.url), "utf8"),
+  ) as { publications: Array<any>; challenges: Array<any> };
+
+test("the fixture's picture comes from the generative edition, not the lossy one", () => {
+  const bundle = mirrorBundle();
+  const fixture = fixtureFromBundle(bundle)!;
+  const generative = bundle.publications.find((entry) => entry.app === "ai-generative");
+  const bounded = bundle.publications.find((entry) => entry.app === "ai-bounded");
+
+  assert.equal(fixture.picture.raster, generative.artifact.body.media.raster);
+  assert.equal(fixture.picture.size, generative.artifact.body.media.size);
+  // The two editions record DIFFERENT rasters, so reading the wrong publication
+  // cannot pass by coincidence — which is how the defect survived a green suite.
+  assert.notEqual(fixture.picture.raster, bounded.artifact.body.media.raster);
+
+  assert.ok(fixture.lossy, "the bundle carries a committed reference");
+  assert.equal(fixture.lossy!.reference.length, 8);
+  assert.equal(fixture.lossy!.rendition.width, bounded.artifact.body.media.width);
+  assert.equal(fixture.lossy!.rendition.height, bounded.artifact.body.media.height);
+  assert.equal(fixture.lossy!.rendition.rule, bounded.artifact.body.media.rule);
+});
+
+test("the two halves are independent: with no lossy publication the picture survives", () => {
+  const bundle = mirrorBundle();
+  const generative = bundle.publications.find((entry) => entry.app === "ai-generative");
+  const withoutBounded = { ...bundle, publications: bundle.publications.filter((entry) => entry.app !== "ai-bounded") };
+
+  const fixture = fixtureFromBundle(withoutBounded)!;
+  assert.equal(fixture.lossy, null, "no bounded publication, no lossy half");
+  // This is the defect, asserted directly: the picture note must still be able to
+  // say the drawn picture is the published one when the lossy half is missing.
+  assert.equal(fixture.picture.raster, generative.artifact.body.media.raster);
+});
+
+test("a bundle without a committed reference yields no lossy half; junk yields nothing", () => {
+  assert.equal(fixtureFromBundle({ publications: [], challenges: [] })!.lossy, null);
+  assert.equal(fixtureFromBundle(null), null);
+  assert.equal(fixtureFromBundle("nope"), null);
+  assert.equal(fixtureFromBundle(42), null);
 });

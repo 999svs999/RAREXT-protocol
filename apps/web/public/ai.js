@@ -297,6 +297,29 @@ function renderBoundedPicture(reference, values, size = {}) {
   }
   return renderBoundedRaster(reference, values, size.width, size.height ?? BOUNDED_RASTER_HEIGHT);
 }
+function fixtureFromBundle(value) {
+  if (typeof value !== "object" || value === null) return null;
+  const bundle = value;
+  const generative = bundle.publications?.find((entry) => entry?.app === "ai-generative");
+  const genMedia = generative?.artifact?.body?.media ?? {};
+  const picture2 = typeof genMedia.raster === "string" ? { raster: genMedia.raster, size: genMedia.size } : {};
+  const bounded = bundle.publications?.find((entry) => entry?.app === "ai-bounded");
+  const challenge = bundle.challenges?.find((entry) => entry?.id === bounded?.challengeId);
+  const spec = challenge?.spec;
+  if (!Array.isArray(spec?.reference) || typeof spec.metric !== "string" || typeof spec.bound !== "number") {
+    return { picture: picture2, lossy: null };
+  }
+  const media = bounded?.artifact?.body?.media ?? {};
+  return {
+    picture: picture2,
+    lossy: {
+      reference: spec.reference,
+      metric: spec.metric,
+      bound: spec.bound,
+      rendition: { width: media.width, height: media.height, rule: media.rule }
+    }
+  };
+}
 
 // apps/web/src/ai-page.ts
 var $ = (id) => {
@@ -360,44 +383,17 @@ $("check").addEventListener("click", () => {
   checkResult.textContent = result.correct ? "MATCHES the committed model. The claim is true by recomputation \u2014 no signature needed to know the model produced it." : `DOES NOT MATCH. The committed model produces ${result.expected.length} tokens that differ from this claim.`;
 });
 void run();
-async function loadBoundedFixture() {
+async function loadFixture() {
   try {
     const response = await fetch("./bundle.json", { cache: "no-cache" });
     if (!response.ok) return null;
-    const bundle = await response.json();
-    const published = bundle.publications?.find((entry) => entry.app === "ai-bounded");
-    const challenge = bundle.challenges?.find((entry) => entry.id === published?.challengeId);
-    const spec = challenge?.spec;
-    const generative = bundle.publications?.find((entry) => entry.app === "ai-generative");
-    const genMedia = generative?.artifact?.body?.media ?? {};
-    publishedRendition = genMedia.raster ? { raster: genMedia.raster, size: genMedia.size } : null;
+    const parsed = fixtureFromBundle(await response.json());
+    publishedRendition = parsed?.picture.raster ? { raster: parsed.picture.raster, size: parsed.picture.size } : null;
     refreshPictureNote();
-    if (!spec?.reference || !spec.metric || typeof spec.bound !== "number") return null;
-    const media = published?.artifact?.body?.media ?? {};
-    return {
-      published: { raster: genMedia.raster, size: genMedia.size },
-      reference: spec.reference,
-      metric: spec.metric,
-      bound: spec.bound,
-      rendition: { width: media.width, height: media.height, rule: media.rule }
-    };
+    return parsed;
   } catch {
     return null;
   }
-}
-function drawRaster(canvas, raster, width, height) {
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  const image = context.createImageData(width, height);
-  for (let pixel = 0; pixel < width * height; pixel++) {
-    image.data[pixel * 4] = raster[pixel * 3] ?? 0;
-    image.data[pixel * 4 + 1] = raster[pixel * 3 + 1] ?? 0;
-    image.data[pixel * 4 + 2] = raster[pixel * 3 + 2] ?? 0;
-    image.data[pixel * 4 + 3] = 255;
-  }
-  context.putImageData(image, 0, 0);
 }
 var picture = $("picture");
 var pictureNote = $("picture-note");
@@ -413,40 +409,54 @@ function refreshPictureNote() {
   }
   pictureNote.textContent = "This run's picture, re-derived from the model and seed above \u2014 the rendition.raster digest in the evidence below is these bytes.";
 }
+function drawRaster(canvas, raster, width, height) {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const image = context.createImageData(width, height);
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    image.data[pixel * 4] = raster[pixel * 3] ?? 0;
+    image.data[pixel * 4 + 1] = raster[pixel * 3 + 1] ?? 0;
+    image.data[pixel * 4 + 2] = raster[pixel * 3 + 2] ?? 0;
+    image.data[pixel * 4 + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
+}
 var boundedPicture = $("bounded-picture");
 var boundedInput = $("reconstruction");
 var boundedResult = $("bounded-result");
 var boundedEvidence = $("bounded-evidence");
-var boundedFixture = await loadBoundedFixture();
-if (!boundedFixture) {
+var fixture = await loadFixture();
+if (!fixture?.lossy) {
   boundedResult.textContent = "This page is not beside a mirror bundle, so there is no committed reference to measure against. Open it from the published mirror.";
 } else {
-  boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${boundedFixture.reference.length} values, ${boundedFixture.metric} within ${boundedFixture.bound}.`;
-  boundedInput.placeholder = `e.g. ${boundedFixture.reference.slice(0, 4).join(", ")}, \u2026`;
+  boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${fixture.lossy.reference.length} values, ${fixture.lossy.metric} within ${fixture.lossy.bound}.`;
+  boundedInput.placeholder = `e.g. ${fixture.lossy.reference.slice(0, 4).join(", ")}, \u2026`;
 }
 $("check-bounded").addEventListener("click", () => {
-  if (!boundedFixture) return;
+  if (!fixture?.lossy) return;
   const parsed = boundedInput.value.split(/[\s,]+/).filter((token) => token.length > 0).map(Number);
   if (parsed.length === 0 || parsed.some((value) => !Number.isFinite(value))) {
     boundedResult.textContent = "Paste numbers (comma or space separated) to measure.";
     return;
   }
   try {
-    const claim = checkBoundedClaim(boundedFixture.reference, parsed, boundedFixture.metric, boundedFixture.bound);
+    const claim = checkBoundedClaim(fixture.lossy.reference, parsed, fixture.lossy.metric, fixture.lossy.bound);
     if (claim.error) {
       boundedResult.textContent = claim.error;
       boundedEvidence.textContent = "";
       boundedPicture.width = 0;
       return;
     }
-    boundedResult.textContent = claim.correct ? `WITHIN the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is true by recomputation.` : `OUTSIDE the bound: ${boundedFixture.metric} = ${claim.metricValue} (bound ${boundedFixture.bound}). The claim is false, and no signature can make it true.`;
+    boundedResult.textContent = claim.correct ? `WITHIN the bound: ${fixture.lossy.metric} = ${claim.metricValue} (bound ${fixture.lossy.bound}). The claim is true by recomputation.` : `OUTSIDE the bound: ${fixture.lossy.metric} = ${claim.metricValue} (bound ${fixture.lossy.bound}). The claim is false, and no signature can make it true.`;
     drawRaster(
       boundedPicture,
-      renderBoundedPicture(boundedFixture.reference, parsed, boundedFixture.rendition),
-      boundedFixture.rendition.width ?? boundedFixture.reference.length,
-      boundedFixture.rendition.height ?? 152
+      renderBoundedPicture(fixture.lossy.reference, parsed, fixture.lossy.rendition),
+      fixture.lossy.rendition.width ?? fixture.lossy.reference.length,
+      fixture.lossy.rendition.height ?? 152
     );
-    void runBoundedProof(boundedFixture.reference, parsed, boundedFixture.metric, boundedFixture.bound).then((proof) => {
+    void runBoundedProof(fixture.lossy.reference, parsed, fixture.lossy.metric, fixture.lossy.bound).then((proof) => {
       boundedEvidence.textContent = JSON.stringify(proof, null, 2);
     });
   } catch (error) {

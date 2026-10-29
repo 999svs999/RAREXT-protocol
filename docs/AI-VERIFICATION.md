@@ -198,7 +198,12 @@ runs the committed model in your browser and assembles the evidence an attestati
 would carry — the artifact body, the model digest, the trace hash built the way
 `attestRun` builds it, and the artifact hash — and, for the lossy representation,
 measures a pasted reconstruction against the committed reference it reads from the
-bundle BESIDE the page, so the page cannot drift from the artifact it is measuring.
+bundle BESIDE the page, so the page cannot drift from the artifact it is measuring. It also DRAWS it: both
+representations are painted from the raster the evidence commits to — the RGB bytes
+themselves, never decoded from a file — so the picture a visitor sees in the browser
+re-hashes to the digest in the published artifact. The bundle's two editions are read
+as independent halves, because a page that reads one out of the other goes quiet
+instead of wrong.
 Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a
 signature is an identity claim and a page has no identity, so the PROOF is what it
 produces. Its hashes are held to node's in `apps/web/test/ai-proof.test.ts` — if

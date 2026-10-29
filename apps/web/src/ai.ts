@@ -260,3 +260,65 @@ export function renderBoundedPicture(
   }
   return renderBoundedRaster(reference, values, size.width, size.height ?? BOUNDED_RASTER_HEIGHT);
 }
+
+/**
+ * What the bundle BESIDE the page says, parsed once and testably.
+ *
+ * The two halves are separate fields on purpose. The picture note and the lossy
+ * form have nothing to do with each other: reading the published raster out of the
+ * LOSSY publication — which does not carry one — made the note go quiet while the
+ * picture still drew, and only loading the page in a browser showed it. As separate
+ * fields that mistake cannot be expressed: `picture` comes from the generative
+ * edition, `lossy` from the bounded one, and either may be absent alone.
+ */
+export interface PublishedFixture {
+  /** The rendition the published GENERATIVE edition recorded, if the bundle carries one. */
+  picture: { raster?: string; size?: number };
+  /** The lossy half of the page, if this bundle carries a committed reference. */
+  lossy: {
+    reference: number[];
+    metric: BoundedMetric;
+    bound: number;
+    rendition: { width?: number; height?: number; rule?: string };
+  } | null;
+}
+
+type BundleShape = {
+  publications?: Array<{
+    app?: string;
+    challengeId?: string;
+    artifact?: {
+      body?: {
+        media?: { width?: number; height?: number; rule?: string; raster?: string; size?: number };
+      };
+    };
+  }>;
+  challenges?: Array<{ id?: string; spec?: { metric?: string; bound?: number; reference?: number[] } }>;
+};
+
+export function fixtureFromBundle(value: unknown): PublishedFixture | null {
+  if (typeof value !== "object" || value === null) return null;
+  const bundle = value as BundleShape;
+
+  const generative = bundle.publications?.find((entry) => entry?.app === "ai-generative");
+  const genMedia = generative?.artifact?.body?.media ?? {};
+  const picture = typeof genMedia.raster === "string" ? { raster: genMedia.raster, size: genMedia.size } : {};
+
+  const bounded = bundle.publications?.find((entry) => entry?.app === "ai-bounded");
+  const challenge = bundle.challenges?.find((entry) => entry?.id === bounded?.challengeId);
+  const spec = challenge?.spec;
+  if (!Array.isArray(spec?.reference) || typeof spec.metric !== "string" || typeof spec.bound !== "number") {
+    return { picture, lossy: null };
+  }
+
+  const media = bounded?.artifact?.body?.media ?? {};
+  return {
+    picture,
+    lossy: {
+      reference: spec.reference,
+      metric: spec.metric as BoundedMetric,
+      bound: spec.bound,
+      rendition: { width: media.width, height: media.height, rule: media.rule },
+    },
+  };
+}
