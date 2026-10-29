@@ -16,6 +16,7 @@ import {
   fixtureFromBundle,
   renderBoundedPicture,
   renderProofPicture,
+  verifyPublishedRendition,
 } from "../src/ai.ts";
 
 /**
@@ -212,4 +213,46 @@ test("a bundle without a committed reference yields no lossy half; junk yields n
   assert.equal(fixtureFromBundle(null), null);
   assert.equal(fixtureFromBundle("nope"), null);
   assert.equal(fixtureFromBundle(42), null);
+});
+
+test("a published rendition re-derives from its own commitment, both representations", async () => {
+  const bundle = mirrorBundle();
+  const generative = bundle.publications.find((entry) => entry.app === "ai-generative");
+  const bounded = bundle.publications.find((entry) => entry.app === "ai-bounded");
+  const challenge = bundle.challenges.find((entry) => entry.id === bounded.challengeId);
+
+  const gen = await verifyPublishedRendition({ app: "ai-generative", body: generative.artifact.body });
+  assert.equal(gen.matches, true, "the generative picture is the artifact's own");
+  assert.equal(gen.derived, generative.artifact.body.media.raster);
+
+  const lossy = await verifyPublishedRendition({
+    app: "ai-bounded",
+    body: bounded.artifact.body,
+    challenge,
+  });
+  assert.equal(lossy.matches, true, "the lossy strip is the artifact's own");
+  assert.equal(lossy.derived, bounded.artifact.body.media.raster);
+});
+
+test("a rendition that is not the claim's picture does NOT re-derive", async () => {
+  const bundle = mirrorBundle();
+  const generative = bundle.publications.find((entry) => entry.app === "ai-generative");
+  const body = generative.artifact.body;
+
+  // Change the SEED and the derived picture moves: the recorded raster is now a
+  // picture this commitment cannot produce. This is the whole point of re-deriving.
+  const forged = await verifyPublishedRendition({ app: "ai-generative", body: { ...body, seed: body.seed + 1 } });
+  assert.equal(forged.matches, false);
+  assert.notEqual(forged.derived, forged.recorded);
+
+  // A rule this page does not implement is refused by NAME, never compared loosely.
+  const unknown = await verifyPublishedRendition({ app: "x", body: { media: { rule: "someone-elses-v9", raster: "a".repeat(64) } } });
+  assert.equal(unknown.derived, null);
+  assert.equal(unknown.matches, false);
+  assert.match(String(unknown.reason), /does not implement the rule/);
+
+  // An artifact with no raster records nothing to re-derive against.
+  const none = await verifyPublishedRendition({ app: "x", body: {} });
+  assert.equal(none.recorded, "");
+  assert.equal(none.matches, false);
 });

@@ -250,6 +250,12 @@ if (process.argv.includes("--self-test")) {
     const aiPageReal = readFileSync(new URL("apps/web/src/ai-page.ts", root), "utf8");
     requireCondition("page fixture parser", aiModuleReal.includes("export function fixtureFromBundle"));
     requireCondition("page delegates parsing", aiPageReal.includes("fixtureFromBundle("));
+    // Read the source HERE, in this block: a requireCondition that borrows a guard's
+    // local is a ReferenceError, not a check — the same trap as last cycle, where the
+    // rule had just been written down and was still broken.
+    const galleryReal = readFileSync(new URL("site/registry/mirror/gallery.html", root), "utf8");
+    requireCondition("gallery re-derives renditions", galleryReal.includes("verifyPublishedRendition("));
+    requireCondition("rendition check is exported", aiModuleReal.includes("export async function verifyPublishedRendition"));
   }
 
   const assertChanged = (before, after, label) => {
@@ -3083,6 +3089,25 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     if (!aiPage.includes("fixtureFromBundle(")) {
       fail("the page no longer parses the bundle beside it through the tested fixtureFromBundle");
     }
+    // The gallery re-derives published renditions in the visitor's browser. It must do
+    // that through the module (one implementation of the rule, testable), and it must
+    // reach the check by IMPORT rather than by growing its own copy — the extract-one-
+    // module discipline the page work already paid for once.
+    const gallery = readFileSync(new URL("site/registry/mirror/gallery.html", root), "utf8");
+    if (!gallery.includes("verifyPublishedRendition(")) {
+      fail("the gallery no longer re-derives the renditions it shows from the artifacts that claim them");
+    }
+    if (!gallery.includes("./renditions.js")) {
+      fail("the gallery does not import the rendition module, so its check is a private copy");
+    }
+    if (gallery.includes("renderRaster(") || gallery.includes("renderBoundedRaster(")) {
+      fail("the gallery renders rasters itself instead of calling the shared check");
+    }
+    const buildScript = JSON.parse(readFileSync(new URL("package.json", root), "utf8")).scripts["build:web"];
+    if (!String(buildScript).includes("renditions.ts")) {
+      fail("package.json no longer builds the gallery's rendition module, so the page ships without it");
+    }
+
     if (aiPage.includes("publications?.find(")) {
       fail("the page searches the bundle's publications itself — that parsing belongs in fixtureFromBundle, where a test can reach it");
     }

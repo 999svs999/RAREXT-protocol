@@ -203,7 +203,11 @@ representations are painted from the raster the evidence commits to — the RGB 
 themselves, never decoded from a file — so the picture a visitor sees in the browser
 re-hashes to the digest in the published artifact. The bundle's two editions are read
 as independent halves, because a page that reads one out of the other goes quiet
-instead of wrong.
+instead of wrong. The gallery goes
+further on every rendition it shows: the digest it prints proves the bytes are the
+bundle's, and the line beneath it re-derives the PICTURE from the artifact's own model
+and seed and says whether it is the claim's — so a mirror that serves a doctored
+rendition is caught in the visitor's browser, by recomputation, artifact by artifact.
 Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a
 signature is an identity claim and a page has no identity, so the PROOF is what it
 produces. Its hashes are held to node's in `apps/web/test/ai-proof.test.ts` — if

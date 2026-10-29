@@ -322,3 +322,67 @@ export function fixtureFromBundle(value: unknown): PublishedFixture | null {
     },
   };
 }
+
+/**
+ * Re-derive a PUBLISHED artifact's rendition from the commitment inside it.
+ *
+ * The gallery verifies a served blob against the digest the bundle records, which
+ * proves the bytes are the bundle's — not that the picture is the one the AI claim
+ * commits to. This does the other half, in the visitor's browser: render the raster
+ * from the artifact's own model/seed (generative) or from the committed reference
+ * against the artifact's values (lossy), and compare the digest to the one the
+ * artifact records. A mirror can serve bytes; only the artifact can say which
+ * picture they are.
+ */
+export interface PublishedRenditionCheck {
+  /** The digest the artifact records for its picture. */
+  recorded: string;
+  /** The digest of the raster re-derived here, or null when the artifact's rule is not implemented. */
+  derived: string | null;
+  /** True only when both exist and agree. */
+  matches: boolean;
+  /** Why no comparison happened, when the rule is unknown or the request is malformed. */
+  reason?: string;
+}
+
+export async function verifyPublishedRendition(input: {
+  app?: string;
+  body: any;
+  challenge?: { spec?: { reference?: number[] } };
+}): Promise<PublishedRenditionCheck> {
+  const media = input.body?.media;
+  const recorded = typeof media?.raster === "string" ? media.raster : "";
+  if (!recorded) return { recorded: "", derived: null, matches: false, reason: "the artifact records no raster" };
+
+  try {
+    let raster: Uint8Array;
+    if (media.rule === RASTER_RULE) {
+      if (!input.body?.model || typeof input.body.seed !== "number" || typeof media.size !== "number") {
+        return { recorded, derived: null, matches: false, reason: "the artifact does not carry a usable model, seed and size" };
+      }
+      raster = renderRaster(input.body.model, input.body.seed, media.size);
+    } else if (media.rule === BOUNDED_RASTER_RULE) {
+      const reference = input.challenge?.spec?.reference;
+      if (!Array.isArray(reference) || !Array.isArray(input.body?.values)) {
+        return { recorded, derived: null, matches: false, reason: "the artifact's challenge does not carry the committed reference" };
+      }
+      raster = renderBoundedRaster(
+        reference,
+        input.body.values,
+        media.width,
+        media.height ?? BOUNDED_RASTER_HEIGHT,
+      );
+    } else {
+      return { recorded, derived: null, matches: false, reason: `this page does not implement the rule ${String(media.rule)}` };
+    }
+    const derived = await sha256Bytes(raster);
+    return { recorded, derived, matches: derived === recorded };
+  } catch (error) {
+    return {
+      recorded,
+      derived: null,
+      matches: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
