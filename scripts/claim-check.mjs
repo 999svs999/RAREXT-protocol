@@ -397,6 +397,10 @@ if (process.argv.includes("--self-test")) {
   const rfcLostTheRefusal = doctor(originalSeedListRfc, "rfcLostTheRefusal", (s) =>
     s.replace("does not match the expected digest", "is not what we were looking for"),
   );
+  const originalVerifiersRfc = readFileSync(new URL("rfcs/0006-independent-verifiers.md", root), "utf8");
+  const rfcPinnedTheRunner = doctor(originalVerifiersRfc, "rfcPinnedTheRunner", (s) =>
+    s.replace("names the RULE, never the RUNNER", "names the runner, mostly"),
+  );
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -420,6 +424,14 @@ if (process.argv.includes("--self-test")) {
   const caughtSeedList = failures > beforeSeedList;
   if (!caughtSeedList) fail("self-test: the checker accepted RFC 0020 dropping the refusal its answer quotes");
   caught = caught && caughtSeedList;
+
+  // And RFC 0006's answer softened into naming the runner — the answer this project
+  // had to argue for once already.
+  const beforeVerifiers = failures;
+  checkAnnouncementRfc(undefined, undefined, rfcPinnedTheRunner);
+  const caughtVerifiers = failures > beforeVerifiers;
+  if (!caughtVerifiers) fail("self-test: the checker accepted RFC 0006's answer naming the runner");
+  caught = caught && caughtVerifiers;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1228,7 +1240,7 @@ function checkArtifactSources(filesOverride) {
  * still be there, so a later edit cannot quietly drop the security argument or
  * rename a primitive into fiction.
  */
-function checkAnnouncementRfc(rfcOverride, seedListRfcOverride) {
+function checkAnnouncementRfc(rfcOverride, seedListRfcOverride, verifiersRfcOverride) {
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
   const { text: sources } = readSourceTrees({ includeScripts: true });
@@ -1327,6 +1339,37 @@ function checkAnnouncementRfc(rfcOverride, seedListRfcOverride) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0020's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // RFC 0006 (independent verifiers) — the thesis the AI-verification surface is an
+  // instance of. Its four answers are held the same way. This block sat INSIDE the
+  // loop above on its first landing, after a `continue`, where it never ran and the
+  // check still passed; a guard in dead code is the failure this file's
+  // requireCondition helper exists to make visible, so the RFC's own precondition is
+  // asserted too.
+  const verifiersRfc =
+    verifiersRfcOverride ?? readFileSync(new URL("rfcs/0006-independent-verifiers.md", root), "utf8");
+  const VERIFIERS_ANSWERED = [
+    ["1", "required operator set", ["names the RULE, never the RUNNER"], []],
+    ["2", "verifier bytes be pinned", ["the MANIFEST is pinned"], ["verifierHash"]],
+    ["3", "prove liveness", ["it does not have to"], []],
+    ["4", "fee schedule", ["no fee for attesting"], []],
+  ];
+  for (const [number, marker, quoted, inCode] of VERIFIERS_ANSWERED) {
+    if (!verifiersRfc.includes(marker)) {
+      fail(`RFC 0006's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!verifiersRfc.includes(quote)) {
+        fail(`RFC 0006's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0006's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
   }

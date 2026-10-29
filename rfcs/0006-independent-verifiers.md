@@ -139,13 +139,40 @@ behaves as before and recomputes.
 
 ## Open questions
 
-1. Should an app declare a required operator set, and should a publication from a
-   different operator be rejected?
-2. Should an operator's verifier bytes be pinned by hash in the publication, so a
-   reader can fetch and run exactly what signed?
-3. How does an operator prove liveness — a heartbeat, a challenge, or nothing?
-4. Should the registry keep a fee schedule for operator attestations, or leave
-   that to the app?
+1. **Should an app declare a required operator set?** — **ANSWERED: no. The
+   protocol names the RULE, never the RUNNER.** An attestation carries a verifier
+   name and a hashed manifest, and neither is a statement about WHO ran it: a
+   reader re-runs the rule itself, so the identity of the machine that produced the
+   first answer is not part of what it checks. An operator set would make a
+   verifier's answer depend on the operator, which is the coupling independent
+   verification exists to remove — and a rule that only certain parties may apply
+   is not independent, it is delegated.
+2. **Should an operator's verifier bytes be pinned by hash in the publication?** —
+   **ANSWERED: the MANIFEST is pinned, not the executable, and that is the right
+   granularity.** `verifierHash` is the canonical digest of the verifier's manifest
+   — its name, version, metrics and representation — so a reader knows exactly
+   which rule produced a verdict and can tell that a different one did. The bytes
+   of one implementation are a different commitment: pinning an executable would
+   make a verdict depend on whose build ran it, which is the same coupling in a
+   different coat. The protocol commits to the RULE, so any implementation of it
+   reaches the same verdict, and the checker's version contracts hold the rule's
+   shape to the code that claims it.
+3. **How does an operator prove liveness?** — **ANSWERED: it does not have to.**
+   The artifact and the rule are sufficient, so verification needs nothing from the
+   operator at the moment of checking: a reader fetches the bytes, applies the
+   published rule, and gets the verdict — no heartbeat, no challenge, no session
+   with a machine that might be gone. That is not an omission but the property:
+   an independent verifier that could only answer while a server was up would make
+   verification a subscription, and a chain of custody that dies with its operator
+   is exactly the failure this RFC is written against.
+4. **Should the registry keep a fee schedule for operator attestations?** —
+   **ANSWERED: no fee for attesting.** Verification is the thing the protocol wants
+   to cost nothing to check, so the registry prices what it meters — storage rent,
+   in microcredits per GiB-month — and publishes a reward table for the actions it
+   defines, while what an operator charges for its own work is left to the app that
+   engages it. A fee on attestation would
+   also put a price on disagreement, which is the wrong side of the transaction:
+   the reader who verifies pays in compute, and that is the whole point.
 
 ## Implementation status
 

@@ -27,6 +27,7 @@ cannot quietly join the checked list, and a checked doc cannot quietly leave it.
 | `docs/CRYPTO.md` | crypto doc | the runtime floor against `engines.node`, the leaf-version floor, and the suite derivation through `suiteOf` |
 | `scripts/` | artifact sources | the inline bundle (`bundle.js`) and proof page (`verify.html`) each live in one module; generators delegate to them and keep no private copies |
 | `rfcs/0019-mirror-announcements.md` | announcement rfc | the 17 primitives it leans on exist, its referenced paths resolve, the sections and sentence its argument rests on are present, and **all seven answered questions** are held to the code by the fragment each quotes and the names each leans on |
+| `rfcs/0006-independent-verifiers.md` | verifiers rfc | its four answered questions, each held to the code by the fragment it quotes (`names the RULE, never the RUNNER`, `the MANIFEST is pinned`) and the name it leans on (`verifierHash`) |
 | `rfcs/0020-anchoring-the-seed-list.md` | seed-list rfc | its four answered questions, each held to the code by the fragment it quotes and the names it leans on (`registryListDigest`, the digest-mismatch refusal, `generatedAt`) |
 
 ## Deliberately prose
