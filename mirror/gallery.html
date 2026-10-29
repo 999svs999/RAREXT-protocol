@@ -17,6 +17,8 @@
       .media { background: #05070a; min-height: 120px; display: flex; align-items: center;
                justify-content: center; }
       .media img, .media video { max-width: 100%; max-height: 220px; display: block; }
+      .ai-check { margin-top: 4px; font-size: 0.85em; opacity: 0.85; }
+      .ai-check.bad { color: #b00020; opacity: 1; font-weight: 600; }
       .media audio { width: 100%; }
       .media pre { color: #9fb0c3; font-size: 12px; padding: 14px; white-space: pre-wrap;
                    word-break: break-all; max-height: 220px; overflow: auto; margin: 0; width: 100%; }
@@ -39,6 +41,9 @@
     <div class="grid" id="grid"></div>
     <p class="empty" id="empty" hidden>No public blobs on this node yet.</p>
     <script type="module">
+    // The re-derivation runs the SAME rule the artifact's own verifier runs, from the
+    // module — not a second copy of it living in this page.
+    import { verifyPublishedRendition } from "./renditions.js";
       const grid = document.getElementById("grid");
       const empty = document.getElementById("empty");
       const HASH = /^[0-9a-f]{64}$/;
@@ -167,6 +172,29 @@
         }
       }
 
+      // Which publication records which blob, from the bundle BESIDE this page — the
+      // same file the proof page reads, so neither page can drift from the artifact.
+      let renditions = null;
+      const loadRenditions = async () => {
+        try {
+          const response = await fetch("./bundle.json", { cache: "no-cache" });
+          if (!response.ok) return new Map();
+          const bundle = await response.json();
+          const byId = new Map((bundle.challenges ?? []).map((entry) => [entry.id, entry]));
+          return new Map(
+            (bundle.publications ?? [])
+              .filter((entry) => entry?.artifact?.body?.media?.blob)
+              .map((entry) => [
+                entry.artifact.body.media.blob,
+                { app: entry.app, body: entry.artifact.body, challenge: byId.get(entry.challengeId) },
+              ]),
+          );
+        } catch {
+          return new Map();
+        }
+      };
+      const renditionFor = (hash) => (renditions ? renditions.get(hash) : undefined);
+
       const render = (record) => {
         const kind = family(record.mediaType);
         if (!kind) return null;
@@ -221,6 +249,30 @@
             (kind ? ` · ${kind}` : "") +
             (record.ai.title ? ` — ${record.ai.title}` : "");
           meta.appendChild(ai);
+        
+          // The other half of the verification. The digest above proves these bytes are
+          // the bundle's; this asks whether the PICTURE is the one the AI claim commits
+          // to, re-derived here from the artifact's own model and seed.
+          const check = document.createElement("div");
+          check.className = "ai-check";
+          const publication = renditionFor(record.hash);
+          if (!publication) {
+            check.textContent = "no publication records this blob, so there is no claim to re-derive";
+          } else {
+            check.textContent = "re-deriving from the artifact…";
+            verifyPublishedRendition(publication)
+              .then((result) => {
+                check.textContent = result.matches
+                  ? `re-derived from the artifact: this picture IS the claim's (${result.recorded.slice(0, 16)}…)`
+                  : `NOT re-derived: ${result.reason ?? "the picture this claim produces is not the one recorded"}`;
+                if (!result.matches) check.classList.add("bad");
+              })
+              .catch((error) => {
+                check.textContent = `could not re-derive: ${error}`;
+                check.classList.add("bad");
+              });
+          }
+          meta.appendChild(check);
         }
 
         card.append(media, meta);
@@ -239,6 +291,7 @@
         return card;
       };
 
+      renditions = await loadRenditions();
       const shown = source.records.map(render).filter(Boolean);
       for (const card of shown) grid.appendChild(card);
       if (shown.length === 0) empty.hidden = false;
