@@ -74,6 +74,23 @@ const fail = (message) => {
   console.error(`  MISMATCH ${message}`);
 };
 
+/**
+ * Run an injection, or fail loudly because it changed nothing.
+ *
+ * A doctor whose target has been renamed replaces nothing, so the "doctored" text
+ * equals the real source and the case comparing them passes while testing nothing
+ * — twice this week that happened, and only the guard complained, never the case.
+ * Routing every injection through this makes a stale one impossible to miss: the
+ * mutation must differ from its input, or the self-test fails naming it.
+ */
+const doctor = (original, label, mutate) => {
+  const doctored = mutate(original);
+  if (doctored === original) {
+    fail(`self-test: the ${label} injection is STALE — it changed nothing, so its case proves nothing`);
+  }
+  return doctored;
+};
+
 function checkSamplingTable(markdown, label) {
   const rows = parseTable(markdown);
 
@@ -149,7 +166,7 @@ if (process.argv.includes("--self-test")) {
   console.log("self-test: a doctored table must be reported as a mismatch\n");
   const original = readFileSync(rfcPath, "utf8");
   const before = failures;
-  const doctored = original.replace(/^\|\s*10%\s*\|\s*44\s*\|/m, "| 10% | 45 |");
+  const doctored = doctor(original, "doctored", (s) => s.replace(/^\|\s*10%\s*\|\s*44\s*\|/m, "| 10% | 45 |"));
   checkSamplingTable(doctored, "doctored");
   // And a doctored bench record: the arithmetic must not forgive a wrong ratio.
   const beforeDoctoredRecord = failures;
@@ -277,7 +294,7 @@ if (process.argv.includes("--self-test")) {
   // And the AI verification doc — doctored rule name must be caught.
   const beforeAi = failures;
   const originalAiDoc = readFileSync(new URL("docs/AI-VERIFICATION.md", root), "utf8");
-  const doctoredAiDoc = originalAiDoc.replace("`xorshift32-image-v1`", "`xorshift32-image-v2`");
+  const doctoredAiDoc = doctor(originalAiDoc, "doctoredAiDoc", (s) => s.replace("`xorshift32-image-v1`", "`xorshift32-image-v2`"));
   checkAiVerificationDoc(doctoredAiDoc);
   const caughtAi = failures > beforeAi;
   if (!caughtAi) fail("self-test: the checker accepted a doctored AI rendition rule name");
@@ -286,7 +303,7 @@ if (process.argv.includes("--self-test")) {
   // sentence is held to the export and to the committed bundle, so dropping it
   // is drift, not a rewording.
   const beforeAiReplay = failures;
-  const noReplayAiDoc = originalAiDoc.replaceAll("replayBundleAi", "replayClaimsOffline");
+  const noReplayAiDoc = doctor(originalAiDoc, "noReplayAiDoc", (s) => s.replaceAll("replayBundleAi", "replayClaimsOffline"));
   checkAiVerificationDoc(noReplayAiDoc);
   const caughtAiReplay = failures > beforeAiReplay;
   if (!caughtAiReplay) fail("self-test: the checker accepted an AI verification doc that no longer names the SDK's bundle replay");
@@ -347,7 +364,7 @@ if (process.argv.includes("--self-test")) {
   // page that only describes the proof is the failure this check exists for.
   const beforeFrontDoor = failures;
   const originalLanding = readFileSync(new URL("site/index.html", root), "utf8");
-  const doctoredLanding = originalLanding.replace(/ data-pin-root/g, "");
+  const doctoredLanding = doctor(originalLanding, "doctoredLanding", (s) => s.replace(/ data-pin-root/g, ""));
   checkFrontDoor(undefined, doctoredLanding);
   const caughtFrontDoor = failures > beforeFrontDoor;
   if (!caughtFrontDoor) fail("self-test: the checker accepted a front door without its pinned proof link");
@@ -376,7 +393,7 @@ if (process.argv.includes("--self-test")) {
     realApiBundle.replaceAll("foldAnnouncements(", "foldAnnouncementsUnused(") +
     "\n// stray fork\nconst refusals = [];\nconst refuse = (url, reason) => {\n  refusals.push({ url, reason });\n};\n";
   const realSdkIndex = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
-  const doctoredSdkIndex = realSdkIndex.replaceAll("verifyCandidates(", "verifyCandidatesUnused(");
+  const doctoredSdkIndex = doctor(realSdkIndex, "doctoredSdkIndex", (s) => s.replaceAll("verifyCandidates(", "verifyCandidatesUnused("));
   checkVerifySequence({
     "apps/api/src/bundle.ts": doctoredApiBundle,
     "packages/agent-sdk/src/index.ts": doctoredSdkIndex,
@@ -434,7 +451,7 @@ if (process.argv.includes("--self-test")) {
   // And a runtime floor the package contradicts must be reported.
   const beforeCrypto = failures;
   const originalCryptoDoc = readFileSync(new URL("docs/CRYPTO.md", root), "utf8");
-  const doctoredCryptoDoc = originalCryptoDoc.replace(/Node \d+\.\d+\+/, "Node 20.12+");
+  const doctoredCryptoDoc = doctor(originalCryptoDoc, "doctoredCryptoDoc", (s) => s.replace(/Node \d+\.\d+\+/, "Node 20.12+"));
   checkCryptoDoc(doctoredCryptoDoc);
   const caughtCrypto = failures > beforeCrypto;
   if (!caughtCrypto) fail("self-test: the checker accepted a runtime floor the package contradicts");
@@ -442,7 +459,7 @@ if (process.argv.includes("--self-test")) {
   // And an app-protocol config name the code never reads must be reported.
   const beforeAppProtocol = failures;
   const originalAppProtocol = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
-  const doctoredAppProtocol = originalAppProtocol.replace("RAREXT_CHALLENGES`", "RAREXT_CHALLENGES_V2`");
+  const doctoredAppProtocol = doctor(originalAppProtocol, "doctoredAppProtocol", (s) => s.replace("RAREXT_CHALLENGES`", "RAREXT_CHALLENGES_V2`"));
   checkAppProtocol(doctoredAppProtocol);
   const caughtAppProtocol = failures > beforeAppProtocol;
   if (!caughtAppProtocol) fail("self-test: the checker accepted a documented config name no code reads");
@@ -452,7 +469,7 @@ if (process.argv.includes("--self-test")) {
   // takedown test would be caught).
   const beforeMirrors = failures;
   const originalMirrorsDoc = readFileSync(new URL("docs/MIRRORS.md", root), "utf8");
-  const doctoredMirrorsDoc = originalMirrorsDoc.replace("npm run test:takedown", "npm run test:mirror");
+  const doctoredMirrorsDoc = doctor(originalMirrorsDoc, "doctoredMirrorsDoc", (s) => s.replace("npm run test:takedown", "npm run test:mirror"));
   checkMirrorsDoc(doctoredMirrorsDoc);
   const caughtMirrors = failures > beforeMirrors;
   if (!caughtMirrors) fail("self-test: the checker accepted a mirrors doc naming an undefined npm script");
@@ -460,7 +477,7 @@ if (process.argv.includes("--self-test")) {
   // And a mirrors doc that stops naming the pinning call must be reported:
   // the new sentences are held to the code, so dropping one is drift.
   const beforePinDoc = failures;
-  const unpinnedMirrorsDoc = originalMirrorsDoc.replace("`pinBundle`", "`pinTheBundle`");
+  const unpinnedMirrorsDoc = doctor(originalMirrorsDoc, "unpinnedMirrorsDoc", (s) => s.replace("`pinBundle`", "`pinTheBundle`"));
   checkMirrorsDoc(unpinnedMirrorsDoc);
   const caughtPinDoc = failures > beforePinDoc;
   if (!caughtPinDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the pinning call");
@@ -468,7 +485,7 @@ if (process.argv.includes("--self-test")) {
   // And a publish flow that stops recording what the pinning call returned must
   // be reported — the doc's sentence is held to the code, not to itself.
   const realPublishProof = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
-  const doctoredPublishProof = realPublishProof.replace("seed.pins =", "seed.recordedPins =");
+  const doctoredPublishProof = doctor(realPublishProof, "doctoredPublishProof", (s) => s.replace("seed.pins =", "seed.recordedPins ="));
   const beforePinWrite = failures;
   checkMirrorsDoc(undefined, { publishProof: doctoredPublishProof });
   const caughtPinWrite = failures > beforePinWrite;
@@ -477,7 +494,7 @@ if (process.argv.includes("--self-test")) {
   // And a resident demo that stops calling the resolver — the doc's sentence
   // about that leg would then be describing a script that does not do it.
   const demoSource = readFileSync(new URL("scripts/demo-resident.mjs", root), "utf8");
-  const doctoredDemo = demoSource.replace("sdk.identityFromPublishedOrigin(", "sdk.notTheResolver(");
+  const doctoredDemo = doctor(demoSource, "doctoredDemo", (s) => s.replace("sdk.identityFromPublishedOrigin(", "sdk.notTheResolver("));
   const beforeDemo = failures;
   checkMirrorsDoc(undefined, { demoResident: doctoredDemo });
   const caughtDemo = failures > beforeDemo;
@@ -509,7 +526,7 @@ if (process.argv.includes("--self-test")) {
   // And an API twin that stops checking hops — the doc's redirect sentence gone
   // false in the tree — must be reported.
   const apiTwinReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
-  const noHopCheck = apiTwinReal.replaceAll("fetchWithUrlPolicy(", "request(");
+  const noHopCheck = doctor(apiTwinReal, "noHopCheck", (s) => s.replaceAll("fetchWithUrlPolicy(", "request("));
   const beforeHop = failures;
   checkMirrorsDoc(undefined, { apiBundle: noHopCheck });
   const caughtHop = failures > beforeHop;
@@ -519,7 +536,7 @@ if (process.argv.includes("--self-test")) {
   // And a core that declares the announcement bound but no longer APPLIES it —
   // the doc still true in prose, the bound gone from the fold — must be reported.
   const coreAnn = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
-  const unappliedBound = coreAnn.replace("input.maxAnnouncementDocuments ?? MAX_ANNOUNCEMENT_DOCUMENTS", "Number.MAX_SAFE_INTEGER");
+  const unappliedBound = doctor(coreAnn, "unappliedBound", (s) => s.replace("input.maxAnnouncementDocuments ?? MAX_ANNOUNCEMENT_DOCUMENTS", "Number.MAX_SAFE_INTEGER"));
   const beforeBound = failures;
   checkMirrorsDoc(undefined, { coreAnnouncements: unappliedBound });
   const caughtBound = failures > beforeBound;
@@ -532,7 +549,7 @@ if (process.argv.includes("--self-test")) {
   // The shape moved (the policy is applied through core's hop-checking fetch), so
   // the injection names what the tree holds NOW: a stale doctor injects nothing and
   // the case passes for the wrong reason.
-  const noPolicyTwin = apiBundleReal.replaceAll("fetchWithUrlPolicy(", "someOtherCheck(");
+  const noPolicyTwin = doctor(apiBundleReal, "noPolicyTwin", (s) => s.replaceAll("fetchWithUrlPolicy(", "someOtherCheck("));
   const beforeTwin = failures;
   checkMirrorsDoc(undefined, { apiBundle: noPolicyTwin });
   const caughtTwin = failures > beforeTwin;
@@ -607,7 +624,7 @@ if (process.argv.includes("--self-test")) {
   // And a kinds list that loses the `key` kind — the statement RFC 0019 Q4 asked
   // for — must be reported.
   const kindsReal = readFileSync(new URL("apps/api/src/revocations.ts", root), "utf8");
-  const doctoredKinds = kindsReal.replace('"artifact", "key"', '"artifact"');
+  const doctoredKinds = doctor(kindsReal, "doctoredKinds", (s) => s.replace('"artifact", "key"', '"artifact"'));
   const beforeKinds = failures;
   checkMirrorsDoc(undefined, { revocations: doctoredKinds });
   const caughtKinds = failures > beforeKinds;
@@ -672,7 +689,7 @@ if (process.argv.includes("--self-test")) {
   // And a live checker with no pin check must be reported — a doc that says
   // pins are verified while the script verifies none is the quiet drift.
   const realSeedVerifier = readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
-  const doctoredSeedVerifier = realSeedVerifier.replace("export async function checkPin", "async function checkPinUnused");
+  const doctoredSeedVerifier = doctor(realSeedVerifier, "doctoredSeedVerifier", (s) => s.replace("export async function checkPin", "async function checkPinUnused"));
   const beforePinCheck = failures;
   checkMirrorsDoc(undefined, { seedVerifier: doctoredSeedVerifier });
   const caughtPinCheck = failures > beforePinCheck;
@@ -681,7 +698,7 @@ if (process.argv.includes("--self-test")) {
   // And a mirrors doc that stops naming the SDK's offline AI replay: the
   // sentence is held to the export and to the refusal it quotes.
   const beforeReplayDoc = failures;
-  const noReplayMirrorsDoc = originalMirrorsDoc.replaceAll("replayBundleAi", "replayClaimsOffline");
+  const noReplayMirrorsDoc = doctor(originalMirrorsDoc, "noReplayMirrorsDoc", (s) => s.replaceAll("replayBundleAi", "replayClaimsOffline"));
   checkMirrorsDoc(noReplayMirrorsDoc);
   const caughtReplayDoc = failures > beforeReplayDoc;
   if (!caughtReplayDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the SDK's bundle replay");
@@ -780,13 +797,13 @@ if (process.argv.includes("--self-test")) {
   // And a demo that stops CALLING selfPublish — the sentence still in the doc,
   // the work gone — must be reported.
   const selfPublishDemoReal = readFileSync(new URL("scripts/demo-self-publish.mjs", root), "utf8");
-  const doctoredSelfPublishDemo = selfPublishDemoReal.replace("sdk.selfPublish(", "sdk.assembleSomething(");
+  const doctoredSelfPublishDemo = doctor(selfPublishDemoReal, "doctoredSelfPublishDemo", (s) => s.replace("sdk.selfPublish(", "sdk.assembleSomething("));
   const beforeSelfPublishDemo = failures;
   checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: doctoredSelfPublishDemo });
   const caughtSelfPublishDemo = failures > beforeSelfPublishDemo;
   // And a demo that makes a computation but no GENERATION, while the doc says it
   // does, must be reported too.
-  const noGenerationDemo = selfPublishDemoReal.replace("sdk.selfPublishGenerative(", "sdk.notThat(");
+  const noGenerationDemo = doctor(selfPublishDemoReal, "noGenerationDemo", (s) => s.replace("sdk.selfPublishGenerative(", "sdk.notThat("));
   const beforeNoGeneration = failures;
   checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noGenerationDemo });
   const caughtNoGeneration = failures > beforeNoGeneration;
@@ -795,7 +812,7 @@ if (process.argv.includes("--self-test")) {
 
   // And a demo that only ever tries reconstructions that PASS — the negative
   // removed, the promise kept in prose — must be reported.
-  const noNegativeDemo = selfPublishDemoReal.replace("outsideReplay.claims[0].correct === false", "true");
+  const noNegativeDemo = doctor(selfPublishDemoReal, "noNegativeDemo", (s) => s.replace("outsideReplay.claims[0].correct === false", "true"));
   const beforeNoNegative = failures;
   checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noNegativeDemo });
   const caughtNoNegative = failures > beforeNoNegative;
@@ -807,7 +824,7 @@ if (process.argv.includes("--self-test")) {
   // And an MCP verb registered but never dispatched — a tool listed to clients
   // that answers nothing — must be reported.
   const serverReal = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
-  const registeredOnly = serverReal.replace('case "rarext_attest_local":', 'case "rarext_nothing":');
+  const registeredOnly = doctor(serverReal, "registeredOnly", (s) => s.replace('case "rarext_attest_local":', 'case "rarext_nothing":'));
   const beforeDispatch = failures;
   checkAiVerificationDoc(undefined, undefined, { mcpServer: registeredOnly });
   const caughtDispatch = failures > beforeDispatch;
@@ -816,7 +833,7 @@ if (process.argv.includes("--self-test")) {
 
   // And a server that dispatches AROUND the tested boundary — the case doing its
   // own coercion, which no test would ever reach — must be reported.
-  const aroundBoundary = serverReal.replace("attestLocalFromArgs(", "attestAiLocally(");
+  const aroundBoundary = doctor(serverReal, "aroundBoundary", (s) => s.replace("attestLocalFromArgs(", "attestAiLocally("));
   const beforeAround = failures;
   checkAiVerificationDoc(undefined, undefined, { mcpServer: aroundBoundary });
   const caughtAround = failures > beforeAround;
@@ -826,7 +843,7 @@ if (process.argv.includes("--self-test")) {
   // And a registry builder that keeps its own assembly — the drift the one shared
   // function exists to prevent — must be reported.
   const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
-  const doctoredBuilder = builderReal.replace("return assembleBundle({", "return {");
+  const doctoredBuilder = doctor(builderReal, "doctoredBuilder", (s) => s.replace("return assembleBundle({", "return {"));
   const beforeBuilder = failures;
   checkAiVerificationDoc(undefined, undefined, { registryBuilder: doctoredBuilder });
   const caughtBuilder = failures > beforeBuilder;
@@ -1427,6 +1444,9 @@ function checkAppProtocol(docOverride) {
   for (const { method, path } of routes) {
     // A published :param maps to either an exact guard (when the route names
     // the param inline) or a prefix guard for the collection path.
+    // Not injections: these two NORMALISE a route path, and a path with no
+    // parameter is legitimately unchanged — the stale-injection guard is for
+    // doctors of source text, not for string utilities.
     const normalised = path.replace(/:[A-Za-z]+/g, "");
     const literal = path.replace(/\/:[A-Za-z]+/g, "");
     const handled =
@@ -1994,7 +2014,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     if (!/await readBundleResponseBytes\(response\)/.test(publishedIdentity)) {
       fail("the resident's resolver must bound every document it reads");
     }
-    const resolverCode = publishedIdentity.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const resolverCode = doctor(publishedIdentity, "resolverCode", (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""));
     if (/issuedAt|expiresAt/.test(resolverCode)) {
       fail("the resolver retrieves and core decides: window arithmetic found in the resolver");
     }
@@ -2130,7 +2150,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     // Comments are stripped first: this module's own prose NAMES the arithmetic
     // it refuses to do, and a guard that reads prose would fail on the sentence
     // forbidding the thing it checks for.
-    const adapterCode = adapterSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const adapterCode = doctor(adapterSource, "adapterCode", (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""));
     if (/issuedAt|expiresAt/.test(adapterCode)) {
       fail("core decides and the adapter answers: window arithmetic found in the adapter");
     }
