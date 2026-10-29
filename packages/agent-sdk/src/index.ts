@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  RASTER_RULE,
   assembleBundle,
   attestBoundedRun,
   attestGenerativeRun,
@@ -22,6 +23,7 @@ import {
   foldAnnouncements,
   planSeedUnion,
   publicationFromSignedInput,
+  renderRaster,
   readBundleResponseBytes,
   unresolvedIdentity,
   verifyAiArtifact,
@@ -33,6 +35,7 @@ import {
   allowPrivateFromSeeds,
   fetchWithUrlPolicy,
 } from "../../../packages/core/src/urls.ts";
+import { encodePngRaster } from "./png.ts";
 import { requireFiniteSeed, requireSteps, requireValues } from "./validate.ts";
 import type {
   AttestationBinding,
@@ -45,6 +48,7 @@ import type {
   BundleSeed,
   CandidateOutcome,
   GenerativeBody,
+  GenerativeMedia,
   GenerativeSpec,
 } from "@rarext/core";
 import type {
@@ -528,6 +532,15 @@ export interface SelfPublishGenerativeInput {
    * bundle" rather than a pass.
    */
   challenge: Challenge;
+  /**
+   * Ship a RENDITION of the output — a picture beside the values, exactly as a
+   * registry publishes one. The raster is the commitment (its digest is what the
+   * evidence records); the PNG is one faithful encoding of it, because two
+   * encoders produce different deflate streams for the same pixels. A resident
+   * that wants an artifact the gallery can show needs this; one that only wants
+   * the values does not.
+   */
+  rendition?: number;
   binding: { id: string; version: number; claimKind: ClaimKind };
   /**
    * The semantics record this claim is bound by, carried INTO the bundle. A
@@ -674,7 +687,25 @@ export function selfPublishGenerative(
 
   // The agent runs the model itself — the output is computed, never claimed.
   const output = generate(input.model, seed, steps);
-  const body: GenerativeBody = { model: input.model, seed: input.seed, output };
+
+  // The rendition, when asked for: rendered from the same model and seed, so it is
+  // a function of the commitment rather than a picture sitting beside it.
+  let media: GenerativeMedia | undefined;
+  if (input.rendition !== undefined) {
+    const size = input.rendition;
+    const raster = renderRaster(input.model, seed, size);
+    const png = encodePngRaster(raster, size);
+    media = {
+      mediaType: "image/png",
+      rule: RASTER_RULE,
+      blob: createHash("sha256").update(png).digest("hex"),
+      raster: createHash("sha256").update(raster).digest("hex"),
+      size,
+      bytes: png.length,
+    };
+  }
+
+  const body: GenerativeBody = { model: input.model, seed, output, ...(media ? { media } : {}) };
   const artifact: Artifact = {
     app,
     kind: "ai.generative",
@@ -1204,6 +1235,8 @@ const announcementVerifier: AnnouncementVerifier = {
   },
   verify: verifyPayload,
 };
+
+export { crc32, encodePngRaster } from "./png.ts";
 
 export function generateAgentKeypair(
   suite: SignatureSuite = "ecdsa-p256",

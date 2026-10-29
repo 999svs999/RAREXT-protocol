@@ -2,7 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { AgentSigner, generateAgentKeypair, replayBundleAi, selfPublishGenerative, verifyBundle, verifyPayload } from "../src/index.ts";
+import { createHash } from "node:crypto";
+import { canonicalize, generativeRenditionHolds, renderRaster } from "@rarext/core";
+import {
+  AgentSigner,
+  encodePngRaster,
+  generateAgentKeypair,
+  replayBundleAi,
+  selfPublishGenerative,
+  verifyBundle,
+  verifyPayload,
+} from "../src/index.ts";
 
 /**
  * An AI output made and proved offline: the agent runs the committed model
@@ -157,4 +167,59 @@ test("the SDK refuses to make a record with nonsense in it", () => {
   // and the smallest real one still works.
   const zero = call({ steps: 0 });
   assert.equal(zero.attestation.gateCount, 0);
+});
+
+test("a resident can ship a rendition, and it is a function of the commitment", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+
+  const made = selfPublishGenerative(signer, {
+    author: "resident",
+    title: "with a picture",
+    model: model as never,
+    seed,
+    challenge: challenge as never,
+    semantics: semantics as never,
+    binding,
+    rendition: 64,
+    createdAt: "2026-10-28T00:00:00.000Z",
+  });
+
+  const body = made.publication.artifact.body as { media?: Record<string, unknown> };
+  assert.ok(body.media, "the artifact carries a rendition");
+
+  // The RENDITION CHECK the registry runs accepts it — the picture is this
+  // artifact's own, re-derived from the committed model and seed.
+  assert.equal(
+    generativeRenditionHolds(body as never, sha256),
+    true,
+    "the raster re-derives from the commitment, so the claim covers the picture too",
+  );
+
+  // The PNG is one encoding of that raster, and both digests are recorded.
+  const raster = made.publication.artifact.body as { media: { raster: string; blob: string; size: number; bytes: number } };
+  const rasterBytes = renderRaster(model as never, seed, 64);
+  assert.equal(raster.media.raster, sha256(rasterBytes), "the raster digest is the commitment");
+  const png = encodePngRaster(rasterBytes, 64);
+  assert.equal(raster.media.blob, sha256(png), "the blob digest is the PNG a mirror would serve");
+  assert.equal(raster.media.bytes, png.length);
+
+  // And a picture that is not this artifact's makes the claim false.
+  const forged = { ...body, media: { ...(body.media as object), raster: "0".repeat(64) } };
+  assert.equal(generativeRenditionHolds(forged as never, sha256), false);
+});
+
+test("without a rendition the artifact stays lean, as before", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const made = selfPublishGenerative(signer, {
+    author: "resident",
+    title: "values only",
+    model: model as never,
+    seed,
+    challenge: challenge as never,
+    binding,
+    createdAt: "2026-10-28T00:00:00.000Z",
+  });
+  const body = made.publication.artifact.body as { media?: unknown };
+  assert.equal(body.media, undefined, "no rendition asked for, none shipped");
 });
