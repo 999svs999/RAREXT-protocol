@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+
+import {
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  BOUNDED_RASTER_SCALE,
+  boundedRenditionHolds,
+  renderBoundedRaster,
+} from "@rarext/core";
 
 import { AgentSigner, generateAgentKeypair, replayBundleAi, selfPublishBounded, verifyBundle } from "../src/index.ts";
 
@@ -115,4 +124,77 @@ test("the SDK refuses a reconstruction it cannot carry, before signing anything"
   // would trip the array check and prove nothing about the cap it claims to test.
   const oversized = new Array<number>(1_048_577).fill(0);
   assert.throws(() => call(oversized), /must not exceed/, "the cap is on length, and it is core's number");
+});
+
+test("a resident can ship the lossy strip, and the registry's own check accepts it", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+  const reference = (challenge.spec as { reference: number[] }).reference;
+  const values = published.artifact.body.values;
+
+  const made = selfPublishBounded(signer, {
+    author: "resident",
+    title: "with a strip",
+    values,
+    challenge,
+    semantics,
+    binding,
+    rendition: {},
+    createdAt: "2026-10-28T00:00:00.000Z",
+  } as never);
+
+  const body = made.publication.artifact.body as { media?: Record<string, unknown> };
+  const media = body.media as { width: number; height: number; rule: string; raster: string; blob: string; bytes: number };
+  assert.ok(media, "the artifact carries a strip when one was asked for");
+
+  // The registry's OWN check decides it.
+  assert.equal(boundedRenditionHolds(body as never, challenge.spec as never, sha256), true);
+
+  // The WIDTH is one lane per value at the rule's scale — NOT the value count. Taking
+  // the count produces a wrong picture that still hashes consistently, so nothing
+  // downstream would ever notice; this assertion is the only thing that would.
+  assert.equal(media.width, reference.length * BOUNDED_RASTER_SCALE);
+  assert.equal(media.height, BOUNDED_RASTER_HEIGHT);
+  assert.equal(media.rule, BOUNDED_RASTER_RULE);
+  assert.equal(media.raster, sha256(renderBoundedRaster(reference, values, media.width, media.height)));
+
+  // And a strip that is not this artifact's makes the claim false.
+  const forged = { ...body, media: { ...media, raster: "0".repeat(64) } };
+  assert.equal(boundedRenditionHolds(forged as never, challenge.spec as never, sha256), false);
+});
+
+test("a rendition without a committed reference refuses by name", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  assert.throws(
+    () =>
+      selfPublishBounded(signer, {
+        author: "resident",
+        title: "no reference",
+        values: published.artifact.body.values,
+        challenge: { ...challenge, spec: { metric: "maxAbsError", bound: 4 } },
+        semantics,
+        binding,
+        rendition: {},
+        createdAt: "2026-10-28T00:00:00.000Z",
+      } as never),
+    /carries no committed reference/,
+  );
+});
+
+test("no rendition asked for means none shipped", () => {
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const made = selfPublishBounded(signer, {
+    author: "resident",
+    title: "values only",
+    values: published.artifact.body.values,
+    challenge,
+    semantics,
+    binding,
+    createdAt: "2026-10-28T00:00:00.000Z",
+  } as never);
+  const body = made.publication.artifact.body as { media?: unknown };
+  assert.equal(body.media, undefined);
+  // And the registry's check says so in its own terms: null, not a false verdict —
+  // "this artifact records no picture" is not the same claim as "its picture is wrong".
+  assert.equal(boundedRenditionHolds(body as never, challenge.spec as never, (b: Uint8Array | string) => createHash("sha256").update(b).digest("hex")), null);
 });

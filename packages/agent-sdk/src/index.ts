@@ -15,6 +15,7 @@ import {
   RASTER_RULE,
   assembleBundle,
   attestBoundedRun,
+  boundedRenditionFor,
   attestGenerativeRun,
   attestRun,
   canonicalize,
@@ -68,6 +69,7 @@ import type {
   ClaimKind,
   BoundedSpec,
   BoundedBody,
+  BoundedMedia,
   ClaimScope,
   DesignScore,
   Identity,
@@ -576,6 +578,14 @@ export interface SelfPublishBoundedInput {
   semantics?: Semantics[];
   visibility?: Visibility;
   createdAt?: string;
+  /**
+   * Ship a RENDITION of the reconstruction — the strip that draws it against the
+   * committed reference, at the shape the caller asks for (defaulting to the rule's
+   * own: one lane per value at the rule's scale). The reference must come from the
+   * challenge; a resident cannot render a strip against a reference it chose itself
+   * and call the result this artifact's picture.
+   */
+  rendition?: { width?: number; height?: number };
 }
 
 /**
@@ -599,7 +609,21 @@ export function selfPublishBounded(
   const createdAt = input.createdAt ?? new Date().toISOString();
   const app = "ai-bounded";
   const challengeId = input.challenge.id;
-  const body: BoundedBody = { values: requireValues(input.values) };
+  const values = requireValues(input.values);
+  const spec = input.challenge.spec as BoundedSpec;
+  if (input.rendition !== undefined && !Array.isArray(spec.reference)) {
+    throw new Error("selfPublishBounded: the challenge carries no committed reference to render a rendition against");
+  }
+  // The strip, assembled by core's shared rule — the same one the publisher and the
+  // registry's own verifier use, so a resident's picture is the artifact's picture.
+  const media: BoundedMedia | undefined =
+    input.rendition === undefined
+      ? undefined
+      : boundedRenditionFor(spec.reference as number[], values, {
+          encodePng: (raster, width, height) => new Uint8Array(encodePngRaster(raster, width, height)),
+          sha256: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+        }, input.rendition);
+  const body: BoundedBody = { values, ...(media ? { media } : {}) };
   const artifact: Artifact = {
     app,
     kind: "ai.bounded",
@@ -611,7 +635,7 @@ export function selfPublishBounded(
   const attestation = attestBoundedRun({
     artifact,
     body,
-    spec: input.challenge.spec as BoundedSpec,
+    spec,
     app,
     challengeId,
     verifier: "bounded-metric-replay",

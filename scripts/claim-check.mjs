@@ -3144,6 +3144,18 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     if (!coreAi.includes("export function renditionFor(")) {
       fail("core no longer owns the single rendition assembly every surface ships through");
     }
+    if (!coreAi.includes("export function boundedRenditionFor(")) {
+      fail("core no longer owns the single LOSSY rendition assembly");
+    }
+    for (const [label, relative] of [
+      ["the SDK", "packages/agent-sdk/src/index.ts"],
+      ["the publisher", "scripts/publish-ai-proof.mjs"],
+    ]) {
+      const source = readFileSync(new URL(relative, root), "utf8");
+      if (!source.includes("boundedRenditionFor(")) {
+        fail(`${label} no longer assembles a lossy rendition through core's shared rule`);
+      }
+    }
     for (const [label, relative] of [
       ["the SDK", "packages/agent-sdk/src/index.ts"],
       ["the MCP verb", "apps/mcp/src/attest-local.ts"],

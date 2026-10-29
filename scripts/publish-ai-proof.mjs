@@ -115,15 +115,22 @@ if (!boundedStoreResponse.ok) {
 }
 const boundedBlob = await boundedStoreResponse.json();
 
-boundedBody.media = {
-  mediaType: "image/png",
-  rule: core.BOUNDED_RASTER_RULE,
-  blob: boundedBlob.hash,
-  raster: boundedRasterDigest,
-  width: boundedPngWidth,
-  height: boundedPngHeight,
-  bytes: boundedPng.length,
-};
+// One assembly, in core — and the digests are computed from the bytes, so the store's
+// answer is CHECKED against them rather than trusted.
+boundedBody.media = core.boundedRenditionFor(boundedChallenge.spec.reference, boundedBody.values, {
+  encodePng: (raster, width, height) => new Uint8Array(encodePngRaster(raster, width, height)),
+  sha256: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+});
+if (boundedBody.media.blob !== boundedBlob.hash) {
+  throw new Error(
+    `the store recorded blob ${boundedBlob.hash.slice(0, 16)}… for bytes whose digest is ${boundedBody.media.blob.slice(0, 16)}…`,
+  );
+}
+if (boundedBody.media.raster !== boundedRasterDigest) {
+  throw new Error(
+    `the rendition raster digest moved: ${boundedRasterDigest.slice(0, 16)}… -> ${boundedBody.media.raster.slice(0, 16)}…`,
+  );
+}
 console.log(
   `bounded rendition stored: blob ${boundedBlob.hash.slice(0, 16)}… raster ${boundedRasterDigest.slice(0, 16)}… (${boundedPng.length} bytes)`,
 );

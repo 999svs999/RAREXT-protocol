@@ -757,3 +757,41 @@ export function renditionFor(
     bytes: png.length,
   };
 }
+
+/**
+ * The ONE assembly of a LOSSY rendition — the strip that draws a reconstruction
+ * against the committed reference. The sibling of `renditionFor`, and separate from
+ * it because the shape genuinely differs (a strip has width and height, not a size)
+ * rather than because the two rules drifted.
+ *
+ * The publisher assembled this inline and then took the blob digest from the store's
+ * response; going through this function computes both digests from the bytes, which
+ * lets the caller ASSERT that what the store recorded is the digest of what it was
+ * sent — a mangling store is then a failure instead of a silently different artifact.
+ */
+export function boundedRenditionFor(
+  reference: number[],
+  values: number[],
+  deps: {
+    encodePng: (raster: Uint8Array, width: number, height: number) => Uint8Array;
+    sha256: (bytes: Uint8Array) => string;
+  },
+  size: { width?: number; height?: number } = {},
+): BoundedMedia {
+  // The strip is one lane per value at a fixed scale — the width is NOT the value
+  // count, and taking it as such is a wrong picture that still hashes consistently,
+  // so nothing downstream would notice.
+  const width = size.width ?? reference.length * BOUNDED_RASTER_SCALE;
+  const height = size.height ?? BOUNDED_RASTER_HEIGHT;
+  const raster = renderBoundedRaster(reference, values, width, height);
+  const png = deps.encodePng(raster, width, height);
+  return {
+    mediaType: "image/png",
+    rule: BOUNDED_RASTER_RULE,
+    blob: deps.sha256(png),
+    raster: deps.sha256(raster),
+    width,
+    height,
+    bytes: png.length,
+  };
+}
