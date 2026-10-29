@@ -1856,6 +1856,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     ["site/registry/bundle.json", "the published bundle"],
     ["site/registry/seed.json", "the published seed"],
     ["site/registry/mirror/verify.html", "the published verify page"],
+    ["site/registry/mirror/ai.html", "the published AI-proof page"],
   ]) {
     let size = 0;
     try {

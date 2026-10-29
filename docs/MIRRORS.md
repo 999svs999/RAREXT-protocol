@@ -89,6 +89,12 @@ A mirror is a directory:
   `data-pin-root` links are rewritten at deploy time to carry the anchored
   root, so "Verify this registry" opens the verifier already pinned to the root
   the chain holds, and a deploy whose front door lost its proof links fails.
+- `ai.html` — a page that runs the committed model IN THE BROWSER and shows the
+  evidence an attestation would carry (the artifact body, the model digest, the
+  trace hash, the artifact hash), and recomputes a pasted claim against the same
+  rule. Its hashes are asserted against node's in
+  `apps/web/test/ai-proof.test.ts`, so a browser that disagreed about the evidence
+  would fail the gate rather than quietly produce a different proof.
 - `blobs.json` — small public blobs embedded for `gallery.html`. The gallery
   re-hashes every embedded blob in the browser and skips any whose bytes, size,
   or hash disagree; it never renders unverified metadata. AI renditions carry
