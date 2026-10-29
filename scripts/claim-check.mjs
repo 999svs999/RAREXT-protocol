@@ -401,11 +401,15 @@ if (process.argv.includes("--self-test")) {
   const rfcPinnedTheRunner = doctor(originalVerifiersRfc, "rfcPinnedTheRunner", (s) =>
     s.replace("names the RULE, never the RUNNER", "names the runner, mostly"),
   );
+  const originalClaimsRfc = readFileSync(new URL("rfcs/0003-verifiable-claims.md", root), "utf8");
+  const rfcLostTheGap = doctor(originalClaimsRfc, "rfcLostTheGap", (s) =>
+    s.replace("it is NOT yet", "it is anchored already"),
+  );
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
   ));
-  checkAnnouncementRfc(doctoredRfc);
+  checkAnnouncementRfc({ rfc: doctoredRfc });
   const caughtRfc = failures > beforeRfc;
   if (!caughtRfc) fail("self-test: the checker accepted an RFC leaning on a primitive that does not exist");
   caught = caught && caughtRfc;
@@ -413,14 +417,14 @@ if (process.argv.includes("--self-test")) {
   // And an RFC whose ANSWERED question names a primitive the tree lacks — the shape
   // a protocol record takes when the code moves on and the answer does not.
   const beforeRfcRename = failures;
-  checkAnnouncementRfc(rfcRenamedCache);
+  checkAnnouncementRfc({ rfc: rfcRenamedCache });
   const caughtRfcRename = failures > beforeRfcRename;
   if (!caughtRfcRename) fail("self-test: the checker accepted an RFC answer naming a primitive the tree lacks");
   caught = caught && caughtRfcRename;
 
   // And a sibling RFC whose answer stops quoting the refusal it describes.
   const beforeSeedList = failures;
-  checkAnnouncementRfc(undefined, rfcLostTheRefusal);
+  checkAnnouncementRfc({ seedList: rfcLostTheRefusal });
   const caughtSeedList = failures > beforeSeedList;
   if (!caughtSeedList) fail("self-test: the checker accepted RFC 0020 dropping the refusal its answer quotes");
   caught = caught && caughtSeedList;
@@ -449,10 +453,17 @@ if (process.argv.includes("--self-test")) {
   // And RFC 0006's answer softened into naming the runner — the answer this project
   // had to argue for once already.
   const beforeVerifiers = failures;
-  checkAnnouncementRfc(undefined, undefined, rfcPinnedTheRunner);
+  checkAnnouncementRfc({ verifiers: rfcPinnedTheRunner });
   const caughtVerifiers = failures > beforeVerifiers;
   if (!caughtVerifiers) fail("self-test: the checker accepted RFC 0006's answer naming the runner");
   caught = caught && caughtVerifiers;
+
+  // And RFC 0003's answer losing the gap it names — the negative claim going quiet.
+  const beforeClaims = failures;
+  checkAnnouncementRfc({ claims: rfcLostTheGap });
+  const caughtClaims = failures > beforeClaims;
+  if (!caughtClaims) fail("self-test: the checker accepted RFC 0003 dropping the anchoring gap it names");
+  caught = caught && caughtClaims;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1261,7 +1272,8 @@ function checkArtifactSources(filesOverride) {
  * still be there, so a later edit cannot quietly drop the security argument or
  * rename a primitive into fiction.
  */
-function checkAnnouncementRfc(rfcOverride, seedListRfcOverride, verifiersRfcOverride) {
+function checkAnnouncementRfc(overrides = {}) {
+  const { rfc: rfcOverride, seedList: seedListRfcOverride, verifiers: verifiersRfcOverride, claims: claimsRfcOverride } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
   const { text: sources } = readSourceTrees({ includeScripts: true });
@@ -1362,6 +1374,38 @@ function checkAnnouncementRfc(rfcOverride, seedListRfcOverride, verifiersRfcOver
         fail(`RFC 0020's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
+  }
+
+  // RFC 0003 (verifiable claims) — the thesis the AI work is the strongest instance of.
+  // Its Q1 answer is a NEGATIVE claim ("it is not anchored yet"), and a negative needs
+  // the code side asserted too: the RFC's "not yet" is true only while core has no
+  // semantics leaf, so that absence is what the check holds.
+  const claimsRfc =
+    claimsRfcOverride ?? readFileSync(new URL("rfcs/0003-verifiable-claims.md", root), "utf8");
+  const CLAIMS_ANSWERED = [
+    ["1", "anchored like a publication", ["it is NOT yet"], ["publicationLeaf"]],
+    ["2", "distrusted verifier hashes", ["fail-closed"], ["REVOCATION_KINDS"]],
+    ["3", "typed contract rather than a string map", ["stronger than either"], ["semanticsBinding", "scopeAllows"]],
+    ["4", "no semantics binding", ["DERIVED id"], ["findSemantics"]],
+  ];
+  for (const [number, marker, quoted, inCode] of CLAIMS_ANSWERED) {
+    if (!claimsRfc.includes(marker)) {
+      fail(`RFC 0003's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!claimsRfc.includes(quote)) {
+        fail(`RFC 0003's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0003's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+  if (claimsRfc.includes("it is NOT yet") && sources.includes("semanticsLeaf")) {
+    fail("RFC 0003 says semantics are not anchored yet, but core now has a semantics leaf — the answer is stale");
   }
 
   // RFC 0006 (independent verifiers) — the thesis the AI-verification surface is an

@@ -88,14 +88,47 @@ meaningless. The `origin` field exists so that can be measured.
 
 ## Open questions
 
-1. Should a semantics record be signed by its owner, and anchored like a publication?
-   It should be, but the signing path for non-artifact objects is not defined yet.
-2. Should a claim carry an explicit expiry or revocation reference, and should the
-   registry expose a list of revoked claims and distrusted verifier hashes?
-3. Does the scope need to be a typed contract rather than a string map, so that a scope
-   cannot be interpreted differently by two readers?
-4. What is the migration path for attestations published before this RFC, which carry
-   no semantics binding?
+1. **Should a semantics record be signed and anchored like a publication?** —
+   **ANSWERED: it should be, and it is NOT yet — the gap is named here rather than
+   implied closed.** Semantics records travel in the bundle, but the bundle's root is a
+   Merkle root over PUBLICATION leaves, and a semantics record is a bundle FIELD:
+   editing it leaves the root verifying, which makes any anchoring claim about it an
+   anchor in name only. The rule the protocol already applies elsewhere is the fix —
+   commit to the thing INSIDE the proof (for seed lists, RFC 0020 embeds the list's
+   digest as an ordinary publication, and changing it moves the root). A semantics
+   record that a claim depends on needs the same treatment: its digest published as a
+   leaf, so a reader holding a root can tell whether the meaning it resolved is the one
+   that was committed to. Until then, a claim's binding is only as strong as the mirror
+   that served the record.
+2. **Should a claim carry a revocation reference, and should the registry expose
+   revoked claims and distrusted verifier hashes?** — **ANSWERED: yes, and it does.**
+   Revocation is first-class: `REVOCATION_KINDS` names `artifact` (this claim is
+   withdrawn) and `verifier` (do not trust verdicts from this rule's hash) beside
+   `capability` and `key`, `/v1/revocations` publishes them, and the lookups are
+   fail-closed — a check that cannot reach the list refuses rather than assuming
+   "not revoked". A verifier-hash revocation is exactly the "distrusted verifier" the
+   question asks for, stated as the digest the attestation already carries rather than
+   as a name anyone could re-use.
+3. **Does the scope need a typed contract rather than a string map?** — **ANSWERED: it
+   is a published, versioned record PLUS a spec hash, which is stronger than either.**
+   A binding is an `(id, version)` reference into the registry's semantics, so two
+   readers resolve the SAME text rather than each parsing their own map —
+   `semanticsBinding` refuses to accept a challenge whose version no longer matches,
+   and the challenge's spec is hashed (`specHash`) so a spec edited under a stable
+   version is caught rather than believed. The remaining string-shaped surface is the
+   scope map, and it is bounded by `scopeAllows`: a scope can only narrow the
+   predicate, never assert something the semantics record does not say.
+4. **What is the migration path for attestations with no semantics binding?** —
+   **ANSWERED: they are reported as UNBOUND, not silently accepted.** A challenge
+   carrying no semantics reference resolves as `"missing"` (and a stale version as
+   `"version-mismatch"`), so the registry surfaces challenges whose meaning nobody
+   owns instead of issuing a verdict that pretends a meaning was agreed. An
+   attestation is never left blank either: with no explicit binding it records a
+   DERIVED id (`app/challengeId`), so an old claim is labelled with the meaning its own
+   identifiers imply and a reader can see that no semantics record was ever named for
+   it. Old attestations therefore keep verifying as artifacts while the record they
+   would bind to is reported as missing rather than assumed — the honest label for a
+   claim made before the meaning was written down.
 
 ## Implementation status
 
