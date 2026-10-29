@@ -1,10 +1,20 @@
 import {
+  MAX_BOUNDED_LENGTH,
   MAX_GENERATIVE_STEPS,
+  boundedScore,
   canonicalize,
   generate,
+  verifyBoundedReconstruction,
   verifyGenerativeReplay,
 } from "@rarext/core";
-import type { GenerativeBody, GenerativeSpec, XorshiftModel } from "@rarext/core";
+import type {
+  BoundedBody,
+  BoundedMetric,
+  BoundedSpec,
+  GenerativeBody,
+  GenerativeSpec,
+  XorshiftModel,
+} from "@rarext/core";
 
 /**
  * The AI proof, made in a browser — no server, no install, no key.
@@ -119,4 +129,92 @@ export function checkClaim(
   steps: number,
 ): { correct: boolean; expected: string } {
   return verifyGenerativeReplay({ model, seed, output }, { steps } as GenerativeSpec);
+}
+
+/**
+ * The LOSSY half, in the browser: the representation real model classes take,
+ * where nobody can hash-compare a float tensor regenerated on other hardware and
+ * the claim is a DISTANCE instead.
+ *
+ * The evidence is built with the same field names the registry's own assembly
+ * uses (`metric`, `metricValue`, `bound`, `referenceDigest`,
+ * `reconstructionDigest`), so a visitor who computes the trace hash here gets the
+ * number an attestation would carry — and the suite asserts that against node's.
+ */
+export interface BoundedProof {
+  body: BoundedBody;
+  metric: BoundedMetric;
+  metricValue: number;
+  bound: number;
+  correct: boolean;
+  score: number;
+  referenceDigest: string;
+  reconstructionDigest: string;
+  traceHash: string;
+  artifactHash: string;
+}
+
+export async function runBoundedProof(
+  reference: number[],
+  values: number[],
+  metric: BoundedMetric,
+  bound: number,
+): Promise<BoundedProof> {
+  if (!Array.isArray(values) || !values.every((entry) => typeof entry === "number" && Number.isFinite(entry))) {
+    throw new Error("values must be an array of finite numbers");
+  }
+  if (values.length > MAX_BOUNDED_LENGTH) {
+    throw new Error(`values must not exceed ${MAX_BOUNDED_LENGTH} entries`);
+  }
+  if (typeof bound !== "number" || !Number.isFinite(bound)) {
+    throw new Error("bound must be a finite number");
+  }
+
+  const body: BoundedBody = { values };
+  const spec: BoundedSpec = { metric, bound, reference };
+  const check = verifyBoundedReconstruction(body, spec);
+  if ("error" in check) {
+    throw new Error(check.error);
+  }
+
+  const referenceDigest = await sha256Hex(canonicalize(reference));
+  const reconstructionDigest = await sha256Hex(canonicalize(values));
+  const trace = {
+    metric,
+    metricValue: check.metricValue,
+    bound,
+    referenceDigest,
+    reconstructionDigest,
+  };
+  const artifact = {
+    app: "ai-bounded",
+    kind: "ai.bounded",
+    version: 1,
+    mediaType: "application/json",
+    body,
+  };
+
+  return {
+    body,
+    metric,
+    metricValue: check.metricValue,
+    bound,
+    correct: check.correct,
+    score: check.correct ? boundedScore(check.metricValue, bound) : 0,
+    referenceDigest,
+    reconstructionDigest,
+    traceHash: await sha256Hex(canonicalize(trace)),
+    artifactHash: await sha256Hex(canonicalize(artifact)),
+  };
+}
+
+/** The visitor's half of a lossy claim: recompute the distance, locally. */
+export function checkBoundedClaim(
+  reference: number[],
+  values: number[],
+  metric: BoundedMetric,
+  bound: number,
+): { correct: boolean; metricValue?: number; error?: string } {
+  const check = verifyBoundedReconstruction({ values }, { metric, bound, reference });
+  return "error" in check ? { correct: false, error: check.error } : { correct: check.correct, metricValue: check.metricValue };
 }
