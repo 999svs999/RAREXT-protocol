@@ -852,6 +852,16 @@ if (process.argv.includes("--self-test")) {
   if (!caughtAround) fail("self-test: the checker accepted a dispatch that bypasses the tested boundary");
   caught = caught && caughtAround;
 
+  // And a browser suite that stops comparing its hashes against node's — the
+  // cross-runtime claim in the doc, kept in prose — must be reported.
+  const webTestReal = readFileSync(new URL("apps/web/test/ai-proof.test.ts", root), "utf8");
+  const noNodeCompare = doctor(webTestReal, "noNodeCompare", (s) => s.replaceAll("createHash(", "hashIt("));
+  const beforeNodeCompare = failures;
+  checkAiVerificationDoc(undefined, undefined, { webProofTest: noNodeCompare });
+  const caughtNodeCompare = failures > beforeNodeCompare;
+  if (!caughtNodeCompare) fail("self-test: the checker accepted a browser suite that never compares against node");
+  caught = caught && caughtNodeCompare;
+
   // And a registry builder that keeps its own assembly — the drift the one shared
   // function exists to prevent — must be reported.
   const builderReal = readFileSync(new URL("apps/api/src/bundle.ts", root), "utf8");
@@ -2997,6 +3007,40 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     }
     if (!/attestLocalFromArgs\(/.test(module ?? "")) {
       fail("the argument boundary must live in the tested module");
+    }
+  }
+
+  // The doc now names a page that MAKES proofs in the browser. Three things make
+  // that sentence true: the page and its bundle exist and are published, the
+  // module behind them is the one under test, and the test really holds the
+  // browser's hashes to node's — a cross-runtime claim is worth nothing asserted
+  // only in prose.
+  if (doc.includes("mirror/ai.html")) {   // plain text on purpose: a regex here already cost one debugging round to its own escaping
+    for (const relative of ["apps/web/public/ai.html", "site/registry/mirror/ai.html"]) {
+      let text;
+      try {
+        text = readFileSync(new URL(relative, root), "utf8");
+      } catch {
+        fail(`AI-VERIFICATION.md names the browser proof page, but ${relative} does not exist`);
+        continue;
+      }
+      if (!/ai\.js/.test(text)) fail(`${relative} does not load the module that makes the proof`);
+    }
+    const module = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
+    for (const marker of ["runCommittedModel", "runBoundedProof"]) {
+      if (!new RegExp(`export (async )?function ${marker}`).test(module)) {
+        fail(`the doc says the page makes both kinds of proof, but ai.ts exports no ${marker}`);
+      }
+    }
+    const webTest = sources.webProofTest ?? readFileSync(new URL("apps/web/test/ai-proof.test.ts", root), "utf8");
+    // CALL forms, not bare words: the file's own prose says "compared to
+    // createHash", so a mention check passed while the injection removed the
+    // call — the usage-versus-mention trap this project keeps naming, this time
+    // in the guard that was supposed to catch it.
+    for (const marker of ['createHash("sha256")', "sha256Hex(", "runBoundedProof("]) {
+      if (!webTest.includes(marker)) {
+        fail(`the doc says the browser's hashes are held to node's, but the suite no longer calls ${marker}`);
+      }
     }
   }
 

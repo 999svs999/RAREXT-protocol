@@ -193,7 +193,19 @@ verification page recomputes the Merkle root and runs the local AI checks in
 your browser: the generative output is replayed from the committed model and
 seed, the bounded metric is recomputed from the raw reconstruction, and the
 generative rendition is re-derived and digest-checked against the mirror's
-inline blob. The proof pipeline is committed and reproducible:
+inline blob. **You can also make one.** <https://999svs999.github.io/RAREXT-protocol/mirror/ai.html>
+runs the committed model in your browser and assembles the evidence an attestation
+would carry — the artifact body, the model digest, the trace hash built the way
+`attestRun` builds it, and the artifact hash — and, for the lossy representation,
+measures a pasted reconstruction against the committed reference it reads from the
+bundle BESIDE the page, so the page cannot drift from the artifact it is measuring.
+Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a
+signature is an identity claim and a page has no identity, so the PROOF is what it
+produces. Its hashes are held to node's in `apps/web/test/ai-proof.test.ts` — if
+WebCrypto and node disagreed about the evidence, `npm run ci` would say so rather
+than let a browser produce a different proof quietly.
+
+The proof pipeline is committed and reproducible:
 
 ```
 node scripts/publish-ai-proof.mjs
