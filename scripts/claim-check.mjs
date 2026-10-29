@@ -1281,7 +1281,13 @@ function checkAnnouncementRfc(rfcOverride) {
     ["5", "cached", ["AnnouncementDocumentCache", "cacheMaxAgeMs"], ["AnnouncementDocumentCache", "cacheMaxAgeMs"]],
     ["4", "revoking an announcing key", ["yes, `key`"], ["REVOCATION_KINDS"]],
     ["2", "180 days", ["5-minute clock-skew tolerance"], ["MAX_ANNOUNCEMENT_LIFETIME_MS", "ANNOUNCEMENT_CLOCK_SKEW_MS"]],
+    ["3", "Where does signature verification run", ["AnnouncementVerifier"], ["AnnouncementVerifier", "verifyPayload"]],
+    ["6", "announcement list itself be pinned", ["registryListDigest"], ["registryListDigest"]],
+    ["7", "announced mirror 404s", ["verifyCandidates"], ["verifyCandidates"]],
   ];
+  if (!/All seven questions are answered/.test(rfc)) {
+    fail("RFC 0019 no longer states that all seven of its questions are answered");
+  }
   for (const [number, marker, quoted, inCode] of ANSWERED) {
     if (!rfc.includes(marker)) {
       fail(`RFC 0019's question ${number} no longer appears at all (looking for "${marker}")`);

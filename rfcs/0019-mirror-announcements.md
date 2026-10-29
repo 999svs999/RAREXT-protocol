@@ -371,10 +371,17 @@ This is additive by construction.
    is deliberate — a nomination that has run out is safe to drop, while one dated
    far in the future is worth naming. The caller supplies "now"; core does not
    consult an ambient clock for the decision.
-3. **Where does signature verification run?** `verifyPayload` lives in
-   `apps/api/src/identity.ts` today; the SDK signs but does not export a
-   signature verifier. Does a resident that reads announcements itself need a
-   verifier export, or does verification stay behind the API?
+3. **Where does signature verification run?** — **ANSWERED: wherever the reader
+   is; it never hides behind the API.** The premise has moved since this was
+   written: the SDK signs AND verifies (`verifyPayload` is exported, and the
+   resolver a resident uses is built from it), so a client that reads
+   announcements itself can check them itself. The fold states this as a PORT
+   rather than a rule: `foldAnnouncements` takes an injected
+   `AnnouncementVerifier` and cannot fetch, verify or accept anything without
+   one, so the API's copy is a convenience for callers that want it and never a
+   substitute for the reader's own. That is the shape the rest of the protocol
+   uses — the verifier is supplied, never assumed — and it means a resident's
+   trust does not extend to the server it happens to be talking to.
 4. **Does revoking an announcing key need a new revocation kind?** — **ANSWERED:
    yes, `key`.** Rotation plus expiry can retire an announcing key, but neither is
    a "do not trust this key" statement a client can fetch: rotation says which key
@@ -413,12 +420,27 @@ This is additive by construction.
    it is an optimisation, never a source of truth — and bounded (`maxEntries`,
    oldest-insertion eviction), because an unbounded cache in a long-lived
    resident is a leak.
-6. **Should the announcement list itself be pinned?** If the seed's
-   `announcements[]` can be edited by whoever serves the seed, a hostile edit
-   removes or redirects discovery without touching the pins.
-7. **What happens when an announced mirror 404s?** The existing sequence records
-   the refusal and moves on; whether an announcer accumulates a bad-reputation
-   penalty is undecided, and deliberately not invented here.
+6. **Should the announcement list itself be pinned?** — **ANSWERED: yes, and it
+   is (`rfcs/0020-anchoring-the-seed-list.md`).** Whoever serves the seed can edit
+   `announcements[]` without touching the pins, which removes or redirects
+   discovery while every record in it still verifies — the list is the part the
+   seed's own commitment did not cover. The fix is to commit to the LIST the way
+   the protocol commits to everything else: `registryListDigest` reduces the
+   entries in order to a canonical digest, that digest goes into the anchored
+   bundle as an ordinary publication, and RFC 0020 proves the commitment is
+   COVERED — changing the embedded digest moves the Merkle root a client already
+   holds, which is what makes the pin an anchor rather than a label.
+7. **What happens when an announced mirror 404s?** — **ANSWERED: the refusal is
+   recorded and the walk continues; no reputation penalty is invented.** The
+   candidate sequence (`verifyCandidates`) tries each location, records what each
+   one did, and keeps going, so one dead mirror costs a fetch rather than a
+   discovery. The second half of the question stays UNDECIDED on purpose, and the
+   reason is the rule this whole RFC is built on: an announcement proposes
+   LOCATIONS, never facts. A penalty is a fact about an actor, accumulated across
+   announces, so it would have to be carried somewhere that is not the
+   announcement — a reputation layer is a different protocol with its own trust
+   story, and inventing a scoring rule for it here would smuggle a judgement into
+   a document whose only job is to move a pointer.
 
 ## Decision
 
@@ -429,8 +451,12 @@ records into the union, resolution runs through the announcing handle's key
 history, and open question 1 is answered by the `announcers` rule — with a test
 proving that an unvouched contradiction is refused and discovery still
 completes, so the denial-of-service shape is closed rather than described.
-Questions 2, 4, and 5 are answered in their sections above (the lifetime cap,
-the `key` revocation kind, and caching documents but never verdicts); where a
-resident's signature verifier lives (question 3) remains open, as do questions
-6 and 7, and a seed without `announcements` still behaves exactly as it did
-before.
+**All seven questions are answered in their sections above.** Q1 and Q6 by the
+`announcers` rule and RFC 0020's list pinning; Q2, Q4 and Q5 here — the lifetime
+cap that refuses rather than clamps, the `key` revocation kind that says "do not
+trust this key" where rotation and expiry cannot, and caching the DOCUMENT while
+never caching the verdict; Q3 by the fold's injected verifier, which puts
+verification wherever the reader is; Q7 by the candidate sequence, which records
+each refusal and keeps walking — with the reputation half declined in the open,
+because a penalty is a fact about an actor and this RFC moves locations, never
+facts. A seed without `announcements` still behaves exactly as it did before.
