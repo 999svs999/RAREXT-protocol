@@ -390,6 +390,9 @@ if (process.argv.includes("--self-test")) {
   // the sentence is the injection.
   const beforeRfc = failures;
   const originalRfc = readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
+  // An RFC answer that names a primitive the tree lacks — the failure mode of a
+  // protocol record edited after the code moved on.
+  const rfcRenamedCache = doctor(originalRfc, "rfcRenamedCache", (s) => s.replaceAll("cacheMaxAgeMs", "cacheTTLms"));
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -398,6 +401,14 @@ if (process.argv.includes("--self-test")) {
   const caughtRfc = failures > beforeRfc;
   if (!caughtRfc) fail("self-test: the checker accepted an RFC leaning on a primitive that does not exist");
   caught = caught && caughtRfc;
+
+  // And an RFC whose ANSWERED question names a primitive the tree lacks — the shape
+  // a protocol record takes when the code moves on and the answer does not.
+  const beforeRfcRename = failures;
+  checkAnnouncementRfc(rfcRenamedCache);
+  const caughtRfcRename = failures > beforeRfcRename;
+  if (!caughtRfcRename) fail("self-test: the checker accepted an RFC answer naming a primitive the tree lacks");
+  caught = caught && caughtRfcRename;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1246,6 +1257,46 @@ function checkAnnouncementRfc(rfcOverride) {
   // locations, never truth. If that sentence goes, the argument has changed.
   if (!/proposes LOCATIONS, never facts/.test(rfc)) {
     fail("RFC 0019 no longer states that an announcement proposes locations, never facts");
+  }
+
+  // The ANSWERED questions lean on code BY NAME — the `key` revocation kind, the
+  // cache port and its caller-supplied TTL, the lifetime cap and the skew tolerance.
+  // An answer that names a primitive the tree does not have is an answer to a
+  // different question, and the RFC reads exactly as confidently either way; so each
+  // answer is held to the code, in the same spirit as the primitives above. This is
+  // where a claim like "the fold takes an optional injected cache port" stops being
+  // prose: delete the port and this fails naming the question.
+  // The ANSWERED questions lean on code by name — the cache port and the TTL it
+  // takes, the one exported kinds list, the lifetime cap and the skew tolerance. An
+  // answer that names a primitive the tree does not have is an answer to a different
+  // question, and the RFC reads exactly as confidently either way.
+  //
+  // Two anchors per question, because a doc states different things in different
+  // shapes: what it QUOTES must appear verbatim (Q5 names its port and TTL outright),
+  // and what it SUMMARISES is anchored as prose (Q2 says "180 days by default, with a
+  // 5-minute clock-skew tolerance" and never spells the constants). Demanding a quote
+  // the RFC only summarises is an over-strict check that fails on an honest doc —
+  // which is exactly what the first version of this block did.
+  const ANSWERED = [
+    ["5", "cached", ["AnnouncementDocumentCache", "cacheMaxAgeMs"], ["AnnouncementDocumentCache", "cacheMaxAgeMs"]],
+    ["4", "revoking an announcing key", ["yes, `key`"], ["REVOCATION_KINDS"]],
+    ["2", "180 days", ["5-minute clock-skew tolerance"], ["MAX_ANNOUNCEMENT_LIFETIME_MS", "ANNOUNCEMENT_CLOCK_SKEW_MS"]],
+  ];
+  for (const [number, marker, quoted, inCode] of ANSWERED) {
+    if (!rfc.includes(marker)) {
+      fail(`RFC 0019's question ${number} no longer appears at all (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!rfc.includes(quote)) {
+        fail(`RFC 0019's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0019's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
   }
 
   console.log(
