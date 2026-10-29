@@ -193,19 +193,19 @@ if (process.argv.includes("--self-test")) {
   const appSource = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
   // The health row is the table's first line, and it is `/health` — no /v1
   // prefix, which is exactly the kind of detail a hand-written anchor gets wrong.
-  const doctoredDoc = originalArchitecture.replace(
+  const doctoredDoc = doctor(originalArchitecture, "doctoredDoc", (s) => s.replace(
     "| GET | `/health` |",
     "| GET | `/health` |\n| GET | `/v1/time-travel` |",
-  );
+  ));
   checkRouteSurface(doctoredDoc);
   caught = caught && failures > beforeRoutes;
   // And a soak run that failed must be reported, not waved through.
   const beforeSoak = failures;
   const realSoak = readFileSync(new URL("bench/storage/soak-2026-10-26.log", root), "utf8");
-  const doctoredSoak = realSoak.replace(
+  const doctoredSoak = doctor(realSoak, "doctoredSoak", (s) => s.replace(
     "| Put | 5991 | 5991 | 0 | 100.0% |",
     "| Put | 5991 | 5942 | 49 | 99.2% |",
-  );
+  ));
   checkSoakLog(doctoredSoak);
   caught = caught && failures > beforeSoak;
   // A doctored input that equals its original proves nothing: the anchor
@@ -231,40 +231,40 @@ if (process.argv.includes("--self-test")) {
   caught = caught && caughtThroughput;
   // And a limits table the code outgrew must be reported.
   const beforeLimits = failures;
-  const doctoredLimitsDoc = originalOperations.replace(
+  const doctoredLimitsDoc = doctor(originalOperations, "doctoredLimitsDoc", (s) => s.replace(
     "`MAX_VOCAB` = 4,096",
     "`MAX_VOCAB` = 8,192",
-  );
+  ));
   checkLimitsTable(doctoredLimitsDoc);
   const caughtLimits = failures > beforeLimits;
   if (!caughtLimits) fail("self-test: the checker accepted a limits table the code contradicts");
   caught = caught && caughtLimits;
   // And an AI bounds row the code outgrows must be reported.
   const beforeReplay = failures;
-  const doctoredOperationsDoc = originalOperations.replace(
+  const doctoredOperationsDoc = doctor(originalOperations, "doctoredOperationsDoc", (s) => s.replace(
     "`MAX_GENERATIVE_TOKEN_LENGTH` = 256 UTF-16 code units",
     "`MAX_GENERATIVE_TOKEN_LENGTH` = 128 UTF-16 code units",
-  );
+  ));
   checkReplayBounds(doctoredOperationsDoc);
   const caughtReplay = failures > beforeReplay;
   if (!caughtReplay) fail("self-test: the checker accepted an AI bounds row the code contradicts");
   caught = caught && caughtReplay;
   // And an operational default the code contradicts must be reported.
   const beforeDefaults = failures;
-  const doctoredOperatorDoc = originalOperatorDoc.replace(
+  const doctoredOperatorDoc = doctor(originalOperatorDoc, "doctoredOperatorDoc", (s) => s.replace(
     "every 6 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)",
     "every 12 hours (`RAREXT_CHALLENGE_INTERVAL_MS`)",
-  );
+  ));
   checkOperationalDefaults(doctoredOperatorDoc);
   const caughtDefaults = failures > beforeDefaults;
   if (!caughtDefaults) fail("self-test: the checker accepted an operational default the code contradicts");
   caught = caught && caughtDefaults;
   // And a doc citing test evidence that is not in the tree must be reported.
   const beforeEvidence = failures;
-  const doctoredOperationsDoc2 = originalOperations.replace(
+  const doctoredOperationsDoc2 = doctor(originalOperations, "doctoredOperationsDoc2", (s) => s.replace(
     "apps/api/test/holder-fault.test.ts",
     "apps/api/test/holder-fault-removed.test.ts",
-  );
+  ));
   checkEvidenceCitations(doctoredOperationsDoc2);
   const caughtEvidence = failures > beforeEvidence;
   if (!caughtEvidence) fail("self-test: the checker accepted a citation to test evidence that does not exist");
@@ -272,10 +272,10 @@ if (process.argv.includes("--self-test")) {
   // And a chain route the docs publish but the server drops must be reported.
   const beforeChain = failures;
   const originalChains = readFileSync(new URL("docs/CHAINS.md", root), "utf8");
-  const doctoredChains = originalChains.replace(
+  const doctoredChains = doctor(originalChains, "doctoredChains", (s) => s.replace(
     "GET  /chain/audit",
     "GET  /chain/audit\nPOST /chain/rollback",
-  );
+  ));
   checkChainSurface(doctoredChains);
   const caughtChain = failures > beforeChain;
   if (!caughtChain) fail("self-test: the checker accepted a published chain route the server does not handle");
@@ -283,10 +283,10 @@ if (process.argv.includes("--self-test")) {
   // And a reward the code no longer pays must be reported.
   const beforeReward = failures;
   const originalWorkDoc = readFileSync(new URL("docs/WORK.md", root), "utf8");
-  const doctoredWorkDoc = originalWorkDoc.replace(
+  const doctoredWorkDoc = doctor(originalWorkDoc, "doctoredWorkDoc", (s) => s.replace(
     "| `verify` | per verified attestation | 10 |",
     "| `verify` | per verified attestation | 12 |",
-  );
+  ));
   checkRewardTable(doctoredWorkDoc);
   const caughtReward = failures > beforeReward;
   if (!caughtReward) fail("self-test: the checker accepted a reward table the code contradicts");
@@ -312,10 +312,10 @@ if (process.argv.includes("--self-test")) {
   // caught. The `createdAt` line anchors on the interface block.
   const beforeSemantics = failures;
   const originalSemanticsDoc = readFileSync(new URL("docs/SEMANTICS.md", root), "utf8");
-  const doctoredSemanticsDoc = originalSemanticsDoc.replace(
+  const doctoredSemanticsDoc = doctor(originalSemanticsDoc, "doctoredSemanticsDoc", (s) => s.replace(
     "  createdAt: string;",
     "  created: string;",
-  );
+  ));
   checkSemanticsDoc(doctoredSemanticsDoc);
   const caughtSemantics = failures > beforeSemantics;
   if (!caughtSemantics) fail("self-test: the checker accepted a doctored semantics field name");
@@ -323,10 +323,10 @@ if (process.argv.includes("--self-test")) {
   // And the snapshot/migration doc — a published version the code no longer
   // supports must be caught.
   const beforeSnapshot = failures;
-  const doctoredSnapshotDoc = originalOperations.replace(
+  const doctoredSnapshotDoc = doctor(originalOperations, "doctoredSnapshotDoc", (s) => s.replace(
     "Snapshot version 2 is current.",
     "Snapshot version 3 is current.",
-  );
+  ));
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
   // And an RFC that leans on a primitive which does not exist must be reported.
   // The phantom name is built at runtime: a literal in this file would be
@@ -339,10 +339,10 @@ if (process.argv.includes("--self-test")) {
   // the sentence is the injection.
   const beforeRfc = failures;
   const originalRfc = readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
-  const doctoredRfc = originalRfc.replace(
+  const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
-  );
+  ));
   checkAnnouncementRfc(doctoredRfc);
   const caughtRfc = failures > beforeRfc;
   if (!caughtRfc) fail("self-test: the checker accepted an RFC leaning on a primitive that does not exist");
@@ -352,10 +352,10 @@ if (process.argv.includes("--self-test")) {
   const beforeConfig = failures;
   const originalConfigDoc = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
   const phantomEnv = `RAREXT_VERIFIERS_V${originalConfigDoc.length}`;
-  const doctoredConfigDoc = originalConfigDoc.replace(
+  const doctoredConfigDoc = doctor(originalConfigDoc, "doctoredConfigDoc", (s) => s.replace(
     /`RAREXT_VERIFIERS`/g,
     `\`${phantomEnv}\``,
-  );
+  ));
   checkConfigSurface(doctoredConfigDoc);
   const caughtConfig = failures > beforeConfig;
   if (!caughtConfig) fail("self-test: the checker accepted a documented knob nothing reads");
@@ -439,10 +439,10 @@ if (process.argv.includes("--self-test")) {
   // it" assertion would find the fixture rather than the document and the
   // injection would pass vacuously.
   const phantomDoc = `docs/PHANTOM-${originalClaimsMap.length}.md`;
-  const doctoredClaimsMap = originalClaimsMap.replace(
+  const doctoredClaimsMap = doctor(originalClaimsMap, "doctoredClaimsMap", (s) => s.replace(
     "| `docs/WORK.md` | reward table |",
     `| \`${phantomDoc}\` | reward table |`,
-  );
+  ));
   if (doctoredClaimsMap === originalClaimsMap) fail("self-test: the claims-map fixture no longer changes its input");
   checkClaimsCoverage(doctoredClaimsMap);
   const caughtCoverage = failures > beforeCoverage;
@@ -503,10 +503,10 @@ if (process.argv.includes("--self-test")) {
   // And a standing test that stops comparing the committed digest with the
   // published list's — the live property, downgraded to a presence check.
   const standingSource = readFileSync(new URL("apps/api/test/published-bundle.test.ts", root), "utf8");
-  const doctoredStanding = standingSource.replace(
+  const doctoredStanding = doctor(standingSource, "doctoredStanding", (s) => s.replace(
     "commitment.digest,\n    digest,",
     "commitment.digest,\n    commitment.digest,",
-  );
+  ));
   const beforeStanding = failures;
   checkMirrorsDoc(undefined, { standingTest: doctoredStanding });
   const caughtStanding = failures > beforeStanding;
@@ -516,10 +516,10 @@ if (process.argv.includes("--self-test")) {
   // accepts any artifact with a matching field name — must be reported.
   const commitmentSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
   const coreShapeSource = readFileSync(new URL("packages/core/src/registries.ts", root), "utf8");
-  const doctoredCommitment = coreShapeSource.replace(
+  const doctoredCommitment = doctor(coreShapeSource, "doctoredCommitment", (s) => s.replace(
     "if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) return null;",
     "// kind ignored",
-  );
+  ));
   const beforeCommitment = failures;
   checkMirrorsDoc(undefined, { registryClient: commitmentSource, coreShape: doctoredCommitment });
 
@@ -561,10 +561,10 @@ if (process.argv.includes("--self-test")) {
   // And a client that computes a digest and then ignores the mismatch — the check
   // the doc promises, in the shape of a no-op — must be reported.
   const digestClientSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
-  const doctoredDigest = digestClientSource.replace(
+  const doctoredDigest = doctor(digestClientSource, "doctoredDigest", (s) => s.replace(
     "if (actual !== options.expectDigest) {",
     "if (false) {",
-  );
+  ));
   const beforeDigest = failures;
   checkMirrorsDoc(undefined, { registryClient: doctoredDigest });
   const caughtDigest = failures > beforeDigest;
@@ -573,10 +573,10 @@ if (process.argv.includes("--self-test")) {
   // And a one-call join that stops folding announcements — the doc's sentence is
   // then describing something the client does not do.
   const networkJoinSource = readFileSync(new URL("packages/agent-sdk/src/registries.ts", root), "utf8");
-  const doctoredNetwork = networkJoinSource.replace(
+  const doctoredNetwork = doctor(networkJoinSource, "doctoredNetwork", (s) => s.replace(
     "await findVerifiedBundleFromSeeds([seed]",
     "await findVerifiedBundle(seed",
-  );
+  ));
   const beforeNetwork = failures;
   checkMirrorsDoc(undefined, { registryClient: doctoredNetwork });
   const caughtNetwork = failures > beforeNetwork;
@@ -585,10 +585,10 @@ if (process.argv.includes("--self-test")) {
   // And a SERVER that grows its own normaliser for the seed list — the fork the
   // single parser exists to prevent — must be reported.
   const serverRegistrySource = readFileSync(new URL("apps/api/src/registries.ts", root), "utf8");
-  const doctoredServerRegistry = serverRegistrySource.replace(
+  const doctoredServerRegistry = doctor(serverRegistrySource, "doctoredServerRegistry", (s) => s.replace(
     "return parsed.length > 0 ? parsed : defaultSeeds();",
     "return defaultSeeds();",
-  ).replace("parseRegistrySeedList(JSON.parse(text) as unknown)", "[]");
+  ).replace("parseRegistrySeedList(JSON.parse(text) as unknown)", "[]"));
   const beforeServerRegistry = failures;
   checkMirrorsDoc(undefined, { serverRegistry: doctoredServerRegistry });
   const caughtServerRegistry = failures > beforeServerRegistry;
@@ -600,10 +600,10 @@ if (process.argv.includes("--self-test")) {
     new URL("packages/agent-sdk/src/published-identity.ts", root),
     "utf8",
   );
-  const doctoredPublishedIdentity = realPublishedIdentity.replace(
+  const doctoredPublishedIdentity = doctor(realPublishedIdentity, "doctoredPublishedIdentity", (s) => s.replace(
     "const bytes = await readBundleResponseBytes(response);",
     "const bytes = new Uint8Array(await response.arrayBuffer());",
-  );
+  ));
   const beforeResolverCap = failures;
   checkMirrorsDoc(undefined, { publishedIdentity: doctoredPublishedIdentity });
   const caughtResolverCap = failures > beforeResolverCap;
@@ -612,10 +612,10 @@ if (process.argv.includes("--self-test")) {
   // And a fold that reads a FAILED revocation lookup as "not revoked" — the
   // fail-open this loop closed — must be reported.
   const failOpenSource = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
-  const doctoredFailOpen = failOpenSource.replace(
+  const doctoredFailOpen = doctor(failOpenSource, "doctoredFailOpen", (s) => s.replace(
     "if (!lookup.ok) {",
     "if (false && !lookup.ok) {",
-  );
+  ));
   const beforeFailOpen = failures;
   checkMirrorsDoc(undefined, { announcements: doctoredFailOpen });
   const caughtFailOpen = failures > beforeFailOpen;
@@ -636,10 +636,10 @@ if (process.argv.includes("--self-test")) {
   // Doctor the CONSTANT, not the branch: the guard checks the constant's value,
   // so a doctored branch left it passing while injecting nothing — the stale
   // injection this self-test exists to catch.
-  const doctoredLifetime = lifetimeSource.replace(
+  const doctoredLifetime = doctor(lifetimeSource, "doctoredLifetime", (s) => s.replace(
     "MAX_ANNOUNCEMENT_LIFETIME_MS = 180 * 24",
     "MAX_ANNOUNCEMENT_LIFETIME_MS = 400 * 24",
-  );
+  ));
   const beforeLifetime = failures;
   checkMirrorsDoc(undefined, { announcements: doctoredLifetime });
   const caughtLifetime = failures > beforeLifetime;
@@ -648,10 +648,10 @@ if (process.argv.includes("--self-test")) {
   // And a fold that stops comparing the handle against the seed's announcers —
   // the open question this loop answered — must be reported.
   const realAnnouncements = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
-  const doctoredAnnouncements = realAnnouncements.replace(
+  const doctoredAnnouncements = doctor(realAnnouncements, "doctoredAnnouncements", (s) => s.replace(
     "(seed.announcers ?? []).includes(handle as string)",
     "true",
-  );
+  ));
   const beforeAnnouncers = failures;
   checkMirrorsDoc(undefined, { announcements: doctoredAnnouncements });
   const caughtAnnouncers = failures > beforeAnnouncers;
@@ -664,10 +664,10 @@ if (process.argv.includes("--self-test")) {
   // and the self-test would then report "the checker accepted a doctored row"
   // while proving nothing.
   const cacheFoldReal = readFileSync(new URL("packages/core/src/announcements.ts", root), "utf8");
-  const doctoredCacheFold = cacheFoldReal.replace(
+  const doctoredCacheFold = doctor(cacheFoldReal, "doctoredCacheFold", (s) => s.replace(
     "input.cache.get(url)",
     "doctoredCacheGet(url)",
-  );
+  ));
   if (doctoredCacheFold === cacheFoldReal) fail("self-test: the cache fixture no longer changes its input");
   const beforeCacheFold = failures;
   checkMirrorsDoc(undefined, { announcements: doctoredCacheFold });
@@ -677,10 +677,10 @@ if (process.argv.includes("--self-test")) {
   // And an identity adapter that starts DECIDING — packing a rotation window
   // of its own — must be reported. Core decides; the adapter answers.
   const realIdentityAdapter = readFileSync(new URL("apps/api/src/announcement-identity.ts", root), "utf8");
-  const doctoredIdentityAdapter = realIdentityAdapter.replace(
+  const doctoredIdentityAdapter = doctor(realIdentityAdapter, "doctoredIdentityAdapter", (s) => s.replace(
     "store.rotationsFor(handle)",
     "store.rotationsFor(handle).filter((rotation) => Date.parse(rotation.issuedAt) <= Date.now())",
-  );
+  ));
   const beforeAdapter = failures;
   checkMirrorsDoc(undefined, { identityAdapter: doctoredIdentityAdapter });
   const caughtAdapter = failures > beforeAdapter;
@@ -706,10 +706,10 @@ if (process.argv.includes("--self-test")) {
   // And a mirrors doc that stops naming the resident demo must be reported:
   // the command is held to the npm script and the script's SDK imports.
   const beforeResidentDoc = failures;
-  const noResidentMirrorsDoc = originalMirrorsDoc.replaceAll(
+  const noResidentMirrorsDoc = doctor(originalMirrorsDoc, "noResidentMirrorsDoc", (s) => s.replaceAll(
     "npm run demo:resident",
     "npm run resident-demo",
-  );
+  ));
   checkMirrorsDoc(noResidentMirrorsDoc);
   const caughtResidentDoc = failures > beforeResidentDoc;
   if (!caughtResidentDoc) fail("self-test: the checker accepted a mirrors doc that no longer names the resident demo");
@@ -733,10 +733,10 @@ if (process.argv.includes("--self-test")) {
   // reported: the sentence is held to core's verifier and the SDK's union
   // entry (RFC 0019 step 1).
   const beforeAnnouncements = failures;
-  const noAnnouncementMirrorsDoc = originalMirrorsDoc.replaceAll(
+  const noAnnouncementMirrorsDoc = doctor(originalMirrorsDoc, "noAnnouncementMirrorsDoc", (s) => s.replaceAll(
     "verifyAnnouncement",
     "verifyTheAnnouncement",
-  );
+  ));
   checkMirrorsDoc(noAnnouncementMirrorsDoc);
   const caughtAnnouncements = failures > beforeAnnouncements;
   if (!caughtAnnouncements) fail("self-test: the checker accepted a mirrors doc that no longer names the announcement verifier");
@@ -750,10 +750,10 @@ if (process.argv.includes("--self-test")) {
   assertChanged(realSeedVerifier, doctoredSeedVerifier, "seed-pins-verification");
   // And an audit-window number the code contradicts must be reported.
   const beforeWindow = failures;
-  const doctoredOperationsWindow = originalOperations.replace(
+  const doctoredOperationsWindow = doctor(originalOperations, "doctoredOperationsWindow", (s) => s.replace(
     "default `AUDIT_WINDOW_MS` = 15 min",
     "default `AUDIT_WINDOW_MS` = 30 min",
-  );
+  ));
   checkAuditWindowClaims(doctoredOperationsWindow);
   const caughtWindow = failures > beforeWindow;
   if (!caughtWindow) fail("self-test: the checker accepted an audit window the code contradicts");
@@ -786,10 +786,10 @@ if (process.argv.includes("--self-test")) {
   assertChanged(originalAiDoc, doctoredAiDoc, "ai-verification");
   // And the AI doc's resident-demo sentence is held to the script as well.
   const beforeResidentAi = failures;
-  const noResidentAiDoc = originalAiDoc.replaceAll(
+  const noResidentAiDoc = doctor(originalAiDoc, "noResidentAiDoc", (s) => s.replaceAll(
     "npm run demo:resident",
     "npm run resident-demo",
-  );
+  ));
   checkAiVerificationDoc(noResidentAiDoc);
   const caughtResidentAi = failures > beforeResidentAi;
   if (!caughtResidentAi) fail("self-test: the checker accepted an AI doc that no longer names the resident demo");
