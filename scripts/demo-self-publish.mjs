@@ -20,7 +20,10 @@
  * Exit code is non-zero if any claim in the run does not hold.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+
+import { generativeRenditionHolds, renderRaster } from "@rarext/core";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
 
@@ -149,6 +152,9 @@ const generated = sdk.selfPublishGenerative(signer, {
   challenge,
   semantics,
   binding: { id: "ai-generative/gen-starter", version: 1, claimKind: "generative" },
+  // And the picture beside the values, rendered on this node from the same model and
+  // seed — the shape a registry publishes, which a resident could not produce before.
+  rendition: 64,
 });
 
 check(
@@ -173,6 +179,29 @@ check(
   "the replay is tied to the bundle's own root",
   replayed.root === generated.bundle.manifest.root,
   replayed.root?.slice(0, 16),
+);
+
+// The rendition: a picture the artifact commits to. The registry's OWN check decides
+// it — not a check written for the demo — and because this run used the published
+// model and seed, the resident's raster should equal the PUBLISHED one byte for byte.
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+const rendition = generated.publication.artifact.body.media;
+check("the artifact ships a rendition beside its values", Boolean(rendition), rendition?.mediaType ?? "none");
+check(
+  "the rendition re-derives from the artifact's own commitment",
+  generativeRenditionHolds(generated.publication.artifact.body, sha256) === true,
+  `${rendition?.raster?.slice(0, 16)}…`,
+);
+check(
+  "the resident's picture IS the published raster, byte for byte",
+  rendition?.raster === published.artifact.body.media.raster,
+  `${rendition?.size}×${rendition?.size}, ${rendition?.bytes} bytes`,
+);
+check(
+  "the blob digest is the PNG a mirror would serve",
+  rendition?.blob ===
+    sha256(sdk.encodePngRaster(renderRaster(published.artifact.body.model, published.artifact.body.seed, rendition.size), rendition.size)),
+  `blob ${rendition?.blob?.slice(0, 16)}…`,
 );
 
 // And the representation real model classes take: a LOSSY reconstruction, where

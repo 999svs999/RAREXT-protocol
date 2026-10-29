@@ -863,11 +863,19 @@ if (process.argv.includes("--self-test")) {
   // And a demo that makes a computation but no GENERATION, while the doc says it
   // does, must be reported too.
   const noGenerationDemo = doctor(selfPublishDemoReal, "noGenerationDemo", (s) => s.replace("sdk.selfPublishGenerative(", "sdk.notThat("));
+  const noRenditionDemo = doctor(selfPublishDemoReal, "noRenditionDemo", (s) => s.replaceAll("  rendition: 64,", ""));
   const beforeNoGeneration = failures;
   checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noGenerationDemo });
   const caughtNoGeneration = failures > beforeNoGeneration;
   if (!caughtNoGeneration) fail("self-test: the checker accepted a demo with no generation in it");
   caught = caught && caughtNoGeneration;
+
+  // And a demo that ships no rendition — the doc's sentence kept, the picture gone.
+  const beforeNoRendition = failures;
+  checkAiVerificationDoc(undefined, undefined, { selfPublishDemo: noRenditionDemo });
+  const caughtNoRendition = failures > beforeNoRendition;
+  if (!caughtNoRendition) fail("self-test: the checker accepted a self-publish demo that ships no rendition");
+  caught = caught && caughtNoRendition;
 
   // And a demo that only ever tries reconstructions that PASS — the negative
   // removed, the promise kept in prose — must be reported.
@@ -2994,6 +3002,21 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
       }
       if (!/export function selfPublishGenerative\(/.test(sdkSource)) {
         fail("AI-VERIFICATION.md names selfPublishGenerative, but the SDK does not export it");
+      }
+      // The RENDITION: the doc says a resident ships a picture beside its values, so
+      // the demo must ask for one and must let the registry's OWN check decide it.
+      // A demo that asserted its own picture with its own arithmetic would prove
+      // nothing about what the serving side does with the artifact.
+      if (/rendition/i.test(doc)) {
+        if (!/rendition:\s*\d/.test(demo)) {
+          fail("the doc says a resident ships a rendition, but the demo never asks for one");
+        }
+        if (!/generativeRenditionHolds\(/.test(demo)) {
+          fail("the demo draws a picture and never asks the registry's own check whether it is the artifact's");
+        }
+        if (!/sdk\.encodePngRaster\(/.test(demo)) {
+          fail("the demo records a blob digest without encoding the PNG it claims to digest");
+        }
       }
     }
     // The bounded representation, and its NEGATIVE: the doc promises the demo

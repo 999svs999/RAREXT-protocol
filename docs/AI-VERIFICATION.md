@@ -207,7 +207,11 @@ instead of wrong. The gallery goes
 further on every rendition it shows: the digest it prints proves the bytes are the
 bundle's, and the line beneath it re-derives the PICTURE from the artifact's own model
 and seed and says whether it is the claim's — so a mirror that serves a doctored
-rendition is caught in the visitor's browser, by recomputation, artifact by artifact.
+rendition is caught in the visitor's browser, by recomputation, artifact by artifact. A resident ships the same
+shape: the self-publish demo asks the SDK for a rendition, and the registry's OWN
+check — not arithmetic written for the demo — decides whether the picture is the
+artifact's, with the demo requiring its raster to equal the published one byte for
+byte.
 Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a
 signature is an identity claim and a page has no identity, so the PROOF is what it
 produces. Its hashes are held to node's in `apps/web/test/ai-proof.test.ts` — if
