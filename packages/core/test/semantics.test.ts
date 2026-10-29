@@ -207,3 +207,45 @@ test("a semantics commitment is inside the proof: tampering with it moves the ro
   assert.equal(parseSemanticsCommitmentArtifact({ app: "rarext-semantics", kind: "semantics-commitment", body: "not json" }), null);
   assert.equal(parseSemanticsCommitmentArtifact({ app: "rarext-semantics", kind: "semantics-commitment", body: JSON.stringify({ digests: { a: 1 } }) }), null);
 });
+
+/**
+ * The live registry, measured rather than assumed: its own publications and its own
+ * semantics, with the commitment added.
+ *
+ * RFC 0020's commitment is already a publication in the committed bundle, so the shape
+ * is proven in place — what this measures is the DELTA for semantics: the committed
+ * root does not change if nothing is added, and DOES change when the commitment is,
+ * which is what "the meaning is not anchored today" means in numbers.
+ */
+test("the committed registry's root moves when its semantics are committed", () => {
+  const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");
+  const bytesSha = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const committed = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as {
+    publications: Array<Record<string, unknown>>;
+    semantics: Array<Record<string, unknown>>;
+    manifest: { root: string; leafVersion: number };
+  };
+  const leavesOf = (publications: Array<Record<string, unknown>>) =>
+    publications.map((publication) => publicationLeaf(publication as never, bytesSha, PUBLICATION_LEAF_VERSION));
+
+  const asIs = merkleRoot(leavesOf(committed.publications), bytesSha);
+
+  const template = committed.publications[0];
+  const commitment = {
+    ...template,
+    id: "semantics-commitment",
+    artifact: semanticsCommitmentArtifact(semanticsDigests(committed.semantics as never, sha256Hex)),
+  };
+  const withCommitment = merkleRoot(leavesOf([...committed.publications, commitment]), bytesSha);
+
+  assert.notEqual(withCommitment, asIs, "committing the semantics is a real change to the root");
+
+  // The commitment covers the records the bundle carries: every one of them resolves
+  // to the digest it committed, so a reader can check the meaning it used.
+  const digests = parseSemanticsCommitmentArtifact(commitment.artifact)!.digests;
+  for (const record of committed.semantics) {
+    const key = `${record.id}@${record.version}`;
+    assert.equal(digests[key], semanticsRecordDigest(record as never, sha256Hex), `${key} is committed`);
+  }
+  assert.equal(Object.keys(digests).length, committed.semantics.length);
+});

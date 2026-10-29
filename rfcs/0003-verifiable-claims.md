@@ -131,6 +131,25 @@ meaningless. The `origin` field exists so that can be measured.
    would bind to is reported as missing rather than assumed — the honest label for a
    claim made before the meaning was written down.
 
+## Sequencing the live change
+
+Committing the LIVE registry's own semantics is safe only as a sequence, because the
+root is pinned in more than one place: the bundle, the mirror's copy of it, the seed
+that names the root, the anchor that points at it, and the landing page's
+`data-pin-root` link. The order is:
+
+1. re-publish the bundle with the semantics commitment as a further publication (the
+   shape RFC 0020's own commitment already takes in that same bundle);
+2. re-pin — the seed and the anchor data now name the new root;
+3. re-anchor, so the anchor's subject is the root that covers the commitment;
+4. redeploy, whose own post-checks recompute the root from the served bytes.
+
+Half-applying it is worse than the gap it closes: a published bundle whose root nothing
+pins is a bundle whose proof nobody can check. The delta is measured rather than
+assumed — `packages/core/test/semantics.test.ts` builds the commitment against the
+committed bundle's own publications and semantics and shows the root move, and that
+every record it carries resolves to the digest committed for it.
+
 ## Implementation status
 
 The core of this RFC is implemented: semantics records, binding checks, claim kinds and
