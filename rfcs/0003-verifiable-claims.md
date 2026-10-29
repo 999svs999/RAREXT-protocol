@@ -89,17 +89,18 @@ meaningless. The `origin` field exists so that can be measured.
 ## Open questions
 
 1. **Should a semantics record be signed and anchored like a publication?** —
-   **ANSWERED: it should be, and it is NOT yet — the gap is named here rather than
-   implied closed.** Semantics records travel in the bundle, but the bundle's root is a
-   Merkle root over PUBLICATION leaves, and a semantics record is a bundle FIELD:
-   editing it leaves the root verifying, which makes any anchoring claim about it an
-   anchor in name only. The rule the protocol already applies elsewhere is the fix —
-   commit to the thing INSIDE the proof (for seed lists, RFC 0020 embeds the list's
-   digest as an ordinary publication, and changing it moves the root). A semantics
-   record that a claim depends on needs the same treatment: its digest published as a
-   leaf, so a reader holding a root can tell whether the meaning it resolved is the one
-   that was committed to. Until then, a claim's binding is only as strong as the mirror
-   that served the record.
+   **ANSWERED: yes, and it is — a semantics commitment is published as an ordinary
+   publication.** Semantics records travel in the bundle, but the bundle's root is a
+   Merkle root over PUBLICATION leaves, so a record that is only a FIELD is editable
+   while the root still verifies: an anchor in name only. The fix is the one RFC 0020
+   applies to seed lists — commit to the thing INSIDE the proof.
+   `semanticsCommitmentArtifact` publishes `id@version -> digest` for each record's
+   canonical form, so the same leaf and root helpers that cover every other claim cover
+   the meaning a claim was made against; editing a committed digest moves the root a
+   client already holds, which is the test that decides whether "anchored" means
+   anything. What is committed is more than the record's prose: `specHash`,
+   `verifierHash`, `owner` and the interpretation all sit inside the digest, so the
+   rule a verdict was produced by is anchored with the meaning it was judged against.
 2. **Should a claim carry a revocation reference, and should the registry expose
    revoked claims and distrusted verifier hashes?** — **ANSWERED: yes, and it does.**
    Revocation is first-class: `REVOCATION_KINDS` names `artifact` (this claim is

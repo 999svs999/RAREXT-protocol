@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { readFileSync } from "node:fs";
+
 import {
   canonicalize,
+  PUBLICATION_LEAF_VERSION,
+  merkleRoot,
+  parseSemanticsCommitmentArtifact,
+  publicationLeaf,
+  semanticsCommitmentArtifact,
+  semanticsDigests,
+  semanticsRecordDigest,
   claimFromAttestation,
   findSemantics,
   LOGIC_SEMANTICS,
@@ -144,4 +153,57 @@ test("a claim binds subject, meaning, and proof", () => {
   assert.equal(claim.proofKind, "recomputable");
   assert.equal(claim.proofHash, "trace-hash");
   assert.equal(claim.predicate, "logic/half-adder@1 (half-adder)");
+});
+
+/**
+ * RFC 0003's question 1, as a property: the commitment is INSIDE the proof.
+ *
+ * "Anchored" has to mean that tampering with the committed meaning moves the root a
+ * client already holds — not merely that the commitment can be attached to a bundle.
+ * The commitment is an ordinary publication, so the same leaf/root helpers that cover
+ * every other claim cover this one.
+ */
+test("a semantics commitment is inside the proof: tampering with it moves the root", () => {
+  // The leaf helpers hash BYTES as well as strings, so this accepts both — the same
+  // digest either way.
+  const stringSha = (value: string) => createHash("sha256").update(value).digest("hex");
+  // Core's Sha256 is bytes in, BYTES out — the hex encoding stays outside the math.
+  const bytesSha = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const digests = semanticsDigests(LOGIC_SEMANTICS, stringSha);
+  const key = `${LOGIC_SEMANTICS[0].id}@${LOGIC_SEMANTICS[0].version}`;
+  assert.ok(digests[key], "every record gets a digest");
+
+  const committed = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as {
+    publications: Array<Record<string, unknown>>;
+  };
+  const template = committed.publications[0];
+  const asPublication = (d: Record<string, string>) => ({
+    ...template,
+    id: "semantics-commitment",
+    artifact: semanticsCommitmentArtifact(d),
+  }) as never;
+
+  const leaf = publicationLeaf(asPublication(digests), bytesSha, PUBLICATION_LEAF_VERSION);
+  const root = merkleRoot([leaf], bytesSha);
+
+  // One digest changed: the root a client holds no longer rebuilds.
+  const tampered = { ...digests, [key]: "0".repeat(64) };
+  const tamperedRoot = merkleRoot([publicationLeaf(asPublication(tampered), bytesSha, PUBLICATION_LEAF_VERSION)], bytesSha);
+  assert.notEqual(tamperedRoot, root, "tampering with a committed semantics digest moves the root");
+
+  // And a real edit to a record changes the digest that was committed.
+  const edited = { ...LOGIC_SEMANTICS[0], summary: `${LOGIC_SEMANTICS[0].summary} (edited)` };
+  assert.notEqual(semanticsRecordDigest(edited as never, stringSha), digests[key], "an edit changes the committed digest");
+
+  // The digest is canonical, not incidental: the SAME record with its keys written in
+  // the opposite order digests identically.
+  const reordered = Object.fromEntries(Object.entries(LOGIC_SEMANTICS[0]).reverse()) as never;
+  assert.equal(semanticsRecordDigest(reordered, stringSha), digests[key], "key order does not move the digest");
+
+  // The parser round-trips, and refuses anything that is not a commitment.
+  const artifact = semanticsCommitmentArtifact(digests);
+  assert.deepEqual(parseSemanticsCommitmentArtifact(artifact)?.digests, digests);
+  assert.equal(parseSemanticsCommitmentArtifact({ app: "federation", kind: "registry-list-commitment", body: "{}" }), null);
+  assert.equal(parseSemanticsCommitmentArtifact({ app: "rarext-semantics", kind: "semantics-commitment", body: "not json" }), null);
+  assert.equal(parseSemanticsCommitmentArtifact({ app: "rarext-semantics", kind: "semantics-commitment", body: JSON.stringify({ digests: { a: 1 } }) }), null);
 });

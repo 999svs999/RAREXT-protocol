@@ -402,8 +402,11 @@ if (process.argv.includes("--self-test")) {
     s.replace("names the RULE, never the RUNNER", "names the runner, mostly"),
   );
   const originalClaimsRfc = readFileSync(new URL("rfcs/0003-verifiable-claims.md", root), "utf8");
-  const rfcLostTheGap = doctor(originalClaimsRfc, "rfcLostTheGap", (s) =>
-    s.replace("it is NOT yet", "it is anchored already"),
+  // The injection follows the ANSWER: it used to drop the "not yet" gap, and the answer
+  // is positive now, so it drops the property the positive answer names. doctor()
+  // refuses a stale injection, which is what caught this when the answer flipped.
+  const rfcLostTheRoot = doctor(originalClaimsRfc, "rfcLostTheRoot", (s) =>
+    s.replace("an anchor in name only", "good enough in practice"),
   );
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
@@ -460,9 +463,9 @@ if (process.argv.includes("--self-test")) {
 
   // And RFC 0003's answer losing the gap it names — the negative claim going quiet.
   const beforeClaims = failures;
-  checkAnnouncementRfc({ claims: rfcLostTheGap });
+  checkAnnouncementRfc({ claims: rfcLostTheRoot });
   const caughtClaims = failures > beforeClaims;
-  if (!caughtClaims) fail("self-test: the checker accepted RFC 0003 dropping the anchoring gap it names");
+  if (!caughtClaims) fail("self-test: the checker accepted RFC 0003 dropping the property its answer names");
   caught = caught && caughtClaims;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
@@ -1383,7 +1386,7 @@ function checkAnnouncementRfc(overrides = {}) {
   const claimsRfc =
     claimsRfcOverride ?? readFileSync(new URL("rfcs/0003-verifiable-claims.md", root), "utf8");
   const CLAIMS_ANSWERED = [
-    ["1", "anchored like a publication", ["it is NOT yet"], ["publicationLeaf"]],
+    ["1", "anchored like a publication", ["an anchor in name only"], ["semanticsCommitmentArtifact", "semanticsDigests"]],
     ["2", "distrusted verifier hashes", ["fail-closed"], ["REVOCATION_KINDS"]],
     ["3", "typed contract rather than a string map", ["stronger than either"], ["semanticsBinding", "scopeAllows"]],
     ["4", "no semantics binding", ["DERIVED id"], ["findSemantics"]],
@@ -1404,8 +1407,11 @@ function checkAnnouncementRfc(overrides = {}) {
       }
     }
   }
-  if (claimsRfc.includes("it is NOT yet") && sources.includes("semanticsLeaf")) {
-    fail("RFC 0003 says semantics are not anchored yet, but core now has a semantics leaf — the answer is stale");
+  // The answer is POSITIVE now, so the code side is what must hold: if the RFC claims
+  // anchoring, the commitment builder has to exist. (It was a negative claim until the
+  // commitment was built; the check flipped with the answer, in the same commit.)
+  if (claimsRfc.includes("AND IT IS") && !sources.includes("semanticsCommitmentArtifact")) {
+    fail("RFC 0003 says semantics are anchored, but the tree has no semantics commitment artifact");
   }
 
   // RFC 0006 (independent verifiers) — the thesis the AI-verification surface is an

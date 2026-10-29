@@ -152,7 +152,13 @@ export {
   logicSemanticsForChallenge,
   scopeAllows,
   semanticsBinding,
+  SEMANTICS_APP,
+  SEMANTICS_COMMITMENT_KIND,
+  parseSemanticsCommitmentArtifact,
+  semanticsCommitmentArtifact,
+  semanticsDigests,
   semanticsForApp,
   semanticsRecord,
+  semanticsRecordDigest,
   taskForSemantics,
 } from "./semantics.ts";

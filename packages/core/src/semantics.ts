@@ -253,3 +253,73 @@ export function logicSemanticsForChallenge(
 export function taskForSemantics(semantics: Semantics) {
   return tasks.find((task) => `logic/${task.id}` === semantics.id) ?? null;
 }
+
+/**
+ * Anchoring semantics records — RFC 0003's question 1.
+ *
+ * The bundle's root is a Merkle root over PUBLICATION leaves, and a semantics record
+ * is a bundle FIELD: editing it leaves the root verifying, so any anchoring claim
+ * about the field is an anchor in name only. The fix is the one RFC 0020 applies to
+ * seed lists — commit to the thing INSIDE the proof. A registry publishes a semantics
+ * commitment as an ordinary publication carrying `id@version -> digest`, so a reader
+ * holding a root can tell whether the meaning it resolved is the one committed to,
+ * and editing the field moves the root a client already holds.
+ */
+export const SEMANTICS_APP = "rarext-semantics";
+export const SEMANTICS_COMMITMENT_KIND = "semantics-commitment";
+
+/** The digest a commitment records for one record: its canonical form, hashed. */
+export function semanticsRecordDigest(semantics: Semantics, sha256: (value: string) => string): string {
+  return sha256(canonicalize(semantics));
+}
+
+/** `id@version -> digest` for every record in a registry. */
+export function semanticsDigests(
+  semantics: Semantics[],
+  sha256: (value: string) => string,
+): Record<string, string> {
+  const digests: Record<string, string> = {};
+  for (const record of semantics) {
+    digests[`${record.id}@${record.version}`] = semanticsRecordDigest(record, sha256);
+  }
+  return digests;
+}
+
+/** A publication-shaped artifact carrying the commitment, like the federation's. */
+export function semanticsCommitmentArtifact(digests: Record<string, string>): {
+  app: string;
+  kind: string;
+  version: number;
+  mediaType: string;
+  body: string;
+} {
+  return {
+    app: SEMANTICS_APP,
+    kind: SEMANTICS_COMMITMENT_KIND,
+    version: 1,
+    mediaType: "application/json",
+    body: JSON.stringify({ digests }),
+  };
+}
+
+/** Read a semantics commitment out of an artifact, or null when it is not one. */
+export function parseSemanticsCommitmentArtifact(artifact: {
+  app?: unknown;
+  kind?: unknown;
+  body?: unknown;
+}): { digests: Record<string, string> } | null {
+  if (artifact.app !== SEMANTICS_APP || artifact.kind !== SEMANTICS_COMMITMENT_KIND) return null;
+  if (typeof artifact.body !== "string") return null;
+  try {
+    const parsed = JSON.parse(artifact.body) as { digests?: unknown };
+    if (typeof parsed.digests !== "object" || parsed.digests === null) return null;
+    const digests: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed.digests as Record<string, unknown>)) {
+      if (typeof value !== "string") return null;
+      digests[key] = value;
+    }
+    return { digests };
+  } catch {
+    return null;
+  }
+}
