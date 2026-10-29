@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Make an AI proof — RAREXT</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./favicon.svg" />
+  </head>
+  <body>
+    <main>
+      <h1>AI lives here, not on a server</h1>
+      <p>
+        This page runs the <strong>committed model</strong> in your browser — the same numbers the
+        published bundle was generated with — and assembles the evidence an attestation would carry.
+        Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is
+        an identity claim, and a page has no identity. What you get is the PROOF, which anyone can
+        recompute.
+      </p>
+
+      <form id="controls" onsubmit="return false">
+        <label>Seed <input id="seed" type="number" step="1" /></label>
+        <label>Steps <input id="steps" type="number" step="1" min="0" /></label>
+        <button id="run" type="button">Run the committed model here</button>
+      </form>
+
+      <p id="verdict" role="status"></p>
+      <pre id="output" aria-label="generated output"></pre>
+      <details>
+        <summary>The evidence an attestation would carry</summary>
+        <pre id="evidence"></pre>
+      </details>
+
+      <h2>Or check somebody else's claim</h2>
+      <p>
+        Paste a claimed output for the same model, seed and steps. It is recomputed here and compared;
+        the verdict is arithmetic, not trust.
+      </p>
+      <textarea id="claim" rows="4" placeholder="paste a claimed output"></textarea>
+      <button id="check" type="button">Check it against the committed model</button>
+      <p id="check-result" role="status"></p>
+
+      <p>
+        The module behind this page is <code>apps/web/src/ai.ts</code>, and its hashes are asserted
+        against node's in <code>apps/web/test/ai-proof.test.ts</code> — if WebCrypto and node
+        disagreed about the evidence, "anyone can recompute this" would be a slogan.
+        <a href="./verify.html">Verify the mirror's bundle</a> ·
+        <a href="./index.html">the workbench</a>
+      </p>
+    </main>
+    <script type="module" src="./ai.js"></script>
+  </body>
+</html>
