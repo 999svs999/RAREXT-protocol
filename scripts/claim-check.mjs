@@ -256,6 +256,10 @@ if (process.argv.includes("--self-test")) {
     const galleryReal = readFileSync(new URL("site/registry/mirror/gallery.html", root), "utf8");
     requireCondition("gallery re-derives renditions", galleryReal.includes("verifyPublishedRendition("));
     requireCondition("rendition check is exported", aiModuleReal.includes("export async function verifyPublishedRendition"));
+    const coreAiReal = readFileSync(new URL("packages/core/src/ai.ts", root), "utf8");
+    const mcpLocalReal = readFileSync(new URL("apps/mcp/src/attest-local.ts", root), "utf8");
+    requireCondition("one rendition assembly", coreAiReal.includes("export function renditionFor("));
+    requireCondition("the MCP ships renditions too", mcpLocalReal.includes("renditionFor("));
   }
 
   const assertChanged = (before, after, label) => {
@@ -3129,6 +3133,39 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
     const buildScript = JSON.parse(readFileSync(new URL("package.json", root), "utf8")).scripts["build:web"];
     if (!String(buildScript).includes("renditions.ts")) {
       fail("package.json no longer builds the gallery's rendition module, so the page ships without it");
+    }
+
+    // ONE assembly of a rendition. Three surfaces ship one (the SDK for a resident, the
+    // MCP verb for an agent's tooling, the registry's publisher) and a second copy of
+    // the field mapping is a second rule — the same defect the page work already paid
+    // for once. Core owns it; every maker calls it, and the MCP's verb must REGISTER
+    // the argument as well as accept it, or clients cannot ask for a picture at all.
+    const coreAi = readFileSync(new URL("packages/core/src/ai.ts", root), "utf8");
+    if (!coreAi.includes("export function renditionFor(")) {
+      fail("core no longer owns the single rendition assembly every surface ships through");
+    }
+    for (const [label, relative] of [
+      ["the SDK", "packages/agent-sdk/src/index.ts"],
+      ["the MCP verb", "apps/mcp/src/attest-local.ts"],
+    ]) {
+      const source = readFileSync(new URL(relative, root), "utf8");
+      if (!source.includes("renditionFor(")) {
+        fail(`${label} no longer assembles a rendition through core's shared rule`);
+      }
+      if (/mediaType:\s*"image\/png"/.test(source) && /raster:/.test(source) && /blob:/.test(source)) {
+        fail(`${label} assembles a rendition's fields itself instead of calling renditionFor`);
+      }
+    }
+    const architecture = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+    if (/RENDITION of the run/.test(architecture)) {
+      const mcpServer = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
+      if (!/rendition:\s*\{\s*type:\s*"number"/.test(mcpServer)) {
+        fail("ARCHITECTURE.md says the MCP verb ships a rendition, but its schema does not register the argument, so no client can ask for one");
+      }
+    }
+    const mcpLocal = readFileSync(new URL("apps/mcp/src/attest-local.ts", root), "utf8");
+    if (!/MAX_RENDITION_SIZE/.test(mcpLocal)) {
+      fail("the MCP rendition argument has no cap, so a caller can ask for an unbounded raster");
     }
 
     if (aiPage.includes("publications?.find(")) {

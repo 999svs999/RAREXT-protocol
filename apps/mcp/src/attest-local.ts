@@ -7,6 +7,7 @@ import {
   generate,
   isGenerativeBody,
   isBoundedBody,
+  renditionFor,
   type Attestation,
   type Artifact,
   type BoundedBody,
@@ -14,9 +15,11 @@ import {
   type Challenge,
   type ClaimKind,
   type GenerativeBody,
+  type GenerativeMedia,
   type GenerativeSpec,
   type XorshiftModel,
 } from "../../../packages/core/src/index.ts";
+import { encodePngRaster } from "../../../packages/agent-sdk/src/png.ts";
 import { verifyAiLocally } from "./verify-ai.ts";
 import type { AiLocalVerification } from "../../../packages/core/src/index.ts";
 
@@ -58,6 +61,12 @@ export interface AttestLocalInput {
   values?: number[];
   /** The committed model; defaults to the challenge's sample model. */
   model?: XorshiftModel;
+  /**
+   * Ship a RENDITION of a generative run at this pixel size — the picture beside the
+   * values, assembled by the shared rule rather than a second copy of it here. A
+   * caller that wants only the tokens omits it.
+   */
+  rendition?: number;
   /** The semantics binding to record; null when there is none to claim. */
   binding?: { id: string; version: number; claimKind: ClaimKind } | null;
 }
@@ -87,7 +96,17 @@ export async function attestAiLocally(
     const seed = input.seed ?? sample?.seed ?? 0;
 
     const output = generate(model, seed, steps);
-    const body: GenerativeBody = { model, seed, output };
+
+    // The picture, when the caller asked for one: rendered and digested by the same
+    // assembly the SDK ships, so an MCP client and a resident produce the same bytes.
+    const media: GenerativeMedia | undefined =
+      input.rendition === undefined
+        ? undefined
+        : renditionFor(model, seed, input.rendition, {
+            encodePng: (raster, size) => new Uint8Array(encodePngRaster(raster, size)),
+            sha256: sha256Of,
+          });
+    const body: GenerativeBody = { model, seed, output, ...(media ? { media } : {}) };
     const artifact: Artifact = {
       app,
       kind: "ai.generative",
@@ -180,6 +199,9 @@ export { isGenerativeBody, isBoundedBody, canonicalize };
  * and the server's dispatch is a one-liner through this function so the coercion
  * under test is the coercion in production.
  */
+/** How large a rendition a caller may ask for: 512×512 is 786 kB of raster. */
+export const MAX_RENDITION_SIZE = 512;
+
 export async function attestLocalFromArgs(
   challengeId: string,
   registry: { challenge(id: string): Promise<Challenge> },
@@ -203,6 +225,16 @@ export async function attestLocalFromArgs(
       throw new Error("steps must be a non-negative integer");
     }
     input.steps = args.steps;
+  }
+
+  if (args.rendition !== undefined) {
+    if (typeof args.rendition !== "number" || !Number.isInteger(args.rendition) || args.rendition < 1) {
+      throw new Error("rendition must be a positive integer");
+    }
+    if (args.rendition > MAX_RENDITION_SIZE) {
+      throw new Error(`rendition must be at most ${MAX_RENDITION_SIZE} pixels`);
+    }
+    input.rendition = args.rendition;
   }
 
   if (args.values !== undefined) {

@@ -723,3 +723,37 @@ export function attestBoundedRun(input: {
     createdAt: input.createdAt,
   };
 }
+
+/**
+ * The ONE assembly of a generative rendition.
+ *
+ * A rendition is a raster rendered from the commitment, the PNG that encodes it, and
+ * the digests of both. Three surfaces ship renditions (the SDK for a resident, the MCP
+ * verb for an agent's tooling, the registry's own publisher) and a second copy of this
+ * mapping anywhere is a second rule: the fields, the rule name, which digest covers
+ * what. The encoder and the hash arrive as arguments so core keeps its two invariants —
+ * no hashing dependency, no compression dependency.
+ */
+export function renditionFor(
+  model: XorshiftModel,
+  seed: number,
+  size: number,
+  deps: {
+    encodePng: (raster: Uint8Array, size: number) => Uint8Array;
+    sha256: (bytes: Uint8Array) => string;
+  },
+): GenerativeMedia {
+  if (!Number.isInteger(size) || size < 1) {
+    throw new Error(`renditionFor: size must be a positive integer, got ${String(size)}`);
+  }
+  const raster = renderRaster(model, seed, size);
+  const png = deps.encodePng(raster, size);
+  return {
+    mediaType: "image/png",
+    rule: RASTER_RULE,
+    blob: deps.sha256(png),
+    raster: deps.sha256(raster),
+    size,
+    bytes: png.length,
+  };
+}

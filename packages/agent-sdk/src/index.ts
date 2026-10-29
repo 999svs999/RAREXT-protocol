@@ -23,7 +23,7 @@ import {
   foldAnnouncements,
   planSeedUnion,
   publicationFromSignedInput,
-  renderRaster,
+  renditionFor,
   readBundleResponseBytes,
   unresolvedIdentity,
   verifyAiArtifact,
@@ -690,20 +690,14 @@ export function selfPublishGenerative(
 
   // The rendition, when asked for: rendered from the same model and seed, so it is
   // a function of the commitment rather than a picture sitting beside it.
-  let media: GenerativeMedia | undefined;
-  if (input.rendition !== undefined) {
-    const size = input.rendition;
-    const raster = renderRaster(input.model, seed, size);
-    const png = encodePngRaster(raster, size);
-    media = {
-      mediaType: "image/png",
-      rule: RASTER_RULE,
-      blob: createHash("sha256").update(png).digest("hex"),
-      raster: createHash("sha256").update(raster).digest("hex"),
-      size,
-      bytes: png.length,
-    };
-  }
+  // The assembly lives in core — one copy for every surface that ships a rendition.
+  const media: GenerativeMedia | undefined =
+    input.rendition === undefined
+      ? undefined
+      : renditionFor(input.model, seed, input.rendition, {
+          encodePng: (raster, size) => new Uint8Array(encodePngRaster(raster, size)),
+          sha256: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+        });
 
   const body: GenerativeBody = { model: input.model, seed, output, ...(media ? { media } : {}) };
   const artifact: Artifact = {

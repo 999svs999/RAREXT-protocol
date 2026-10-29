@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { Challenge } from "../../../packages/core/src/index.ts";
+import { createHash } from "node:crypto";
+
+import { generativeRenditionHolds } from "../../../packages/core/src/index.ts";
+import { encodePngRaster } from "../../../packages/agent-sdk/src/png.ts";
+import { renderRaster } from "../../../packages/core/src/index.ts";
 import { generate } from "../src/generative.ts";
 import { attestAiLocally, attestLocalFromArgs } from "../../mcp/src/attest-local.ts";
 
@@ -155,4 +160,45 @@ test("a well-formed argument set goes straight through the boundary", async () =
   assert.equal(body.seed, 5);
   assert.equal(body.output, generate(model, 5, 4), "the coerced values are the ones that ran");
   assert.equal(made.attestation.gateCount, 4);
+});
+
+test("a caller can ship a rendition, and the verifier that judges it accepts it", async () => {
+  const made = await attestAiLocally("gen-1", registryFor(generativeChallenge), { rendition: 32 });
+  const body = made.artifact.body as { model: never; seed: number; media?: Record<string, unknown> };
+
+  assert.ok(body.media, "the artifact carries a rendition when one was asked for");
+  const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+
+  // The registry's OWN check decides it — not arithmetic written for this test.
+  assert.equal(generativeRenditionHolds(body as never, sha256), true);
+  assert.equal(body.media!.raster, sha256(renderRaster(body.model, body.seed, 32)));
+  assert.equal(body.media!.blob, sha256(encodePngRaster(renderRaster(body.model, body.seed, 32), 32)));
+  assert.equal(body.media!.size, 32);
+
+  // And the local verifier — the one that will later JUDGE this artifact — accepts it.
+  assert.equal(made.verification.correct, true, "the verifier that judges the artifact accepts its picture");
+  assert.equal(made.signed, false, "still no key, still nothing published");
+});
+
+test("no rendition asked for means none shipped", async () => {
+  const made = await attestAiLocally("gen-1", registryFor(generativeChallenge));
+  assert.equal((made.artifact.body as { media?: unknown }).media, undefined);
+});
+
+test("the rendition argument is a boundary, not a suggestion", async () => {
+  const registry = registryFor(generativeChallenge);
+  const refused: Array<[Record<string, unknown>, RegExp]> = [
+    [{ rendition: 0 }, /positive integer/],
+    [{ rendition: 2.5 }, /positive integer/],
+    [{ rendition: -8 }, /positive integer/],
+    [{ rendition: "64" }, /positive integer/],
+    [{ rendition: 513 }, /at most 512/],
+  ];
+  for (const [args, pattern] of refused) {
+    await assert.rejects(() => attestLocalFromArgs("gen-1", registry, args), pattern);
+  }
+  // And the largest allowed size still works, so the cap is at the boundary the
+  // message names rather than somewhere short of it.
+  const biggest = await attestLocalFromArgs("gen-1", registry, { rendition: 512 });
+  assert.equal((biggest.artifact.body as { media?: { size?: number } }).media?.size, 512);
 });
