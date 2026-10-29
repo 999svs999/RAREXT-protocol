@@ -425,6 +425,27 @@ if (process.argv.includes("--self-test")) {
   if (!caughtSeedList) fail("self-test: the checker accepted RFC 0020 dropping the refusal its answer quotes");
   caught = caught && caughtSeedList;
 
+  // The artifact-source rule (one writer per generated artifact) had a seam that no
+  // test ever passed an override to, so the branch that reads one never ran in EITHER
+  // mode — a guard that cannot be falsified is a guard that cannot fail. Coverage
+  // found it; this makes it falsifiable. (No doctor() here: that helper compares
+  // strings, and an array fixture would always look "changed".)
+  const beforeArtifactSources = failures;
+  // The override REPLACES the whole file list, so the fixture is the real generators
+  // plus one doctored stray — otherwise the required generators "go missing" and the
+  // run fails on a rule nobody was testing.
+  const fixtureFiles = [
+    "build-mirror.mjs", "publish-ai-proof.mjs", "mirror-artifacts.mjs", "mirror-verify-page.mjs",
+  ].map((name) => ({
+    name,
+    text: readFileSync(new URL(`scripts/${name}`, root), "utf8"),
+  }));
+  fixtureFiles.push({ name: "some-new-publisher.mjs", text: "const inline = window.__RAREXT_BUNDLE__;" });
+  checkArtifactSources(fixtureFiles);
+  const caughtArtifactSources = failures > beforeArtifactSources;
+  if (!caughtArtifactSources) fail("self-test: the checker accepted a second writer of the inline bundle");
+  caught = caught && caughtArtifactSources;
+
   // And RFC 0006's answer softened into naming the runner — the answer this project
   // had to argue for once already.
   const beforeVerifiers = failures;
