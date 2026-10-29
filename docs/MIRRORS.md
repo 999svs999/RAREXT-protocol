@@ -85,7 +85,9 @@ A mirror is a directory:
   reason, and the page always says which location the copy it verified came
   from (`Served from`). When nothing verifies it says so instead of showing a
   green row, so a visitor to a tampered mirror still gets a truthful answer.
-  The landing page carries this proof surface at the front door: its
+  The landing page carries this proof surface at the front door — the pinned
+verifier, the gallery, and the browser AI-proof page (`ai.html`), because a
+proof nobody can reach is a proof nobody checks: its
   `data-pin-root` links are rewritten at deploy time to carry the anchored
   root, so "Verify this registry" opens the verifier already pinned to the root
   the chain holds, and a deploy whose front door lost its proof links fails.

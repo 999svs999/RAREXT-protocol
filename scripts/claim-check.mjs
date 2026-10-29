@@ -369,6 +369,18 @@ if (process.argv.includes("--self-test")) {
   const caughtFrontDoor = failures > beforeFrontDoor;
   if (!caughtFrontDoor) fail("self-test: the checker accepted a front door without its pinned proof link");
   caught = caught && caughtFrontDoor;
+
+  // And a front door that loses the AI-proof link must be reported: the page is
+  // published, and a proof nobody can reach is a proof nobody checks.
+  const noAiLink = doctor(originalLanding, "noAiLink", (s) => s.replace(
+    '\n          <a href="./mirror/ai.html">Make an AI proof in your browser →</a>',
+    "",
+  ));
+  const beforeAiLink = failures;
+  checkFrontDoor(undefined, noAiLink);
+  const caughtAiLink = failures > beforeAiLink;
+  if (!caughtAiLink) fail("self-test: the checker accepted a front door without the AI-proof link");
+  caught = caught && caughtAiLink;
   // And a generator that keeps its own inline copy of a shared artifact must
   // be reported — the fixture names a second holder of the inline bundle.
   const beforeSources = failures;
@@ -1050,6 +1062,9 @@ function checkFrontDoor(docOverride, indexOverride) {
   }
   if (!index.includes("./mirror/gallery.html")) {
     fail("the landing page does not link the gallery — the AI artifacts that verify themselves are invisible from the front door");
+  }
+  if (!index.includes("./mirror/ai.html")) {
+    fail("the landing page does not link the browser AI proof — a page nobody can find is half-published");
   }
 
   console.log("  pinned verifier, gallery, and registry linked | deploy pins data-pin-root links");
