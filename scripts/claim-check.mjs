@@ -3168,10 +3168,21 @@ function checkAiVerificationDoc(docOverride, appOverride, sources = {}) {
         fail(`${label} assembles a rendition's fields itself instead of calling renditionFor`);
       }
     }
+    {
+      // The MCP verb ships BOTH representations; the lossy leg goes through core's own
+      // strip assembly, so a lane shape is never computed here.
+      const mcpLocalBounded = readFileSync(new URL("apps/mcp/src/attest-local.ts", root), "utf8");
+      if (!mcpLocalBounded.includes("boundedRenditionFor(")) {
+        fail("the MCP verb no longer ships a lossy strip through core's shared rule");
+      }
+    }
     const architecture = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
     if (/RENDITION of the run/.test(architecture)) {
       const mcpServer = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
-      if (!/rendition:\s*\{\s*type:\s*"number"/.test(mcpServer)) {
+      // The argument accepts BOTH shapes now, so the registration check looks for the
+      // union: a regression back to a number-only schema is what would make the strip
+      // unreachable for a client.
+      if (!/rendition:\s*\{\s*\n\s*type:\s*\["number",\s*"object"\]/.test(mcpServer)) {
         fail("ARCHITECTURE.md says the MCP verb ships a rendition, but its schema does not register the argument, so no client can ask for one");
       }
     }

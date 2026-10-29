@@ -390,7 +390,11 @@ const tools = [
         seed: { type: "number" },
         steps: { type: "number" },
         values: { type: "array", items: { type: "number" } },
-        rendition: { type: "number", description: "Ship a rendition at this pixel size beside the values" },
+        rendition: {
+          type: ["number", "object"],
+          description:
+            "Ship a rendition beside the values: a pixel size for a generative run, or a { width, height } lane shape for a lossy strip",
+        },
       },
       required: ["challengeId"],
     },

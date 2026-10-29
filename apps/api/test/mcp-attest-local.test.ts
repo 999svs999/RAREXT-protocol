@@ -4,7 +4,13 @@ import test from "node:test";
 import type { Challenge } from "../../../packages/core/src/index.ts";
 import { createHash } from "node:crypto";
 
-import { generativeRenditionHolds } from "../../../packages/core/src/index.ts";
+import {
+  BOUNDED_RASTER_HEIGHT,
+  BOUNDED_RASTER_RULE,
+  BOUNDED_RASTER_SCALE,
+  boundedRenditionHolds,
+  generativeRenditionHolds,
+} from "../../../packages/core/src/index.ts";
 import { encodePngRaster } from "../../../packages/agent-sdk/src/png.ts";
 import { renderRaster } from "../../../packages/core/src/index.ts";
 import { generate } from "../src/generative.ts";
@@ -191,7 +197,9 @@ test("the rendition argument is a boundary, not a suggestion", async () => {
     [{ rendition: 0 }, /positive integer/],
     [{ rendition: 2.5 }, /positive integer/],
     [{ rendition: -8 }, /positive integer/],
-    [{ rendition: "64" }, /positive integer/],
+    // A string is now refused as a SHAPE problem rather than an integer one: the
+    // argument accepts two forms, so "not a number" no longer means "not an integer".
+    [{ rendition: "64" }, /pixel size or a \{ width, height \} shape/],
     [{ rendition: 513 }, /at most 512/],
   ];
   for (const [args, pattern] of refused) {
@@ -201,4 +209,51 @@ test("the rendition argument is a boundary, not a suggestion", async () => {
   // message names rather than somewhere short of it.
   const biggest = await attestLocalFromArgs("gen-1", registry, { rendition: 512 });
   assert.equal((biggest.artifact.body as { media?: { size?: number } }).media?.size, 512);
+});
+
+test("a caller can ship a LOSSY strip, and the verifier that judges it accepts it", async () => {
+  const values = [10, 20, 30, 40, 200, 255, 0, 128];
+  const made = await attestAiLocally("bounded-1", registryFor(boundedChallenge), { values, rendition: {} });
+  const body = made.artifact.body as { values: number[]; media?: Record<string, number | string> };
+  const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+
+  assert.ok(body.media, "the artifact carries a strip when one was asked for");
+  // The width is the RULE's: one lane per value at its scale — not a count a caller
+  // picks, and not the pixel size the generative shape uses.
+  assert.equal(body.media.width, reference.length * BOUNDED_RASTER_SCALE);
+  assert.equal(body.media.height, BOUNDED_RASTER_HEIGHT);
+  assert.equal(body.media.rule, BOUNDED_RASTER_RULE);
+
+  // The registry's OWN check decides it, and the local verifier accepts the artifact.
+  assert.equal(boundedRenditionHolds(body as never, boundedChallenge.spec as never, sha256), true);
+  assert.equal(made.verification.correct, true, "the verifier that judges the artifact accepts its strip");
+});
+
+test("the two rendition shapes are not interchangeable", async () => {
+  const values = [10, 20, 30, 40, 200, 255, 0, 128];
+  await assert.rejects(
+    () => attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values, rendition: 64 }),
+    /is lossy: its rendition is a \{ width, height \} strip, not a 64-pixel size/,
+  );
+  await assert.rejects(
+    () => attestLocalFromArgs("gen-1", registryFor(generativeChallenge), { rendition: { width: 128 } }),
+    /is generative: its rendition is a pixel size/,
+  );
+});
+
+test("the strip shape is a boundary in its own right", async () => {
+  const values = [10, 20, 30, 40, 200, 255, 0, 128];
+  const refused: Array<[Record<string, unknown>, RegExp]> = [
+    [{ rendition: { width: 0 } }, /rendition\.width must be an integer/],
+    [{ rendition: { height: 2.5 } }, /rendition\.height must be an integer/],
+    [{ rendition: { width: 513 } }, /rendition\.width must be an integer/],
+    [{ rendition: {} }, /supply size, width or height/],
+    [{ rendition: "big" }, /pixel size or a \{ width, height \} shape/],
+  ];
+  for (const [args, pattern] of refused) {
+    await assert.rejects(() => attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values, ...args }), pattern);
+  }
+  // The rule's own shape, asked for explicitly, still works.
+  const shaped = await attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values, rendition: { width: 128 } });
+  assert.equal((shaped.artifact.body as { media?: { width?: number } }).media?.width, 128);
 });

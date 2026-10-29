@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   attestBoundedRun,
+  boundedRenditionFor,
   attestGenerativeRun,
   canonicalize,
   generate,
@@ -11,6 +12,7 @@ import {
   type Attestation,
   type Artifact,
   type BoundedBody,
+  type BoundedMedia,
   type BoundedSpec,
   type Challenge,
   type ClaimKind,
@@ -62,11 +64,13 @@ export interface AttestLocalInput {
   /** The committed model; defaults to the challenge's sample model. */
   model?: XorshiftModel;
   /**
-   * Ship a RENDITION of a generative run at this pixel size — the picture beside the
-   * values, assembled by the shared rule rather than a second copy of it here. A
-   * caller that wants only the tokens omits it.
+   * Ship a RENDITION beside the values, described in the RULE's own terms: a pixel
+   * SIZE for a generative run, or a lane shape ({ width, height }) for a lossy strip.
+   * The two are not interchangeable — a strip's width is one lane per value at the
+   * rule's scale, not a count of pixels a caller picks — so passing the wrong one is
+   * refused by name rather than reinterpreted into a picture of something else.
    */
-  rendition?: number;
+  rendition?: number | { width?: number; height?: number };
   /** The semantics binding to record; null when there is none to claim. */
   binding?: { id: string; version: number; claimKind: ClaimKind } | null;
 }
@@ -94,6 +98,12 @@ export async function attestAiLocally(
 
     const steps = input.steps ?? (challenge.spec as { steps?: number }).steps ?? 0;
     const seed = input.seed ?? sample?.seed ?? 0;
+
+    if (input.rendition !== undefined && typeof input.rendition !== "number") {
+      throw new Error(
+        `challenge ${challengeId} is generative: its rendition is a pixel size, not a ${JSON.stringify(input.rendition)} strip shape`,
+      );
+    }
 
     const output = generate(model, seed, steps);
 
@@ -142,7 +152,25 @@ export async function attestAiLocally(
     if (!input.values) {
       throw new Error(`challenge ${challengeId} is bounded: supply the reconstruction's values`);
     }
-    const body: BoundedBody = { values: input.values };
+    // The strip, through core's shared rule — the same assembly the SDK and the
+    // publisher use. A number here is refused: lanes are the rule's business.
+    const spec = challenge.spec as BoundedSpec;
+    if (input.rendition !== undefined && typeof input.rendition === "number") {
+      throw new Error(
+        `challenge ${challengeId} is lossy: its rendition is a { width, height } strip, not a ${input.rendition}-pixel size`,
+      );
+    }
+    let media: BoundedMedia | undefined;
+    if (input.rendition !== undefined) {
+      if (!Array.isArray(spec.reference)) {
+        throw new Error(`challenge ${challengeId} carries no committed reference to render a strip against`);
+      }
+      media = boundedRenditionFor(spec.reference, input.values, {
+        encodePng: (raster, width, height) => new Uint8Array(encodePngRaster(raster, width, height)),
+        sha256: sha256Of,
+      }, input.rendition);
+    }
+    const body: BoundedBody = { values: input.values, ...(media ? { media } : {}) };
     const artifact: Artifact = {
       app,
       kind: "ai.bounded",
@@ -154,7 +182,7 @@ export async function attestAiLocally(
     const attestation = attestBoundedRun({
       artifact,
       body,
-      spec: challenge.spec as BoundedSpec,
+      spec,
       app,
       challengeId,
       verifier: "bounded-metric-replay",
@@ -228,13 +256,29 @@ export async function attestLocalFromArgs(
   }
 
   if (args.rendition !== undefined) {
-    if (typeof args.rendition !== "number" || !Number.isInteger(args.rendition) || args.rendition < 1) {
-      throw new Error("rendition must be a positive integer");
+    if (typeof args.rendition === "number") {
+      if (!Number.isInteger(args.rendition) || args.rendition < 1) {
+        throw new Error("rendition must be a positive integer");
+      }
+      if (args.rendition > MAX_RENDITION_SIZE) {
+        throw new Error(`rendition must be at most ${MAX_RENDITION_SIZE} pixels`);
+      }
+      input.rendition = args.rendition;
+    } else if (typeof args.rendition === "object" && args.rendition !== null) {
+      const shape = args.rendition as { width?: unknown; height?: unknown };
+      for (const [field, value] of [["width", shape.width], ["height", shape.height]] as const) {
+        if (value === undefined) continue;
+        if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > MAX_RENDITION_SIZE) {
+          throw new Error(`rendition.${field} must be an integer between 1 and ${MAX_RENDITION_SIZE}`);
+        }
+      }
+      if (shape.width === undefined && shape.height === undefined) {
+        throw new Error("rendition must describe either a size or a strip: supply size, width or height");
+      }
+      input.rendition = args.rendition as { width?: number; height?: number };
+    } else {
+      throw new Error("rendition must be a pixel size or a { width, height } shape");
     }
-    if (args.rendition > MAX_RENDITION_SIZE) {
-      throw new Error(`rendition must be at most ${MAX_RENDITION_SIZE} pixels`);
-    }
-    input.rendition = args.rendition;
   }
 
   if (args.values !== undefined) {
