@@ -88,15 +88,34 @@ anchored awaits the next anchor.
 
 ## Open questions
 
-1. Who authors the commitment — the registry operator whose bundle carries it,
-   or a federation handle? An operator signing a list of OTHER registries is a
-   statement about them, and RFC 0019's `announcers` answer ("locations open,
-   facts by authority") may apply here too.
-2. One commitment per list, or per registries entry? The list is small today;
-   the shape should not have to change when it is not.
-3. How does a client find the list URL when the commitment is in a bundle it
-   read first? The commitment names `listUrl`, which is a location — so a client
-   that trusts the bundle trusts that URL for the list, and the digest is what it
-   checks. That ordering is worth stating explicitly wherever it is used.
-4. Does the commitment need an expiry, so a stale list is visible as stale
-   rather than merely old? `generatedAt` is recorded but nothing consumes it.
+1. **Who authors the commitment?** — **ANSWERED: an authority for the list, which
+   is why a federation handle is the right signer when the list crosses operators.**
+   RFC 0019's rule decides it: an announcement proposes locations, facts come from
+   authority. The commitment carries a DIGEST, which is a fact about the list, so
+   the operator whose bundle merely happens to carry it is not thereby qualified to
+   state it — the signer must be the list's own operator, or a handle the reader
+   already trusts across operators. The question's suspicion was right, and the
+   answer is not "either": the same rule that governs announcements governs the
+   commitment built to protect them.
+2. **One commitment per list, or per registries entry?** — **ANSWERED: one per
+   list.** `registryListDigest` reduces the entries **in order** to a single
+   canonical digest, so the commitment's subject is the list as a whole; a
+   per-entry shape would change what the digest covers, which is the thing a client
+   holds a root over. The list being small today is not the reason — a shape that
+   has to change when the list grows is a version of the protocol, and this one does
+   not have to.
+3. **How does a client find the list URL?** — **ANSWERED: it trusts the bundle for
+   the LOCATION and the digest for the list.** The commitment names `listUrl`, so a
+   client that trusts the bundle trusts that URL enough to fetch it, and the digest
+   is what decides whether what came back is the list — `registriesFromPublishedList`
+   refuses with "the seed list at `<url>` does not match the expected digest". The
+   ordering is the protocol's ordinary one, stated here because it is easy to
+   misread as trust in the URL: the URL is where to look, never what to believe.
+4. **Does the commitment need an expiry?** — **ANSWERED: no expiry is imposed; the
+   `generatedAt` is the input a client's own staleness policy needs.** A protocol
+   TTL would expire an operator's list for a reason no client can check — the list
+   is either the list its digest names or it is not, and that judgement does not
+   improve with age. A reader that wants a fresher list re-reads it, and one that
+   wants a bound on staleness has `generatedAt` to compare against a clock it
+   trusts. Recorded, not enforced: enforcement here would be policy wearing the
+   protocol's clothes.

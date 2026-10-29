@@ -393,6 +393,10 @@ if (process.argv.includes("--self-test")) {
   // An RFC answer that names a primitive the tree lacks — the failure mode of a
   // protocol record edited after the code moved on.
   const rfcRenamedCache = doctor(originalRfc, "rfcRenamedCache", (s) => s.replaceAll("cacheMaxAgeMs", "cacheTTLms"));
+  const originalSeedListRfc = readFileSync(new URL("rfcs/0020-anchoring-the-seed-list.md", root), "utf8");
+  const rfcLostTheRefusal = doctor(originalSeedListRfc, "rfcLostTheRefusal", (s) =>
+    s.replace("does not match the expected digest", "is not what we were looking for"),
+  );
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -409,6 +413,13 @@ if (process.argv.includes("--self-test")) {
   const caughtRfcRename = failures > beforeRfcRename;
   if (!caughtRfcRename) fail("self-test: the checker accepted an RFC answer naming a primitive the tree lacks");
   caught = caught && caughtRfcRename;
+
+  // And a sibling RFC whose answer stops quoting the refusal it describes.
+  const beforeSeedList = failures;
+  checkAnnouncementRfc(undefined, rfcLostTheRefusal);
+  const caughtSeedList = failures > beforeSeedList;
+  if (!caughtSeedList) fail("self-test: the checker accepted RFC 0020 dropping the refusal its answer quotes");
+  caught = caught && caughtSeedList;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1217,7 +1228,7 @@ function checkArtifactSources(filesOverride) {
  * still be there, so a later edit cannot quietly drop the security argument or
  * rename a primitive into fiction.
  */
-function checkAnnouncementRfc(rfcOverride) {
+function checkAnnouncementRfc(rfcOverride, seedListRfcOverride) {
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
   const { text: sources } = readSourceTrees({ includeScripts: true });
@@ -1287,6 +1298,37 @@ function checkAnnouncementRfc(rfcOverride) {
   ];
   if (!/All seven questions are answered/.test(rfc)) {
     fail("RFC 0019 no longer states that all seven of its questions are answered");
+  }
+
+  // RFC 0020 (anchoring the seed list) is the sibling this RFC's Q6 points at, and it
+  // has its own four answered questions. Same treatment: what each answer QUOTES must
+  // appear, and the names it leans on must exist.
+  const seedListRfc =
+    seedListRfcOverride ?? readFileSync(new URL("rfcs/0020-anchoring-the-seed-list.md", root), "utf8");
+  if (!/^## Open questions/m.test(seedListRfc)) {
+    fail("RFC 0020 no longer has its Open questions section");
+  }
+  const SEED_LIST_ANSWERED = [
+    ["1", "Who authors the commitment", ["federation handle is the right signer"], ["federationCommitment", "FEDERATION_APP"]],
+    ["2", "One commitment per list", ["in order"], ["registryListDigest"]],
+    ["3", "How does a client find the list URL", ["does not match the expected digest"], ["registriesFromPublishedList"]],
+    ["4", "Does the commitment need an expiry", ["no expiry is imposed"], ["generatedAt"]],
+  ];
+  for (const [number, marker, quoted, inCode] of SEED_LIST_ANSWERED) {
+    if (!seedListRfc.includes(marker)) {
+      fail(`RFC 0020's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!seedListRfc.includes(quote)) {
+        fail(`RFC 0020's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0020's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
   }
   for (const [number, marker, quoted, inCode] of ANSWERED) {
     if (!rfc.includes(marker)) {
