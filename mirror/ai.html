@@ -40,6 +40,22 @@
       <button id="check" type="button">Check it against the committed model</button>
       <p id="check-result" role="status"></p>
 
+      <h2>Or measure a LOSSY reconstruction</h2>
+      <p>
+        Real model classes cannot be hash-compared — a quantized network, a compressed
+        embedding, a neural codec regenerate differently on other hardware. That claim is a
+        <strong>distance</strong> instead, and it is measured here too. The committed
+        reference is read from the bundle <em>beside this page</em> (the mirror serves one),
+        so the page cannot drift from the artifact it is measuring.
+      </p>
+      <textarea id="reconstruction" rows="3" placeholder="paste a reconstruction: numbers, comma or space separated"></textarea>
+      <button id="check-bounded" type="button">Measure it against the committed reference</button>
+      <p id="bounded-result" role="status"></p>
+      <details>
+        <summary>The evidence an attestation would carry for this distance</summary>
+        <pre id="bounded-evidence"></pre>
+      </details>
+
       <p>
         The module behind this page is <code>apps/web/src/ai.ts</code>, and its hashes are asserted
         against node's in <code>apps/web/test/ai-proof.test.ts</code> — if WebCrypto and node
