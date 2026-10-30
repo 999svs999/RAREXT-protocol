@@ -9,6 +9,8 @@ import {
 } from "@rarext/core";
 import {
   BOUNDED_RASTER_HEIGHT,
+  parseSemanticsCommitmentArtifact,
+  semanticsRecordDigest,
   BOUNDED_RASTER_RULE,
   RASTER_RULE,
   renderBoundedRaster,
@@ -385,4 +387,45 @@ export async function verifyPublishedRendition(input: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * Whether a bundle's semantics commitment covers the records the bundle carries.
+ *
+ * The registry anchors its meanings (RFC 0003's question 1), and until a page shows it,
+ * only a test knows. Returns null when the bundle records NO commitment — which is a
+ * different statement from "its commitment is wrong", and the difference matters: one is
+ * an artifact that never made the claim, the other is an artifact whose claim failed.
+ */
+export interface SemanticsCommitmentStatus {
+  committed: number;
+  matched: number;
+  missing: string[];
+}
+
+export function semanticsCommitmentHolds(
+  bundle: {
+    publications?: Array<{ artifact?: unknown }>;
+    semantics?: Array<{ id: string; version: number }>;
+  },
+  sha256: (value: string) => string,
+): SemanticsCommitmentStatus | null {
+  let digests: Record<string, string> | null = null;
+  for (const publication of bundle.publications ?? []) {
+    const parsed = parseSemanticsCommitmentArtifact((publication?.artifact ?? {}) as never);
+    if (parsed) {
+      digests = parsed.digests;
+      break;
+    }
+  }
+  if (!digests) return null;
+
+  const missing: string[] = [];
+  let matched = 0;
+  for (const record of bundle.semantics ?? []) {
+    const key = `${record.id}@${record.version}`;
+    if (digests[key] === semanticsRecordDigest(record as never, sha256)) matched += 1;
+    else missing.push(key);
+  }
+  return { committed: Object.keys(digests).length, matched, missing };
 }

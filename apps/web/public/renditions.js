@@ -1,3 +1,16 @@
+// packages/core/src/canonical.ts
+function canonicalize(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
+  const record = value;
+  const keys = Object.keys(record).filter((key) => record[key] !== void 0).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
+}
+
 // packages/core/src/ai.ts
 var MAX_VOCAB = 4096;
 var MAX_GENERATIVE_TOKEN_LENGTH = 256;
@@ -96,7 +109,34 @@ function clampByte(value) {
   return Math.round(value);
 }
 
+// packages/core/src/semantics.ts
+var SEMANTICS_APP = "rarext-semantics";
+var SEMANTICS_COMMITMENT_KIND = "semantics-commitment";
+function semanticsRecordDigest(semantics, sha256) {
+  return sha256(canonicalize(semantics));
+}
+function parseSemanticsCommitmentArtifact(artifact) {
+  if (artifact.app !== SEMANTICS_APP || artifact.kind !== SEMANTICS_COMMITMENT_KIND) return null;
+  if (typeof artifact.body !== "string") return null;
+  try {
+    const parsed = JSON.parse(artifact.body);
+    if (typeof parsed.digests !== "object" || parsed.digests === null) return null;
+    const digests = {};
+    for (const [key, value] of Object.entries(parsed.digests)) {
+      if (typeof value !== "string") return null;
+      digests[key] = value;
+    }
+    return { digests };
+  } catch {
+    return null;
+  }
+}
+
 // apps/web/src/ai.ts
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 async function sha256Bytes(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -149,10 +189,31 @@ async function verifyPublishedRendition(input) {
     };
   }
 }
+function semanticsCommitmentHolds(bundle, sha256) {
+  let digests = null;
+  for (const publication of bundle.publications ?? []) {
+    const parsed = parseSemanticsCommitmentArtifact(publication?.artifact ?? {});
+    if (parsed) {
+      digests = parsed.digests;
+      break;
+    }
+  }
+  if (!digests) return null;
+  const missing = [];
+  let matched = 0;
+  for (const record of bundle.semantics ?? []) {
+    const key = `${record.id}@${record.version}`;
+    if (digests[key] === semanticsRecordDigest(record, sha256)) matched += 1;
+    else missing.push(key);
+  }
+  return { committed: Object.keys(digests).length, matched, missing };
+}
 export {
   renderBoundedPicture,
   renderProofPicture,
+  semanticsCommitmentHolds,
   sha256Bytes,
+  sha256Hex,
   verifyPublishedRendition
 };
 //# sourceMappingURL=renditions.js.map

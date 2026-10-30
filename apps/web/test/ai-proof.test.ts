@@ -16,6 +16,7 @@ import {
   fixtureFromBundle,
   renderBoundedPicture,
   renderProofPicture,
+  semanticsCommitmentHolds,
   verifyPublishedRendition,
 } from "../src/ai.ts";
 
@@ -175,7 +176,7 @@ test("the picture the page draws is the published one, both representations", ()
 const mirrorBundle = () =>
   JSON.parse(
     readFileSync(new URL("../../../site/registry/mirror/bundle.json", import.meta.url), "utf8"),
-  ) as { publications: Array<any>; challenges: Array<any> };
+  ) as { publications: Array<any>; challenges: Array<any>; semantics: Array<any> };
 
 test("the fixture's picture comes from the generative edition, not the lossy one", () => {
   const bundle = mirrorBundle();
@@ -255,4 +256,29 @@ test("a rendition that is not the claim's picture does NOT re-derive", async () 
   const none = await verifyPublishedRendition({ app: "x", body: {} });
   assert.equal(none.recorded, "");
   assert.equal(none.matches, false);
+});
+
+test("the published registry's semantics commitment is visible to a browser", () => {
+  const sha = (v: string) => createHash("sha256").update(v).digest("hex");
+  const bundle = mirrorBundle();
+
+  const status = semanticsCommitmentHolds(bundle, sha);
+  assert.ok(status, "the published registry records a semantics commitment");
+  assert.equal(status!.committed, bundle.semantics.length, "every record the bundle carries is committed");
+  assert.equal(status!.matched, status!.committed, "and every committed digest matches its record");
+  assert.deepEqual(status!.missing, []);
+
+  // A record edited without the commitment moves: the digest no longer matches.
+  const edited = {
+    ...bundle,
+    semantics: bundle.semantics.map((record: any, index: number) =>
+      index === 0 ? { ...record, summary: `${record.summary} (edited)` } : record,
+    ),
+  };
+  const drifted = semanticsCommitmentHolds(edited, sha)!;
+  assert.equal(drifted.missing.length, 1, "an edited record is reported as missing from the commitment");
+
+  // And a bundle with no commitment at all answers null — not false. The bundle never
+  // made the claim; that is a different statement from its claim failing.
+  assert.equal(semanticsCommitmentHolds({ publications: [], semantics: [] }, sha), null);
 });

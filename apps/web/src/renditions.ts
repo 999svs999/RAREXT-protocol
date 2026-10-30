@@ -6,4 +6,11 @@
  * side effects, so this re-export bundles to just the check and the primitives it
  * needs — one implementation of the rule, reachable from both pages.
  */
-export { verifyPublishedRendition, renderProofPicture, renderBoundedPicture, sha256Bytes } from "./ai.ts";
+export {
+  verifyPublishedRendition,
+  renderProofPicture,
+  renderBoundedPicture,
+  semanticsCommitmentHolds,
+  sha256Bytes,
+  sha256Hex,
+} from "./ai.ts";

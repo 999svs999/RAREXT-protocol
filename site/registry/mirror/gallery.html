@@ -31,6 +31,7 @@
   </head>
   <body>
     <h1>Media stored on RAREXT</h1>
+  <p id="meanings" data-state="pending">checking the registry’s semantics commitment…</p>
     <p class="lede">
       Every item below is a content-addressed blob in the RAREXT blob store. This page
       renders it from the node's raw blob route — the raw bytes with their stored media
@@ -43,7 +44,7 @@
     <script type="module">
     // The re-derivation runs the SAME rule the artifact's own verifier runs, from the
     // module — not a second copy of it living in this page.
-    import { verifyPublishedRendition } from "./renditions.js";
+    import { verifyPublishedRendition, semanticsCommitmentHolds, sha256Hex } from "./renditions.js";
       const grid = document.getElementById("grid");
       const empty = document.getElementById("empty");
       const HASH = /^[0-9a-f]{64}$/;
@@ -295,6 +296,31 @@
       const shown = source.records.map(render).filter(Boolean);
       for (const card of shown) grid.appendChild(card);
       if (shown.length === 0) empty.hidden = false;
-    </script>
+    
+  <!-- The registry anchors its MEANINGS (RFC 0003's first question). Until a page shows
+       it, only a test knows: this line recomputes each record's digest in the visitor's
+       browser and compares it with the digest the registry committed to. -->
+  (async () => {
+    const line = document.getElementById("meanings");
+    if (!line) return;
+    try {
+      const bundle = await (await fetch("./bundle.json", { cache: "no-cache" })).json();
+      const status = semanticsCommitmentHolds(bundle, sha256Hex);
+      if (!status) {
+        line.dataset.state = "none";
+        line.textContent = "this registry records no semantics commitment";
+        return;
+      }
+      const ok = status.missing.length === 0;
+      line.dataset.state = ok ? "ok" : "bad";
+      line.textContent = ok
+        ? `meanings anchored: ${status.matched} of ${status.committed} committed digest(s) match the records this registry carries`
+        : `meanings DENIED: ${status.missing.length} of ${status.committed} committed record(s) do not match (${status.missing.join(", ")})`;
+    } catch (error) {
+      line.dataset.state = "error";
+      line.textContent = `meanings check failed: ${String(error)}`;
+    }
+  })();
+</script>
   </body>
 </html>

@@ -1573,6 +1573,17 @@ function checkAnnouncementRfc(overrides = {}) {
     }
   }
 
+  // The semantics commitment is only a property a VISITOR can check if a page shows it:
+  // a proof nothing reaches is a proof nobody checks.
+  const galleryPage = readFileSync(new URL("site/registry/mirror/gallery.html", root), "utf8");
+  if (!galleryPage.includes("semanticsCommitmentHolds(bundle, sha256Hex)")) {
+    fail("the gallery no longer checks the registry's semantics commitment in the browser");
+  }
+  const galleryBundle = readFileSync(new URL("site/registry/mirror/renditions.js", root), "utf8");
+  if (!galleryBundle.includes("semanticsCommitmentHolds")) {
+    fail("the gallery's built module no longer exports semanticsCommitmentHolds, so the page would throw");
+  }
+
   const tracRfc = tracRfcOverride ?? readFileSync(new URL("rfcs/0001-trac-integration.md", root), "utf8");
 
   // THE AXIS ITSELF: every question in every RFC carries a verdict — ANSWERED, or an
