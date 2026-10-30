@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 
-import { tasks } from "../../../packages/core/src/index.ts";
+import { isBoundedSpec, tasks } from "../../../packages/core/src/index.ts";
 import type { Challenge, SampleArtifact, Task } from "../../../packages/core/src/index.ts";
 import { generate, type XorshiftModel } from "./generative.ts";
 
 const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z";
+
+/** A challenge id is a name people type and quote; beyond this it is not one. */
+export const MAX_CHALLENGE_ID_LENGTH = 200;
 
 const SAMPLE_CIRCUITS: Record<string, { components: { id: string; type: string; inputs?: string[] }[] }> = {
   "half-adder": {
@@ -81,8 +84,19 @@ export function asChallenge(value: unknown): Challenge {
 
   const challenge = value as Partial<Challenge>;
 
-  if (typeof challenge.id !== "string" || challenge.id.length === 0) {
-    throw new Error("challenge.id must be a string");
+  // Refused, never normalized: an id with surrounding whitespace or no bound is a
+  // different id depending on who read it, and silently trimming it would publish a
+  // challenge under a name its author did not write.
+  if (typeof challenge.id !== "string" || challenge.id.trim().length === 0) {
+    throw new Error("challenge.id must be a non-empty string");
+  }
+  if (challenge.id !== challenge.id.trim()) {
+    throw new Error(`challenge.id ${JSON.stringify(challenge.id)} has surrounding whitespace`);
+  }
+  if (challenge.id.length > MAX_CHALLENGE_ID_LENGTH) {
+    throw new Error(
+      `challenge ${challenge.id.slice(0, 24)}… has an id longer than ${MAX_CHALLENGE_ID_LENGTH} characters`,
+    );
   }
 
   if (typeof challenge.app !== "string" || challenge.app.length === 0) {
@@ -112,6 +126,37 @@ export function asChallenge(value: unknown): Challenge {
     typeof challenge.sponsor !== "string"
   ) {
     throw new Error(`challenge ${challenge.id} has an invalid sponsor`);
+  }
+
+  // The spec is what a verifier and a leaderboard row read, so the boundary refuses here
+  // what the consumer would refuse later. For the bounded app the rule is CORE'S OWN
+  // (isBoundedSpec) rather than a second copy of it: a boundary that re-implemented the
+  // verifier's rule would drift from the verifier.
+  if (challenge.spec !== undefined) {
+    if (typeof challenge.spec !== "object" || challenge.spec === null || Array.isArray(challenge.spec)) {
+      throw new Error(`challenge ${challenge.id} has a spec that is not an object`);
+    }
+    if (challenge.app === "ai-bounded" && !isBoundedSpec(challenge.spec)) {
+      throw new Error(
+        `challenge ${challenge.id} has a spec the bounded verifier would refuse ` +
+          `(needs metric maxAbsError|meanAbsError, a finite non-negative bound, and a non-empty reference of finite numbers)`,
+      );
+    }
+  }
+
+  for (const [field, value] of [
+    ["version", challenge.version],
+    ["semanticsVersion", challenge.semanticsVersion],
+  ] as const) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
+      throw new Error(`challenge ${challenge.id} has an invalid ${field}`);
+    }
+  }
+
+  if (challenge.createdAt !== undefined) {
+    if (typeof challenge.createdAt !== "string" || Number.isNaN(Date.parse(challenge.createdAt))) {
+      throw new Error(`challenge ${challenge.id} has an unparseable createdAt`);
+    }
   }
 
   return {

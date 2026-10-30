@@ -2268,6 +2268,20 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The boundary table says the challenge boundary refuses what the verifier would refuse,
+  // using CORE's rule rather than a second copy of it. Both halves are checked: the doc
+  // states it, and the source actually calls core's validator.
+  {
+    const hardening = sources.hardeningDoc ?? readFileSync(new URL("docs/HARDENING.md", root), "utf8");
+    if (!hardening.includes("for the bounded app, CORE's own `isBoundedSpec`, so a spec the verifier would refuse is refused")) {
+      fail("HARDENING.md no longer states that the challenge boundary reuses core's bounded-spec rule");
+    }
+    const boundarySource = readFileSync(new URL("apps/api/src/challenges.ts", root), "utf8");
+    if (!boundarySource.includes("isBoundedSpec(challenge.spec)")) {
+      fail("the challenge boundary does not call core's isBoundedSpec, which HARDENING.md says it does");
+    }
+  }
+
   // docs/HARDENING.md writes down what a resident accepts from strangers, beside
   // what is still not handled. A written-down bound is a claim about the tree: the
   // constant exists, the code USES it, and the drop is reported rather than
