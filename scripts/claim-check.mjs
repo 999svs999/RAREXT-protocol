@@ -408,6 +408,10 @@ if (process.argv.includes("--self-test")) {
   const rfcLostTheRoot = doctor(originalClaimsRfc, "rfcLostTheRoot", (s) =>
     s.replace("an anchor in name only", "good enough in practice"),
   );
+  const originalRentRfc = readFileSync(new URL("rfcs/0018-storage-rent-settlement.md", root), "utf8");
+  const rfcRentClaimsSettlement = doctor(originalRentRfc, "rfcRentClaimsSettlement", (s) =>
+    s.replace("the quote is computed, not charged", "refunds are automatic and instant"),
+  );
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -480,6 +484,13 @@ if (process.argv.includes("--self-test")) {
   const caughtClaims = failures > beforeClaims;
   if (!caughtClaims) fail("self-test: the checker accepted RFC 0003 dropping the property its answer names");
   caught = caught && caughtClaims;
+
+  // And RFC 0018's answer claiming a settlement layer that does not exist.
+  const beforeRent = failures;
+  checkAnnouncementRfc({ rent: rfcRentClaimsSettlement });
+  const caughtRent = failures > beforeRent;
+  if (!caughtRent) fail("self-test: the checker accepted RFC 0018 claiming settlement it does not have");
+  caught = caught && caughtRent;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1314,7 +1325,13 @@ function checkArtifactSources(filesOverride) {
  * rename a primitive into fiction.
  */
 function checkAnnouncementRfc(overrides = {}) {
-  const { rfc: rfcOverride, seedList: seedListRfcOverride, verifiers: verifiersRfcOverride, claims: claimsRfcOverride } = overrides;
+  const {
+    rfc: rfcOverride,
+    seedList: seedListRfcOverride,
+    verifiers: verifiersRfcOverride,
+    claims: claimsRfcOverride,
+    rent: rentRfcOverride,
+  } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
   const { text: sources } = readSourceTrees({ includeScripts: true });
@@ -1413,6 +1430,37 @@ function checkAnnouncementRfc(overrides = {}) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0020's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // RFC 0018 (storage rent settlement) — the economy. Most of its answers name which
+  // HALF is implemented (the quote) and which is still design (intent, settlement,
+  // apply), which is the honest shape for an RFC whose pricing landed and whose
+  // settlement did not.
+  const rentRfc =
+    rentRfcOverride ?? readFileSync(new URL("rfcs/0018-storage-rent-settlement.md", root), "utf8");
+  const RENT_ANSWERED = [
+    ["1", "allowed to pay for a blob", ["whoever signs the intent"], ["quoteStorageRent"]],
+    ["2", "partial upload refund", ["the quote is computed, not charged"], ["STORAGE_CREDIT_SCALE"]],
+    ["3", "holder payouts", ["the credit is not split"], []],
+    ["4", "restart at payment time", ["max(now, current retainedUntil)"], ["retentionUntil"]],
+    ["5", "chain adapter settles credits first", ["the first will be the local rail"], []],
+    ["6", "signed operator price commitment", ["exactly reproducible from it"], ["STORAGE_RENT_POLICY"]],
+  ];
+  for (const [number, marker, quoted, inCode] of RENT_ANSWERED) {
+    if (!rentRfc.includes(marker)) {
+      fail(`RFC 0018's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!rentRfc.includes(quote)) {
+        fail(`RFC 0018's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0018's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
   }

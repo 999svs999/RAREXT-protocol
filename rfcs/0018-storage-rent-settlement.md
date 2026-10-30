@@ -198,17 +198,40 @@ usage field without touching stored bytes.
 
 ## Open questions
 
-1. Who is allowed to pay for a blob: its author, any payer, or a delegated
-   capability holder?
-2. Does a failed or partial upload refund automatically, and in what unit?
-3. Are holder payouts settled from the same credit, or is rent kept by the
-   registry operator until a holder market exists?
-4. Does renewal extend from the old `retentionUntil` or restart at payment time
-   when the term has already lapsed?
-5. Which chain adapter settles credits first, and does it settle quotes or only
-   periodic net positions?
-6. Should the quote include a signed operator price commitment, or is the
-   `storage-rent-v1` policy plus a response digest enough?
+1. **Who is allowed to pay for a blob?** — **ANSWERED at the design level: whoever signs the intent.** The flow binds a payer key into the signed intent, so paying is
+   an act of signing rather than a property of authorship — the author can pay, and so
+   can a delegated capability holder, because the signature IS the authority. Worth
+   stating plainly: the IMPLEMENTED half of this RFC is the quote. `quoteStorageRent`
+   and the `storage-rent-v1` policy are real and tested; the intent, settlement and
+   apply steps are design, and nothing in the tree yet enforces who may pay.
+2. **Does a failed or partial upload refund automatically?** — **ANSWERED: no, and not
+   in any unit yet.** The design leaves early-deletion refunds to policy, and there is
+   no settlement layer to refund FROM — the quote is computed, not charged. When one
+   exists, the unit is settled, not invented: microcredits, the same unit the quote
+   prices in (`STORAGE_CREDIT_SCALE`), so a refund is the same arithmetic run backwards
+   rather than a second currency.
+3. **Are holder payouts settled from the same credit?** — **ANSWERED: the credit is not split.** Rent is accounted against the blob's retention, and no holder market exists
+   to attribute a share to; dividing a credit among parties the protocol cannot name
+   would be a payment to nobody in particular. When a holder market exists, this
+   question reopens with an answerable subject.
+4. **Does renewal extend from the old `retentionUntil` or restart at payment time?** —
+   **ANSWERED: it extends from `max(now, current retainedUntil)`**, which is the
+   design's own rule and the only one that cannot lose a customer time they already
+   paid for: a term renewed early continues, and one renewed after a lapse starts from
+   now rather than back-dating a gap. `retentionUntil` is the field the artifact model
+   carries; the renewal arithmetic that would apply the rule is not yet written.
+5. **Which chain adapter settles credits first?** — **ANSWERED: none yet — the first will be the local rail.** The design anticipates settlement through an adapter,
+   and the default adapter registry ships the `local` rail (no network) as the one that
+   always exists, which is what makes settlement testable end to end before any external
+   chain is involved. Until settlement lands, no adapter settles anything, and the
+   question of quotes-versus-net-positions is decided by whichever lands first.
+6. **Should the quote include a signed operator price commitment?** — **ANSWERED: the
+   policy plus the quote is enough, and stronger than a signature here.** A signature
+   would attest that an operator once said a number; the `storage-rent-v1` policy names
+   the rates, and the quote is exactly reproducible from it — byte-months at the tier's
+   rate, in rational microcredits — so any reader can recompute the number instead of
+   believing one. A commitment that can be DERIVED needs no one's word for it, which is
+   the same principle the rest of this protocol runs on.
 
 ## Decision
 
