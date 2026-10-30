@@ -250,11 +250,16 @@
               const artifact = publication.artifact ?? {};
               const body = artifact.body ?? {};
               const digest = body.media?.blob ?? body.traceHash ?? "";
-              const shown = String(digest).slice(0, 12);
+              // A digest is shown only when the publication HAS one. Slicing an empty
+              // string produced "…", which is a claim-shaped string about nothing — the
+              // commitment publications carry digests lists, not a single blob.
+              const cell = digest
+                ? `<a href="./verify.html" title="Recomputed in your browser by the mirror's proof page"><code>${escapeHtml(String(digest).slice(0, 12))}…</code></a>`
+                : `<span class="muted">—</span>`;
               return `
             <tr>
               <td class="muted">—</td>
-              <td><a href="./verify.html" title="Recomputed in your browser by the mirror's proof page"><code>${escapeHtml(shown)}…</code></a></td>
+              <td>${cell}</td>
               <td class="muted">unranked</td>
               <td>${escapeHtml(publication.app ?? "")}</td>
               <td>${escapeHtml(publication.challengeId ?? "")}</td>
