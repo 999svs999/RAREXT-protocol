@@ -442,7 +442,7 @@ if (process.argv.includes("--self-test")) {
   // plus one doctored stray — otherwise the required generators "go missing" and the
   // run fails on a rule nobody was testing.
   const fixtureFiles = [
-    "build-mirror.mjs", "publish-ai-proof.mjs", "mirror-artifacts.mjs", "mirror-verify-page.mjs",
+    "build-mirror.mjs", "publish-ai-proof.mjs", "publish-proof.mjs", "mirror-artifacts.mjs", "mirror-verify-page.mjs",
   ].map((name) => ({
     name,
     text: readFileSync(new URL(`scripts/${name}`, root), "utf8"),
@@ -452,6 +452,19 @@ if (process.argv.includes("--self-test")) {
   const caughtArtifactSources = failures > beforeArtifactSources;
   if (!caughtArtifactSources) fail("self-test: the checker accepted a second writer of the inline bundle");
   caught = caught && caughtArtifactSources;
+
+  // And a publisher whose copy list no longer carries what the mirror publishes — the
+  // failure that dropped three pages from the deployment.
+  const emptiedList = fixtureFiles.map((file) =>
+    file.name === "publish-proof.mjs"
+      ? { ...file, text: file.text.replace(/const mirrorFiles = \[[\s\S]*?\];/, "const mirrorFiles = [];") }
+      : file,
+  );
+  const beforeCopyList = failures;
+  checkArtifactSources(emptiedList);
+  const caughtCopyList = failures > beforeCopyList;
+  if (!caughtCopyList) fail("self-test: the checker accepted a publisher whose copy list drops published files");
+  caught = caught && caughtCopyList;
 
   // And RFC 0006's answer softened into naming the runner — the answer this project
   // had to argue for once already.
@@ -1239,6 +1252,31 @@ function checkArtifactSources(filesOverride) {
     }
   }
 
+
+  // The publisher copies an EXPLICIT list into the published mirror — and DELETES the
+  // mirror first. A page that exists in the tree but not on that list disappears on the
+  // next publish: silently, and only from the deployment. It happened: ai.html, ai.js
+  // and renditions.js were dropped by the first re-publish after they were added. Every
+  // file the mirror carries must therefore be copied or generated, so the list and the
+  // published tree cannot drift apart.
+  const publisherText = sources.get("publish-proof.mjs");
+  if (publisherText) {
+    const listMatch = /const mirrorFiles = \[([\s\S]*?)\];/.exec(publisherText);
+    if (!listMatch) {
+      fail("the publisher's mirror copy list is gone, so the published mirror has no declared shape");
+    } else {
+      const copied = new Set(Array.from(listMatch[1].matchAll(/"([^"]+)"/g)).map((m) => m[1]));
+      // Written from the bundle by the bundle writer, or development artifacts that are
+      // not published surfaces. Named explicitly rather than guessed by shape.
+      const notCopied = new Set(["bundle.json", "bundle.js", "verify.html"]);
+      for (const name of readdirSync(new URL("site/registry/mirror", root))) {
+        if (copied.has(name) || notCopied.has(name) || name.endsWith(".map")) continue;
+        fail(
+          `${name} is published in site/registry/mirror, but the publisher's copy list does not carry it — the next publish drops it`,
+        );
+      }
+    }
+  }
 
   const generators = ["build-mirror.mjs", "publish-ai-proof.mjs"];
   const shared = ["mirror-artifacts.mjs", "mirror-verify-page.mjs"];
