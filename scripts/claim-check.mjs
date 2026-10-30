@@ -1575,6 +1575,17 @@ function checkAnnouncementRfc(overrides = {}) {
     }
   }
 
+  // A page that promises rows must be able to show them on a STATIC mirror, where no API
+  // is reachable: the leaderboard fell back to nothing, on a site whose own bundle carries
+  // the publications it was refusing to list.
+  const leaderboardPage = readFileSync(new URL("site/registry/mirror/leaderboard.html", root), "utf8");
+  if (!leaderboardPage.includes("listFromBundle()")) {
+    fail("the leaderboard no longer falls back to the mirror's own bundle when no API answers");
+  }
+  if (!leaderboardPage.includes("./bundle.json")) {
+    fail("the leaderboard's fallback no longer reads bundle.json, so on a static mirror it lists nothing");
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
