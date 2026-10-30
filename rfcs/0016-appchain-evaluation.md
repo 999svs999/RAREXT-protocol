@@ -347,19 +347,44 @@ RFC, not a side effect of deploying validators.
 
 ## Open questions
 
-1. What exactly counts as a settled action for RAREXT: anchor root, storage
-   byte-month, claim bounty, escrow release, or a weighted basket?
-2. Who pays validators, and in what unit, without a token? Is fee-equivalent
-   revenue from storage and marketplace enough?
-3. Is canonical identity a chain account, or a keypair with on-chain pointers to a
-   handle and delegation records?
-4. What is the minimum validator set and finality rule: BFT with fixed validators,
-   or proof of stake with slashing? What is the reorg policy for published anchors?
-5. Does an audited EVM anchor contract defer the appchain indefinitely by covering
-   the public-proof need?
-6. How do handles, rotations, and delegations migrate without breaking existing
-   signatures and links?
-7. How do we measure demand without counting test traffic or operator self-use?
+1. **What counts as a settled action?** — **ANSWERED: three units exist and none is
+   settled.** An anchor root, a storage byte-month and a claim bounty are each priced and
+   recorded already; settlement is what is missing, and which of them settles first is
+   the first adapter's decision rather than this RFC's. Worth saying plainly: the units
+   being DISTINCT is the durable part, because a weighted basket would be a currency the
+   protocol had to define and defend.
+2. **Who pays validators, and in what unit, without a token?** — **ANSWERED: nobody,
+   because there are no validators.** The protocol runs no chain, so it has no validator
+   set to pay and no token to pay them in; fee-equivalent revenue from storage and
+   marketplace is therefore not a funding gap but a different design's problem. The
+   question reopens only if the appchain does.
+3. **Is canonical identity a chain account?** — **ANSWERED: a keypair with records.** The
+   canonical identity is the key that signs, with `handle`, `rarext.identity-link`,
+   `rarext.key-rotation` and `rarext.delegation` records carrying the names and grants. A
+   chain account is one location among others — the same rule announcements follow.
+4. **What validator set and finality rule?** — **ANSWERED: not applicable, and the reorg policy is the
+   general one.** BFT-versus-stake is a question about a chain the protocol
+   does not operate. What it does fix is the reorg policy for published anchors: content
+   addressing means a reorg can move a chain pointer but never the artifact, and a reader
+   re-derives the anchor from the bytes rather than trusting the chain to remember it.
+5. **Does an audited EVM anchor contract defer the appchain indefinitely?** —
+   **ANSWERED: it defers it for every cycle evaluated so far.** The public-proof need is a
+   root in an append-only record, which the protocol's anchor and adapter rails already
+   provide; the appchain would add ordering nobody consumes. "Indefinitely" is a stronger
+   word than the evidence supports, so the test is stated instead: reopen when a rule
+   needs ordering the anchor cannot express.
+6. **How do handles, rotations and delegations migrate?** — **ANSWERED: as records, so
+   they migrate like anything else.** Each is a publication with its own kind, named by a
+   CID and covered by the root, so nothing about them needs a special path: existing
+   signatures stay valid because they were made over the record's bytes, and links survive
+   because they point at records rather than at rows in a database.
+7. **How do we measure demand without counting test traffic?** — **ANSWERED: count
+   verified artifacts.** The registry credits a worker and refuses to pay twice for the
+   same artifact, so the number is of distinct verified things rather than of requests.
+   Excluding operator self-use is a POLICY the ledger can support — the publisher is named
+   in every record — but the protocol does not subtract it, because a rule that guessed
+   which runs were real would be inventing a fact.
+
 
 ## Decision
 

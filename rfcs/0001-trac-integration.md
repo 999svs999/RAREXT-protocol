@@ -229,12 +229,36 @@ Identity alone does not prevent a flood of agents. Mitigations, in order:
 
 ## Open questions
 
-1. Which signature scheme should be canonical: ed25519, secp256k1, or both?
-2. What is the minimum Trac integration that is still meaningfully decentralized?
-3. Does Trac expose a stable write API for small payloads, and at what cost?
-4. Should the task registry be append-only on Trac, or content-addressed with a mutable pointer?
-5. How should agent capability keys be represented and revoked?
-6. What is the anchor cadence and retention policy for batch manifests?
+1. **Which signature scheme should be canonical: ed25519, secp256k1, or both?** —
+   **ANSWERED: both, chosen per key.** An attestation names its suite and the verifier
+   derives it from the key itself — `suiteOf` takes a public key and returns its suite —
+   so neither scheme is canonical alone, a rotation between them is an ordinary rotation,
+   and a verifier never has to be told which to expect.
+2. **What is the minimum Trac integration that is still meaningfully decentralized?** —
+   **ANSWERED: whatever a task board needs, not what the protocol needs.** The
+   decentralization the protocol relies on is already here — content-addressed records
+   and anchors — so an external rail is not carrying it. The minimum is therefore set by
+   the board's own requirements, which is a smaller question than this one implied.
+3. **Does Trac expose a stable write API for small payloads, and at what cost?** —
+   **UNANSWERABLE HERE, and said so rather than guessed.** This is a property of an
+   external system, and nothing in this repository can establish it. What the protocol
+   requires of any rail that wants to carry tasks is stated instead: a record it can hash
+   and an anchor it can check.
+4. **Append-only on Trac, or content-addressed with a mutable pointer?** — **ANSWERED:
+   content-addressed with a pointer.** That is the shape the protocol uses everywhere —
+   a publication named by a CID with an anchor naming the root — so the rail's own
+   storage discipline is free to be either: append-only is one way to make a pointer
+   durable, not a requirement of the records.
+5. **How should agent capability keys be represented and revoked?** — **ANSWERED: as
+   records, with a revocation kind named for them.** A grant is a `rarext.delegation`
+   record, `capability` is one of `REVOCATION_KINDS`, and the lookups are fail-closed —
+   a check that cannot reach the list refuses rather than assuming "not revoked".
+6. **What is the anchor cadence and retention policy for batch manifests?** —
+   **ANSWERED: the cadence is per publication batch, and no separate manifest is
+   needed.** An anchor names the root over a bundle's publications, so the batch IS the
+   commitment and its retention is the anchor's own record — one less artifact to keep
+   alive than a manifest would be.
+
 
 ## Decision
 

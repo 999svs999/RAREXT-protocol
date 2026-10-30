@@ -422,6 +422,12 @@ if (process.argv.includes("--self-test")) {
   const originalMigrationRfc = readFileSync(new URL("rfcs/0017-game-native-state-migration.md", root), "utf8");
   const rfcScoresActors = doctor(originalMigrationRfc, "rfcScoresActors", (s) =>
     s.replace("DERIVED from them and never", "carried as an authoritative score and"));
+  const originalAppchainRfc = readFileSync(new URL("rfcs/0016-appchain-evaluation.md", root), "utf8");
+  const rfcPaysValidators = doctor(originalAppchainRfc, "rfcPaysValidators", (s) =>
+    s.replace("because there are no validators", "paid from a validator reward pool by"));
+  const originalTracRfc = readFileSync(new URL("rfcs/0001-trac-integration.md", root), "utf8");
+  const rfcOneScheme = doctor(originalTracRfc, "rfcOneScheme", (s) =>
+    s.replace("chosen per key", "fixed to ed25519 alone"));
   
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
@@ -524,6 +530,20 @@ if (process.argv.includes("--self-test")) {
   const caughtMigration = failures > beforeMigration;
   if (!caughtMigration) fail("self-test: the checker accepted RFC 0017 carrying a score about an actor");
   caught = caught && caughtMigration;
+
+  // And the last two RFCs: an appchain answer inventing validators, and a Trac answer
+  // picking one signature scheme.
+  const beforeAppchain = failures;
+  checkAnnouncementRfc({ appchain: rfcPaysValidators });
+  const caughtAppchain = failures > beforeAppchain;
+  if (!caughtAppchain) fail("self-test: the checker accepted RFC 0016 inventing a validator set");
+  caught = caught && caughtAppchain;
+
+  const beforeTrac = failures;
+  checkAnnouncementRfc({ trac: rfcOneScheme });
+  const caughtTrac = failures > beforeTrac;
+  if (!caughtTrac) fail("self-test: the checker accepted RFC 0001 picking a single signature scheme");
+  caught = caught && caughtTrac;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1367,6 +1387,8 @@ function checkAnnouncementRfc(overrides = {}) {
     placements: placementsRfcOverride,
     economy: economyRfcOverride,
     migration: migrationRfcOverride,
+    appchain: appchainRfcOverride,
+    trac: tracRfcOverride,
   } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
@@ -1497,6 +1519,96 @@ function checkAnnouncementRfc(overrides = {}) {
         fail(`RFC 0005's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
+  }
+
+  // RFC 0016 (appchain evaluation) and RFC 0001 (Trac integration) — the last two RFCs
+  // with open questions, answered mostly by what the protocol already is.
+  const appchainRfc =
+    appchainRfcOverride ?? readFileSync(new URL("rfcs/0016-appchain-evaluation.md", root), "utf8");
+  const APPCHAIN_ANSWERED = [
+    ["1", "counts as a settled action", ["three units exist and none is"], []],
+    ["2", "pays validators", ["because there are no validators"], []],
+    ["3", "canonical identity", ["a keypair with records"], ["handle"]],
+    ["4", "finality rule", ["the reorg policy is the"], []],
+    ["5", "defer the appchain", ["defers it for every cycle evaluated"], []],
+    ["6", "delegations migrate", ["migrate like anything else"], ["rarext.key-rotation"]],
+    ["7", "measure demand", ["verified artifacts"], []],
+  ];
+  for (const [number, marker, quoted, inCode] of APPCHAIN_ANSWERED) {
+    if (!appchainRfc.includes(marker)) {
+      fail(`RFC 0016's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!appchainRfc.includes(quote)) {
+        fail(`RFC 0016's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0016's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  const tracRfc = tracRfcOverride ?? readFileSync(new URL("rfcs/0001-trac-integration.md", root), "utf8");
+
+  // THE AXIS ITSELF: every question in every RFC carries a verdict — ANSWERED, or an
+  // explicit admission that this repository cannot answer it. Without this, a new RFC
+  // could land with an Open questions section that nothing ever closes, which is how
+  // open questions stay open; with it, the sweep that answered ten RFCs is a property
+  // the gate holds rather than a burst of work someone remembers doing.
+  // The template is not an RFC: its questions are placeholders to be filled in, and
+  // demanding a verdict on "the question you have not written yet" would be demanding
+  // one on nothing.
+  const rfcNames = readdirSync(new URL("rfcs", root))
+    .filter((f) => f.endsWith(".md") && f !== "0000-template.md")
+    .sort();
+  for (const name of rfcNames) {
+    const text = readFileSync(new URL(`rfcs/${name}`, root), "utf8");
+    // A line scan, not a lookahead: `(?=\s*$)` matches at EVERY line end under the m
+    // flag, so the first version captured an empty section and the rule passed on every
+    // file — vacuous, and only a hand-proof against a doctored RFC showed it.
+    const lines = text.split("\n");
+    const heading = lines.findIndex((line) => /^## .*[Oo]pen questions?/i.test(line));
+    if (heading < 0) continue;
+    let stop = lines.findIndex((line, index) => index > heading && line.startsWith("## "));
+    if (stop < 0) stop = lines.length;
+    const section = lines.slice(heading + 1, stop).join("\n");
+    const items = section.split(/^\d+\. /m).filter((item) => item.trim().length > 0);
+    if (items.length === 0) continue;
+    const unverdicted = items.filter((item) => !/ANSWERED|UNANSWERABLE HERE/.test(item));
+    if (unverdicted.length > 0) {
+      const first = unverdicted[0].split("\n")[0].slice(0, 60);
+      fail(`rfcs/${name} has ${unverdicted.length} open question(s) with no verdict, starting "${first}"`);
+    }
+  }
+  const TRAC_ANSWERED = [
+    ["1", "signature scheme should be canonical", ["chosen per key"], ["suiteOf"]],
+    ["2", "minimum Trac integration", ["whatever a task board needs"], []],
+    ["3", "stable write API for small payloads", ["UNANSWERABLE HERE"], []],
+    ["4", "content-addressed with a mutable pointer", ["content-addressed with a pointer"], []],
+    ["5", "capability keys be represented and revoked", ["a revocation kind named for them"], ["REVOCATION_KINDS"]],
+    ["6", "anchor cadence and retention", ["the batch IS the"], []],
+  ];
+  for (const [number, marker, quoted, inCode] of TRAC_ANSWERED) {
+    if (!tracRfc.includes(marker)) {
+      fail(`RFC 0001's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!tracRfc.includes(quote)) {
+        fail(`RFC 0001's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0001's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+  if (!tracRfc.includes("UNANSWERABLE HERE")) {
+    fail("RFC 0001 no longer says which of its questions this repository cannot answer");
   }
 
   // RFC 0017 (game-native state migration) — what the migration owns, what it
