@@ -1717,6 +1717,39 @@ function checkAnnouncementRfc(overrides = {}) {
     console.log("semantics commitment (one comparison rule): core owns it | the page and the agent both call it");
   }
 
+  // THE MCP TOOL LIST, both directions: every verb the server declares is named in its README,
+  // and every `rarext_*` name the README names is a verb it declares. Declarations live in MORE
+  // THAN ONE MODULE — server.ts spreads storage.ts in — so the scan reads the whole directory.
+  // A single-file scan reported the five storage verbs as "documented but absent" when they were
+  // declared in the module the list is assembled from; the false alarm is why the loop reads the
+  // tree rather than the file that first comes to mind.
+  {
+    const declared = new Set();
+    let scanned = 0;
+    for (const entry of readdirSync(new URL("apps/mcp/src", root))) {
+      if (!entry.endsWith(".ts")) continue;
+      scanned += 1;
+      const source = readFileSync(new URL("apps/mcp/src/" + entry, root), "utf8");
+      for (const match of source.matchAll(/name: "(rarext_[a-z_]+)"/g)) declared.add(match[1]);
+    }
+    if (scanned === 0 || declared.size === 0) {
+      fail(
+        `the MCP tool-list rule scanned ${scanned} module(s) and found ${declared.size} verb(s) — a list with nothing in it proves nothing`,
+      );
+    }
+    const readme = readFileSync(new URL("apps/mcp/README.md", root), "utf8");
+    const documented = new Set([...readme.matchAll(/rarext_[a-z_]+/g)].map((match) => match[0]));
+    const undocumented = [...declared].filter((verb) => !documented.has(verb)).sort();
+    if (undocumented.length > 0) {
+      fail(`apps/mcp/README.md does not name ${undocumented.length} declared MCP verb(s): ${undocumented.join(", ")}`);
+    }
+    const notAVerb = [...documented].filter((name) => !declared.has(name)).sort();
+    if (notAVerb.length > 0) {
+      fail(`apps/mcp/README.md names ${notAVerb.length} rarext_* thing(s) the MCP does not declare: ${notAVerb.join(", ")}`);
+    }
+    console.log("mcp tool list: " + declared.size + " declared verb(s) across " + scanned + " module(s) | README names every one, and names nothing else");
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit

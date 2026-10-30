@@ -30,6 +30,9 @@ Tools:
 - `rarext_link_identity`
 - `rarext_adapters`
 - `rarext_verify`
+- `rarext_verify_ai`
+- `rarext_verify_semantics`
+- `rarext_attest_local`
 - `rarext_anchor`
 - `rarext_anchor_proof`
 - `rarext_tapeout_status`
