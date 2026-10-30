@@ -416,6 +416,10 @@ if (process.argv.includes("--self-test")) {
   const rfcKeepsForks = doctor(originalPlacementsRfc, "rfcKeepsForks", (s) =>
     s.replace("refuses the second", "keeps both branches"), 1);
   
+  const originalEconomyRfc = readFileSync(new URL("rfcs/0004-storage-economy.md", root), "utf8");
+  const rfcRecoversKeys = doctor(originalEconomyRfc, "rfcRecoversKeys", (s) =>
+    s.replace("not merely absent but incompatible", "available on request to the operator"));
+  
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -502,6 +506,13 @@ if (process.argv.includes("--self-test")) {
   const caughtPlacements = failures > beforePlacements;
   if (!caughtPlacements) fail("self-test: the checker accepted RFC 0005 keeping both fork branches");
   caught = caught && caughtPlacements;
+
+  // And RFC 0004's sealed tier answering with a recovery service — the property reversed.
+  const beforeEconomy = failures;
+  checkAnnouncementRfc({ economy: rfcRecoversKeys });
+  const caughtEconomy = failures > beforeEconomy;
+  if (!caughtEconomy) fail("self-test: the checker accepted RFC 0004 promising key recovery");
+  caught = caught && caughtEconomy;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1343,6 +1354,7 @@ function checkAnnouncementRfc(overrides = {}) {
     claims: claimsRfcOverride,
     rent: rentRfcOverride,
     placements: placementsRfcOverride,
+    economy: economyRfcOverride,
   } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
@@ -1471,6 +1483,34 @@ function checkAnnouncementRfc(overrides = {}) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0005's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // RFC 0004 (storage economy) — the pricing units, the challenge cadence and the
+  // sealed tier's enforced property.
+  const economyRfc =
+    economyRfcOverride ?? readFileSync(new URL("rfcs/0004-storage-economy.md", root), "utf8");
+  const ECONOMY_ANSWERED = [
+    ["1", "the retention proof", ["the SCHEDULED challenge"], ["DEFAULT_INTERVAL_MS"]],
+    ["2", "free tier", ["prices it at zero rather"], []],
+    ["3", "key-recovery service", ["not merely absent but incompatible"], ["isSealedMetadata"]],
+    ["4", "settlement cadence", ["already distinct"], []],
+    ["5", "its own repository", ["test is whether the surface still serves"], []],
+  ];
+  for (const [number, marker, quoted, inCode] of ECONOMY_ANSWERED) {
+    if (!economyRfc.includes(marker)) {
+      fail(`RFC 0004's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!economyRfc.includes(quote)) {
+        fail(`RFC 0004's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0004's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
   }

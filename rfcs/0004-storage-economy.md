@@ -105,16 +105,31 @@ than the settlement layer. The RFC's stage-2 gate exists to resist it.
 
 ## Open questions
 
-1. What is the retention proof? A time-locked challenge signed by a committee, or
-   a chain slot that releases a challenge after a delay?
-2. Who pays for replication in the free tier — the operator today, a bounty pool
-   later, or the storage provider as a business?
-3. Does the sealed tier need a key-recovery service, and does that break the
-   "the node cannot read it" property?
-4. What is the settlement cadence, and does the chain settle byte-months, or only
-   the claim bounties?
-5. Should the storage app be its own repository once the surface outgrows the
-   protocol's needs?
+1. **What is the retention proof?** — **ANSWERED: the SCHEDULED challenge, and no
+   committee.** The durability schedule releases challenges on a cadence (`intervalMs`,
+   defaulting to `DEFAULT_INTERVAL_MS`) and the holder answers with a bounded nonce, so
+   the proof is a challenge anyone can verify rather than an attestation someone must be
+   trusted to have made. A committee signature would add a party whose word is believed;
+   the whole point of the challenge is that no word is needed.
+2. **Who pays for replication in the free tier?** — **ANSWERED: the operator, and the
+   pricing says so.** A tier whose rate is zero comes out `free: true` — the protocol prices it at zero rather
+   than pretending a third party pays, which is a smaller claim
+   and a true one. A bounty pool, or a storage provider carrying it as a business, are
+   later arrangements the protocol does not model and therefore does not promise.
+3. **Does the sealed tier need a key-recovery service?** — **ANSWERED: no, and it could
+   not have one.** Encryption is client-side and the registry REFUSES a server-side
+   sealed write, saying so in as many words (encrypt before upload, or store ciphertext
+   as a public blob). A recovery service is therefore not merely absent but incompatible: whoever can recover the key can read the bytes, which is exactly the
+   property the tier is named for.
+4. **What is the settlement cadence?** — **ANSWERED: none yet, and the two units are
+   already distinct.** Rent is priced in byte-months and the reward
+table pays per claim bounties; neither is settled, because no settlement exists. The cadence is owed by
+   the first adapter that settles — and the quote-versus-net-positions question is
+   decided there rather than here.
+5. **Should the storage app be its own repository?** — **ANSWERED: not yet, and the test is whether the surface still serves the protocol.** Today it does: the durability
+   report, the challenge schedule and the sealed envelope are protocol artifacts, each
+   derived from the rules above rather than from an app's product needs. The question
+   reopens when that stops being true, which is a condition rather than a date.
 
 ## Implementation status
 
