@@ -1787,6 +1787,31 @@ function checkAnnouncementRfc(overrides = {}) {
     }
   }
 
+  // THE WORKED EXAMPLE IS GATED, because a worked example that is not run is decoration. The
+  // Python verifier's README described a publish step the API had started refusing and nothing
+  // noticed, because the protocol was only ever tested against a fixture. The gate now runs the
+  // real service, so the guard is guarded: deleting or neutering that test fails here.
+  {
+    const gating = "apps/api/test/python-verifier-example.test.ts";
+    let source;
+    try {
+      source = readFileSync(new URL(gating, root), "utf8");
+    } catch {
+      fail(`the gate no longer runs the python verifier example (${gating} is missing)`);
+      source = "";
+    }
+    for (const marker of ["python3", "verifier.py", "traceHash", "verifiers.json", "examples/python-verifier"]) {
+      if (source !== "" && !source.includes(marker)) {
+        fail(`the python verifier example's gating test no longer exercises ${marker}`);
+      }
+    }
+    // The docs must point at it, or the example is gated but unfindable.
+    const protocol = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
+    if (!protocol.includes("examples/python-verifier")) {
+      fail("APP-PROTOCOL.md no longer points readers at the python verifier example");
+    }
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
