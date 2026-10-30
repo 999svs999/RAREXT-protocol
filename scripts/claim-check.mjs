@@ -1586,6 +1586,16 @@ function checkAnnouncementRfc(overrides = {}) {
     fail("the leaderboard's fallback no longer reads bundle.json, so on a static mirror it lists nothing");
   }
 
+  // The mirror's proof page answers "is this copy faithful" — so it must answer for the
+  // MEANINGS the registry anchors, not leave the newest property to a different page.
+  const verifyPage = readFileSync(new URL("site/registry/mirror/verify.html", root), "utf8");
+  if (!verifyPage.includes("semanticsCommitmentHolds(bundle, sha256Hex)")) {
+    fail("the mirror's proof page no longer recomputes the registry's semantics commitment");
+  }
+  if (!verifyPage.includes("./renditions.js")) {
+    fail("the proof page checks the semantics commitment without importing the module that implements it");
+  }
+
   // The AI proof page must verify the PUBLISHED claim, not only a hand-pasted one: the
   // bundle carries the publication's own reconstruction values, so waiting for a visitor
   // to paste something is a page withholding evidence it already has.

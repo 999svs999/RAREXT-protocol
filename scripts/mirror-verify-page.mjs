@@ -37,6 +37,7 @@ export function mirrorVerifyPage({ title, heading }) {
     <button id="check">Re-verify</button>
     <script type="module">
       import { verifyBundle } from "./verify.js";
+      import { semanticsCommitmentHolds, sha256Hex } from "./renditions.js";
       const out = document.getElementById("out");
 
       // The same cap every client path shares (MAX_BUNDLE_RESPONSE_BYTES in
@@ -172,6 +173,23 @@ export function mirrorVerifyPage({ title, heading }) {
             htmlRow("This copy is faithful", result.valid ? "yes" : "no", result.valid ? "ok" : "bad"),
             result.reason ? htmlRow("Why not", result.reason, "bad") : "",
           ]);
+
+        // The registry anchors its MEANINGS, and a page whose job is "is this copy
+        // faithful" should say so rather than leave the newest property to a different
+        // page. Recomputed here from the records the bundle carries.
+        const semantics = await semanticsCommitmentHolds(bundle, sha256Hex);
+        sections.push("<h2>Meanings — anchored</h2>");
+        if (!semantics) {
+          sections.push(htmlRow("Semantics commitment", "this registry records none", "dim"));
+        } else {
+          const matched = semantics.missing.length === 0;
+          sections.push(htmlRow(
+            "Committed records",
+            semantics.matched + " of " + semantics.committed + " digest(s) match the records this copy carries",
+            matched ? "ok" : "bad",
+          ));
+          if (!matched) sections.push(htmlRow("Unmatched", semantics.missing.join(", "), "bad"));
+        }
 
         const ai = (result.aiClaims ?? []).filter((claim) => claim.representation);
         if (ai.length) {
