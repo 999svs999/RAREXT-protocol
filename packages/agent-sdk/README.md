@@ -53,10 +53,10 @@ Use `publishArtifactAs` with an `AgentSigner` for signed generic artifacts. See 
 ## Mirrors and offline AI replay
 
 An agent does not need the registry to hold a copy of it, or to check the AI claims
-inside one. Two standalone functions take you from a seed document to verdicts:
+inside one. Three standalone functions take you from a seed document to verdicts:
 
 ```ts
-import { findVerifiedBundle, replayBundleAi } from "@rarext/agent-sdk";
+import { findVerifiedBundle, replayBundleAi, verifyBundleSemantics } from "@rarext/agent-sdk";
 import { readFile } from "node:fs/promises";
 
 const seed = JSON.parse(await readFile("seed.json", "utf8"));
@@ -67,6 +67,10 @@ const found = await findVerifiedBundle(seed);
 
 // The verified copy is the only input: no fetch, no server, no API.
 const { root, claims } = replayBundleAi(found.bundle);
+
+// Does this registry anchor the MEANINGS it carries? Same input, same rule the
+// browser proof page and the MCP verb use; null when the registry claims none.
+const meanings = verifyBundleSemantics(found.bundle);
 ```
 
 `root` is the bundle's manifest root, so verdicts tie to the copy that produced
@@ -80,6 +84,11 @@ them. Each claim is `{ publicationId, title, representation, correct, evidence? 
 - a publication whose challenge the bundle does not carry is reported as
   `error: "challenge <id> not in bundle"` rather than skipped;
 - a bundle that claims nothing AI comes back with an empty `claims` list.
+- `verifyBundleSemantics` answers the other half of "is this copy faithful": it compares the
+  bundle's committed `id@version -> digest` map against the records the bundle carries, giving
+  `{ committed, matched, missing }`, and returns `null` — never `false` — when the registry
+  records no commitment at all. A meaning that was never claimed and a claim that no longer
+  holds are different facts, and this reports them differently.
 
 Nothing an attestation says can raise `correct`: the attestation is only ever
 compared against what your own replay computed. See

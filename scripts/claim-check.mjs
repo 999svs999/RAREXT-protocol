@@ -1750,6 +1750,43 @@ function checkAnnouncementRfc(overrides = {}) {
     console.log("mcp tool list: " + declared.size + " declared verb(s) across " + scanned + " module(s) | README names every one, and names nothing else");
   }
 
+  // THE SDK README'S OWN ARITHMETIC. It says how many standalone functions take a reader from a
+  // seed document to verdicts, and names them. The number is parsed from the doc at check time
+  // and the names are held against the module that must export them, so a capability added
+  // without the sentence and a sentence left behind after the capability both fail. It said
+  // "Two" while three existed — the second was added last cycle and the count stayed.
+  {
+    const sdkReadme = readFileSync(new URL("packages/agent-sdk/README.md", root), "utf8");
+    const WORDS = { Two: 2, Three: 3, Four: 4, Five: 5 };
+    const stated = /\b(Two|Three|Four|Five) standalone functions? take you from a seed document to verdicts/.exec(sdkReadme);
+    if (!stated) {
+      fail("the SDK README no longer says how many standalone functions take a seed document to verdicts");
+    } else {
+      const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+      // A name counts only if the doc USES it and the module EXPORTS it, so the doc cannot
+      // reach its number by naming things that do not exist.
+      const named = ["findVerifiedBundle", "replayBundleAi", "verifyBundleSemantics"].filter(
+        (name) => sdkReadme.includes(name) && new RegExp("export (async )?function " + name + "\\(").test(sdkSource),
+      );
+      for (const name of ["findVerifiedBundle", "replayBundleAi", "verifyBundleSemantics"]) {
+        if (!new RegExp("export (async )?function " + name + "\\(").test(sdkSource)) {
+          fail("the SDK README section leans on " + name + ", which the SDK does not export");
+        }
+        if (!sdkReadme.includes(name)) {
+          fail("the SDK README does not name " + name + ", which the SDK exports for offline verification");
+        }
+      }
+      if (WORDS[stated[1]] !== named.length) {
+        fail(
+          "the SDK README says " + stated[1] + " standalone functions but " + named.length + " real exported ones are named",
+        );
+      }
+      console.log(
+        "sdk readme: says " + stated[1] + " | names " + named.length + " exported offline verification function(s)",
+      );
+    }
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
