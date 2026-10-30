@@ -309,16 +309,36 @@ function fixtureFromBundle(value) {
   if (!Array.isArray(spec?.reference) || typeof spec.metric !== "string" || typeof spec.bound !== "number") {
     return { picture: picture2, lossy: null };
   }
-  const media = bounded?.artifact?.body?.media ?? {};
+  const body = bounded?.artifact?.body ?? {};
+  const media = body.media ?? {};
   return {
     picture: picture2,
     lossy: {
       reference: spec.reference,
       metric: spec.metric,
       bound: spec.bound,
+      // The publication's OWN reconstruction values and the digest it committed to for
+      // them. Without these the page can only check a hand-pasted guess; with them the
+      // published claim is checkable the moment the page loads.
+      values: Array.isArray(body.values) ? body.values : void 0,
+      committedRaster: typeof media.raster === "string" ? media.raster : void 0,
       rendition: { width: media.width, height: media.height, rule: media.rule }
     }
   };
+}
+async function verifyPublishedBoundedRendition(lossy) {
+  if (!lossy.values || lossy.values.length === 0) return null;
+  const claim = checkBoundedClaim(lossy.reference, lossy.values, lossy.metric, lossy.bound);
+  if (claim.error) return null;
+  let renditionMatches = null;
+  if (lossy.committedRaster && lossy.rendition.width && lossy.rendition.height) {
+    const raster = renderBoundedPicture(lossy.reference, lossy.values, {
+      width: lossy.rendition.width,
+      height: lossy.rendition.height
+    });
+    renditionMatches = await sha256Bytes(raster) === lossy.committedRaster;
+  }
+  return { metricValue: claim.metricValue ?? null, within: claim.correct, renditionMatches };
 }
 
 // apps/web/src/ai-page.ts
@@ -433,6 +453,20 @@ if (!fixture?.lossy) {
 } else {
   boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${fixture.lossy.reference.length} values, ${fixture.lossy.metric} within ${fixture.lossy.bound}.`;
   boundedInput.placeholder = `e.g. ${fixture.lossy.reference.slice(0, 4).join(", ")}, \u2026`;
+  const published = fixture.lossy;
+  void verifyPublishedBoundedRendition(published).then((checked) => {
+    if (!checked) return;
+    boundedResult.textContent = checked.within ? `The PUBLISHED reconstruction measures ${published.metric} = ${checked.metricValue} within the bound ${published.bound} \u2014 recomputed here${checked.renditionMatches === null ? "" : checked.renditionMatches ? ", and its values re-render to the digest the publication recorded." : ", but its values do NOT re-render to the digest the publication recorded."}` : `The PUBLISHED reconstruction measures ${published.metric} = ${checked.metricValue}, OUTSIDE the bound ${published.bound}. The claim is false here, and no signature can make it true.`;
+    if (checked.renditionMatches === false) boundedResult.classList.add("bad");
+    if (published.values) {
+      drawRaster(
+        boundedPicture,
+        renderBoundedPicture(published.reference, published.values, published.rendition),
+        published.rendition.width ?? published.reference.length,
+        published.rendition.height ?? 152
+      );
+    }
+  });
 }
 $("check-bounded").addEventListener("click", () => {
   if (!fixture?.lossy) return;

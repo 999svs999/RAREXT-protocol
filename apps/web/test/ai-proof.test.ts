@@ -17,6 +17,7 @@ import {
   renderBoundedPicture,
   renderProofPicture,
   semanticsCommitmentHolds,
+  verifyPublishedBoundedRendition,
   verifyPublishedRendition,
 } from "../src/ai.ts";
 
@@ -287,4 +288,23 @@ test("the published registry's semantics commitment is visible to a browser", as
   // And a bundle with no commitment at all answers null — not false. The bundle never
   // made the claim; that is a different statement from its claim failing.
   assert.equal(await semanticsCommitmentHolds({ publications: [], semantics: [] }, asyncSha), null);
+});
+
+test("the PUBLISHED lossy claim verifies itself from the registry's own bundle", async () => {
+  const bundle = mirrorBundle();
+  const fixture = fixtureFromBundle(bundle)!;
+  assert.ok(fixture.lossy, "the published bundle carries a committed reference");
+  assert.ok(fixture.lossy!.values, "and the publication's own reconstruction values");
+
+  // No hasher is injected here on purpose: this runs the page's own async sha256Bytes, so
+  // the shape the browser actually uses is the shape under test.
+  const checked = await verifyPublishedBoundedRendition(fixture.lossy!);
+  assert.ok(checked, "the published reconstruction is checkable");
+  assert.equal(checked!.within, true, "the published claim holds");
+  assert.equal(checked!.renditionMatches, true, "and its values re-render to the committed digest");
+
+  const tampered = { ...fixture.lossy!, values: fixture.lossy!.values!.map((value) => value + 200) };
+  const bad = await verifyPublishedBoundedRendition(tampered);
+  assert.equal(bad!.within, false, "a tampered reconstruction is reported OUTSIDE, not accepted");
+  assert.equal(bad!.renditionMatches, false, "and it no longer re-renders to the committed digest");
 });

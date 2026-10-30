@@ -280,6 +280,12 @@ export interface PublishedFixture {
     reference: number[];
     metric: BoundedMetric;
     bound: number;
+    /** The PUBLISHED reconstruction's own values, when the publication carries them: the
+     *  half that makes the claim checkable on arrival instead of only on a paste. */
+    values?: number[];
+    /** The digest the publication committed to for its rendition — the link between the
+     *  values above and the published bytes. */
+    committedRaster?: string;
     rendition: { width?: number; height?: number; rule?: string };
   } | null;
 }
@@ -291,6 +297,10 @@ type BundleShape = {
     artifact?: {
       body?: {
         media?: { width?: number; height?: number; rule?: string; raster?: string; size?: number };
+        // The bounded publication's own reconstruction values: the real bundle carries
+        // them, and leaving them out of this type is how the page could have checked a
+        // pasted guess but never the published claim.
+        values?: number[];
       };
     };
   }>;
@@ -312,16 +322,60 @@ export function fixtureFromBundle(value: unknown): PublishedFixture | null {
     return { picture, lossy: null };
   }
 
-  const media = bounded?.artifact?.body?.media ?? {};
+  const body = bounded?.artifact?.body ?? {};
+  const media = body.media ?? {};
   return {
     picture,
     lossy: {
       reference: spec.reference,
       metric: spec.metric as BoundedMetric,
       bound: spec.bound,
+      // The publication's OWN reconstruction values and the digest it committed to for
+      // them. Without these the page can only check a hand-pasted guess; with them the
+      // published claim is checkable the moment the page loads.
+      values: Array.isArray(body.values) ? body.values : undefined,
+      committedRaster: typeof media.raster === "string" ? media.raster : undefined,
       rendition: { width: media.width, height: media.height, rule: media.rule },
     },
   };
+}
+
+/**
+ * Re-verify the PUBLISHED lossy claim — the bounded analogue of checking the picture.
+ *
+ * Both halves, from the visitor's browser and nothing else: the metric the published
+ * reconstruction measures against the committed reference, and whether those same values
+ * re-render to the digest the publication committed to. The hasher is awaited because the
+ * browser's only hasher is async; a synchronous call here would compare a digest against a
+ * Promise and call a true claim false.
+ */
+export interface PublishedBoundedCheck {
+  metricValue: number | null;
+  within: boolean;
+  renditionMatches: boolean | null;
+}
+
+export async function verifyPublishedBoundedRendition(lossy: {
+  reference: number[];
+  metric: BoundedMetric;
+  bound: number;
+  values?: number[];
+  committedRaster?: string;
+  rendition: { width?: number; height?: number };
+}): Promise<PublishedBoundedCheck | null> {
+  if (!lossy.values || lossy.values.length === 0) return null;
+  const claim = checkBoundedClaim(lossy.reference, lossy.values, lossy.metric, lossy.bound);
+  if (claim.error) return null;
+
+  let renditionMatches: boolean | null = null;
+  if (lossy.committedRaster && lossy.rendition.width && lossy.rendition.height) {
+    const raster = renderBoundedPicture(lossy.reference, lossy.values, {
+      width: lossy.rendition.width,
+      height: lossy.rendition.height,
+    } as never);
+    renditionMatches = (await sha256Bytes(raster)) === lossy.committedRaster;
+  }
+  return { metricValue: claim.metricValue ?? null, within: claim.correct, renditionMatches };
 }
 
 /**

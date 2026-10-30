@@ -1,4 +1,4 @@
-import { fixtureFromBundle,
+import { verifyPublishedBoundedRendition, fixtureFromBundle,
   renderBoundedPicture,
   renderProofPicture,
   sha256Bytes,
@@ -165,6 +165,32 @@ if (!fixture?.lossy) {
 } else {
   boundedResult.textContent = `Committed reference loaded from the bundle beside this page: ${fixture.lossy.reference.length} values, ${fixture.lossy.metric} within ${fixture.lossy.bound}.`;
   boundedInput.placeholder = `e.g. ${fixture.lossy.reference.slice(0, 4).join(", ")}, …`;
+
+  // Verify the PUBLISHED claim before the visitor does anything: the registry's own
+  // reconstruction, measured against the committed reference and re-rendered to the digest
+  // the publication recorded. Clicking still checks a paste of your own; this checks theirs.
+  const published = fixture.lossy;
+  void verifyPublishedBoundedRendition(published).then((checked) => {
+    if (!checked) return;
+    boundedResult.textContent = checked.within
+      ? `The PUBLISHED reconstruction measures ${published.metric} = ${checked.metricValue} within the bound ${published.bound} — recomputed here${
+          checked.renditionMatches === null
+            ? ""
+            : checked.renditionMatches
+              ? ", and its values re-render to the digest the publication recorded."
+              : ", but its values do NOT re-render to the digest the publication recorded."
+        }`
+      : `The PUBLISHED reconstruction measures ${published.metric} = ${checked.metricValue}, OUTSIDE the bound ${published.bound}. The claim is false here, and no signature can make it true.`;
+    if (checked.renditionMatches === false) boundedResult.classList.add("bad");
+    if (published.values) {
+      drawRaster(
+        boundedPicture,
+        renderBoundedPicture(published.reference, published.values, published.rendition as never),
+        published.rendition.width ?? published.reference.length,
+        published.rendition.height ?? 152,
+      );
+    }
+  });
 }
 
 $("check-bounded").addEventListener("click", () => {

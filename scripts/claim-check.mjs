@@ -1586,6 +1586,14 @@ function checkAnnouncementRfc(overrides = {}) {
     fail("the leaderboard's fallback no longer reads bundle.json, so on a static mirror it lists nothing");
   }
 
+  // The AI proof page must verify the PUBLISHED claim, not only a hand-pasted one: the
+  // bundle carries the publication's own reconstruction values, so waiting for a visitor
+  // to paste something is a page withholding evidence it already has.
+  const aiBundle = readFileSync(new URL("site/registry/mirror/ai.js", root), "utf8");
+  if (!aiBundle.includes("verifyPublishedBoundedRendition")) {
+    fail("the AI proof page no longer verifies the published bounded claim from the bundle");
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
