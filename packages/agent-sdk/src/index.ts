@@ -1610,6 +1610,11 @@ export class RarextClient {
     return this.request(`/v1/semantics/${encodeURIComponent(id)}${suffix}`);
   }
 
+  /** The registry's own bundle: what it commits to, and the root it reports for it. */
+  bundle(): Promise<Bundle> {
+    return this.request("/v1/bundles");
+  }
+
   leaderboard(query: LeaderboardQuery = {}): Promise<LeaderboardEntry[]> {
     const params = new URLSearchParams();
 

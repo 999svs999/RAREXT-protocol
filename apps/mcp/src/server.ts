@@ -19,6 +19,7 @@ import {
 } from "../../../packages/agent-sdk/src/index.ts";
 import { attestLocalFromArgs } from "./attest-local.ts";
 import { verifyAiLocally } from "./verify-ai.ts";
+import { verifyRegistrySemantics } from "./verify-semantics.ts";
 import {
   storageAudit,
   storageChallenge,
@@ -162,6 +163,12 @@ const tools = [
         },
       },
     },
+  },
+  {
+    name: "rarext_verify_semantics",
+    description:
+      "Check whether the registry's own bundle anchors the meanings it serves: fetch the bundle, recompute each committed record's digest with core's rule, and report how many matched, naming any that did not. The comparison runs HERE — the registry is asked for the bundle, never for the verdict. Returns the root the check ran against, and states plainly that this does NOT prove the bundle rebuilds a root anyone pinned.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "rarext_leaderboard",
@@ -494,6 +501,19 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         );
       }
       return client.semantics();
+
+    case "rarext_verify_semantics": {
+      const report = await verifyRegistrySemantics(client);
+      // null is not false: a registry that records no commitment never made the claim, and
+      // reporting that as a failed claim would be as wrong as reporting a failed one as absent.
+      if (!report) {
+        return {
+          anchored: null,
+          note: "this registry records no semantics commitment, so there is nothing it has anchored",
+        };
+      }
+      return report;
+    }
 
     case "rarext_leaderboard":
       return client.leaderboard({

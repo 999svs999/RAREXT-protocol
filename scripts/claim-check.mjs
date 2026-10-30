@@ -1674,6 +1674,21 @@ function checkAnnouncementRfc(overrides = {}) {
     if (!sdkSource.includes("semanticsCommitmentHolds(commitment")) {
       fail("the SDK no longer offers an offline check of a bundle's anchored meanings");
     }
+    // The MCP is the third resident that asks this question, and it asks it the same way:
+    // the bundle comes from the registry, the comparison comes from core.
+    const mcpSource = readFileSync(new URL("apps/mcp/src/verify-semantics.ts", root), "utf8");
+    if (!mcpSource.includes("semanticsCommitmentHolds(commitment")) {
+      fail("the MCP no longer verifies a registry's anchored meanings through core");
+    }
+    if (/commitment\.digests\[/.test(mcpSource)) {
+      fail("the MCP has re-implemented the semantics-commitment comparison instead of calling core");
+    }
+    if (!readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8").includes('name: "rarext_verify_semantics"')) {
+      fail("the MCP server no longer exposes rarext_verify_semantics");
+    }
+    if (!readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8").includes("whether the registry it serves anchors the meanings it carries (`rarext_verify_semantics`")) {
+      fail("ARCHITECTURE.md no longer describes rarext_verify_semantics");
+    }
     if (/commitment\.digests\[/.test(sdkSource)) {
       fail("the SDK has re-implemented the semantics-commitment comparison instead of calling core");
     }
