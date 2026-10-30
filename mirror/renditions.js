@@ -112,9 +112,6 @@ function clampByte(value) {
 // packages/core/src/semantics.ts
 var SEMANTICS_APP = "rarext-semantics";
 var SEMANTICS_COMMITMENT_KIND = "semantics-commitment";
-function semanticsRecordDigest(semantics, sha256) {
-  return sha256(canonicalize(semantics));
-}
 function parseSemanticsCommitmentArtifact(artifact) {
   if (artifact.app !== SEMANTICS_APP || artifact.kind !== SEMANTICS_COMMITMENT_KIND) return null;
   if (typeof artifact.body !== "string") return null;
@@ -189,7 +186,7 @@ async function verifyPublishedRendition(input) {
     };
   }
 }
-function semanticsCommitmentHolds(bundle, sha256) {
+async function semanticsCommitmentHolds(bundle, sha256) {
   let digests = null;
   for (const publication of bundle.publications ?? []) {
     const parsed = parseSemanticsCommitmentArtifact(publication?.artifact ?? {});
@@ -203,10 +200,14 @@ function semanticsCommitmentHolds(bundle, sha256) {
   let matched = 0;
   for (const record of bundle.semantics ?? []) {
     const key = `${record.id}@${record.version}`;
-    if (digests[key] === semanticsRecordDigest(record, sha256)) matched += 1;
+    const digest = await semanticsRecordDigestAsync(record, sha256);
+    if (digests[key] === digest) matched += 1;
     else missing.push(key);
   }
   return { committed: Object.keys(digests).length, matched, missing };
+}
+async function semanticsRecordDigestAsync(record, sha256) {
+  return await sha256(canonicalize(record));
 }
 export {
   renderBoundedPicture,
