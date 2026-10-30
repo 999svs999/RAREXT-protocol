@@ -1817,10 +1817,16 @@ function checkAnnouncementRfc(overrides = {}) {
         `${rfcQuestions} question(s) — a sweep that found nothing to check proves nothing, so it fails instead of passing`,
     );
   }
-  console.log(
-    `rfc verdicts: ${rfcEntries.length} RFC(s) | ${rfcFilesWithSection} with an Open questions section | ` +
-      `${rfcQuestions} question(s) | ${rfcQuestions - rfcUnanswerable} answered | ${rfcUnanswerable} unanswerable here`,
-  );
+  // Only the real tree reports. The self-test runs this same rule against doctored sets, and
+  // a fixture's inventory printing next to the real one is indistinguishable from the check
+  // regressing — it cost one reader a chase through the CI log, so the fixture runs are silent
+  // and their evidence is the MISMATCH lines they raise instead.
+  if (rfcSetOverride === undefined) {
+    console.log(
+      `rfc verdicts: ${rfcEntries.length} RFC(s) | ${rfcFilesWithSection} with an Open questions section | ` +
+        `${rfcQuestions} question(s) | ${rfcQuestions - rfcUnanswerable} answered | ${rfcUnanswerable} unanswerable here`,
+    );
+  }
   const TRAC_ANSWERED = [
     ["1", "signature scheme should be canonical", ["chosen per key"], ["suiteOf"]],
     ["2", "minimum Trac integration", ["whatever a task board needs"], []],
