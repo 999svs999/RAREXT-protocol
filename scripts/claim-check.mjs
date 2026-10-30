@@ -1592,14 +1592,25 @@ function checkAnnouncementRfc(overrides = {}) {
   // test and both checker modes green. This parses each one for real, without executing it.
   for (const name of readdirSync(new URL("site/registry/mirror", root)).filter((f) => f.endsWith(".html"))) {
     const html = readFileSync(new URL(`site/registry/mirror/${name}`, root), "utf8");
-    const scripts = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-    for (const [index, source] of scripts.entries()) {
-      const file = join(tmpdir(), `rarext-inline-module-${index}.mjs`);
+    // Both kinds, because a page's whole script being a classic <script> does not make it
+    // safe: the leaderboard is one, and a guard that only looked at type="module" reported
+    // "0 scripts" for it — a check with nothing to check, which looks exactly like a check
+    // that passed. Module scripts parse as .mjs, plain ones as .js (top-level await is
+    // illegal in a classic script anyway).
+    const scripts = [
+      ...[...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => ({ source: m[1], kind: "module" })),
+      ...[...html.matchAll(/<script(?![^>]*\btype=)(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => ({
+        source: m[1],
+        kind: "script",
+      })),
+    ].filter((entry) => entry.source.trim().length > 0);
+    for (const [index, { source, kind }] of scripts.entries()) {
+      const file = join(tmpdir(), `rarext-inline-${kind}-${index}.${kind === "module" ? "mjs" : "js"}`);
       writeFileSync(file, source);
       const checked = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
       if (checked.status !== 0) {
         const why = (checked.stderr || "").split("\n").find((line) => line.includes("Error")) ?? "unknown parse error";
-        fail(`site/registry/mirror/${name} inline module ${index} does not parse: ${why.trim()}`);
+        fail(`site/registry/mirror/${name} inline ${kind} ${index} does not parse: ${why.trim()}`);
       }
     }
   }
