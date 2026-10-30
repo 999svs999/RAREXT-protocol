@@ -9,6 +9,14 @@ const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z";
 /** A challenge id is a name people type and quote; beyond this it is not one. */
 export const MAX_CHALLENGE_ID_LENGTH = 200;
 
+/**
+ * Memory bounds on operator-supplied configuration. `RAREXT_CHALLENGES` is a stranger input
+ * like any other: a source big enough to matter, or a list long enough to matter, is refused
+ * BY NAME so the operator learns which limit they hit instead of watching RSS climb.
+ */
+export const MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES = 1 << 20;
+export const MAX_CONFIGURED_CHALLENGES = 256;
+
 const SAMPLE_CIRCUITS: Record<string, { components: { id: string; type: string; inputs?: string[] }[] }> = {
   "half-adder": {
     components: [
@@ -188,15 +196,41 @@ function configuredChallenges(): Challenge[] {
   if (!source) return [];
 
   let text = source;
+  // Which thing did we read? A file path names itself in every refusal below; the
+  // environment variable names RAREXT_CHALLENGES. A raw SyntaxError would name neither.
+  let origin = "RAREXT_CHALLENGES";
 
   if (!source.startsWith("[") && !source.startsWith("{")) {
+    origin = source;
     if (!existsSync(source)) {
       throw new Error(`RAREXT_CHALLENGES file not found: ${source}`);
     }
-    text = readFileSync(source, "utf8");
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(source);
+    } catch (error) {
+      throw new Error(`RAREXT_CHALLENGES could not read ${source}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (bytes.byteLength > MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES) {
+      throw new Error(
+        `RAREXT_CHALLENGES source ${source} is ${bytes.byteLength} bytes, above the ${MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES} byte cap`,
+      );
+    }
+    text = bytes.toString("utf8");
+  } else if (Buffer.byteLength(source, "utf8") > MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES) {
+    throw new Error(
+      `RAREXT_CHALLENGES is ${Buffer.byteLength(source, "utf8")} bytes, above the ${MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES} byte cap`,
+    );
   }
 
-  const parsed = JSON.parse(text) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(
+      `RAREXT_CHALLENGES from ${origin} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const list = Array.isArray(parsed)
     ? parsed
     : typeof parsed === "object" && parsed !== null && "challenges" in parsed
@@ -204,7 +238,12 @@ function configuredChallenges(): Challenge[] {
       : null;
 
   if (!Array.isArray(list)) {
-    throw new Error("RAREXT_CHALLENGES must be an array or { challenges: [] }");
+    throw new Error(`RAREXT_CHALLENGES from ${origin} must be an array or { challenges: [] }`);
+  }
+  if (list.length > MAX_CONFIGURED_CHALLENGES) {
+    throw new Error(
+      `RAREXT_CHALLENGES from ${origin} carries ${list.length} challenges, above the ${MAX_CONFIGURED_CHALLENGES} cap`,
+    );
   }
 
   return list.map(asChallenge);

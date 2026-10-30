@@ -36,6 +36,7 @@ const durabilityConstants = await import(new URL("apps/api/src/durability.ts", r
 const work = await import(new URL("apps/api/src/work.ts", root).href);
 const audits = await import(new URL("apps/api/src/audit-attestation.ts", root).href);
 const sdk = await import(new URL("packages/agent-sdk/src/index.ts", root).href);
+const challengeConstants = await import(new URL("apps/api/src/challenges.ts", root).href);
 const leaf = await import(new URL("packages/core/src/leaf.ts", root).href);
 const erasure = await import(new URL("apps/api/src/erasure.ts", root).href);
 const generative = await import(new URL("apps/api/src/generative.ts", root).href);
@@ -311,6 +312,18 @@ if (process.argv.includes("--self-test")) {
   checkOperationalDefaults(doctoredOperatorDoc);
   const caughtDefaults = failures > beforeDefaults;
   if (!caughtDefaults) fail("self-test: the checker accepted an operational default the code contradicts");
+
+  // And a challenge-boundary cap the code contradicts must be reported.
+  const beforeChallengeCaps = failures;
+  const doctoredHardening = doctor(
+    readFileSync(new URL("docs/HARDENING.md", root), "utf8"),
+    "doctoredHardening",
+    (s) => s.replace("`MAX_CONFIGURED_CHALLENGES` = 256", "`MAX_CONFIGURED_CHALLENGES` = 512"),
+  );
+  checkChallengeBoundaryLimits(doctoredHardening);
+  const caughtChallengeCaps = failures > beforeChallengeCaps;
+  if (!caughtChallengeCaps) fail("self-test: the checker accepted a challenge-boundary cap the code contradicts");
+  caught = caught && caughtChallengeCaps;
   caught = caught && caughtDefaults;
   // And a doc citing test evidence that is not in the tree must be reported.
   const beforeEvidence = failures;
@@ -2268,20 +2281,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
-  // The boundary table says the challenge boundary refuses what the verifier would refuse,
-  // using CORE's rule rather than a second copy of it. Both halves are checked: the doc
-  // states it, and the source actually calls core's validator.
-  {
-    const hardening = sources.hardeningDoc ?? readFileSync(new URL("docs/HARDENING.md", root), "utf8");
-    if (!hardening.includes("for the bounded app, CORE's own `isBoundedSpec`, so a spec the verifier would refuse is refused")) {
-      fail("HARDENING.md no longer states that the challenge boundary reuses core's bounded-spec rule");
-    }
-    const boundarySource = readFileSync(new URL("apps/api/src/challenges.ts", root), "utf8");
-    if (!boundarySource.includes("isBoundedSpec(challenge.spec)")) {
-      fail("the challenge boundary does not call core's isBoundedSpec, which HARDENING.md says it does");
-    }
-  }
-
+  checkChallengeBoundaryLimits();
   // docs/HARDENING.md writes down what a resident accepts from strangers, beside
   // what is still not handled. A written-down bound is a claim about the tree: the
   // constant exists, the code USES it, and the drop is reported rather than
@@ -3042,6 +3042,45 @@ function checkThroughputArtifact(artifactOverride) {
  * bytes, labelled loosely), `MAX_GENERATIVE_STEPS` = 100,000, `MAX_VOCAB` =
  * 4,096. Each must equal what the implementation actually exports.
  */
+// The challenge boundary's own limits: what it refuses, and the caps on operator input.
+// The doc states them and the code exports them, so both halves are compared rather than
+// one being trusted.
+function checkChallengeBoundaryLimits(docOverride) {
+  console.log(`challenge boundary (docs/HARDENING.md${docOverride ? ", DOCTORED" : ""} vs apps/api/src/challenges.ts):`);
+  const doc = docOverride ?? readFileSync(new URL("docs/HARDENING.md", root), "utf8");
+  const source = readFileSync(new URL("apps/api/src/challenges.ts", root), "utf8");
+
+  if (!doc.includes("for the bounded app, CORE's own `isBoundedSpec`, so a spec the verifier would refuse is refused")) {
+    fail("HARDENING.md no longer states that the challenge boundary reuses core's bounded-spec rule");
+  }
+  if (!source.includes("isBoundedSpec(challenge.spec)")) {
+    fail("the challenge boundary does not call core's isBoundedSpec, which HARDENING.md says it does");
+  }
+
+  const docCount = Number(doc.match(/`MAX_CONFIGURED_CHALLENGES` = ([\d,]+)/)?.[1]?.replaceAll(",", ""));
+  if (docCount !== 256) fail(`HARDENING.md no longer states MAX_CONFIGURED_CHALLENGES = 256 (says ${docCount})`);
+  if (challengeConstants.MAX_CONFIGURED_CHALLENGES !== 256) {
+    fail(`the code's MAX_CONFIGURED_CHALLENGES is ${challengeConstants.MAX_CONFIGURED_CHALLENGES}, not 256`);
+  }
+
+  const docBytes = Number(doc.match(/`MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES` = (\d+) MiB/)?.[1]);
+  if (docBytes !== 1) fail(`HARDENING.md no longer states MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES = 1 MiB (says ${docBytes})`);
+  if (challengeConstants.MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES !== 1 << 20) {
+    fail(`the code's MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES is ${challengeConstants.MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES}, not ${1 << 20}`);
+  }
+
+  // The id cap is a claim like the others, and it is refused rather than trimmed.
+  const docId = Number(doc.match(/`MAX_CHALLENGE_ID_LENGTH` = ([\d,]+)/)?.[1]?.replaceAll(",", ""));
+  if (docId !== 200) fail(`HARDENING.md no longer states MAX_CHALLENGE_ID_LENGTH = 200 (says ${docId})`);
+  if (challengeConstants.MAX_CHALLENGE_ID_LENGTH !== 200) {
+    fail(`the code's MAX_CHALLENGE_ID_LENGTH is ${challengeConstants.MAX_CHALLENGE_ID_LENGTH}, not 200`);
+  }
+
+  console.log(
+    `  refuses what the verifier would refuse (core's isBoundedSpec) | id <= ${challengeConstants.MAX_CHALLENGE_ID_LENGTH} | configured <= ${challengeConstants.MAX_CONFIGURED_CHALLENGES} | source <= ${challengeConstants.MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES / 2 ** 20} MiB`,
+  );
+}
+
 function checkLimitsTable(docOverride) {
   console.log(`limits table (docs/OPERATIONS.md${docOverride ? ", DOCTORED" : ""} vs exported constants):`);
   const doc = docOverride ?? readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");

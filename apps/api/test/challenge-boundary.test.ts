@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { asChallenge, createChallengeRegistry } from "../src/challenges.ts";
+import {
+  asChallenge,
+  createChallengeRegistry,
+  MAX_CONFIGURED_CHALLENGES,
+  MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES,
+} from "../src/challenges.ts";
 
 /**
  * The challenge validation boundary.
@@ -140,4 +148,113 @@ test("a configured challenge intentionally replaces a built-in with the same id 
   } finally {
     delete process.env.RAREXT_CHALLENGES;
   }
+});
+
+/**
+ * The LOADER, one level out from `asChallenge`: `RAREXT_CHALLENGES` is an operator-supplied
+ * string, so it is stranger input like any other. A refusal that does not name WHICH source
+ * failed leaves an operator reading a raw JSON error with no idea which file or variable it
+ * came from.
+ */
+const withSource = <T>(value: string | undefined, body: () => T): T => {
+  const saved = process.env.RAREXT_CHALLENGES;
+  if (value === undefined) delete process.env.RAREXT_CHALLENGES;
+  else process.env.RAREXT_CHALLENGES = value;
+  try {
+    return body();
+  } finally {
+    if (saved === undefined) delete process.env.RAREXT_CHALLENGES;
+    else process.env.RAREXT_CHALLENGES = saved;
+  }
+};
+
+test("malformed JSON from the environment names the variable, not just a parser position", () => {
+  assert.throws(
+    () => withSource('[{"id":"a",}]', () => createChallengeRegistry()),
+    (error: unknown) =>
+      error instanceof Error &&
+      /RAREXT_CHALLENGES/.test(error.message) &&
+      !/^Unexpected|^SyntaxError/.test(error.message),
+    "the refusal must name RAREXT_CHALLENGES, not surface a bare SyntaxError",
+  );
+});
+
+test("malformed JSON in a FILE names the path", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rarext-challenges-"));
+  const file = join(dir, "broken.json");
+  writeFileSync(file, "[{\"id\":\"a\",}]");
+  try {
+    assert.throws(
+      () => withSource(file, () => createChallengeRegistry()),
+      (error: unknown) => error instanceof Error && error.message.includes(file),
+      "the refusal must name the file it read",
+    );
+    // a path that does not exist already names itself; keep it that way
+    assert.throws(
+      () => withSource(join(dir, "missing.json"), () => createChallengeRegistry()),
+      /file not found/,
+    );
+    // a DIRECTORY at that path is a refusal that NAMES the path — the underlying errno may
+    // be quoted for diagnosis, but it must not be the whole message.
+    assert.throws(
+      () => withSource(dir, () => createChallengeRegistry()),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes(dir) &&
+        !/^EISDIR|^EACCES/.test(error.message),
+      "a directory must be refused with the path named, not as a bare errno",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the { challenges: [...] } wrapper is accepted, and a non-array is refused", () => {
+  const wrapped = withSource(
+    JSON.stringify({ challenges: [{ id: "wrapped", app: "logic", title: "T", description: "D" }] }),
+    () => createChallengeRegistry(),
+  );
+  assert.ok(wrapped.get("wrapped"), "the wrapper shape registers its challenges");
+
+  // A wrapper whose `challenges` is not an array hits the stated shape rule…
+  assert.throws(
+    () => withSource(JSON.stringify({ challenges: {} }), () => createChallengeRegistry()),
+    /must be an array or \{ challenges: \[\] \}/,
+  );
+  // …while a bare JSON scalar is not JSON-shaped at all: it is read as a PATH, and refused
+  // as one. Stated explicitly because it is a real consequence of the source syntax rule.
+  for (const scalar of [JSON.stringify(42), JSON.stringify("nope")]) {
+    assert.throws(
+      () => withSource(scalar, () => createChallengeRegistry()),
+      /file not found/,
+      `${scalar} is treated as a path and refused as a missing file`,
+    );
+  }
+});
+
+test("a source larger than the cap is refused by name, and so is too many challenges", () => {
+  // Both are memory bounds on operator input, checked by name so the operator knows which
+  // limit they hit rather than watching the process grow.
+  const huge = JSON.stringify([{ id: "big", app: "logic", title: "T", description: "x".repeat(MAX_CONFIGURED_CHALLENGE_SOURCE_BYTES) }]);
+  assert.throws(
+    () => withSource(huge, () => createChallengeRegistry()),
+    /RAREXT_CHALLENGES/,
+    "an oversized source must be refused",
+  );
+
+  const many = JSON.stringify(
+    Array.from({ length: MAX_CONFIGURED_CHALLENGES + 1 }, (_, i) => ({
+      id: `bulk-${i}`, app: "logic", title: "T", description: "D",
+    })),
+  );
+  assert.throws(
+    () => withSource(many, () => createChallengeRegistry()),
+    new RegExp(String(MAX_CONFIGURED_CHALLENGES)),
+    "more challenges than the cap must be refused by name",
+  );
+});
+
+test("an empty or absent source is simply no configuration", () => {
+  assert.equal(withSource(undefined, () => createChallengeRegistry()).get("gen-starter")?.id, "gen-starter");
+  assert.equal(withSource("   ", () => createChallengeRegistry()).get("gen-starter")?.id, "gen-starter");
 });
