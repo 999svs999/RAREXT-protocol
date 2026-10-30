@@ -580,6 +580,28 @@ if (process.argv.includes("--self-test")) {
   const caughtRfcSet = failures > beforeRfcSet;
   if (!caughtRfcSet) fail("self-test: the checker accepted an RFC set with an unverdicted question");
   caught = caught && caughtRfcSet;
+
+  // The two ways the same axis can pass while checking nothing: a section that exists and
+  // holds no numbered question, and a set where no RFC has a section at all. Both are
+  // "everything I examined was fine" over an empty examination, so both must FAIL.
+  const beforeEmptySection = failures;
+  checkAnnouncementRfc({
+    rfcSet: {
+      ...rfcSetAll,
+      "0006-independent-verifiers.md": "## Open questions\n\n## Decision\n\nFine.\n",
+    },
+  });
+  const caughtEmptySection = failures > beforeEmptySection;
+  if (!caughtEmptySection) fail("self-test: the checker accepted an Open questions section that holds no numbered question");
+  caught = caught && caughtEmptySection;
+
+  const beforeNoSections = failures;
+  checkAnnouncementRfc({
+    rfcSet: { "0001-trac-integration.md": "# RFC\n\nNo questions here.\n", "0006-independent-verifiers.md": "# RFC\n\nAlso none.\n" },
+  });
+  const caughtNoSections = failures > beforeNoSections;
+  if (!caughtNoSections) fail("self-test: the checker accepted an RFC set whose verdict sweep examined nothing");
+  caught = caught && caughtNoSections;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1753,24 +1775,52 @@ function checkAnnouncementRfc(overrides = {}) {
   const rfcEntries = rfcSetOverride
     ? Object.entries(rfcSetOverride)
     : rfcNames.map((name) => [name, readFileSync(new URL(`rfcs/${name}`, root), "utf8")]);
+  // The sweep states what it EXAMINED, not only what it rejected. This rule was vacuous
+  // once (the lookahead above captured an empty section and every file passed) and the
+  // `continue`s below kept a second vacuity alive: a section present but holding no
+  // numbered items closes nothing, and a run that examined no RFC at all was
+  // indistinguishable from a run that examined nineteen. Both are failures now, because a
+  // guard with nothing to report and a guard that never ran look the same from a gate.
+  let rfcFilesWithSection = 0;
+  let rfcQuestions = 0;
+  let rfcUnanswerable = 0;
   for (const [name, text] of rfcEntries) {
     // A line scan, not a lookahead: `(?=\s*$)` matches at EVERY line end under the m
     // flag, so the first version captured an empty section and the rule passed on every
     // file — vacuous, and only a hand-proof against a doctored RFC showed it.
     const lines = text.split("\n");
     const heading = lines.findIndex((line) => /^## .*[Oo]pen questions?/i.test(line));
+    // An RFC with no Open questions section is legitimate — it had none to ask. Only a
+    // section that EXISTS and closes nothing is a failure, so the absence is counted
+    // rather than assumed.
     if (heading < 0) continue;
+    rfcFilesWithSection += 1;
     let stop = lines.findIndex((line, index) => index > heading && line.startsWith("## "));
     if (stop < 0) stop = lines.length;
     const section = lines.slice(heading + 1, stop).join("\n");
     const items = section.split(/^\d+\. /m).filter((item) => item.trim().length > 0);
-    if (items.length === 0) continue;
+    if (items.length === 0) {
+      fail(`rfcs/${name} has an Open questions section holding no numbered question, so the section closes nothing`);
+      continue;
+    }
+    rfcQuestions += items.length;
+    rfcUnanswerable += items.filter((item) => /UNANSWERABLE HERE/.test(item)).length;
     const unverdicted = items.filter((item) => !/ANSWERED|UNANSWERABLE HERE/.test(item));
     if (unverdicted.length > 0) {
       const first = unverdicted[0].split("\n")[0].slice(0, 60);
       fail(`rfcs/${name} has ${unverdicted.length} open question(s) with no verdict, starting "${first}"`);
     }
   }
+  if (rfcFilesWithSection < 1 || rfcQuestions < 1) {
+    fail(
+      `the RFC verdict sweep examined ${rfcEntries.length} file(s), ${rfcFilesWithSection} section(s) and ` +
+        `${rfcQuestions} question(s) — a sweep that found nothing to check proves nothing, so it fails instead of passing`,
+    );
+  }
+  console.log(
+    `rfc verdicts: ${rfcEntries.length} RFC(s) | ${rfcFilesWithSection} with an Open questions section | ` +
+      `${rfcQuestions} question(s) | ${rfcQuestions - rfcUnanswerable} answered | ${rfcUnanswerable} unanswerable here`,
+  );
   const TRAC_ANSWERED = [
     ["1", "signature scheme should be canonical", ["chosen per key"], ["suiteOf"]],
     ["2", "minimum Trac integration", ["whatever a task board needs"], []],
