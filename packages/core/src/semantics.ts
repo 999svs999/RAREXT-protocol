@@ -323,3 +323,50 @@ export function parseSemanticsCommitmentArtifact(artifact: {
     return null;
   }
 }
+
+/**
+ * A bundle that carries its semantics commitment — pure, so it can be tested and so
+ * every publisher that wants the commitment gets the SAME one.
+ *
+ * Two details are easy to get wrong and are therefore here rather than in a script:
+ * the new publication is a COPY of an existing one (the leaf requires an attestation),
+ * and `representation` is stripped from that attestation. Keeping it would publish the
+ * commitment as an AI claim — a fake model result inside the very surface that exists
+ * to prove model results (RFC 0020's commitment carries the same warning).
+ *
+ * Returns the bundle and the added publication's id, or the bundle unchanged when there
+ * is nothing to commit or one is already present.
+ */
+export function withSemanticsCommitment(
+  bundle: {
+    publications?: Array<Record<string, unknown>>;
+    semantics?: Semantics[];
+    [key: string]: unknown;
+  },
+  sha256: (value: string) => string,
+): { bundle: typeof bundle; added: string | null } {
+  const publications = bundle.publications ?? [];
+  const records = bundle.semantics ?? [];
+  if (records.length === 0) return { bundle, added: null };
+  if (publications.some((publication) => (publication.artifact as { kind?: unknown } | undefined)?.kind === SEMANTICS_COMMITMENT_KIND)) {
+    return { bundle, added: null };
+  }
+  const template = publications[0];
+  if (!template) return { bundle, added: null };
+
+  const attestation = { ...(template.attestation as Record<string, unknown> | undefined) };
+  delete attestation.representation;
+
+  const id = "pub-semantics-commitment";
+  const added = {
+    ...template,
+    id,
+    title: `The ${records.length} semantics records this bundle commits to`,
+    attestation,
+    artifact: {
+      ...(template.artifact as Record<string, unknown>),
+      ...semanticsCommitmentArtifact(semanticsDigests(records, sha256)),
+    },
+  };
+  return { bundle: { ...bundle, publications: [...publications, added] }, added: id };
+}

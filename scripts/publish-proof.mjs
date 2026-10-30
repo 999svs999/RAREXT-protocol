@@ -61,8 +61,10 @@ const {
   parseRegistrySeedList,
   registryListDigest,
   federationCommitmentArtifact,
+  withSemanticsCommitment,
   FEDERATION_APP,
   REGISTRY_LIST_COMMITMENT_KIND,
+  SEMANTICS_COMMITMENT_KIND,
 } = await import(join(root, "packages/core/src/index.ts"));
 const { nodeSha256 } = await import(join(root, "apps/api/src/digest.ts"));
 
@@ -97,6 +99,20 @@ if (!(bundle.publications ?? []).some((publication) => publication.artifact?.kin
       }),
     },
   });
+}
+
+// RFC 0003's question 1: the SEMANTICS records are a bundle FIELD, and the root covers
+// publication leaves — so a meaning a claim was made against was editable while the root
+// still verified. Same fix as the seed list above: commit to it inside the proof.
+//
+// The assembly lives in CORE (withSemanticsCommitment), not here: it strips the
+// template's `representation` so the commitment is not published as a fake AI claim,
+// and a rule that easy to get wrong belongs where a test can reach it. A script block
+// is the one place no test ever runs.
+const semanticsCommitment = withSemanticsCommitment(bundle, nodeSha256);
+bundle = semanticsCommitment.bundle;
+if (semanticsCommitment.added) {
+  console.log(`semantics commitment published: ${semanticsCommitment.added} over ${(bundle.semantics ?? []).length} record(s)`);
 }
 
 // The manifest describes what is actually in the bundle, and the ROOT is

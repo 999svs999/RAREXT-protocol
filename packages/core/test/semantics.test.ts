@@ -12,7 +12,9 @@ import {
   publicationLeaf,
   semanticsCommitmentArtifact,
   semanticsDigests,
+  SEMANTICS_COMMITMENT_KIND,
   semanticsRecordDigest,
+  withSemanticsCommitment,
   claimFromAttestation,
   findSemantics,
   LOGIC_SEMANTICS,
@@ -248,4 +250,46 @@ test("the committed registry's root moves when its semantics are committed", () 
     assert.equal(digests[key], semanticsRecordDigest(record as never, sha256Hex), `${key} is committed`);
   }
   assert.equal(Object.keys(digests).length, committed.semantics.length);
+});
+
+/**
+ * The bundle-level step the publisher runs, extracted so it is testable: adding the
+ * commitment is where the "fake AI claim" trap lives, and a script block is the one
+ * place a test cannot reach.
+ */
+test("withSemanticsCommitment adds a publication, strips representation, and moves the root", () => {
+  const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");
+  const bytesSha = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const committed = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as Record<string, unknown> & {
+    publications: Array<Record<string, unknown>>;
+    semantics: Array<Record<string, unknown>>;
+  };
+
+  const rootOf = (b: { publications: Array<Record<string, unknown>> }) =>
+    merkleRoot(b.publications.map((x) => publicationLeaf(x as never, bytesSha, PUBLICATION_LEAF_VERSION)), bytesSha);
+
+  const { bundle: withCommitment, added } = withSemanticsCommitment(committed as never, sha256Hex);
+  assert.equal(added, "pub-semantics-commitment");
+  const publications = withCommitment.publications!;
+  assert.equal(publications.length, committed.publications.length + 1);
+  assert.notEqual(rootOf(withCommitment as never), rootOf(committed as never), "the commitment is inside the proof");
+
+  const publication = publications.at(-1) as { artifact: Record<string, unknown>; attestation: Record<string, unknown> };
+  assert.equal((publication.artifact as { kind?: string }).kind, SEMANTICS_COMMITMENT_KIND);
+  // THE TRAP: keeping the template's `representation` would publish a commitment as an
+  // AI claim inside the surface that exists to prove AI results.
+  assert.equal("representation" in publication.attestation, false, "no representation survives onto a commitment");
+  assert.ok(publication.attestation && Object.keys(publication.attestation).length > 0, "the leaf still has its attestation");
+
+  // It commits to the records the bundle carries...
+  const digests = parseSemanticsCommitmentArtifact(publication.artifact as never)!.digests;
+  for (const record of committed.semantics) {
+    assert.equal(digests[`${record.id}@${record.version}`], semanticsRecordDigest(record as never, sha256Hex));
+  }
+
+  // ...and it is idempotent: running it twice does not add a second commitment.
+  const again = withSemanticsCommitment(withCommitment as never, sha256Hex);
+  assert.equal(again.added, null);
+  assert.equal(again.bundle.publications!.length, publications.length);
+  assert.equal(withSemanticsCommitment({ publications: [] }, sha256Hex).added, null);
 });

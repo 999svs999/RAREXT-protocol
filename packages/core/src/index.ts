@@ -161,4 +161,5 @@ export {
   semanticsRecord,
   semanticsRecordDigest,
   taskForSemantics,
+  withSemanticsCommitment,
 } from "./semantics.ts";
