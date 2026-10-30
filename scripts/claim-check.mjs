@@ -11,7 +11,9 @@
 //
 // Everything here is in-repo: no network, no fixtures, no bench run.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1569,6 +1571,24 @@ function checkAnnouncementRfc(overrides = {}) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0016's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
+  // syntax error, and a single HTML comment inside <script type="module"> kills the whole
+  // page: the live gallery rendered no cards and never ran its own check, with every unit
+  // test and both checker modes green. This parses each one for real, without executing it.
+  for (const name of readdirSync(new URL("site/registry/mirror", root)).filter((f) => f.endsWith(".html"))) {
+    const html = readFileSync(new URL(`site/registry/mirror/${name}`, root), "utf8");
+    const scripts = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    for (const [index, source] of scripts.entries()) {
+      const file = join(tmpdir(), `rarext-inline-module-${index}.mjs`);
+      writeFileSync(file, source);
+      const checked = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+      if (checked.status !== 0) {
+        const why = (checked.stderr || "").split("\n").find((line) => line.includes("Error")) ?? "unknown parse error";
+        fail(`site/registry/mirror/${name} inline module ${index} does not parse: ${why.trim()}`);
       }
     }
   }

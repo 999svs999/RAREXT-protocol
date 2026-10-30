@@ -297,15 +297,17 @@
       for (const card of shown) grid.appendChild(card);
       if (shown.length === 0) empty.hidden = false;
     
-  <!-- The registry anchors its MEANINGS (RFC 0003's first question). Until a page shows
-       it, only a test knows: this line recomputes each record's digest in the visitor's
-       browser and compares it with the digest the registry committed to. -->
+  // The registry anchors its MEANINGS (RFC 0003's first question). Until a page shows it,
+  // only a test knows: this line recomputes each record's digest in the visitor's browser
+  // and compares it with the digest the registry committed to. This is a JS comment and
+  // must stay one — an HTML comment inside a module is a SYNTAX ERROR that kills the whole
+  // page, which is exactly what it did to the live gallery.
   (async () => {
     const line = document.getElementById("meanings");
     if (!line) return;
     try {
       const bundle = await (await fetch("./bundle.json", { cache: "no-cache" })).json();
-      const status = semanticsCommitmentHolds(bundle, sha256Hex);
+      const status = await semanticsCommitmentHolds(bundle, sha256Hex);
       if (!status) {
         line.dataset.state = "none";
         line.textContent = "this registry records no semantics commitment";

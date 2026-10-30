@@ -10,7 +10,6 @@ import {
 import {
   BOUNDED_RASTER_HEIGHT,
   parseSemanticsCommitmentArtifact,
-  semanticsRecordDigest,
   BOUNDED_RASTER_RULE,
   RASTER_RULE,
   renderBoundedRaster,
@@ -403,13 +402,17 @@ export interface SemanticsCommitmentStatus {
   missing: string[];
 }
 
-export function semanticsCommitmentHolds(
+export async function semanticsCommitmentHolds(
   bundle: {
     publications?: Array<{ artifact?: unknown }>;
     semantics?: Array<{ id: string; version: number }>;
   },
-  sha256: (value: string) => string,
-): SemanticsCommitmentStatus | null {
+  // ASYNC, because the only hasher a browser has is async (crypto.subtle). A synchronous
+  // signature here would compare a digest against a Promise and report every record as
+  // missing — which is exactly what happened, and no test using node's synchronous
+  // createHash could see it.
+  sha256: (value: string) => Promise<string> | string,
+): Promise<SemanticsCommitmentStatus | null> {
   let digests: Record<string, string> | null = null;
   for (const publication of bundle.publications ?? []) {
     const parsed = parseSemanticsCommitmentArtifact((publication?.artifact ?? {}) as never);
@@ -424,8 +427,19 @@ export function semanticsCommitmentHolds(
   let matched = 0;
   for (const record of bundle.semantics ?? []) {
     const key = `${record.id}@${record.version}`;
-    if (digests[key] === semanticsRecordDigest(record as never, sha256)) matched += 1;
+    const digest = await semanticsRecordDigestAsync(record as never, sha256);
+    if (digests[key] === digest) matched += 1;
     else missing.push(key);
   }
   return { committed: Object.keys(digests).length, matched, missing };
+}
+
+/** The commitment's digest for one record, with the hasher awaited — core's own
+ *  semanticsRecordDigest is synchronous and would compare a digest against a Promise
+ *  when handed the browser's async hasher. */
+export async function semanticsRecordDigestAsync(
+  record: unknown,
+  sha256: (value: string) => Promise<string> | string,
+): Promise<string> {
+  return await sha256(canonicalize(record));
 }

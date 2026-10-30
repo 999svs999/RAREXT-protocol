@@ -258,27 +258,33 @@ test("a rendition that is not the claim's picture does NOT re-derive", async () 
   assert.equal(none.matches, false);
 });
 
-test("the published registry's semantics commitment is visible to a browser", () => {
-  const sha = (v: string) => createHash("sha256").update(v).digest("hex");
+test("the published registry's semantics commitment is visible to a browser", async () => {
+  // The hasher is ASYNC here on purpose: a browser's only hasher is crypto.subtle, and a
+  // synchronous implementation compared each digest against a Promise — reporting all five
+  // records as missing while a node-createHash test passed. This test uses the page's shape.
+  const asyncSha = async (v: string) => createHash("sha256").update(v).digest("hex");
+  const syncSha = (v: string) => createHash("sha256").update(v).digest("hex");
   const bundle = mirrorBundle();
 
-  const status = semanticsCommitmentHolds(bundle, sha);
+  const status = await semanticsCommitmentHolds(bundle, asyncSha);
   assert.ok(status, "the published registry records a semantics commitment");
   assert.equal(status!.committed, bundle.semantics.length, "every record the bundle carries is committed");
   assert.equal(status!.matched, status!.committed, "and every committed digest matches its record");
-  assert.deepEqual(status!.missing, []);
+  assert.deepEqual(status!.missing, [], "an async hasher must not report records as missing");
 
-  // A record edited without the commitment moves: the digest no longer matches.
+  const withSync = await semanticsCommitmentHolds(bundle, syncSha);
+  assert.deepEqual(withSync!.missing, [], "a synchronous hasher agrees, so the two shapes cannot drift");
+
   const edited = {
     ...bundle,
     semantics: bundle.semantics.map((record: any, index: number) =>
       index === 0 ? { ...record, summary: `${record.summary} (edited)` } : record,
     ),
   };
-  const drifted = semanticsCommitmentHolds(edited, sha)!;
+  const drifted = (await semanticsCommitmentHolds(edited, asyncSha))!;
   assert.equal(drifted.missing.length, 1, "an edited record is reported as missing from the commitment");
 
   // And a bundle with no commitment at all answers null — not false. The bundle never
   // made the claim; that is a different statement from its claim failing.
-  assert.equal(semanticsCommitmentHolds({ publications: [], semantics: [] }, sha), null);
+  assert.equal(await semanticsCommitmentHolds({ publications: [], semantics: [] }, asyncSha), null);
 });
