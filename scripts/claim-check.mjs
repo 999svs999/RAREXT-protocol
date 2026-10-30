@@ -419,6 +419,9 @@ if (process.argv.includes("--self-test")) {
   const originalEconomyRfc = readFileSync(new URL("rfcs/0004-storage-economy.md", root), "utf8");
   const rfcRecoversKeys = doctor(originalEconomyRfc, "rfcRecoversKeys", (s) =>
     s.replace("not merely absent but incompatible", "available on request to the operator"));
+  const originalMigrationRfc = readFileSync(new URL("rfcs/0017-game-native-state-migration.md", root), "utf8");
+  const rfcScoresActors = doctor(originalMigrationRfc, "rfcScoresActors", (s) =>
+    s.replace("DERIVED from them and never", "carried as an authoritative score and"));
   
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
@@ -513,6 +516,14 @@ if (process.argv.includes("--self-test")) {
   const caughtEconomy = failures > beforeEconomy;
   if (!caughtEconomy) fail("self-test: the checker accepted RFC 0004 promising key recovery");
   caught = caught && caughtEconomy;
+
+  // And RFC 0017's reputation answer carrying an authoritative score — the claim about an
+  // actor this protocol refuses to record.
+  const beforeMigration = failures;
+  checkAnnouncementRfc({ migration: rfcScoresActors });
+  const caughtMigration = failures > beforeMigration;
+  if (!caughtMigration) fail("self-test: the checker accepted RFC 0017 carrying a score about an actor");
+  caught = caught && caughtMigration;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1355,6 +1366,7 @@ function checkAnnouncementRfc(overrides = {}) {
     rent: rentRfcOverride,
     placements: placementsRfcOverride,
     economy: economyRfcOverride,
+    migration: migrationRfcOverride,
   } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
@@ -1483,6 +1495,37 @@ function checkAnnouncementRfc(overrides = {}) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0005's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // RFC 0017 (game-native state migration) — what the migration owns, what it
+  // deliberately does not, and the finality rule that lets a writer stop.
+  const migrationRfc =
+    migrationRfcOverride ?? readFileSync(new URL("rfcs/0017-game-native-state-migration.md", root), "utf8");
+  const MIGRATION_ANSWERED = [
+    ["1", "represent a build's status", ["refuses to own their meaning"], ["unmanagedTopLevelFields"]],
+    ["2", "content-addressed configuration", ["what survives is the CID"], ["DURABLE_GAME_STATE_COLLECTIONS"]],
+    ["3", "What is reputation", ["DERIVED from them and never"], ["buildGameStateMigrationBundle"]],
+    ["4", "What is a rating", ["recompute the number instead of believing it"], []],
+    ["5", "canonical identity", ["locations open, facts by"], ["handle"]],
+    ["6", "RESET-style move", ["copied whole"], ["DURABLE_GAME_STATE_COLLECTIONS"]],
+    ["7", "finality rule", ["re-derives the anchor rather than trusting"], ["CURRENT_SNAPSHOT_VERSION"]],
+    ["8", "appchain unnecessary", ["definition of unnecessary"], []],
+  ];
+  for (const [number, marker, quoted, inCode] of MIGRATION_ANSWERED) {
+    if (!migrationRfc.includes(marker)) {
+      fail(`RFC 0017's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!migrationRfc.includes(quote)) {
+        fail(`RFC 0017's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0017's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
   }

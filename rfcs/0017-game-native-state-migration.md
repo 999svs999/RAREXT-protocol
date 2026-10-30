@@ -450,22 +450,48 @@ in its own RFC.
 
 ## Open questions
 
-1. What target fields represent an active, completed, or abandoned build, and who
-   is allowed to change that status?
-2. Are challenges ordered state, content-addressed configuration, or both? How are
-   sponsored challenges made durable before the cutover?
-3. What is reputation: a set of signed claims, a numeric score, or a tournament
-   rating? What evidence, decay, and dispute rules apply?
-4. What is a rating? Is it a match result, a verifier score, a human review, or a
-   separate tournament record?
-5. Does canonical identity become a chain account, or a RAREXT key with on-chain
-   pointers to a handle and delegation records?
-6. Which records fit in a RESET-style move and which stay content-addressed under
-   the 8 KiB/4 KiB limits?
-7. What finality rule lets the old writer stop without risking a reorg that
-   invalidates a migrated anchor?
-8. Does an audited EVM anchor contract plus an append-only log make the appchain
-   unnecessary for another cycle?
+1. **What fields represent a build's status, and who may change it?** — **ANSWERED: the
+   game's own fields, and the migration says so by name.** The bundle reports
+   `unmanagedTopLevelFields` — the extension fields it copies without interpreting — so
+   status lives in the game's schema and travels as a publication rather than as a
+   privileged mutation. The protocol migrates the RECORDS and refuses to own their meaning,
+   which is what keeps a game's lifecycle out of a storage protocol's rules.
+2. **Are challenges ordered state, content-addressed configuration, or both?** —
+   **ANSWERED: both, split by what changes.** A challenge is a publication — its
+   configuration pinned by the root, its bytes named by a CID — while `status:
+   "sponsored"` is state the app sets. A sponsored challenge becomes durable the same way
+   anything does: published before the cutover, so what survives is the CID rather than
+   the app's own table.
+3. **What is reputation?** — **ANSWERED: a set of signed claims.** The reward table pays
+   per verified action and the ledger records are the durable source — the migration
+   module states it in as many words. A numeric score is DERIVED from them and never
+   carried as itself, because a score is a claim about an actor, which is the thing this
+   protocol refuses to put in a record it cannot re-derive.
+4. **What is a rating?** — **ANSWERED: derived, with the ledger as the source.** A rating
+   summarizes credit records; remixes are not a separate durable entity but a relation
+   derived from `Publication.parentId`. Same discipline as reputation one level up: count
+   the verifiable records, then recompute the number instead of believing it.
+5. **Does canonical identity become a chain account?** — **ANSWERED: a RAREXT key, with
+   records.** The canonical identity is the key that signs, with `handle` and
+   `rarext.delegation` records carrying the names and the grants. A chain account is one
+   LOCATION among others, which is the rule announcements already follow: locations open, facts by
+   authority.
+6. **Which records fit a RESET-style move?** — **ANSWERED: the ones in the declared
+   durable collections.** `DURABLE_GAME_STATE_COLLECTIONS` is an explicit list, copied whole, and everything else stays content-addressed by its publication rather than by a
+   size rule — blob bytes are named by CID, so a large artifact moves as a pointer and
+   the format's own limits never become a migration decision.
+7. **What finality rule lets the old writer stop?** — **ANSWERED: content addressing is
+   the finality.** The bundle's CID names its bytes and the anchor names a root over the
+   publications, so a reorg can move a chain pointer but never the artifact. The old
+   writer may stop as soon as the new state is published and anchored, because a reader
+   holding the bytes re-derives the anchor rather than trusting the chain to still
+   remember it.
+8. **Is the appchain unnecessary for another cycle?** — **ANSWERED: yes, for the cycle
+   RFC 0016 evaluated.** The protocol's anchor is a root in an append-only record and the
+   adapter rails (local first) already provide the ordering it consumes; an appchain adds
+   ordering the protocol does not read, which is the working definition of unnecessary
+   here. The question is a standing one with a standing test: reopen it when a rule needs
+   ordering the anchor cannot express.
 
 ## Decision
 
