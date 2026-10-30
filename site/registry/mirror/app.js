@@ -11,6 +11,127 @@ function canonicalize(value) {
   return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
 }
 
+// packages/core/src/simulator.ts
+var MAX_ITERATIONS = 64;
+var ARITY = {
+  INPUT: 0,
+  OUTPUT: 1,
+  NAND: 2,
+  LATCH: 2
+};
+function validateCircuit(circuit) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const component of circuit.components) {
+    if (ids.has(component.id)) {
+      throw new Error(`duplicate component id: ${component.id}`);
+    }
+    ids.add(component.id);
+  }
+  for (const component of circuit.components) {
+    const inputs = component.inputs ?? [];
+    const expected = ARITY[component.type];
+    if (inputs.length !== expected) {
+      throw new Error(
+        `${component.id} (${component.type}) expects ${expected} inputs, got ${inputs.length}`
+      );
+    }
+    for (const input of inputs) {
+      if (!ids.has(input)) {
+        throw new Error(`${component.id} references unknown input: ${input}`);
+      }
+    }
+  }
+}
+function evaluate(component, values) {
+  const inputs = component.inputs ?? [];
+  if (component.type === "INPUT") {
+    return values[component.id] ?? 0;
+  }
+  if (component.type === "OUTPUT") {
+    return values[inputs[0] ?? ""] ?? 0;
+  }
+  if (component.type === "NAND") {
+    const a = values[inputs[0] ?? ""] ?? 0;
+    const b = values[inputs[1] ?? ""] ?? 0;
+    return a === 1 && b === 1 ? 0 : 1;
+  }
+  const data = values[inputs[0] ?? ""] ?? 0;
+  const enable = values[inputs[1] ?? ""] ?? 0;
+  return enable === 1 ? data : values[component.id] ?? 0;
+}
+function simulate(circuit, inputs, initial = {}) {
+  validateCircuit(circuit);
+  const values = {};
+  for (const component of circuit.components) {
+    if (component.type === "INPUT") {
+      const value = inputs[component.id];
+      if (value !== 0 && value !== 1) {
+        throw new Error(`missing or invalid input: ${component.id}`);
+      }
+      values[component.id] = value;
+    } else {
+      values[component.id] = initial[component.id] ?? 0;
+    }
+  }
+  let iterations = 0;
+  let settled = false;
+  const trace = [];
+  for (let pass = 0; pass < MAX_ITERATIONS; pass++) {
+    iterations = pass + 1;
+    let changed = false;
+    for (const component of circuit.components) {
+      if (component.type === "INPUT") continue;
+      const next = evaluate(component, values);
+      if (next !== values[component.id]) {
+        values[component.id] = next;
+        changed = true;
+      }
+    }
+    trace.push({ ...values });
+    if (!changed) {
+      settled = true;
+      break;
+    }
+  }
+  const outputs = {};
+  for (const component of circuit.components) {
+    if (component.type === "OUTPUT") {
+      outputs[component.id] = values[component.id] ?? 0;
+    }
+  }
+  return { outputs, values, settled, iterations, trace };
+}
+
+// packages/core/src/scoring.ts
+function countGates(circuit) {
+  return circuit.components.filter(
+    (component) => component.type === "NAND" || component.type === "LATCH"
+  ).length;
+}
+function score(circuit, task) {
+  let passed = 0;
+  for (const testCase of task.cases) {
+    const result = simulate(circuit, testCase.inputs);
+    if (!result.settled) continue;
+    const ok = task.outputs.every(
+      (name) => result.outputs[name] === testCase.outputs[name]
+    );
+    if (ok) passed++;
+  }
+  const gateCount = countGates(circuit);
+  const correct = passed === task.cases.length;
+  const efficiency = gateCount === 0 ? 0 : task.referenceGateCount / gateCount;
+  return {
+    taskId: task.id,
+    correct,
+    passed,
+    total: task.cases.length,
+    gateCount,
+    efficiency,
+    score: correct ? Math.round(efficiency * 1e3) : 0
+  };
+}
+
 // packages/core/src/ai.ts
 var MAX_GENERATIVE_STEPS = 1e5;
 var MAX_VOCAB = 4096;
@@ -139,128 +260,171 @@ function verifyAiArtifact(artifact, challenge) {
   }
   return { error: `artifact kind ${artifact.kind} is not a locally verifiable AI claim` };
 }
+var RASTER_RULE = "xorshift32-image-v1";
+var MAX_RASTER_SIZE = 512;
+function isGenerativeMedia(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value;
+  return media.mediaType === "image/png" && media.rule === RASTER_RULE && typeof media.blob === "string" && /^[0-9a-f]{64}$/.test(media.blob) && typeof media.raster === "string" && /^[0-9a-f]{64}$/.test(media.raster) && Number.isInteger(media.size) && media.size >= 1 && media.size <= MAX_RASTER_SIZE && Number.isInteger(media.bytes) && media.bytes >= 1;
+}
+function renderRaster(model, seed, size) {
+  if (!isXorshiftModel(model)) throw new Error("renderRaster: malformed model");
+  if (!Number.isInteger(size) || size < 1 || size > MAX_RASTER_SIZE) {
+    throw new Error(`renderRaster: size must be 1..${MAX_RASTER_SIZE}`);
+  }
+  const { a, b, c } = model.params;
+  let state = seed >>> 0;
+  const out = new Uint8Array(size * size * 3);
+  for (let i = 0; i < out.length; i++) {
+    state ^= state << a >>> 0;
+    state ^= state >>> b;
+    state ^= state << c >>> 0;
+    state >>>= 0;
+    out[i] = state & 255;
+  }
+  return out;
+}
+var BOUNDED_RASTER_RULE = "bounded-strip-v1";
+var BOUNDED_RASTER_SCALE = 16;
 var BOUNDED_RASTER_LANE = 48;
 var BOUNDED_RASTER_GUTTER = 4;
+var BOUNDED_RASTER_GAIN = 32;
+var MAX_BOUNDED_RASTER_WIDTH = 4096;
+function isBoundedMedia(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const media = value;
+  return media.mediaType === "image/png" && media.rule === BOUNDED_RASTER_RULE && typeof media.blob === "string" && /^[0-9a-f]{64}$/.test(media.blob) && typeof media.raster === "string" && /^[0-9a-f]{64}$/.test(media.raster) && Number.isInteger(media.width) && media.width >= 1 && media.width <= MAX_BOUNDED_RASTER_WIDTH && Number.isInteger(media.height) && media.height >= 1 && media.height <= MAX_BOUNDED_RASTER_WIDTH && Number.isInteger(media.bytes) && media.bytes >= 1;
+}
 var BOUNDED_RASTER_HEIGHT = 3 * BOUNDED_RASTER_LANE + 2 * BOUNDED_RASTER_GUTTER;
-
-// packages/core/src/simulator.ts
-var MAX_ITERATIONS = 64;
-var ARITY = {
-  INPUT: 0,
-  OUTPUT: 1,
-  NAND: 2,
-  LATCH: 2
-};
-function validateCircuit(circuit) {
-  const ids = /* @__PURE__ */ new Set();
-  for (const component of circuit.components) {
-    if (ids.has(component.id)) {
-      throw new Error(`duplicate component id: ${component.id}`);
-    }
-    ids.add(component.id);
+function renderBoundedRaster(reference, reconstruction, width, height = BOUNDED_RASTER_HEIGHT) {
+  if (!Array.isArray(reference) || reference.length < 1) {
+    throw new Error("renderBoundedRaster: reference must be a non-empty array");
   }
-  for (const component of circuit.components) {
-    const inputs = component.inputs ?? [];
-    const expected = ARITY[component.type];
-    if (inputs.length !== expected) {
-      throw new Error(
-        `${component.id} (${component.type}) expects ${expected} inputs, got ${inputs.length}`
-      );
-    }
-    for (const input of inputs) {
-      if (!ids.has(input)) {
-        throw new Error(`${component.id} references unknown input: ${input}`);
-      }
-    }
+  if (!Array.isArray(reconstruction) || reconstruction.length !== reference.length) {
+    throw new Error("renderBoundedRaster: reconstruction must match the reference length");
   }
-}
-function evaluate(component, values) {
-  const inputs = component.inputs ?? [];
-  if (component.type === "INPUT") {
-    return values[component.id] ?? 0;
+  if (reference.length > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: at most ${MAX_BOUNDED_RASTER_WIDTH} values`);
   }
-  if (component.type === "OUTPUT") {
-    return values[inputs[0] ?? ""] ?? 0;
+  const w = width ?? reference.length * BOUNDED_RASTER_SCALE;
+  if (!Number.isInteger(w) || w < 1 || w > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: width must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
   }
-  if (component.type === "NAND") {
-    const a = values[inputs[0] ?? ""] ?? 0;
-    const b = values[inputs[1] ?? ""] ?? 0;
-    return a === 1 && b === 1 ? 0 : 1;
+  if (!Number.isInteger(height) || height < 1 || height > MAX_BOUNDED_RASTER_WIDTH) {
+    throw new Error(`renderBoundedRaster: height must be 1..${MAX_BOUNDED_RASTER_WIDTH}`);
   }
-  const data = values[inputs[0] ?? ""] ?? 0;
-  const enable = values[inputs[1] ?? ""] ?? 0;
-  return enable === 1 ? data : values[component.id] ?? 0;
-}
-function simulate(circuit, inputs, initial = {}) {
-  validateCircuit(circuit);
-  const values = {};
-  for (const component of circuit.components) {
-    if (component.type === "INPUT") {
-      const value = inputs[component.id];
-      if (value !== 0 && value !== 1) {
-        throw new Error(`missing or invalid input: ${component.id}`);
-      }
-      values[component.id] = value;
-    } else {
-      values[component.id] = initial[component.id] ?? 0;
-    }
-  }
-  let iterations = 0;
-  let settled = false;
-  const trace = [];
-  for (let pass = 0; pass < MAX_ITERATIONS; pass++) {
-    iterations = pass + 1;
-    let changed = false;
-    for (const component of circuit.components) {
-      if (component.type === "INPUT") continue;
-      const next = evaluate(component, values);
-      if (next !== values[component.id]) {
-        values[component.id] = next;
-        changed = true;
-      }
-    }
-    trace.push({ ...values });
-    if (!changed) {
-      settled = true;
-      break;
-    }
-  }
-  const outputs = {};
-  for (const component of circuit.components) {
-    if (component.type === "OUTPUT") {
-      outputs[component.id] = values[component.id] ?? 0;
-    }
-  }
-  return { outputs, values, settled, iterations, trace };
-}
-
-// packages/core/src/scoring.ts
-function countGates(circuit) {
-  return circuit.components.filter(
-    (component) => component.type === "NAND" || component.type === "LATCH"
-  ).length;
-}
-function score(circuit, task) {
-  let passed = 0;
-  for (const testCase of task.cases) {
-    const result = simulate(circuit, testCase.inputs);
-    if (!result.settled) continue;
-    const ok = task.outputs.every(
-      (name) => result.outputs[name] === testCase.outputs[name]
+  const raster = new Uint8Array(w * height * 3);
+  const lane = BOUNDED_RASTER_LANE;
+  const gutter = BOUNDED_RASTER_GUTTER;
+  const laneStarts = [0, lane + gutter, 2 * (lane + gutter)];
+  for (let x = 0; x < w; x++) {
+    const index = Math.min(
+      reference.length - 1,
+      Math.floor(x * reference.length / w)
     );
-    if (ok) passed++;
+    const grey = clampByte(reference[index]);
+    const reconstructionGrey = clampByte(reconstruction[index]);
+    const error = clampByte(Math.abs(reference[index] - reconstruction[index]) * BOUNDED_RASTER_GAIN);
+    for (let y = 0; y < height; y++) {
+      const offset = (y * w + x) * 3;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      if (y < lane) {
+        r = g = b = grey;
+      } else if (y < lane + gutter) {
+      } else if (y < laneStarts[1] + lane) {
+        r = g = b = reconstructionGrey;
+      } else if (y < laneStarts[1] + lane + gutter) {
+      } else if (y < laneStarts[2] + lane) {
+        r = error;
+      }
+      raster[offset] = r;
+      raster[offset + 1] = g;
+      raster[offset + 2] = b;
+    }
   }
-  const gateCount = countGates(circuit);
-  const correct = passed === task.cases.length;
-  const efficiency = gateCount === 0 ? 0 : task.referenceGateCount / gateCount;
+  return raster;
+}
+function clampByte(value) {
+  if (!Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  if (value >= 255) return 255;
+  return Math.round(value);
+}
+
+// packages/core/src/leaf.ts
+var PUBLICATION_LEAF_VERSION = 4;
+function leafPayload(publication, version = PUBLICATION_LEAF_VERSION) {
+  if (version < 2) {
+    return {
+      id: publication.id,
+      author: publication.author,
+      authorKey: publication.authorKey,
+      taskId: publication.taskId,
+      circuitHash: publication.attestation.circuitHash,
+      traceHash: publication.attestation.traceHash,
+      score: publication.attestation.score,
+      gateCount: publication.attestation.gateCount,
+      createdAt: publication.createdAt
+    };
+  }
+  const attestation = {
+    circuitHash: publication.attestation.circuitHash,
+    traceHash: publication.attestation.traceHash,
+    correct: publication.attestation.correct,
+    score: publication.attestation.score,
+    gateCount: publication.attestation.gateCount,
+    semanticsId: publication.attestation.semanticsId,
+    semanticsVersion: publication.attestation.semanticsVersion,
+    semanticsHash: publication.attestation.semanticsHash,
+    claimKind: publication.attestation.claimKind,
+    scope: publication.attestation.scope,
+    verifierHash: publication.attestation.verifierHash
+  };
+  const base = {
+    id: publication.id,
+    author: publication.author,
+    authorKey: publication.authorKey,
+    title: publication.title,
+    body: publication.body,
+    app: publication.app,
+    challengeId: publication.challengeId,
+    taskId: publication.taskId,
+    artifact: publication.artifact,
+    circuit: publication.circuit ?? null,
+    parentId: publication.parentId,
+    source: publication.source,
+    createdAt: publication.createdAt,
+    nonce: publication.nonce,
+    signature: publication.signature,
+    attestation
+  };
+  if (version < 3) {
+    return { leafVersion: 2, ...base };
+  }
+  const extended = {
+    ...base,
+    signatureAlgorithm: publication.signatureAlgorithm,
+    cryptoProfile: publication.attestation.cryptoProfile
+  };
+  if (version === 3) {
+    return { leafVersion: 3, ...extended };
+  }
+  const evidence = {};
+  if (publication.attestation.representation !== void 0) {
+    evidence.representation = publication.attestation.representation;
+  }
+  if (publication.attestation.metricName !== void 0) {
+    evidence.metricName = publication.attestation.metricName;
+  }
+  if (publication.attestation.metricValue !== void 0) {
+    evidence.metricValue = publication.attestation.metricValue;
+  }
   return {
-    taskId: task.id,
-    correct,
-    passed,
-    total: task.cases.length,
-    gateCount,
-    efficiency,
-    score: correct ? Math.round(efficiency * 1e3) : 0
+    leafVersion: 4,
+    ...extended,
+    attestation: { ...attestation, ...evidence }
   };
 }
 
@@ -2616,6 +2780,387 @@ async function runWork(options) {
 function localVerdict(serverValid, local) {
   return serverValid && (local?.correct ?? true);
 }
+async function sha256Hex2(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function sha256BytesHex(bytes) {
+  const view2 = new Uint8Array(bytes.length);
+  view2.set(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", view2);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function hashPair(left, right) {
+  return sha256Hex2(left + right);
+}
+async function merkleRoot(leaves) {
+  if (leaves.length === 0) return "";
+  if (leaves.length === 1) return leaves[0];
+  let level = [...leaves];
+  while (level.length > 1) {
+    const next = [];
+    for (let index = 0; index < level.length; index += 2) {
+      next.push(
+        await hashPair(level[index], level[index + 1] ?? level[index])
+      );
+    }
+    level = next;
+  }
+  return level[0];
+}
+function localAiCheck(publication, spec) {
+  if (!spec) return null;
+  const representation = publication.attestation.representation;
+  if (representation === "generative") {
+    if (typeof spec.steps !== "number") return null;
+    const challenge = {
+      id: publication.challengeId,
+      app: publication.app,
+      title: "",
+      description: "",
+      version: 1,
+      spec: { steps: spec.steps },
+      semanticsId: "",
+      semanticsVersion: 1,
+      createdAt: ""
+    };
+    const result = verifyAiArtifact(publication.artifact, challenge);
+    if ("error" in result) return null;
+    return { correct: result.correct === true };
+  }
+  if (representation === "bounded") {
+    if (spec.metric !== "maxAbsError" && spec.metric !== "meanAbsError" || !Array.isArray(spec.reference) || typeof spec.bound !== "number") {
+      return null;
+    }
+    const challenge = {
+      id: publication.challengeId,
+      app: publication.app,
+      title: "",
+      description: "",
+      version: 1,
+      spec: {
+        metric: spec.metric,
+        bound: spec.bound,
+        reference: spec.reference
+      },
+      semanticsId: "",
+      semanticsVersion: 1,
+      createdAt: ""
+    };
+    const result = verifyAiArtifact(publication.artifact, challenge);
+    if ("error" in result) return null;
+    return {
+      correct: result.correct === true,
+      metricValue: typeof result.metricValue === "number" ? result.metricValue : void 0
+    };
+  }
+  return null;
+}
+async function mediaFor(publication, spec, blobBytes, representation) {
+  const body = publication.artifact?.body;
+  if (!body) return null;
+  let raster = null;
+  let geometry = {
+    size: null,
+    width: null,
+    height: null
+  };
+  let media = null;
+  if (typeof body.seed === "number" && isGenerativeMedia(body.media)) {
+    media = body.media;
+    geometry = { size: body.media.size, width: body.media.size, height: body.media.size };
+    try {
+      raster = renderRaster(
+        body.model,
+        body.seed,
+        body.media.size
+      );
+    } catch {
+      raster = null;
+    }
+  } else if (isBoundedMedia(body.media)) {
+    media = body.media;
+    geometry = { size: null, width: body.media.width, height: body.media.height };
+    const reference = spec?.reference;
+    if (Array.isArray(reference) && Array.isArray(body.values)) {
+      try {
+        raster = renderBoundedRaster(
+          reference,
+          body.values,
+          body.media.width,
+          body.media.height
+        );
+      } catch {
+        raster = null;
+      }
+    }
+  }
+  if (!media) {
+    if (body.media !== void 0 && body.media !== null) {
+      const shape = typeof body.media === "object" ? body.media : {};
+      const rule = typeof shape.rule === "string" ? shape.rule : "an unknown rule";
+      return {
+        blob: "",
+        raster: "",
+        size: null,
+        width: null,
+        height: null,
+        reDerived: null,
+        matches: null,
+        blobMatches: null,
+        unverifiable: true,
+        reason: `declared a ${representation ?? "unknown"} rendition under ${rule} that this reader cannot check`
+      };
+    }
+    return null;
+  }
+  let reDerived = null;
+  if (raster) {
+    try {
+      reDerived = await sha256BytesHex(raster);
+    } catch {
+      reDerived = null;
+    }
+  }
+  let blobMatches = null;
+  if (blobBytes) {
+    blobMatches = await sha256BytesHex(blobBytes) === media.blob;
+  }
+  return {
+    blob: media.blob,
+    raster: media.raster,
+    size: geometry.size,
+    width: geometry.width,
+    height: geometry.height,
+    reDerived,
+    matches: reDerived === null ? null : reDerived === media.raster,
+    blobMatches,
+    unverifiable: null,
+    reason: null
+  };
+}
+function base64ToBytes(value) {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return void 0;
+  }
+}
+async function aiClaimsFor(bundle, challenges, media) {
+  const committed = bundle.manifest.leafVersion >= 4;
+  const claims = [];
+  for (const publication of bundle.publications) {
+    const attestation = publication.attestation;
+    const representation = committed ? attestation.representation ?? null : null;
+    const spec = challenges?.[publication.challengeId];
+    const bound = typeof spec?.bound === "number" ? spec.bound : null;
+    const metricValue = committed && typeof attestation.metricValue === "number" ? attestation.metricValue : null;
+    const local = committed ? localAiCheck(publication, spec) : null;
+    let mediaEvidence = null;
+    if (committed) {
+      const body = publication.artifact?.body;
+      if (body?.media !== void 0 && body?.media !== null) {
+        const hash = body.media.blob;
+        const encoded = typeof hash === "string" ? media?.[hash] : void 0;
+        const bytes = typeof encoded === "string" ? base64ToBytes(encoded) : void 0;
+        mediaEvidence = await mediaFor(
+          publication,
+          spec,
+          bytes,
+          representation
+        );
+      }
+    }
+    claims.push({
+      publicationId: publication.id,
+      representation,
+      correct: committed && attestation.correct === true,
+      metricName: committed ? attestation.metricName ?? null : null,
+      metricValue,
+      bound,
+      withinBound: representation === "bounded" && metricValue !== null && bound !== null ? metricValue <= bound : null,
+      local,
+      media: mediaEvidence
+    });
+  }
+  return claims;
+}
+async function verifyBundle(bundle, challenges, pinnedRoot, media) {
+  const leaves = [];
+  for (const publication of bundle.publications) {
+    leaves.push(
+      await sha256Hex2(
+        canonicalize(leafPayload(publication, bundle.manifest.leafVersion))
+      )
+    );
+  }
+  const computedRoot = await merkleRoot(leaves);
+  const listed = bundle.manifest.publications.map((entry) => entry.leaf);
+  const listMatches = JSON.stringify(listed) === JSON.stringify(leaves);
+  if (computedRoot !== bundle.manifest.root) {
+    return {
+      valid: false,
+      root: bundle.manifest.root,
+      computedRoot,
+      publications: leaves.length,
+      reason: "the publications in this bundle do not rebuild the anchored root",
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
+    };
+  }
+  if (!listMatches) {
+    return {
+      valid: false,
+      root: bundle.manifest.root,
+      computedRoot,
+      publications: leaves.length,
+      reason: "the manifest leaf list does not match the publications",
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
+    };
+  }
+  if (pinnedRoot && computedRoot !== pinnedRoot) {
+    return {
+      valid: false,
+      root: bundle.manifest.root,
+      computedRoot,
+      publications: leaves.length,
+      reason: "the bundle root does not match the pinned chain root",
+      aiClaims: await aiClaimsFor(bundle, challenges, media)
+    };
+  }
+  return {
+    valid: true,
+    root: bundle.manifest.root,
+    computedRoot,
+    publications: leaves.length,
+    reason: null,
+    aiClaims: await aiClaimsFor(bundle, challenges, media)
+  };
+}
+
+// apps/web/src/mirror.ts
+var MIRROR_SEED_URLS = ["./seed.json", "../registry/seed.json"];
+var HEX_ROOT = /^[0-9a-f]{64}$/;
+function isHexRoot(value) {
+  return typeof value === "string" && HEX_ROOT.test(value);
+}
+async function resolveMirrorPin(requestedRoot, seedUrls = MIRROR_SEED_URLS, request = fetch) {
+  if (isHexRoot(requestedRoot)) {
+    return { root: requestedRoot, source: "?root=" };
+  }
+  for (const seedUrl of seedUrls) {
+    try {
+      const response = await request(seedUrl);
+      if (!response.ok) continue;
+      const seed = await response.json();
+      if (typeof seed.bundleRoot === "string" && isHexRoot(seed.bundleRoot)) {
+        return { root: seed.bundleRoot, source: seedUrl };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return { root: null, source: null };
+}
+function startMirrorGate(bundle, options = {}) {
+  if (!bundle) {
+    const absent = {
+      kind: "absent",
+      pinnedRoot: null,
+      pinSource: null,
+      computedRoot: null,
+      reason: null
+    };
+    return {
+      ready: Promise.resolve(absent),
+      outcome: () => null,
+      read: () => null,
+      refusal: () => null
+    };
+  }
+  let state = null;
+  let refusal = null;
+  const ready = (async () => {
+    const pin = await resolveMirrorPin(
+      options.requestedRoot ?? null,
+      options.seedUrls ?? MIRROR_SEED_URLS,
+      options.fetch ?? fetch
+    );
+    const verification = await verifyBundle(
+      bundle,
+      void 0,
+      pin.root ?? void 0
+    );
+    if (verification.valid) {
+      state = {
+        kind: pin.root ? "verified" : "verified-unpinned",
+        pinnedRoot: pin.root,
+        pinSource: pin.source,
+        computedRoot: verification.computedRoot,
+        reason: null
+      };
+      options.onVerified?.(state);
+    } else {
+      refusal = {
+        pinnedRoot: pin.root,
+        computedRoot: verification.computedRoot,
+        reason: verification.reason
+      };
+      state = {
+        kind: "refused",
+        pinnedRoot: pin.root,
+        pinSource: pin.source,
+        computedRoot: verification.computedRoot,
+        reason: verification.reason
+      };
+      options.onRefused?.(refusal);
+    }
+    return state;
+  })();
+  return {
+    ready,
+    outcome: () => state,
+    read(path) {
+      if (!state || state.kind === "refused") return null;
+      return mirrorRead(bundle, path);
+    },
+    refusal: () => refusal
+  };
+}
+function mirrorRead(bundle, path) {
+  const url = new URL(path, "https://mirror.invalid");
+  const publications = [...bundle.publications].sort(
+    (a, b) => b.createdAt.localeCompare(a.createdAt)
+  );
+  if (url.pathname === "/v1/feed" || url.pathname === "/v1/artifacts") {
+    const limit = Number(url.searchParams.get("limit") ?? "50");
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    return publications.slice(offset, offset + limit);
+  }
+  if (url.pathname === "/v1/challenges") return bundle.challenges;
+  if (url.pathname === "/v1/semantics") return bundle.semantics;
+  if (url.pathname === "/v1/apps") {
+    return bundle.challenges.map((challenge) => ({
+      id: challenge.app,
+      name: challenge.app,
+      version: "1",
+      description: challenge.description,
+      artifactKinds: [],
+      challengeCount: 1,
+      verifier: "builtin",
+      configured: true,
+      url: null
+    }));
+  }
+  if (url.pathname === "/v1/adapters") return [];
+  if (url.pathname === "/v1/tapeout/status") {
+    return { configured: false, chainId: null, blockNumber: null };
+  }
+  return null;
+}
 
 // apps/web/src/main.ts
 var NODE_WIDTH = 144;
@@ -2743,41 +3288,24 @@ var toastTimer;
 var hintIndex = 0;
 var view = { x: 0, y: 0, w: SVG_WIDTH };
 var touchPoints = /* @__PURE__ */ new Map();
-function mirrorResponse(path) {
-  const bundle = window.__RAREXT_BUNDLE__;
-  if (!bundle) return null;
-  const url = new URL(path, "https://mirror.invalid");
-  const publications = [...bundle.publications].sort(
-    (a, b) => b.createdAt.localeCompare(a.createdAt)
-  );
-  if (url.pathname === "/v1/feed" || url.pathname === "/v1/artifacts") {
-    const limit = Number(url.searchParams.get("limit") ?? "50");
-    const offset = Number(url.searchParams.get("offset") ?? "0");
-    return publications.slice(offset, offset + limit);
-  }
-  if (url.pathname === "/v1/challenges") return bundle.challenges;
-  if (url.pathname === "/v1/semantics") return bundle.semantics;
-  if (url.pathname === "/v1/apps") {
-    return bundle.challenges.map((challenge) => ({
-      id: challenge.app,
-      name: challenge.app,
-      version: "1",
-      description: challenge.description,
-      artifactKinds: [],
-      challengeCount: 1,
-      verifier: "builtin",
-      configured: true,
-      url: null
-    }));
-  }
-  if (url.pathname === "/v1/adapters") return [];
-  if (url.pathname === "/v1/tapeout/status") {
-    return { configured: false, chainId: null, blockNumber: null };
-  }
-  return null;
-}
+var mirrorGate = startMirrorGate(window.__RAREXT_BUNDLE__, {
+  requestedRoot: new URLSearchParams(window.location.search).get("root"),
+  onVerified: (outcome) => {
+    if (outcome.kind === "verified") {
+      console.info(
+        `mirror bundle verified against the pinned root (${outcome.computedRoot}); reads answer from the bundle`
+      );
+      return;
+    }
+    console.info(
+      "mirror bundle verified (internal consistency only: no root pin is available); reads answer from the bundle"
+    );
+  },
+  onRefused: showMirrorRefusal
+});
 async function apiGet(path) {
-  const mirrored = mirrorResponse(path);
+  await mirrorGate.ready;
+  const mirrored = mirrorGate.read(path);
   if (mirrored !== null) return mirrored;
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${response.status} ${path}`);
@@ -3648,6 +4176,23 @@ function toast(message, error = false) {
   toastEl.classList.remove("hidden");
   if (toastTimer) window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toastEl.classList.add("hidden"), 3400);
+}
+function showMirrorRefusal(refusal) {
+  const banner = el("mirror-refusal");
+  const pinned = banner.querySelector("[data-refusal='pinned']");
+  const computed = banner.querySelector("[data-refusal='computed']");
+  const reason = banner.querySelector("[data-refusal='reason']");
+  if (pinned) {
+    pinned.textContent = refusal.pinnedRoot ? refusal.pinnedRoot : "no pin was available \u2014 ?root= was absent and no seed named one";
+  }
+  if (computed) {
+    computed.textContent = refusal.computedRoot ?? "\u2014";
+  }
+  if (reason) {
+    reason.textContent = refusal.reason ?? "the bundle does not rebuild the pinned root";
+  }
+  banner.classList.remove("hidden");
+  document.body.classList.add("mirror-refused");
 }
 function openWelcome() {
   welcomeEl.classList.remove("hidden");

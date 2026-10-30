@@ -19,7 +19,8 @@ const mirrorTarget = join(site, "mirror");
 const bundlePath = join(proof, "bundle.json");
 const blobsPath = join(mirrorSource, "blobs.json");
 
-const bundle = JSON.parse(readFileSync(bundlePath, "utf8"));
+// `let`: the semantics commitment returns a NEW bundle (core functions are pure).
+let bundle = JSON.parse(readFileSync(bundlePath, "utf8"));
 const blobs = JSON.parse(readFileSync(blobsPath, "utf8"));
 
 const { verifyBundle } = await import(join(root, "apps/api/src/bundle.ts"));
@@ -109,7 +110,12 @@ if (!(bundle.publications ?? []).some((publication) => publication.artifact?.kin
 // template's `representation` so the commitment is not published as a fake AI claim,
 // and a rule that easy to get wrong belongs where a test can reach it. A script block
 // is the one place no test ever runs.
-const semanticsCommitment = withSemanticsCommitment(bundle, nodeSha256);
+// A STRING hash, deliberately: `semanticsDigests` hashes each record's canonical TEXT,
+// and nodeSha256 (bytes in, bytes out) silently produced byte maps instead of hex —
+// which the bundle then committed to. The parser refused them, which is the only reason
+// this was caught before it was published as an anchor that proved nothing.
+const stringSha256 = (value) => createHash("sha256").update(value).digest("hex");
+const semanticsCommitment = withSemanticsCommitment(bundle, stringSha256);
 bundle = semanticsCommitment.bundle;
 if (semanticsCommitment.added) {
   console.log(`semantics commitment published: ${semanticsCommitment.added} over ${(bundle.semantics ?? []).length} record(s)`);
@@ -164,12 +170,15 @@ for (const rendition of media) {
 // cap lost the cap on the published page, which is exactly the kind of stale win
 // this list must not allow.
 const mirrorFiles = [
+  "ai.html",
+  "ai.js",
   "app.js",
   "blobs.json",
   "favicon.svg",
   "gallery.html",
   "index.html",
   "leaderboard.html",
+  "renditions.js",
   "styles.css",
   "verify.js",
 ];

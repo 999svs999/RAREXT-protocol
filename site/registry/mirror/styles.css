@@ -153,6 +153,66 @@ button.danger:hover {
   display: none !important;
 }
 
+/* ---------- mirror refusal ---------- */
+/* Shown only when the workbench's startup verification refuses its bundle:
+   the reads stay refused and the page carries this instead of a feed that
+   would quietly serve tampered bytes. */
+
+.mirror-refusal {
+  margin: 14px 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--danger-line);
+  background: var(--danger-soft);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.mirror-refusal strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--danger);
+}
+
+.mirror-refusal p {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.mirror-refusal a {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
+.mirror-refusal-roots {
+  display: grid;
+  gap: 6px;
+}
+
+.mirror-refusal-roots div {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.mirror-refusal-roots span {
+  flex: none;
+  min-width: 118px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mirror-refusal-roots code {
+  word-break: break-all;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;

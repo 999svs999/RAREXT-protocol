@@ -268,13 +268,25 @@ test("withSemanticsCommitment adds a publication, strips representation, and mov
   const rootOf = (b: { publications: Array<Record<string, unknown>> }) =>
     merkleRoot(b.publications.map((x) => publicationLeaf(x as never, bytesSha, PUBLICATION_LEAF_VERSION)), bytesSha);
 
+  // The committed bundle now CARRIES the commitment, so adding is a no-op on it — and
+  // the property is asserted against whatever state the bundle is in: adding one if it
+  // has none, and otherwise checking the one it has actually covers its records. A test
+  // that only asserted "it gets added" would fail the moment the live registry adopted
+  // its own fix, which is the wrong reason to fail.
+  const already = (committed.publications ?? []).some((x) => (x.artifact as { kind?: string })?.kind === SEMANTICS_COMMITMENT_KIND);
   const { bundle: withCommitment, added } = withSemanticsCommitment(committed as never, sha256Hex);
-  assert.equal(added, "pub-semantics-commitment");
+  assert.equal(added, already ? null : "pub-semantics-commitment");
   const publications = withCommitment.publications!;
-  assert.equal(publications.length, committed.publications.length + 1);
-  assert.notEqual(rootOf(withCommitment as never), rootOf(committed as never), "the commitment is inside the proof");
+  assert.equal(publications.length, committed.publications.length + (already ? 0 : 1));
+  if (!already) {
+    assert.notEqual(rootOf(withCommitment as never), rootOf(committed as never), "the commitment is inside the proof");
+  }
 
-  const publication = publications.at(-1) as { artifact: Record<string, unknown>; attestation: Record<string, unknown> };
+  // By KIND, not by position: whatever else the bundle carries, the commitment is the
+  // publication whose artifact says so.
+  const publication = publications.find(
+    (x) => (x.artifact as { kind?: string })?.kind === SEMANTICS_COMMITMENT_KIND,
+  ) as { artifact: Record<string, unknown>; attestation: Record<string, unknown> };
   assert.equal((publication.artifact as { kind?: string }).kind, SEMANTICS_COMMITMENT_KIND);
   // THE TRAP: keeping the template's `representation` would publish a commitment as an
   // AI claim inside the surface that exists to prove AI results.
@@ -292,4 +304,33 @@ test("withSemanticsCommitment adds a publication, strips representation, and mov
   assert.equal(again.added, null);
   assert.equal(again.bundle.publications!.length, publications.length);
   assert.equal(withSemanticsCommitment({ publications: [] }, sha256Hex).added, null);
+});
+
+/**
+ * The ARTIFACT, checked rather than assumed: the published registry's own commitment
+ * must cover the records that registry carries.
+ *
+ * This is the assertion the byte-map bug needed and did not have. A wrong hash kind
+ * produced digests like {"0":167,...} — committed, anchored, and meaningless — and only
+ * the parser's strictness refused them. The hex shape is asserted explicitly, because
+ * that is precisely what was wrong.
+ */
+test("the published registry's own commitment covers its own records", () => {
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  const bundle = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as {
+    publications: Array<Record<string, unknown>>;
+    semantics: Array<Record<string, unknown>>;
+  };
+  const commitment = bundle.publications.find(
+    (x) => (x.artifact as { kind?: string })?.kind === SEMANTICS_COMMITMENT_KIND,
+  );
+  assert.ok(commitment, "the published registry carries its semantics commitment");
+
+  const digests = parseSemanticsCommitmentArtifact(commitment!.artifact as never)!.digests;
+  assert.equal(Object.keys(digests).length, bundle.semantics.length);
+  for (const record of bundle.semantics) {
+    const key = `${record.id}@${record.version}`;
+    assert.match(digests[key]!, /^[0-9a-f]{64}$/, `${key} is committed as a hex digest`);
+    assert.equal(digests[key], semanticsRecordDigest(record as never, sha), `${key} matches its record`);
+  }
 });
