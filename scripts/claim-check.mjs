@@ -2599,8 +2599,19 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   ]) {
     if (!demoSource.includes(marker)) {
       fail(`MIRRORS.md's resident demo must use the SDK, default to the live seed, and support --local; demo-resident.mjs has no "${marker}"`);
+
     }
   }
+  // The resident demo answers BOTH questions a reader has about a registry: do the AI claims
+  // replay, and are the meanings the ones that were anchored. The doc says so and the demo
+  // does it, so both halves are compared rather than one being trusted.
+  if (!demoSource.includes("sdk.verifyBundleSemantics(found.bundle)")) {
+    fail("the resident demo no longer verifies the registry's anchored meanings");
+  }
+  if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("It also calls `verifyBundleSemantics` to confirm that every committed meaning the registry")) {
+    fail("MIRRORS.md no longer describes the resident demo's meanings check");
+  }
+
   if (!/no\s+keys/.test(doc) || !/no\s+server/.test(doc)) {
     fail("MIRRORS.md no longer states that the resident demo needs no keys and no server");
   }

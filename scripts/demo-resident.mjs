@@ -312,17 +312,36 @@ async function main() {
       printEvidence(claim);
     }
 
+    // The other thing a resident needs from a registry: the MEANING it resolved must be the
+    // one the registry anchored. RFC 0003's question 1 — the same check the browser page
+    // runs, through the same core comparison, so the page and the agent cannot disagree.
+    let meaningsOk = true;
+    const semantics = sdk.verifyBundleSemantics(found.bundle);
+    if (semantics === null) {
+      console.log("\nmeanings: this registry records no semantics commitment");
+    } else {
+      meaningsOk = semantics.missing.length === 0;
+      console.log(
+        `\nmeanings anchored: ${semantics.matched} of ${semantics.committed} committed digest(s) match the records this copy carries`,
+      );
+      if (!meaningsOk) console.error(`  unmatched: ${semantics.missing.join(", ")}`);
+    }
+
     if (replay.claims.length > 0) {
       console.log(`\nverdicts tie to the verified root ${replay.root}`);
-      if (failed > 0) {
-        console.error(
-          `\nDEMO FAILED: ${failed} of ${replay.claims.length} AI claim(s) did not replay true from ${found.source} (root ${replay.root}).`,
-        );
+      if (failed > 0 || !meaningsOk) {
+        const why =
+          failed > 0
+            ? `${failed} of ${replay.claims.length} AI claim(s) did not replay true`
+            : `${semantics.missing.length} committed meaning(s) do not match this copy`;
+        console.error(`\nDEMO FAILED: ${why} from ${found.source} (root ${replay.root}).`);
         exitCode = 1;
       } else {
         console.log(
-          `\nDEMO PASSED: ${replay.claims.length} AI claim(s) replayed true from the verified copy at ${found.source} ` +
-            `(root ${replay.root}), found from seed ${seedUrl}. No keys, no server, no writes.`,
+          `\nDEMO PASSED: ${replay.claims.length} AI claim(s) replayed true and ` +
+            `${semantics ? `${semantics.matched} committed meaning(s) matched` : "the registry records no meanings"} ` +
+            `from the verified copy at ${found.source} (root ${replay.root}), found from seed ${seedUrl}. ` +
+            `No keys, no server, no writes.`,
         );
       }
     }
