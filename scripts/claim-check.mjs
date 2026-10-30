@@ -428,6 +428,18 @@ if (process.argv.includes("--self-test")) {
   const originalTracRfc = readFileSync(new URL("rfcs/0001-trac-integration.md", root), "utf8");
   const rfcOneScheme = doctor(originalTracRfc, "rfcOneScheme", (s) =>
     s.replace("chosen per key", "fixed to ed25519 alone"));
+  // doctor() compares strings, so an object fixture is built with its own assert — a
+  // mutation that changed nothing must fail here rather than "pass" the stale check.
+  const rfcSetAll = Object.fromEntries(
+    readdirSync(new URL("rfcs", root))
+      .filter((f) => f.endsWith(".md") && f !== "0000-template.md")
+      .map((f) => [f, readFileSync(new URL(`rfcs/${f}`, root), "utf8")]),
+  );
+  const withoutVerdict = rfcSetAll["0006-independent-verifiers.md"].replace("ANSWERED: no.", "The short answer.");
+  if (withoutVerdict === rfcSetAll["0006-independent-verifiers.md"]) {
+    throw new Error("self-test: the RFC-set injection changed nothing, so its case proves nothing");
+  }
+  const rfcSetMissingVerdict = { ...rfcSetAll, "0006-independent-verifiers.md": withoutVerdict };
   
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
@@ -544,6 +556,15 @@ if (process.argv.includes("--self-test")) {
   const caughtTrac = failures > beforeTrac;
   if (!caughtTrac) fail("self-test: the checker accepted RFC 0001 picking a single signature scheme");
   caught = caught && caughtTrac;
+
+  // And the axis rule itself: an RFC whose question carries no verdict. This is the check
+  // that the RFC sweep is a property the gate holds, and it needed a seam to become
+  // falsifiable in this mode rather than only by doctoring the real tree by hand.
+  const beforeRfcSet = failures;
+  checkAnnouncementRfc({ rfcSet: rfcSetMissingVerdict });
+  const caughtRfcSet = failures > beforeRfcSet;
+  if (!caughtRfcSet) fail("self-test: the checker accepted an RFC set with an unverdicted question");
+  caught = caught && caughtRfcSet;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1389,6 +1410,7 @@ function checkAnnouncementRfc(overrides = {}) {
     migration: migrationRfcOverride,
     appchain: appchainRfcOverride,
     trac: tracRfcOverride,
+    rfcSet: rfcSetOverride,
   } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
@@ -1564,8 +1586,12 @@ function checkAnnouncementRfc(overrides = {}) {
   const rfcNames = readdirSync(new URL("rfcs", root))
     .filter((f) => f.endsWith(".md") && f !== "0000-template.md")
     .sort();
-  for (const name of rfcNames) {
-    const text = readFileSync(new URL(`rfcs/${name}`, root), "utf8");
+  // The RFC set is an injected source like every other, so the rule below is falsifiable
+  // in the self-test rather than only by doctoring the real tree by hand.
+  const rfcEntries = rfcSetOverride
+    ? Object.entries(rfcSetOverride)
+    : rfcNames.map((name) => [name, readFileSync(new URL(`rfcs/${name}`, root), "utf8")]);
+  for (const [name, text] of rfcEntries) {
     // A line scan, not a lookahead: `(?=\s*$)` matches at EVERY line end under the m
     // flag, so the first version captured an empty section and the rule passed on every
     // file — vacuous, and only a hand-proof against a doctored RFC showed it.
