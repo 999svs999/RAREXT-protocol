@@ -7,7 +7,7 @@
 // bundle, copies the bundle and mirror into site/registry, and updates the seed
 // list. It does not generate a new proof or contact a network.
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
@@ -186,8 +186,30 @@ const mirrorFiles = [
 rmSync(mirrorTarget, { recursive: true, force: true });
 mkdirSync(mirrorTarget, { recursive: true });
 
+// EVERY FILE IS COPIED FROM THE PLACE THAT OWNS IT — not from the staging directory.
+// Staging is a build artifact, and a stale one is a landmine: five files were found staged
+// four cycles behind the tree, so a single `publish:proof` would have put a gallery without
+// its anchor check, a leaderboard that lists nothing, and a proof page without its published
+// claim back on the live site. The checker would have caught it afterwards; copying from the
+// owner means it cannot happen at all.
+const owners = {
+  "ai.html": join(root, "apps/web/public", "ai.html"),
+  "ai.js": join(root, "apps/web/public", "ai.js"),
+  "gallery.html": join(root, "apps/web/public", "gallery.html"),
+  "renditions.js": join(root, "apps/web/public", "renditions.js"),
+  // Hand-authored, and its home is the web tree: it was staged four cycles behind, so the
+  // bundle fallback that makes the board list anything on a static mirror would have been
+  // published away.
+  "leaderboard.html": join(root, "apps/web/public", "leaderboard.html"),
+};
 for (const name of mirrorFiles) {
-  cpSync(join(mirrorSource, name), join(mirrorTarget, name));
+  const owner = owners[name];
+  if (owner && !existsSync(owner)) {
+    // A named owner that is missing is a refusal, not a fallback: silently taking the
+    // staged copy is exactly how the staleness above got published.
+    throw new Error(`${name} is owned by ${owner}, which does not exist — build it before publishing`);
+  }
+  cpSync(owner ?? join(mirrorSource, name), join(mirrorTarget, name));
 }
 
 // The published bytes are serialized once and hashed once: the seed pins the

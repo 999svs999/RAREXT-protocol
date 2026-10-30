@@ -11,7 +11,7 @@
 //
 // Everything here is in-repo: no network, no fixtures, no bench run.
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1584,6 +1584,44 @@ function checkAnnouncementRfc(overrides = {}) {
   }
   if (!leaderboardPage.includes("./bundle.json")) {
     fail("the leaderboard's fallback no longer reads bundle.json, so on a static mirror it lists nothing");
+  }
+
+  // A RE-PUBLISH MUST NOT REGRESS THE TREE, and the publish list is the whole surface.
+  // Two failures are real and both are checked here: a file the list omits is DELETED by
+  // the publisher's rmSync, and a file it stages from .ai-proof can be arbitrarily old.
+  const publishSource = readFileSync(new URL("scripts/publish-proof.mjs", root), "utf8");
+  const listBlock = /const mirrorFiles = \[([\s\S]*?)\];/.exec(publishSource);
+  const listed = listBlock ? [...listBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+  if (listed.length === 0) {
+    fail("the publish list could not be read, so nothing is checking what a re-publish copies");
+  }
+  // (Completeness — a file the list omits is deleted by the publisher's rmSync — was
+  // already checked above; this adds the two failure modes it did not cover.)
+  // Files with a declared owner are copied from that owner, so staging cannot regress them.
+  const ownerBlock = /const owners = \{([\s\S]*?)\n\};/.exec(publishSource);
+  const ownerNames = ownerBlock ? [...ownerBlock[1].matchAll(/"([^"]+)":/g)].map((m) => m[1]) : [];
+  if (ownerNames.length === 0) {
+    fail("the publisher no longer declares owners, so every file it copies comes from staging");
+  }
+  for (const name of ownerNames) {
+    const owner = join(fileURLToPath(root), "apps/web/public", name);
+    const mirrorCopy = join(fileURLToPath(root), "site/registry/mirror", name);
+    if (!existsSync(owner)) {
+      fail(`the publisher claims ${name} is owned by apps/web/public, which has no such file`);
+      continue;
+    }
+    if (existsSync(mirrorCopy) && !readFileSync(owner).equals(readFileSync(mirrorCopy))) {
+      fail(`apps/web/public/${name} and the served mirror copy have drifted: a re-publish would publish ${name} from the web tree and change what is live`);
+    }
+  }
+  // Everything still staged from .ai-proof must match what is served, or the next publish
+  // would put the older bytes back.
+  for (const name of listed.filter((entry) => !ownerNames.includes(entry))) {
+    const staged = join(fileURLToPath(root), ".ai-proof", "mirror", name);
+    const servedCopy = join(fileURLToPath(root), "site/registry/mirror", name);
+    if (existsSync(staged) && existsSync(servedCopy) && !readFileSync(staged).equals(readFileSync(servedCopy))) {
+      fail(`.ai-proof/mirror/${name} is older than the served copy: a re-publish would regress it`);
+    }
   }
 
   // The mirror's proof page answers "is this copy faithful" — so it must answer for the
