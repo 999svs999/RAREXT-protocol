@@ -412,6 +412,10 @@ if (process.argv.includes("--self-test")) {
   const rfcRentClaimsSettlement = doctor(originalRentRfc, "rfcRentClaimsSettlement", (s) =>
     s.replace("the quote is computed, not charged", "refunds are automatic and instant"),
   );
+  const originalPlacementsRfc = readFileSync(new URL("rfcs/0005-durable-placements.md", root), "utf8");
+  const rfcKeepsForks = doctor(originalPlacementsRfc, "rfcKeepsForks", (s) =>
+    s.replace("refuses the second", "keeps both branches"), 1);
+  
   const doctoredRfc = doctor(originalRfc, "doctoredRfc", (s) => s.replace(
     "**An announcement proposes LOCATIONS, never facts.**",
     "An announcement proposes locations.",
@@ -491,6 +495,13 @@ if (process.argv.includes("--self-test")) {
   const caughtRent = failures > beforeRent;
   if (!caughtRent) fail("self-test: the checker accepted RFC 0018 claiming settlement it does not have");
   caught = caught && caughtRent;
+
+  // And RFC 0005's answer reversing the fork rule.
+  const beforePlacements = failures;
+  checkAnnouncementRfc({ placements: rfcKeepsForks });
+  const caughtPlacements = failures > beforePlacements;
+  if (!caughtPlacements) fail("self-test: the checker accepted RFC 0005 keeping both fork branches");
+  caught = caught && caughtPlacements;
   // And a doc that publishes a knob nothing reads must be reported — the
   // fixture renames a real env name in the architecture doc.
   const beforeConfig = failures;
@@ -1331,6 +1342,7 @@ function checkAnnouncementRfc(overrides = {}) {
     verifiers: verifiersRfcOverride,
     claims: claimsRfcOverride,
     rent: rentRfcOverride,
+    placements: placementsRfcOverride,
   } = overrides;
   console.log(`announcement rfc (rfcs/0019-mirror-announcements.md${rfcOverride ? ", DOCTORED" : ""} vs tree):`);
   const rfc = rfcOverride ?? readFileSync(new URL("rfcs/0019-mirror-announcements.md", root), "utf8");
@@ -1430,6 +1442,35 @@ function checkAnnouncementRfc(overrides = {}) {
     for (const name of inCode) {
       if (!sources.includes(name)) {
         fail(`RFC 0020's question ${number} answer leans on ${name}, which does not exist in the source trees`);
+      }
+    }
+  }
+
+  // RFC 0005 (durable placements) — where data lives and how it survives. Its answers
+  // lean on the durability + sampling machinery, which is in apps/api.
+  const placementsRfc =
+    placementsRfcOverride ?? readFileSync(new URL("rfcs/0005-durable-placements.md", root), "utf8");
+  const PLACEMENTS_ANSWERED = [
+    ["1", "signed receipt", ["the publisher's own write is the record"], ["directoryHolder"]],
+    ["2", "challenges be sampled", ["COMPUTED rather than fixed"], ["samplesForMissingFraction", "MAX_CHALLENGE_NONCE"]],
+    ["3", "placement diversity be expressed", ["required holder COUNT"], ["requiredHolders"]],
+    ["4", "retention commitment for a remote holder", ["the field the artifact carries"], ["retentionUntil"]],
+    ["5", "keep both branches", ["refuses the second"], []],
+    ["6", "bandwidth a repair spends", ["nobody pays anything"], ["RepairOutcome"]],
+  ];
+  for (const [number, marker, quoted, inCode] of PLACEMENTS_ANSWERED) {
+    if (!placementsRfc.includes(marker)) {
+      fail(`RFC 0005's question ${number} no longer appears (looking for "${marker}")`);
+      continue;
+    }
+    for (const quote of quoted) {
+      if (!placementsRfc.includes(quote)) {
+        fail(`RFC 0005's question ${number} answer no longer says "${quote}"`);
+      }
+    }
+    for (const name of inCode) {
+      if (!sources.includes(name)) {
+        fail(`RFC 0005's question ${number} answer leans on ${name}, which does not exist in the source trees`);
       }
     }
   }

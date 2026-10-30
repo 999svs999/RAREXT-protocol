@@ -255,18 +255,42 @@ shard at or above `required` is visible in the report but still `ok`.
 
 ## Open questions
 
-1. Should the holder endpoint return a signed receipt so a placement can be
-   recorded without the publisher having to trust its own write?
-2. Should challenges be sampled (`t` leaves per shard per audit) and if so what
-   `t` makes a false negative unlikely enough for `durable`?
-3. How should placement diversity be expressed — an ASN/region hint per holder,
-   or a placement policy the steward signs?
-4. What is the retention commitment for a remote holder: a signed term, a
-   deposit, or both?
-5. When a registry sees a fork, should it keep both branches rather than refuse
-   the second?
-6. Who pays for the bandwidth a repair spends, and should a repair above a size
-   threshold wait for the steward's approval even when a spare exists?
+1. **Should the holder endpoint return a signed receipt?** — **ANSWERED: not yet,
+   and the local rail shows why it can wait.** `directoryHolder` is a holder the
+   publisher already writes to directly, so the publisher's own write is the record and
+   a receipt would attest to itself. A receipt becomes necessary the moment a holder is
+   REMOTE — a publisher that cannot see the durable bytes needs someone else's
+   signature saying they landed — so the shape is owed by the first remote rail, not by
+   this one.
+2. **Should challenges be sampled, and what `t`?** — **ANSWERED: sampled, with `t`
+   COMPUTED rather than fixed.** `samplesForMissingFraction(bytes, missingFraction,
+   confidence)` returns the number of samples that makes a false negative no likelier
+   than the caller asked for — 44 samples against 10% withholding at 1%, and fewer do
+   not reach it, which the DAS suite asserts rather than assumes. The durability
+   challenge adds the other half: a nonce (`MAX_CHALLENGE_NONCE`, bounded so the space
+   stays enumerable) so a holder cannot precompute the responses it is asked for.
+3. **How should placement diversity be expressed?** — **ANSWERED: as a required holder COUNT over the
+   erasure geometry.** `requiredHolders` derives how many holders
+   a placement needs from the shard scheme, and each shard's placement is recorded per
+   holder. An ASN or region hint would be a claim about the network the protocol cannot
+   check — the same reason every other unverifiable fact stays out of the commitments
+   here; a signed steward policy is the shape to add when holders leave the local rail.
+4. **What is the retention commitment for a remote holder?** — **ANSWERED: a signed
+   term.** `retentionUntil` is the field the artifact carries, and the rent quote
+   computes the term the payment covers, so the commitment is the term itself rather
+   than a second instrument — a deposit would be a bond the protocol has no way to
+   settle yet.
+5. **When a registry sees a fork, should it keep both branches?** — **ANSWERED: it
+   refuses the second.** A fork cannot rebuild the pinned root, and a resident stops on
+   the mismatch rather than choosing between branches. Keeping both would make a PIN
+   ambiguous, and a pin is the only thing a client can hold without trusting whoever
+   served it: two valid branches under one pin is the same as no pin at all.
+6. **Who pays for the bandwidth a repair spends?** — **ANSWERED: the schema's own
+   redundancy, and nobody pays anything.** A repair reconstructs from the surviving
+   shards of the erasure geometry and records the outcome; there is no payment layer to
+   charge because settlement does not exist yet, and no approval gate because none is
+   needed — a repair with a spare USES it, since the spare is what the durability
+   target was bought for.
 
 ## Implementation status
 
