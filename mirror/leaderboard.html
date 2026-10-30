@@ -223,8 +223,54 @@
 
           setStatus(`${entries.length} verified build${entries.length === 1 ? "" : "s"}.`);
         } catch (error) {
+          // A static mirror HAS no API, and a board that shows nothing is worse than one
+          // that tells the truth: fall back to what this mirror's OWN bundle records.
+          // Every row is unranked and says so — a rank is a recomputation, which a static
+          // copy cannot do, and a score asserted rather than derived is the one thing this
+          // protocol refuses to publish. verify.html is where those recomputations happen.
+          const listed = await listFromBundle();
+          if (listed) return;
           boardBody.innerHTML = "";
           setStatus(`Could not load the leaderboard: ${error.message}`, true);
+        }
+      }
+
+      // The mirror's own publications, when no API is reachable. Deliberately NOT ranked:
+      // the columns a rank would need are left as em dashes rather than guessed.
+      async function listFromBundle() {
+        try {
+          const response = await fetch("./bundle.json", { cache: "no-cache" });
+          if (!response.ok) return false;
+          const bundle = await response.json();
+          const publications = Array.isArray(bundle.publications) ? bundle.publications : [];
+          if (publications.length === 0) return false;
+
+          boardBody.innerHTML = publications
+            .map((publication) => {
+              const artifact = publication.artifact ?? {};
+              const body = artifact.body ?? {};
+              const digest = body.media?.blob ?? body.traceHash ?? "";
+              const shown = String(digest).slice(0, 12);
+              return `
+            <tr>
+              <td class="muted">—</td>
+              <td><a href="./verify.html" title="Recomputed in your browser by the mirror's proof page"><code>${escapeHtml(shown)}…</code></a></td>
+              <td class="muted">unranked</td>
+              <td>${escapeHtml(publication.app ?? "")}</td>
+              <td>${escapeHtml(publication.challengeId ?? "")}</td>
+              <td class="score">—</td>
+              <td>—</td>
+              <td>—</td>
+            </tr>`;
+            })
+            .join("");
+
+          setStatus(
+            `${publications.length} publication(s) in this mirror's bundle, unranked: a rank is a recomputation this static copy cannot perform, so it is not asserted here. verify.html recomputes them in your browser.`,
+          );
+          return true;
+        } catch {
+          return false;
         }
       }
 
