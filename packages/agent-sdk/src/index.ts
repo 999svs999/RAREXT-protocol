@@ -31,6 +31,11 @@ import {
   verifyBundleShape,
   verifyCandidates,
   verifyGenerativeReplay,
+  bundleSemanticsCommitment,
+  semanticsCommitmentHolds,
+  semanticsRecordDigest,
+  semanticsKey,
+  type SemanticsCommitmentStatus,
 } from "@rarext/core";
 import {
   allowPrivateFromSeeds,
@@ -898,6 +903,29 @@ export function buildBundle(
     createdAt: options.createdAt ?? new Date().toISOString(),
     sha256: nodeSha256,
   });
+}
+
+/**
+ * Does the registry's semantics commitment cover the records the bundle carries?
+ *
+ * RFC 0003's question 1, answered by a reader with no server and no key: the registry commits
+ * to `id@version -> digest` as an ordinary publication, so an agent holding a bundle can tell
+ * whether the MEANING it just resolved is the one the registry anchored. Returns null when the
+ * bundle records no commitment at all — an artifact that never made the claim, which must not
+ * be reported as one whose claim failed.
+ *
+ * The comparison is core's (`semanticsCommitmentHolds`), so the page a human reads and the
+ * agent that reads the same bundle apply one rule rather than two that can disagree.
+ */
+export function verifyBundleSemantics(bundle: Bundle): SemanticsCommitmentStatus | null {
+  const commitment = bundleSemanticsCommitment(bundle);
+  if (!commitment) return null;
+
+  const records = bundle.semantics ?? [];
+  const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+  const digests: Record<string, string> = {};
+  for (const record of records) digests[semanticsKey(record)] = semanticsRecordDigest(record, sha256);
+  return semanticsCommitmentHolds(commitment, records, (record) => digests[semanticsKey(record)]!);
 }
 
 export function replayBundleAi(bundle: Bundle): BundleAiReplay {

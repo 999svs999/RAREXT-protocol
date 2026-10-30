@@ -1655,6 +1655,31 @@ function checkAnnouncementRfc(overrides = {}) {
     fail("the AI proof page no longer verifies the published bounded claim from the bundle");
   }
 
+  // ONE comparison rule for "does this bundle's semantics commitment cover its records?":
+  // it lives in core, and both the page a human opens and the agent that reads the same
+  // bundle call it. A second copy in a client would be a second rule, free to drift.
+  {
+    const coreSemantics = readFileSync(new URL("packages/core/src/semantics.ts", root), "utf8");
+    if (!coreSemantics.includes("export function semanticsCommitmentHolds(")) {
+      fail("core no longer owns the semantics-commitment comparison");
+    }
+    const webAi = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
+    if (!webAi.includes("compareSemanticsCommitment(")) {
+      fail("the browser page no longer checks a bundle's semantics commitment through core");
+    }
+    if (/commitment\.digests\[/.test(webAi)) {
+      fail("the browser page has re-implemented the semantics-commitment comparison instead of calling core");
+    }
+    const sdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+    if (!sdkSource.includes("semanticsCommitmentHolds(commitment")) {
+      fail("the SDK no longer offers an offline check of a bundle's anchored meanings");
+    }
+    if (/commitment\.digests\[/.test(sdkSource)) {
+      fail("the SDK has re-implemented the semantics-commitment comparison instead of calling core");
+    }
+    console.log("semantics commitment (one comparison rule): core owns it | the page and the agent both call it");
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
@@ -4057,6 +4082,13 @@ checkAuditWindowClaims();
 function checkSemanticsDoc(docOverride, appOverride) {
   console.log(`semantics doc (docs/SEMANTICS.md${docOverride ? ", DOCTORED" : ""} vs code):`);
   const doc = docOverride ?? readFileSync(new URL("docs/SEMANTICS.md", root), "utf8");
+
+  if (!doc.includes("one comparison rule, so the page a human opens and the agent that reads the same bundle")) {
+    fail("SEMANTICS.md no longer states that the commitment comparison is one rule shared by the page and the agent");
+  }
+  if (!readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8").includes("export function verifyBundleSemantics(")) {
+    fail("SEMANTICS.md says the SDK exposes verifyBundleSemantics, which it does not");
+  }
   const app = appOverride ?? readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
 
   // 1. The record's named fields — the doc publishes the full interface; every

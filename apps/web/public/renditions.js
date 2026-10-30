@@ -128,6 +128,26 @@ function parseSemanticsCommitmentArtifact(artifact) {
     return null;
   }
 }
+function semanticsKey(record) {
+  return `${record.id}@${record.version}`;
+}
+function semanticsCommitmentHolds(commitment, records, digestOf) {
+  const missing = [];
+  let matched = 0;
+  for (const record of records) {
+    const key = semanticsKey(record);
+    if (commitment.digests[key] === digestOf(record)) matched += 1;
+    else missing.push(key);
+  }
+  return { committed: Object.keys(commitment.digests).length, matched, missing };
+}
+function bundleSemanticsCommitment(bundle) {
+  for (const publication of bundle.publications ?? []) {
+    const parsed = parseSemanticsCommitmentArtifact(publication?.artifact ?? {});
+    if (parsed) return parsed;
+  }
+  return null;
+}
 
 // apps/web/src/ai.ts
 async function sha256Hex(text) {
@@ -186,25 +206,15 @@ async function verifyPublishedRendition(input) {
     };
   }
 }
-async function semanticsCommitmentHolds(bundle, sha256) {
-  let digests = null;
-  for (const publication of bundle.publications ?? []) {
-    const parsed = parseSemanticsCommitmentArtifact(publication?.artifact ?? {});
-    if (parsed) {
-      digests = parsed.digests;
-      break;
-    }
+async function semanticsCommitmentHolds2(bundle, sha256) {
+  const commitment = bundleSemanticsCommitment(bundle);
+  if (!commitment) return null;
+  const records = bundle.semantics ?? [];
+  const digests = {};
+  for (const record of records) {
+    digests[semanticsKey(record)] = await semanticsRecordDigestAsync(record, sha256);
   }
-  if (!digests) return null;
-  const missing = [];
-  let matched = 0;
-  for (const record of bundle.semantics ?? []) {
-    const key = `${record.id}@${record.version}`;
-    const digest = await semanticsRecordDigestAsync(record, sha256);
-    if (digests[key] === digest) matched += 1;
-    else missing.push(key);
-  }
-  return { committed: Object.keys(digests).length, matched, missing };
+  return semanticsCommitmentHolds(commitment, records, (record) => digests[semanticsKey(record)]);
 }
 async function semanticsRecordDigestAsync(record, sha256) {
   return await sha256(canonicalize(record));
@@ -212,7 +222,7 @@ async function semanticsRecordDigestAsync(record, sha256) {
 export {
   renderBoundedPicture,
   renderProofPicture,
-  semanticsCommitmentHolds,
+  semanticsCommitmentHolds2 as semanticsCommitmentHolds,
   sha256Bytes,
   sha256Hex,
   verifyPublishedRendition

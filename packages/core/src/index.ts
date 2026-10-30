@@ -155,6 +155,9 @@ export {
   SEMANTICS_APP,
   SEMANTICS_COMMITMENT_KIND,
   parseSemanticsCommitmentArtifact,
+  semanticsKey,
+  semanticsCommitmentHolds,
+  bundleSemanticsCommitment,
   semanticsCommitmentArtifact,
   semanticsDigests,
   semanticsForApp,
@@ -163,3 +166,4 @@ export {
   taskForSemantics,
   withSemanticsCommitment,
 } from "./semantics.ts";
+export type { SemanticsCommitmentStatus } from "./semantics.ts";

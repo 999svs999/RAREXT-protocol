@@ -14,6 +14,9 @@ import {
   semanticsDigests,
   SEMANTICS_COMMITMENT_KIND,
   semanticsRecordDigest,
+  semanticsKey,
+  semanticsCommitmentHolds,
+  bundleSemanticsCommitment,
   withSemanticsCommitment,
   claimFromAttestation,
   findSemantics,
@@ -333,4 +336,37 @@ test("the published registry's own commitment covers its own records", () => {
     assert.match(digests[key]!, /^[0-9a-f]{64}$/, `${key} is committed as a hex digest`);
     assert.equal(digests[key], semanticsRecordDigest(record as never, sha), `${key} matches its record`);
   }
+});
+
+test("a commitment covers the records a bundle carries — and null is not false", () => {
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  const records = [LOGIC_SEMANTICS[0]!, LOGIC_SEMANTICS[1]!];
+  const commitment = { digests: semanticsDigests(records, sha) };
+  const digestOf = (record: { id: string; version: number }) =>
+    semanticsRecordDigest(records.find((r) => semanticsKey(r) === semanticsKey(record))!, sha);
+
+  const status = semanticsCommitmentHolds(commitment, records, digestOf);
+  assert.equal(status.committed, 2);
+  assert.equal(status.matched, 2);
+  assert.deepEqual(status.missing, []);
+
+  // A record the commitment does not cover is named, in the order the bundle carries it.
+  const edited = { ...records[0]!, summary: `${records[0]!.summary} (edited)` };
+  const drifted = semanticsCommitmentHolds(commitment, [edited, records[1]!], (record) =>
+    semanticsRecordDigest(
+      [edited, records[1]!].find((r) => semanticsKey(r) === semanticsKey(record))!,
+      sha,
+    ),
+  );
+  assert.deepEqual(drifted.missing, [semanticsKey(edited)]);
+
+  // And a bundle that records NO commitment answers null — an artifact that never made the
+  // claim, which a reader must not report as one whose claim failed.
+  assert.equal(bundleSemanticsCommitment({ publications: [{ artifact: {} }] }), null);
+  assert.equal(
+    bundleSemanticsCommitment({ publications: [{ artifact: semanticsCommitmentArtifact(commitment.digests) }] })?.digests[
+      semanticsKey(records[0]!)
+    ],
+    commitment.digests[semanticsKey(records[0]!)],
+  );
 });

@@ -154,6 +154,8 @@ Publishing accepts a claim:
 The claim is part of the signed envelope, so it cannot be added to someone else's
 publication after the fact.
 
+The anchoring is checkable by a READER, not only by the publisher that wrote it. `semanticsCommitmentHolds` in core compares a bundle's committed `id@version -> digest` map against the records the bundle carries, and both the browser proof page and the SDK's `verifyBundleSemantics` call it — one comparison rule, so the page a human opens and the agent that reads the same bundle cannot disagree about whether a meaning is the one the registry anchored.
+
 ## For app authors
 
 1. Write the semantics first: what the challenge means, in one paragraph, with a named

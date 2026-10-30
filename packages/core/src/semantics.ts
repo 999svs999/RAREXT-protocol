@@ -370,3 +370,59 @@ export function withSemanticsCommitment(
   };
   return { bundle: { ...bundle, publications: [...publications, added] }, added: id };
 }
+
+/** The `id@version` key a commitment uses for a record. */
+export function semanticsKey(record: Pick<Semantics, "id" | "version">): string {
+  return `${record.id}@${record.version}`;
+}
+
+export interface SemanticsCommitmentStatus {
+  /** How many records the commitment covers. */
+  committed: number;
+  /** How many of the carried records the commitment's digest matches. */
+  matched: number;
+  /** The `id@version` keys the commitment does not match, in the order the bundle carries them. */
+  missing: string[];
+}
+
+/**
+ * Does a semantics commitment cover the records a bundle carries — RFC 0003's question 1,
+ * answered by a reader rather than by the publisher that wrote it.
+ *
+ * `digestOf` supplies each record's digest rather than a hasher, because the hashing is the
+ * caller's business: a browser's only hasher is async, node's is sync, and a core function
+ * that took an async hasher would compare a digest against a Promise and call a true claim
+ * false. The COMPARISON and the accounting live here so a page, an agent and a test all
+ * apply one rule.
+ */
+export function semanticsCommitmentHolds(
+  commitment: { digests: Record<string, string> },
+  records: Array<Pick<Semantics, "id" | "version">>,
+  digestOf: (record: Pick<Semantics, "id" | "version">) => string,
+): SemanticsCommitmentStatus {
+  const missing: string[] = [];
+  let matched = 0;
+  for (const record of records) {
+    const key = semanticsKey(record);
+    if (commitment.digests[key] === digestOf(record)) matched += 1;
+    else missing.push(key);
+  }
+  return { committed: Object.keys(commitment.digests).length, matched, missing };
+}
+
+/**
+ * The semantics commitment a bundle carries, or null when it records none.
+ *
+ * Null is not false: a bundle that never made the claim is a different statement from one
+ * whose claim failed, and a reader that collapsed the two would report an unanchored
+ * registry as a broken one.
+ */
+export function bundleSemanticsCommitment(bundle: {
+  publications?: Array<{ artifact?: unknown }>;
+}): { digests: Record<string, string> } | null {
+  for (const publication of bundle.publications ?? []) {
+    const parsed = parseSemanticsCommitmentArtifact((publication?.artifact ?? {}) as never);
+    if (parsed) return parsed;
+  }
+  return null;
+}

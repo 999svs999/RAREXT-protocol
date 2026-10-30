@@ -8,8 +8,11 @@ import {
   verifyGenerativeReplay,
 } from "@rarext/core";
 import {
+  bundleSemanticsCommitment,
+  semanticsCommitmentHolds as compareSemanticsCommitment,
+  semanticsKey,
+  type SemanticsCommitmentStatus as CoreSemanticsCommitmentStatus,
   BOUNDED_RASTER_HEIGHT,
-  parseSemanticsCommitmentArtifact,
   BOUNDED_RASTER_RULE,
   RASTER_RULE,
   renderBoundedRaster,
@@ -445,47 +448,30 @@ export async function verifyPublishedRendition(input: {
 /**
  * Whether a bundle's semantics commitment covers the records the bundle carries.
  *
- * The registry anchors its meanings (RFC 0003's question 1), and until a page shows it,
- * only a test knows. Returns null when the bundle records NO commitment — which is a
- * different statement from "its commitment is wrong", and the difference matters: one is
- * an artifact that never made the claim, the other is an artifact whose claim failed.
+ * The comparison and its accounting live in CORE (`semanticsCommitmentHolds`), so a page, an
+ * agent and a test apply one rule; this wrapper exists only because the browser's hasher is
+ * async and the hashing is the caller's business. Returns null when the bundle records NO
+ * commitment — a different statement from "its commitment is wrong": one artifact never made
+ * the claim, the other made a claim that failed.
  */
-export interface SemanticsCommitmentStatus {
-  committed: number;
-  matched: number;
-  missing: string[];
-}
+export type { SemanticsCommitmentStatus } from "@rarext/core";
 
 export async function semanticsCommitmentHolds(
   bundle: {
     publications?: Array<{ artifact?: unknown }>;
     semantics?: Array<{ id: string; version: number }>;
   },
-  // ASYNC, because the only hasher a browser has is async (crypto.subtle). A synchronous
-  // signature here would compare a digest against a Promise and report every record as
-  // missing — which is exactly what happened, and no test using node's synchronous
-  // createHash could see it.
   sha256: (value: string) => Promise<string> | string,
-): Promise<SemanticsCommitmentStatus | null> {
-  let digests: Record<string, string> | null = null;
-  for (const publication of bundle.publications ?? []) {
-    const parsed = parseSemanticsCommitmentArtifact((publication?.artifact ?? {}) as never);
-    if (parsed) {
-      digests = parsed.digests;
-      break;
-    }
-  }
-  if (!digests) return null;
+): Promise<CoreSemanticsCommitmentStatus | null> {
+  const commitment = bundleSemanticsCommitment(bundle);
+  if (!commitment) return null;
 
-  const missing: string[] = [];
-  let matched = 0;
-  for (const record of bundle.semantics ?? []) {
-    const key = `${record.id}@${record.version}`;
-    const digest = await semanticsRecordDigestAsync(record as never, sha256);
-    if (digests[key] === digest) matched += 1;
-    else missing.push(key);
+  const records = bundle.semantics ?? [];
+  const digests: Record<string, string> = {};
+  for (const record of records) {
+    digests[semanticsKey(record)] = await semanticsRecordDigestAsync(record as never, sha256);
   }
-  return { committed: Object.keys(digests).length, matched, missing };
+  return compareSemanticsCommitment(commitment, records, (record) => digests[semanticsKey(record)]!);
 }
 
 /** The commitment's digest for one record, with the hasher awaited — core's own
