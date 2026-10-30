@@ -804,6 +804,24 @@ function apiAuthorized(req: IncomingMessage, tokens: string[]): boolean {
   });
 }
 
+/**
+ * Decode ONE path segment, refusing a malformed escape by name.
+ *
+ * A segment arrives percent-encoded, so a route that looked it up raw would answer a miss
+ * for an id that IS published — reachable only through a URL nobody wrote. `decodeURIComponent`
+ * throws on a bad escape, which would surface as a server error for input that is the
+ * client's mistake, so the failure is a value rather than an exception.
+ */
+function decodePathSegment(
+  raw: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: decodeURIComponent(raw) };
+  } catch {
+    return { ok: false, error: `path segment ${JSON.stringify(raw)} is not valid percent-encoding` };
+  }
+}
+
 export function createApp(options: AppOptions = {}): AppServer {
   const store = options.store ?? new RarextStore();
   const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
@@ -1295,8 +1313,12 @@ export function createApp(options: AppOptions = {}): AppServer {
       }
 
       if (req.method === "GET" && pathname.startsWith("/v1/challenges/")) {
-        const id = pathname.slice("/v1/challenges/".length);
-        const challenge = challenges.get(id);
+        const decoded = decodePathSegment(pathname.slice("/v1/challenges/".length));
+        if (!decoded.ok) {
+          send(res, 400, { error: decoded.error });
+          return;
+        }
+        const challenge = challenges.get(decoded.value);
 
         if (!challenge) {
           send(res, 404, { error: "challenge not found" });
@@ -2203,7 +2225,12 @@ export function createApp(options: AppOptions = {}): AppServer {
         const match = /^\/v1\/launches\/([^/]+)\/trajectory$/.exec(pathname);
 
         if (match) {
-          const mint = decodeURIComponent(match[1]!);
+          const decodedMint = decodePathSegment(match[1]!);
+          if (!decodedMint.ok) {
+            send(res, 400, { error: decodedMint.error });
+            return;
+          }
+          const mint = decodedMint.value;
           const chain = url.searchParams.get("chain");
 
           if (!chain) {
@@ -2571,9 +2598,14 @@ export function createApp(options: AppOptions = {}): AppServer {
         pathname.startsWith("/v1/identities/") &&
         pathname.endsWith("/rotate")
       ) {
-        const handle = decodeURIComponent(
+        const decodedHandle = decodePathSegment(
           pathname.slice("/v1/identities/".length, -"/rotate".length),
         );
+        if (!decodedHandle.ok) {
+          send(res, 400, { error: decodedHandle.error });
+          return;
+        }
+        const handle = decodedHandle.value;
         const rotation = asKeyRotation(await readJson(req));
         const identity = store.getIdentity(handle);
 
@@ -2610,9 +2642,14 @@ export function createApp(options: AppOptions = {}): AppServer {
         pathname.startsWith("/v1/identities/") &&
         pathname.endsWith("/rotations")
       ) {
-        const handle = decodeURIComponent(
+        const decodedHandle = decodePathSegment(
           pathname.slice("/v1/identities/".length, -"/rotations".length),
         );
+        if (!decodedHandle.ok) {
+          send(res, 400, { error: decodedHandle.error });
+          return;
+        }
+        const handle = decodedHandle.value;
 
         if (!store.getIdentity(handle)) {
           send(res, 404, { error: "identity not found" });
@@ -2628,9 +2665,14 @@ export function createApp(options: AppOptions = {}): AppServer {
         pathname.startsWith("/v1/identities/") &&
         pathname.endsWith("/delegations")
       ) {
-        const handle = decodeURIComponent(
+        const decodedHandle = decodePathSegment(
           pathname.slice("/v1/identities/".length, -"/delegations".length),
         );
+        if (!decodedHandle.ok) {
+          send(res, 400, { error: decodedHandle.error });
+          return;
+        }
+        const handle = decodedHandle.value;
         const delegation = asDelegation(await readJson(req));
         const identity = store.getIdentity(handle);
 
@@ -2662,9 +2704,14 @@ export function createApp(options: AppOptions = {}): AppServer {
         pathname.startsWith("/v1/identities/") &&
         pathname.endsWith("/delegations")
       ) {
-        const handle = decodeURIComponent(
+        const decodedHandle = decodePathSegment(
           pathname.slice("/v1/identities/".length, -"/delegations".length),
         );
+        if (!decodedHandle.ok) {
+          send(res, 400, { error: decodedHandle.error });
+          return;
+        }
+        const handle = decodedHandle.value;
 
         if (!store.getIdentity(handle)) {
           send(res, 404, { error: "identity not found" });
