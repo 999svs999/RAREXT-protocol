@@ -77,8 +77,18 @@ if (listEntries.length === 0) {
 }
 const listDigest = registryListDigest(listEntries, nodeSha256);
 
-if (!(bundle.publications ?? []).some((publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND)) {
-  const template = bundle.publications[0];
+// REPLACE, never carry — the same rule as the semantics commitment below. A commitment
+// that already exists may cover a seed list that has since changed, and a bundle whose
+// federation commitment disagrees with the seed it is published beside proves a lie about
+// which registries exist. The commitment is derived from the list the seed carries NOW.
+{
+  const isCommitment = (publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND;
+  const carried = (bundle.publications ?? []).filter(isCommitment);
+  const kept = (bundle.publications ?? []).filter((publication) => !isCommitment(publication));
+  const template = kept[0] ?? carried[0];
+  if (!template) {
+    throw new Error("the bundle carries no publication to template the federation commitment from");
+  }
   // The leaf REQUIRES an attestation, and the AI verification surface selects its
   // claims by `representation` — so keeping the template's would have published
   // the commitment as a THIRD AI claim, a fake model result inside the very
@@ -86,20 +96,23 @@ if (!(bundle.publications ?? []).some((publication) => publication.artifact?.kin
   // commitment, not a rendition, and the leaf's other fields can stay.
   const attestation = { ...template.attestation };
   delete attestation.representation;
-  bundle.publications.push({
-    ...template,
-    id: "pub-federation-commitment",
-    title: "The federation seed list this bundle commits to",
-    attestation,
-    artifact: {
-      ...template.artifact,
-      ...federationCommitmentArtifact({
-        listUrl,
-        digest: listDigest,
-        generatedAt: new Date().toISOString(),
-      }),
+  bundle.publications = [
+    ...kept,
+    {
+      ...template,
+      id: "pub-federation-commitment",
+      title: "The federation seed list this bundle commits to",
+      attestation,
+      artifact: {
+        ...template.artifact,
+        ...federationCommitmentArtifact({
+          listUrl,
+          digest: listDigest,
+          generatedAt: new Date().toISOString(),
+        }),
+      },
     },
-  });
+  ];
 }
 
 // RFC 0003's question 1: the SEMANTICS records are a bundle FIELD, and the root covers

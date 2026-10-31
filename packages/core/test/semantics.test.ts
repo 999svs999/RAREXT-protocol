@@ -271,14 +271,13 @@ test("withSemanticsCommitment adds a publication, strips representation, and mov
   const rootOf = (b: { publications: Array<Record<string, unknown>> }) =>
     merkleRoot(b.publications.map((x) => publicationLeaf(x as never, bytesSha, PUBLICATION_LEAF_VERSION)), bytesSha);
 
-  // The committed bundle now CARRIES the commitment, so adding is a no-op on it — and
-  // the property is asserted against whatever state the bundle is in: adding one if it
-  // has none, and otherwise checking the one it has actually covers its records. A test
-  // that only asserted "it gets added" would fail the moment the live registry adopted
-  // its own fix, which is the wrong reason to fail.
+  // The committed bundle now CARRIES the commitment, and the function REPLACES rather than
+  // carries: a commitment is derived from the records the bundle carries NOW, so a stale
+  // commitment covering records that have since changed can never survive a publish.
   const already = (committed.publications ?? []).some((x) => (x.artifact as { kind?: string })?.kind === SEMANTICS_COMMITMENT_KIND);
-  const { bundle: withCommitment, added } = withSemanticsCommitment(committed as never, sha256Hex);
-  assert.equal(added, already ? null : "pub-semantics-commitment");
+  const { bundle: withCommitment, added, replaced } = withSemanticsCommitment(committed as never, sha256Hex);
+  assert.equal(added, "pub-semantics-commitment");
+  assert.equal(replaced, already, "a carried commitment is replaced; a missing one is added");
   const publications = withCommitment.publications!;
   assert.equal(publications.length, committed.publications.length + (already ? 0 : 1));
   if (!already) {
@@ -302,11 +301,46 @@ test("withSemanticsCommitment adds a publication, strips representation, and mov
     assert.equal(digests[`${record.id}@${record.version}`], semanticsRecordDigest(record as never, sha256Hex));
   }
 
-  // ...and it is idempotent: running it twice does not add a second commitment.
+  // ...and it replaces rather than accumulates: running it twice leaves ONE commitment, and
+  // still exactly one.
   const again = withSemanticsCommitment(withCommitment as never, sha256Hex);
-  assert.equal(again.added, null);
+  assert.equal(again.added, "pub-semantics-commitment");
+  assert.equal(again.replaced, true);
   assert.equal(again.bundle.publications!.length, publications.length);
+  assert.equal(
+    again.bundle.publications!.filter((x) => (x.artifact as { kind?: string })?.kind === SEMANTICS_COMMITMENT_KIND).length,
+    1,
+    "exactly one commitment survives a re-derive",
+  );
   assert.equal(withSemanticsCommitment({ publications: [] }, sha256Hex).added, null);
+  assert.equal(withSemanticsCommitment({ publications: [] }, sha256Hex).replaced, false);
+});
+
+test("a record that changes after the commitment is re-committed, and the reader proves it", () => {
+  const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");
+  const committed = JSON.parse(readFileSync("site/registry/bundle.json", "utf8")) as Record<string, unknown> & {
+    publications: Array<Record<string, unknown>>;
+    semantics: Array<Record<string, unknown>>;
+  };
+
+  // A record is edited after the first commitment was written — exactly what happens when a
+  // meaning is corrected between publishes.
+  const drifted = {
+    ...committed,
+    semantics: committed.semantics.map((record, index) =>
+      index === 0 ? { ...record, summary: "edited after the first commitment was written" } : record,
+    ),
+  };
+
+  const { bundle: reCommitted } = withSemanticsCommitment(drifted as never, sha256Hex);
+  const status = semanticsCommitmentHolds(
+    bundleSemanticsCommitment(reCommitted as never)!,
+    reCommitted.semantics as never,
+    (record) => semanticsRecordDigest(record as never, sha256Hex),
+  );
+  assert.ok(status, "the re-derived bundle carries a commitment");
+  assert.deepEqual(status!.missing, [], "the re-derived commitment covers the records AS THEY ARE NOW");
+  assert.equal(status!.matched, status!.committed);
 });
 
 /**

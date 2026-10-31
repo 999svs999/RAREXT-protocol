@@ -1,21 +1,17 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-30T02:25:37.629Z",
+  "updatedAt": "2026-10-31T04:16:39.988Z",
   "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
-  "bundleRoot": "0aa477f24e8e276c7a1743f5e0bf2376d45e78510a7557815f27e52eeef8c523",
+  "bundleRoot": "1675d47d27aa24bc18b54caa0d9794859eb007de046e5c9b51275fbb4023bb54",
   "registries": [
     {
-      "id": "apesdaily",
-      "url": "https://registry.apesdaily.com",
-      "operator": "apesdaily",
+      "id": "rarext",
+      "url": "https://999svs999.github.io/RAREXT-protocol",
+      "operator": "rarext",
       "chains": [
-        "rarex",
-        "base",
-        "solana",
-        "bitcoin",
-        "cosmos"
+        "rarex"
       ],
-      "note": "The reference deployment of the RAREXT registry."
+      "note": "The project's own reference deployment."
     }
   ],
   "mirrors": [
@@ -23,11 +19,11 @@
       "id": "github-pages-mirror",
       "url": "https://999svs999.github.io/RAREXT-protocol/mirror/",
       "bundle": "https://999svs999.github.io/RAREXT-protocol/mirror/bundle.json",
-      "root": "0aa477f24e8e276c7a1743f5e0bf2376d45e78510a7557815f27e52eeef8c523",
+      "root": "1675d47d27aa24bc18b54caa0d9794859eb007de046e5c9b51275fbb4023bb54",
       "operator": "999svs999",
       "note": "The static mirror, published on its own path so a client can fail over between this copy and the registry's; both must rebuild the pinned root."
     }
   ],
-  "bundleCid": "bafkreicndk63i7vwfdatiq7lapxuxzvqf77bxmyb6mgqbamzfhvg5tss5e",
+  "bundleCid": "bafkreigdperrngne4ydk22cvliougthkm5cgyvk6vnfgk55iewwytr43cq",
   "pins": []
 }

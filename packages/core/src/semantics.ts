@@ -344,15 +344,23 @@ export function withSemanticsCommitment(
     [key: string]: unknown;
   },
   sha256: (value: string) => string,
-): { bundle: typeof bundle; added: string | null } {
+): { bundle: typeof bundle; added: string | null; replaced: boolean } {
   const publications = bundle.publications ?? [];
   const records = bundle.semantics ?? [];
-  if (records.length === 0) return { bundle, added: null };
-  if (publications.some((publication) => (publication.artifact as { kind?: unknown } | undefined)?.kind === SEMANTICS_COMMITMENT_KIND)) {
-    return { bundle, added: null };
-  }
-  const template = publications[0];
-  if (!template) return { bundle, added: null };
+  if (records.length === 0) return { bundle, added: null, replaced: false };
+
+  // REPLACE, never carry. A commitment that already exists may cover records that have since
+  // changed, and a bundle whose commitment disagrees with its own records is worse than a bundle
+  // with no commitment at all: it proves a lie about the meanings its own claims were made
+  // against. The commitment is derived from the records the bundle carries NOW, so publishing is
+  // a function of the current tree rather than of what a previous publish happened to commit.
+  const isCommitment = (publication: Record<string, unknown>) =>
+    (publication.artifact as { kind?: unknown } | undefined)?.kind === SEMANTICS_COMMITMENT_KIND;
+  const carried = publications.filter(isCommitment);
+  const replaced = carried.length > 0;
+  const kept = publications.filter((publication) => !isCommitment(publication));
+  const template = kept[0] ?? carried[0];
+  if (!template) return { bundle, added: null, replaced: false };
 
   const attestation = { ...(template.attestation as Record<string, unknown> | undefined) };
   delete attestation.representation;
@@ -368,7 +376,7 @@ export function withSemanticsCommitment(
       ...semanticsCommitmentArtifact(semanticsDigests(records, sha256)),
     },
   };
-  return { bundle: { ...bundle, publications: [...publications, added] }, added: id };
+  return { bundle: { ...bundle, publications: [...kept, added] }, added: id, replaced };
 }
 
 /** The `id@version` key a commitment uses for a record. */
