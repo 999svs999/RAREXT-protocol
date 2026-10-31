@@ -3027,11 +3027,11 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // attestation (core's attestGenerativeRun, the same maker the MCP's attest-local uses)
   // and verify it with the same local verifier the registry's own publications pass — a
   // registry that only re-verifies its own output is a museum, not a living one.
-  if (!demoSource.includes("attestGenerativeRun")) {
-    fail("the resident demo no longer makes a fresh attestation through core's attestGenerativeRun");
+  if (!demoSource.includes("attestAiLocally")) {
+    fail("the resident demo no longer makes its fresh attestation through the one maker (the MCP's attestAiLocally)");
   }
-  if (!demoSource.includes("verifyAiArtifact(madeArtifact, makeChallenge)")) {
-    fail("the resident demo no longer verifies its fresh attestation with the local verifier");
+  if (!demoSource.includes("made.verification.correct === true")) {
+    fail("the resident demo no longer gates the make-direction verdict on the maker's own verification");
   }
   if (!demoSource.includes("a fresh attestation made just now verifies locally")) {
     fail("the resident demo no longer reports the make-direction verdict");

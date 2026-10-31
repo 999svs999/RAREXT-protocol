@@ -25,9 +25,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
-import { attestGenerativeRun, generate, verifyAiArtifact } from "@rarext/core";
-import { createHash, randomUUID } from "node:crypto";
-const sha256Of = (value) => createHash("sha256").update(value).digest("hex");
+import { attestAiLocally } from "../apps/mcp/src/attest-local.ts";
 
 const LIVE_SEED_URL = "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
 const TIMEOUT_MS = Number(process.env.RAREXT_DEMO_TIMEOUT_MS ?? 20_000);
@@ -365,28 +363,16 @@ async function main() {
       console.error("\nmaking: the verified bundle carries no generative-starter challenge with a committed model — nothing fresh could be made");
     } else {
       try {
-        const model = makeChallenge.sampleArtifact.body.model;
-        const steps = makeChallenge.spec.steps;
-        const seed = 20261031 % 2147483647;
-        const madeBody = { model, seed, output: generate(model, seed, steps) };
-        const madeArtifact = { app: "ai-generative", kind: "ai.generative", version: 1, mediaType: "application/json", body: madeBody };
-        const madeAttestation = attestGenerativeRun({
-          artifact: madeArtifact,
-          body: madeBody,
-          spec: { steps },
-          app: "ai-generative",
-          challengeId: makeChallenge.id,
-          verifier: "xorshift32-replay",
-          verifierManifest: { app: "ai-generative", version: 1, algorithm: "xorshift32-replay", representation: "generative" },
-          bound: null,
-          id: randomUUID(),
-          createdAt: new Date().toISOString(),
-          sha256: sha256Of,
-        });
-        const madeVerdict = verifyAiArtifact(madeArtifact, makeChallenge);
-        makingOk = !("error" in madeVerdict) && madeVerdict.correct === true;
+        // The demo assembles NOTHING: attestAiLocally is the one maker the MCP verb runs,
+        // given a registry view of the verified bundle's own challenge.
+        const made = await attestAiLocally(
+          makeChallenge.id,
+          { challenge: async () => makeChallenge },
+          { seed: 20261031 % 2147483647 },
+        );
+        makingOk = made.verification.correct === true;
         console.log(
-          `\nmaking: a fresh run (seed ${seed}, ${steps} steps) attested as ${madeAttestation.id.slice(0, 16)}… ` +
+          `\nmaking: a fresh run (seed ${made.verification.seed}, ${made.verification.steps} steps) attested as ${made.attestation.id.slice(0, 16)}… ` +
             `${makingOk ? "VERIFIES against the committed challenge — made right now, locally" : "DID NOT verify — the maker and the verifier disagree"}`,
         );
       } catch (error) {
