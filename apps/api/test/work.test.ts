@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
+import { CREDIT_ROOT_FIELDS, creditRoot } from "../../../packages/core/src/index.ts";
 import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { JsonWebKey } from "../../../packages/core/src/index.ts";
+import type { CreditRecord } from "../src/work.ts";
 import { post, start, stop } from "./helpers.ts";
+
+const hash = (value: string | Uint8Array) =>
+  createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
 
 const pair = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const publicJwk = pair.publicKey.export({ format: "jwk" }) as JsonWebKey;
@@ -156,13 +161,62 @@ test("a worker is paid for work the registry agrees with", async () => {
 
     const earnings = (await (
       await fetch(`${base}/v1/work/earnings?keyId=wk`)
-    ).json()) as { credits: number; byAction: Record<string, { jobs: number }> };
+    ).json()) as {
+      credits: number;
+      byAction: Record<string, { jobs: number }>;
+      records: Array<CreditRecord & { root: string }>;
+    };
 
     assert.equal(earnings.credits, result.bounty);
     assert.equal(earnings.byAction.verify?.jobs, 1);
+
+    // The RECEIPTS travel with the summary, and each one carries the identity a verifier can
+    // recompute from the receipt itself — including from the response AS IT ARRIVED, with the root
+    // the node attached, because presentation keys are not part of the record.
+    assert.equal(earnings.records.length, 1);
+    const receipt = earnings.records[0]!;
+    assert.equal(receipt.keyId, "wk");
+    assert.equal(receipt.root, creditRoot(receipt, hash));
+    assert.equal(creditRoot(earnings.records[0] as unknown as CreditRecord, hash), receipt.root);
   } finally {
     await stop(server);
   }
+});
+
+test("every field of the API's credit record is a decision core holds: covered, with no labels", () => {
+  // The board (which actions exist, what they pay) is this node's policy; the IDENTITY of what it
+  // pays out is the protocol's. This is the seam: the API's type must have no field that core's
+  // field map does not decide on, or a new field would silently sit outside the receipt's identity.
+  const mutators: Record<keyof CreditRecord, (entry: CreditRecord) => void> = {
+    keyId: (entry) => { entry.keyId = "other"; },
+    action: (entry) => { entry.action = "mirror"; },
+    bounty: (entry) => { entry.bounty = 999; },
+    challengeId: (entry) => { entry.challengeId = "other"; },
+    artifactHash: (entry) => { entry.artifactHash = "e".repeat(64); },
+    at: (entry) => { entry.at = "2026-11-02T00:00:00.000Z"; },
+  };
+
+  const base: CreditRecord = {
+    keyId: "wk",
+    action: "verify",
+    bounty: 12,
+    challengeId: "gen-starter",
+    artifactHash: "c".repeat(64),
+    at: "2026-11-01T00:00:00.000Z",
+  };
+  const baseRoot = creditRoot(base, hash);
+  const tried: string[] = [];
+
+  for (const [field, mutate] of Object.entries(mutators)) {
+    const entry: CreditRecord = { ...base };
+    mutate(entry);
+    assert.notEqual(creditRoot(entry, hash), baseRoot, `${field} is part of the payment`);
+    tried.push(field);
+    assert.equal(CREDIT_ROOT_FIELDS[field as keyof typeof CREDIT_ROOT_FIELDS], true);
+  }
+
+  assert.deepEqual(tried.sort(), Object.keys(base).sort(), "every field of the API's type was decided on");
+  assert.deepEqual(Object.keys(CREDIT_ROOT_FIELDS).sort(), Object.keys(base).sort());
 });
 
 test("the same work is never paid twice", async () => {

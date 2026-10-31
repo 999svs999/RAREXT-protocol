@@ -138,6 +138,7 @@ import {
   proposalProblems,
   proposalRoot,
   anchorRoot,
+  creditRoot,
   publicationRoot,
   sha256Hex,
   toHex,
@@ -1787,7 +1788,17 @@ export function createApp(options: AppOptions = {}): AppServer {
 
       if (req.method === "GET" && pathname === "/v1/work/earnings") {
         const keyId = url.searchParams.get("keyId") ?? "";
-        send(res, 200, summarizeEarnings(keyId, store.listCredits()));
+
+        // The RECEIPTS, not only the summary: each credit record carries its recomputed identity, so
+        // a worker can hold a verifiable receipt for its earnings and whoever it is shown to can
+        // recompute it from the receipt itself. `jobs` stays for compatibility; its `id` is a
+        // display label assembled from three fields, not an identity.
+        const records = store
+          .listCredits()
+          .filter((record) => record.keyId === keyId)
+          .map((record) => ({ ...record, root: creditRoot(record, recordRootHash) }));
+
+        send(res, 200, { ...summarizeEarnings(keyId, store.listCredits()), records });
         return;
       }
 

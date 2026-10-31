@@ -67,7 +67,17 @@ const outcome = {
         // Name WHAT answered. A record is small enough to name, and naming it is the point: whoever
         // holds the root can see which record answered, not merely that something did. An anchor's
         // receipts stay out — they are evidence for a chain read, not for a summary line.
-        ...(resolved.kind === "publication"
+        ...(resolved.kind === "credit"
+          ? {
+              record: {
+                keyId: resolved.record?.keyId,
+                action: resolved.record?.action,
+                bounty: resolved.record?.bounty,
+                challengeId: resolved.record?.challengeId,
+                at: resolved.record?.at,
+              },
+            }
+          : resolved.kind === "publication"
           ? {
               record: {
                 id: resolved.record?.id,
@@ -116,7 +126,9 @@ const what =
       ? `a published record by ${resolved.record?.author ?? "an author"} ("${resolved.record?.title ?? ""}"), by the root the record rebuilds to`
       : resolved.kind === "anchor"
         ? `an anchor of ${resolved.record?.leafCount ?? "?"} publication(s) via ${resolved.record?.adapter ?? "an adapter"}${resolved.record?.reference ? ` (${resolved.record.reference})` : ""}, by the root the anchor rebuilds to`
-        : "a registry bundle, by the root its content rebuilds to";
+        : resolved.kind === "credit"
+          ? `a credit of ${resolved.record?.bounty ?? "?"} credit(s) to ${resolved.record?.keyId ?? "a key"} for ${resolved.record?.action ?? "work"} on ${resolved.record?.challengeId ?? "a challenge"}, by the root the receipt rebuilds to`
+          : "a registry bundle, by the root its content rebuilds to";
 console.log(`\nVERIFIED: ${resolved.root} — ${what} — read from ${resolved.source}`);
 console.log(
   "The root decides: this copy is the object the reference named, wherever it was found, and " +

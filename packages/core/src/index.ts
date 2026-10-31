@@ -124,6 +124,7 @@ export {
   publicationRoot,
   PUBLICATION_ROOT_DOMAIN,
   PUBLICATION_ROOT_FIELDS,
+  PUBLICATION_ROOT_REQUIRED_FIELDS,
   PUBLICATION_ROOT_EXCLUDED_FIELDS,
   publicationFromSignedInput,
 } from "./publications.ts";
@@ -131,9 +132,18 @@ export type { PublishInput } from "./publications.ts";
 export {
   anchorRoot,
   ANCHOR_ROOT_DOMAIN,
+  ANCHOR_ROOT_REQUIRED_FIELDS,
   ANCHOR_ROOT_FIELDS,
   ANCHOR_ROOT_EXCLUDED_FIELDS,
 } from "./anchors.ts";
+export {
+  creditRoot,
+  CREDIT_ROOT_DOMAIN,
+  CREDIT_ROOT_REQUIRED_FIELDS,
+  CREDIT_ROOT_FIELDS,
+  CREDIT_ROOT_EXCLUDED_FIELDS,
+  type CreditRecordFields,
+} from "./credits.ts";
 export { matchRecordRoot } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";

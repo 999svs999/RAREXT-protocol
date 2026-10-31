@@ -154,6 +154,7 @@ recompute. A node keeps them and serves them; it never decides anything.
 | `POST /v1/governance/proposals` | Pin a proposal document. The node answers with the root it COMPUTED for it — the number every vote is bound to. A proposal the tally could not compute (no close time, no choices, no pinned policy) is refused here, using the same validation the tally uses. One id names one document: a second, different document under an id already in use is a `409`. |
 | `GET /v1/governance/proposals` | Every proposal this node holds, with the root it computed for each. |
 | `GET /v1/governance/proposals/:root` | One proposal, its votes, and the tally. |
+| `GET /v1/work/earnings` | A key's earnings, with the RECEIPTS: each credit record carries its recomputed `root`, so a worker holds a verifiable receipt and whoever it is shown to recomputes it from the receipt itself. |
 | `GET /v1/anchors` | Every anchor this node holds, each carrying its `anchorIdentity` — the root recomputed from the record. |
 | `GET /v1/anchors/:id` | One anchor, by the id the node minted **or** by the root its record rebuilds to. An anchor is the protocol's trust root; a client that holds a reference recomputes `anchorRoot` from the bytes it received instead of trusting a label. A root no record rebuilds to is a 404, not a guess. |
 | `POST /v1/anchors` | Anchor what is pending, and return the record with its identity. |

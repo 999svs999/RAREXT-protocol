@@ -1,5 +1,6 @@
-import { anchorRoot } from "./anchors.ts";
-import { publicationRoot } from "./publications.ts";
+import { ANCHOR_ROOT_REQUIRED_FIELDS, anchorRoot } from "./anchors.ts";
+import { CREDIT_ROOT_REQUIRED_FIELDS, creditRoot } from "./credits.ts";
+import { PUBLICATION_ROOT_REQUIRED_FIELDS, publicationRoot } from "./publications.ts";
 import type { HashFn } from "./ai.ts";
 
 /**
@@ -14,7 +15,7 @@ import type { HashFn } from "./ai.ts";
  * The rules are domain-separated from each other and from a byte digest, so trying them in any
  * order is safe: at most one can match a given document and root.
  */
-export type RecordKind = "publication" | "anchor";
+export type RecordKind = "publication" | "anchor" | "credit";
 
 export function matchRecordRoot(
   document: unknown,
@@ -26,11 +27,28 @@ export function matchRecordRoot(
   const record = document as Record<string, unknown>;
   const target = wanted.toLowerCase();
 
-  const publication = publicationRoot(record as never, hash).toLowerCase();
-  if (publication === target) return { kind: "publication", root: publication };
+  // A rule answers only for a document it could actually be ABOUT: every field its type marks
+  // required must be present. Coverage alone is not recognition — a credit receipt carries
+  // `challengeId` too, and a digest computed over a mostly-empty cover is the same for every
+  // object, so answering with it would let a nonsense reference call a receipt a publication.
+  // Each rule's required list is declared beside the rule, so there is no second place to drift.
+  const recognizable = (required: readonly string[]) =>
+    required.every((field) => record[field] !== undefined);
 
-  const anchor = anchorRoot(record as never, hash).toLowerCase();
-  if (anchor === target) return { kind: "anchor", root: anchor };
+  if (recognizable(PUBLICATION_ROOT_REQUIRED_FIELDS)) {
+    const publication = publicationRoot(record as never, hash).toLowerCase();
+    if (publication === target) return { kind: "publication", root: publication };
+  }
+
+  if (recognizable(ANCHOR_ROOT_REQUIRED_FIELDS)) {
+    const anchor = anchorRoot(record as never, hash).toLowerCase();
+    if (anchor === target) return { kind: "anchor", root: anchor };
+  }
+
+  if (recognizable(CREDIT_ROOT_REQUIRED_FIELDS)) {
+    const credit = creditRoot(record as never, hash).toLowerCase();
+    if (credit === target) return { kind: "credit", root: credit };
+  }
 
   return null;
 }

@@ -157,6 +157,36 @@ export const PUBLICATION_ROOT_EXCLUDED_FIELDS: readonly string[] = Object.entrie
   .map(([field]) => field)
   .sort();
 
+/**
+ * The fields that make a document RECOGNIZABLE as a publication — the ones its type marks required.
+ *
+ * Recognition is not coverage: a rule that computed a digest over a document carrying none of its
+ * required fields would produce a meaningless digest that a nonsense reference could still "match",
+ * and the client would be told a credit receipt is a publication. Required means the rule is allowed
+ * to answer at all; what the root COVERS is a separate question, answered by the field map above.
+ */
+export const PUBLICATION_ROOT_REQUIRED_FIELDS: readonly string[] = [
+  "author",
+  "authorKey",
+  "signatureAlgorithm",
+  "title",
+  "body",
+  "app",
+  "challengeId",
+  "artifact",
+  "taskId",
+  "visibility",
+  "artifactCommitment",
+  "parentId",
+  "source",
+  "createdAt",
+  "attestedAt",
+  "verified",
+  "signature",
+  "nonce",
+  "attestation",
+];
+
 export function publicationRoot(publication: Publication, hash: HashFn): string {
   const covered: Record<string, unknown> = {};
   const record = publication as unknown as Record<string, unknown>;

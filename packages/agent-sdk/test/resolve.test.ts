@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 import { resolveRarextUri } from "../src/index.ts";
-import { publicationRoot } from "../../core/src/index.ts";
+import { creditRoot, publicationRoot } from "../../core/src/index.ts";
 import type { Publication } from "../../core/src/index.ts";
 import type { RarextResolveOptions } from "../src/index.ts";
 
@@ -241,6 +241,33 @@ test("a record the economy is written in is named by its own root, as served —
     const asBlob = await resolveRarextUri(`rarext:${origin.host}/bundle.json@${bytesRoot}`, opts());
     assert.equal(asBlob.ok, true, asBlob.ok ? "" : asBlob.reason);
     if (asBlob.ok) assert.equal(asBlob.kind, "blob");
+  } finally {
+    await origin.close();
+  }
+});
+
+test("a worker's RECEIPT is nameable: a credit record resolves by the root it rebuilds to", async () => {
+  const record = {
+    keyId: "worker-key",
+    action: "verify",
+    bounty: 12,
+    challengeId: "gen-starter",
+    artifactHash: "c".repeat(64),
+    at: "2026-11-01T00:00:00.000Z",
+  };
+  const hash = (value: string | Uint8Array) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
+  const root = creditRoot(record, hash);
+
+  // Served as the API serves it: the receipt, plus the root the node attached.
+  const origin = await serve(JSON.stringify({ ...record, root }), "application/json");
+  try {
+    const resolved = await resolveRarextUri(`rarext:${origin.host}/receipt.json@${root}`, opts());
+    assert.equal(resolved.ok, true, resolved.ok ? "" : resolved.reason);
+    if (!resolved.ok) return;
+    assert.equal(resolved.kind, "credit");
+    assert.equal((resolved.record as { keyId: string }).keyId, "worker-key");
+    assert.equal((resolved.record as { bounty: number }).bounty, 12);
   } finally {
     await origin.close();
   }

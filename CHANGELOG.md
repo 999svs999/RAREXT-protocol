@@ -11,6 +11,24 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A worker's receipt is verifiable: credit records carry a recomputable root.** The credits board
+  is this node's policy, but the identity of what it pays out is the protocol's — so core owns
+  `creditRoot` over a declared field map, and a credit record is the one protocol record with NO
+  minted label at all: every field is content (`CREDIT_ROOT_EXCLUDED_FIELDS` is empty, which is the
+  claim that identity is entirely recomputable, and `at` is covered deliberately because WHEN a
+  credit was earned is part of the payment, not bookkeeping about it). `GET /v1/work/earnings` now
+  returns the receipts beside the summary, each with its `root` recomputable from the response as it
+  arrived, and the API's own `CreditRecord` type is held against core's field map by a test that
+  enumerates its fields — the seam where a new field would otherwise silently sit outside the
+  receipt's identity. A `rarext:` reference names a receipt too (`matchRecordRoot` gained the
+  credit rule): `a credit of 12 credit(s) to worker-key for verify on gen-starter`.
+- **Recognition is not coverage.** The first version of `matchRecordRoot` let a rule compute a
+  digest over a document carrying none of its required fields — a credit receipt carries
+  `challengeId`, so the publication rule produced a mostly-empty-cover digest that a nonsense
+  reference could have "matched", telling a client a receipt is a publication. Each rule now
+  declares the fields that make a document recognizable AS that kind
+  (`PUBLICATION_ROOT_REQUIRED_FIELDS`, `ANCHOR_ROOT_REQUIRED_FIELDS`,
+  `CREDIT_ROOT_REQUIRED_FIELDS`), declared beside the rule so there is no second place to drift.
 - **An anchor is addressable by the root its record rebuilds to** — the last object in the protocol
   that was named only by a minted label. `anchorRoot(anchor, hash)` in core covers the CLAIM (which
   root, over which publications, which leaf version, attested by which adapter under which reference

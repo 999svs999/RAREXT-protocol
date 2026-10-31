@@ -6,7 +6,7 @@ import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { publicationRoot } from "../../core/src/index.ts";
+import { creditRoot, publicationRoot } from "../../core/src/index.ts";
 
 const committed = readFileSync(new URL("../../../site/registry/bundle.json", import.meta.url), "utf8");
 const seed = JSON.parse(readFileSync(new URL("../../../site/registry/seed.json", import.meta.url), "utf8")) as {
@@ -197,6 +197,40 @@ test("the CLI names an ANCHOR: the protocol's trust root is addressable by the r
     assert.equal(parsed.resolved.kind, "anchor");
     assert.equal(parsed.resolved.record.anchoredRoot, anchor.root);
     assert.equal(parsed.resolved.record.adapter, "eip-3009-anchor");
+  } finally {
+    await origin.close();
+  }
+});
+
+test("the CLI names a RECEIPT: what was earned, by whom, for what", async () => {
+  const record = {
+    keyId: "worker-key",
+    action: "verify",
+    bounty: 12,
+    challengeId: "gen-starter",
+    artifactHash: "c".repeat(64),
+    at: "2026-11-01T00:00:00.000Z",
+  };
+  const hash = (value: string | Uint8Array) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
+  const root = creditRoot(record, hash);
+
+  const origin = await serve(JSON.stringify({ ...record, root }), "application/json");
+  try {
+    const human = await runCli([`rarext:${origin.host}/receipt.json@${root}`, "--scheme", "http"]);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(
+      human.stdout,
+      /a credit of 12 credit\(s\) to worker-key for verify on gen-starter, by the root the receipt rebuilds to/,
+    );
+
+    const json = await runCli([`rarext:${origin.host}/receipt.json@${root}`, "--scheme", "http", "--json"]);
+    const parsed = JSON.parse(json.stdout) as {
+      resolved: { kind: string; record: { action: string; bounty: number; at: string } };
+    };
+    assert.equal(parsed.resolved.kind, "credit");
+    assert.equal(parsed.resolved.record.bounty, 12);
+    assert.ok(parsed.resolved.record.at, "when it was earned travels with the answer");
   } finally {
     await origin.close();
   }

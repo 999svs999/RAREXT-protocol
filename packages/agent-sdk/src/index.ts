@@ -67,6 +67,7 @@ import type {
   AdapterInfo,
   AdapterStatus,
   Anchor,
+  CreditRecordFields,
   AppInfo,
   Artifact,
   Attestation,
@@ -463,13 +464,13 @@ export type RarextResolveResult =
        * What the root turned out to name: a registry's bundle, a record (a publication or an
        * anchor — core owns the registry of record identities), or raw bytes.
        */
-      kind: "bundle" | "publication" | "anchor" | "blob";
+      kind: "bundle" | "publication" | "anchor" | "credit" | "blob";
       root: string;
       source: string;
       /** A bundle, when the root named one. */
       bundle?: Bundle;
-      /** The record, when the root named one — a publication or an anchor. */
-      record?: Publication | Anchor;
+      /** The record, when the root named one — a publication, an anchor, or a credit receipt. */
+      record?: Publication | Anchor | CreditRecordFields;
       /** A blob's bytes and the media type the host served them with, when the root named bytes. */
       bytes?: Uint8Array;
       mediaType?: string;
@@ -507,7 +508,7 @@ async function readCandidate(
     attempts: Array<{ url: string; reason: string }>;
   },
 ): Promise<
-  | { kind: "publication" | "anchor"; source: string; record: Publication | Anchor }
+  | { kind: "publication" | "anchor" | "credit"; source: string; record: Publication | Anchor | CreditRecordFields }
   | { kind: "blob"; source: string; bytes: Uint8Array; mediaType?: string }
   | null
 > {

@@ -31,6 +31,18 @@ export const ANCHOR_ROOT_EXCLUDED_FIELDS: readonly string[] = Object.entries(ANC
   .map(([field]) => field)
   .sort();
 
+/** The fields that make a document recognizable as an anchor — its type's required fields. */
+export const ANCHOR_ROOT_REQUIRED_FIELDS: readonly string[] = [
+  "id",
+  "root",
+  "publicationIds",
+  "leafCount",
+  "createdAt",
+  "adapter",
+  "reference",
+  "receipts",
+];
+
 /**
  * An anchor's identity, recomputed from the record itself.
  *

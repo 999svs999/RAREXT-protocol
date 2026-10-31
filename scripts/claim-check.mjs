@@ -2410,6 +2410,7 @@ function checkNamingRfc(overrides = {}) {
     "urlForRarextUri",
     "publicationRoot",
     "anchorRoot",
+    "creditRoot",
     "matchRecordRoot",
     "bundleShapeProblem",
   ];
@@ -2551,6 +2552,10 @@ function checkRolesRfc(overrides = {}) {
     [
       "a publication's identity is recomputed from the record",
       "that the entries the economy is written in are answerable rather than asserted",
+    ],
+    [
+      "a credit carries its own recomputable root",
+      "that a worker's receipt is checkable, not just recorded",
     ],
   ]) {
     if (!haystack.includes(squash(sentence))) {
