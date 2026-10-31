@@ -59,6 +59,7 @@ import type {
   AiLocalVerification,
   BundleSeed,
   CandidateOutcome,
+  CandidateRefusal,
   GenerativeBody,
   GenerativeMedia,
   GenerativeSpec,
@@ -232,6 +233,8 @@ export interface VerifiedBundleFromSeeds extends VerifiedBundleSource {
   candidates: number;
   /** The seeds (their URLs) that nominated the winning copy. */
   seeds: string[];
+  /** Every refusal recorded before the winning copy was accepted, each with its stage. */
+  refusals: CandidateRefusal[];
 }
 
 /**
@@ -405,13 +408,18 @@ export async function findVerifiedBundleFromSeeds(
         fetch: request,
         allowPrivate,
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { httpStatus: response.status });
       return readBundleResponseBytes(response);
     },
   });
 
-  if (outcome.status !== "verified") throw new Error(outcome.message);
-  return outcome;
+  if (outcome.status !== "verified") {
+    // The refusals travel WITH the error, each carrying the stage it was refused at — the evidence
+    // an operator needs, and the reason a resolver's attempts can be structural instead of prose.
+    throw Object.assign(new Error(outcome.message), { refusals: outcome.refusals });
+  }
+  // And a WINNING copy still names everything that was refused on the way to it.
+  return { ...outcome, refusals: outcome.refusals };
 }
 
 /**
@@ -476,9 +484,23 @@ export type RarextResolveResult =
       mediaType?: string;
       candidates: number;
       /** Locations that were tried and refused before one verified. Evidence, not noise. */
-      attempts: Array<{ url: string; reason: string }>;
+      attempts: RarextAttempt[];
     }
-  | { ok: false; reason: string; attempts: Array<{ url: string; reason: string }> };
+  | { ok: false; reason: string; attempts: RarextAttempt[] };
+
+/**
+ * WHAT an attempt's refusal WAS, structurally — the difference an operator debugging mirrors asks
+ * for first: was the host DOWN, did it answer without the object, or did it serve something that
+ * does not rebuild the pinned root? A kind, not prose to be matched: the failure mode this closes is
+ * exactly the one where a caller greps a message string and misfiles a dead mirror as a liar.
+ */
+export type RarextAttemptKind = "unreachable" | "unavailable" | "malformed" | "mismatch" | "bundle";
+
+export interface RarextAttempt {
+  url: string;
+  reason: string;
+  kind: RarextAttemptKind;
+}
 
 /** Is this authority something DNS can resolve, or just a name a registry uses for itself? */
 function authorityIsHost(authority: string): boolean {
@@ -505,7 +527,7 @@ async function readCandidate(
     sha256?: Sha256;
     timeoutMs?: number;
     allowPrivate: boolean;
-    attempts: Array<{ url: string; reason: string }>;
+    attempts: RarextAttempt[];
   },
 ): Promise<
   | { kind: "publication" | "anchor" | "credit"; source: string; record: Publication | Anchor | CreditRecordFields }
@@ -525,12 +547,12 @@ async function readCandidate(
       { fetch: request, allowPrivate: ports.allowPrivate },
     );
   } catch (error) {
-    ports.attempts.push({ url, reason: `not read: ${(error as Error).message}` });
+    ports.attempts.push({ url, reason: `not read: ${(error as Error).message}`, kind: "unreachable" });
     return null;
   }
 
   if (!response.ok) {
-    ports.attempts.push({ url, reason: `not read: the host answered ${response.status}` });
+    ports.attempts.push({ url, reason: `not read: the host answered ${response.status}`, kind: "unavailable" });
     return null;
   }
 
@@ -549,7 +571,7 @@ async function readCandidate(
       parsed = JSON.parse(text);
     } catch (error) {
       parsed = undefined;
-      ports.attempts.push({ url, reason: `its JSON does not parse: ${(error as Error).message}` });
+      ports.attempts.push({ url, reason: `its JSON does not parse: ${(error as Error).message}`, kind: "malformed" });
     }
 
     if (parsed !== undefined && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -568,10 +590,11 @@ async function readCandidate(
           `no record rule rebuilds this document to the pinned ${wanted.slice(0, 16)}… ` +
           `(as a publication it is ${asPublication.slice(0, 16)}…; a record is served with its root ` +
           "and durability attached, and those are not part of it)",
+        kind: "mismatch",
       });
     }
   } else {
-    ports.attempts.push({ url, reason: "its bytes are not a JSON object, so they name no record" });
+    ports.attempts.push({ url, reason: "its bytes are not a JSON object, so they name no record", kind: "mismatch" });
   }
 
   // The byte reading: whatever it is, the digest decides.
@@ -584,6 +607,7 @@ async function readCandidate(
   ports.attempts.push({
     url,
     reason: `its bytes hash to ${digest.slice(0, 16)}…, not the pinned ${wanted.slice(0, 16)}…`,
+    kind: "mismatch",
   });
 
   return null;
@@ -639,7 +663,29 @@ export async function resolveRarextUri(
 
   // Every refusal is recorded as it happens, so a failure reads as evidence: which location was
   // tried, and why it did not count.
-  const attempts: Array<{ url: string; reason: string }> = [];
+    const attempts: RarextAttempt[] = [];
+
+  // The walk's refusals, mapped STRUCTURALLY from the stage each happened at (a fetch refusal is
+  // unreachable, a shape or parse refusal is malformed, a pin or root refusal is a mismatch) — never
+  // by matching the message prose. Used on success (the refusals a winning copy accumulated) and on
+  // failure (the aggregate's), because an operator tells a dead mirror from a lying one by the KIND,
+  // not by grepping strings.
+  const mapRefusals = (refusals: Array<{ url: string; reason: string; stage: string; httpStatus?: number }>) => {
+    for (const refusal of refusals) {
+      attempts.push({
+        url: refusal.url,
+        reason: refusal.reason,
+        kind:
+          refusal.stage === "fetch"
+            ? refusal.httpStatus
+              ? "unavailable"
+              : "unreachable"
+            : refusal.stage === "shape" || refusal.stage === "parse"
+              ? "malformed"
+              : "mismatch",
+      });
+    }
+  };
   const { onCandidate, ...rest } = options;
   const seed: SeedDocument = {
     // The seed's own location is the CANDIDATE, not the reference string. `allowPrivateFromSeeds`
@@ -663,10 +709,12 @@ export async function resolveRarextUri(
       ...rest,
       allowPrivateHosts: allowPrivate,
       onCandidate: (event) => {
-        if (event.status === "refused") attempts.push({ url: event.url, reason: event.reason });
+        // Observation only: the structured evidence lands in `attempts` from the aggregate the walk
+        // throws, which carries the STAGE each refusal happened at.
         onCandidate?.(event);
       },
     });
+    mapRefusals(found.refusals);
     return {
       ok: true,
       kind: "bundle",
@@ -680,6 +728,16 @@ export async function resolveRarextUri(
     // The bundle reading is exhausted. A reference does not say what it names — only the root does —
     // so the same candidates are read as RECORDS and as BYTES before anything is called missing.
     const bundleReason = (error as Error).message;
+
+    // The walk's refusals, with the stage each happened at — mapped STRUCTURALLY (a fetch refusal is
+    // unreachable, a shape or parse refusal is malformed, a pin or root refusal is a mismatch), never
+    // by matching the message prose. This is the bundle reading's evidence, and it is what lets an
+    // operator tell a dead mirror from a lying one without grepping strings.
+    if ("refusals" in (error as object)) {
+      mapRefusals(
+        (error as unknown as { refusals: Array<{ url: string; reason: string; stage: string }> }).refusals,
+      );
+    }
 
     // One fetch per candidate, interpreted twice: a publication record, then raw bytes. A failure
     // reports every reading, because "not a bundle" is not the same answer as "not there".

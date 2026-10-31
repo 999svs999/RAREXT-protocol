@@ -92,6 +92,15 @@ test("a LOCATION IS A HINT: a wrong copy is refused by name and a mirror still r
     const evidence = impossible.attempts.map((entry) => entry.reason).join(" | ");
     assert.match(evidence, /its bytes hash to/, "the byte reading says what it hashed to");
     assert.match(evidence, /as a publication it is/, "the record reading says what the document was, or that it is not one");
+
+    // The kinds are STRUCTURAL, so an operator can tell a dead mirror from a lying one without
+    // grepping prose: the lying copy is a mismatch, not an outage.
+    const lying = impossible.attempts.filter((entry) => entry.url === wrong.url);
+    assert.deepEqual(
+      lying.map((entry) => entry.kind),
+      ["mismatch", "mismatch", "mismatch"],
+      "a copy that answers but does not rebuild the root is a mismatch, three readings over",
+    );
   } finally {
     await wrong.close();
     await right.close();
@@ -207,6 +216,12 @@ test("the readings AFTER a bundle obey the SAME policy as the walk: a private ca
       /not read: .*private or link-local/,
       "the later readings refuse by policy too — a record is not readable just because we stopped expecting a bundle",
     );
+    // And the policy refusal is not a MISMATCH for this reference: nothing was served from the
+    // refused location, so nothing lied about content. (A public host that answered 404 IS
+    // classified as unavailable — it answered — while the policy-blocked private candidate is
+    // unreachable, and the kinds say which is which.)
+    assert.ok(outward.attempts.every((entry) => entry.kind !== "mismatch"));
+    assert.ok(outward.attempts.some((entry) => entry.kind === "unreachable"));
   } finally {
     await origin.close();
   }

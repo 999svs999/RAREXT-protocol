@@ -37,6 +37,15 @@ export interface BundleVerification {
   computedRoot: string | null;
   publications: number;
   reason: string | null;
+  /**
+   * WHY an invalid document failed: "structure" means it is not shaped like a bundle at all
+   * (no manifest, no publications), while "rebuild" means it is shaped like one and CONTRADICTS
+   * ITSELF — the root its manifest states is not the root its publications rebuild. The distinction
+   * is not decoration: a client classifying refusals for an operator owes them the difference
+   * between "this was never a bundle" and "this bundle lies about its own root", and the stage a
+   * walk records is derived from it.
+   */
+  kind: "structure" | "rebuild";
 }
 
 /**
@@ -86,7 +95,7 @@ export function verifyBundleShape(
   const problem = bundleShapeProblem(bundle);
 
   if (problem !== null) {
-    return { valid: false, root: "", computedRoot: "", publications: 0, reason: problem };
+    return { valid: false, root: "", computedRoot: "", publications: 0, reason: problem, kind: "structure" };
   }
 
   const leaves = bundle.publications.map((publication) =>
@@ -102,6 +111,7 @@ export function verifyBundleShape(
       computedRoot,
       publications: leaves.length,
       reason: "the publications in this bundle do not rebuild the anchored root",
+      kind: "rebuild",
     };
   }
 
@@ -113,6 +123,7 @@ export function verifyBundleShape(
       computedRoot,
       publications: leaves.length,
       reason: "the manifest leaf list does not match the publications",
+      kind: "rebuild",
     };
   }
 
@@ -122,6 +133,7 @@ export function verifyBundleShape(
     computedRoot,
     publications: leaves.length,
     reason: null,
+    kind: "rebuild",
   };
 }
 
@@ -378,6 +390,8 @@ export interface CandidateRefusal {
   nominators: BundleSeed[];
   /** For a root refusal: what the copy rebuilt and what was pinned to it. */
   detail?: { computedRoot?: string; pinnedRoot?: string };
+  /** For a fetch refusal: the status the host answered, when it answered at all. */
+  httpStatus?: number;
 }
 
 /** Per-attempt outcome a caller can observe: the shape the demo prints as it lands. */
@@ -456,11 +470,15 @@ export async function verifyCandidates(
     try {
       bytes = await fetchBytes(url);
     } catch (error) {
+      // A fetch refusal carries the status the host answered, when it answered at all — the
+      // difference between a dead mirror and one that answered without the object, which callers
+      // classify structurally instead of grepping the message.
       refuse({
         url,
         reason: error instanceof Error ? error.message : "fetch failed",
         stage: "fetch",
         nominators,
+        httpStatus: (error as { httpStatus?: number })?.httpStatus,
       });
       continue;
     }
@@ -496,7 +514,10 @@ export async function verifyCandidates(
         refuse({
           url,
           reason: verification.reason ?? "the bundle does not verify",
-          stage: "shape",
+          // A document that was never a bundle is a SHAPE refusal; one that contradicts its own
+          // manifest is a ROOT refusal — the operator-facing difference between "never a bundle"
+          // and "this bundle lies about its own root".
+          stage: verification.kind === "rebuild" ? "root" : "shape",
           nominators,
         });
         continue;

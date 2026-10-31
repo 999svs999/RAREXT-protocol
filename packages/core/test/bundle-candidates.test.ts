@@ -45,8 +45,9 @@ test("the shared sequence: tampered, pin-passing but root-wrong, then the honest
   const reserialized = JSON.stringify(committed, null, 2) + "\n";
 
   // Candidate 1: an altered title, so the rebuilt root moves. Its nominator
-  // carries no CID pin, so the refusal names the shape — the stage that comes
-  // after the pin stage did not fire.
+  // carries no CID pin, so the pin stage did not fire — and the refusal lands
+  // at the ROOT stage, because the bundle contradicts its own manifest rather
+  // than merely being misshapen.
   const tampered = structuredClone(committed);
   tampered.publications = tampered.publications.map((publication, index) =>
     index === 0 ? { ...publication, title: "an altered title" } : publication,
@@ -111,7 +112,7 @@ test("the shared sequence: tampered, pin-passing but root-wrong, then the honest
     result.refusals.map((refusal) => ({ url: refusal.url, stage: refusal.stage })),
     [
       { url: "https://a.example/re-serialized.json", stage: "pin" },
-      { url: "https://a.example/tampered.json", stage: "shape" },
+      { url: "https://a.example/tampered.json", stage: "root" },
       { url: "https://a.example/another.json", stage: "root" },
     ],
   );

@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Attempt evidence is structural: every refusal an attempt records now carries a KIND** —
+  `unreachable` (the host never answered), `unavailable` (it answered without the object), `malformed`
+  (not parseable as the shape a reading needs), `mismatch` (it answered and does not rebuild the
+  pinned root) — so an operator debugging mirrors tells a dead mirror from a lying one without
+  grepping prose, which is the exact failure mode the codebase's own rule ("never classify a failure
+  by matching message prose") warns about. The kinds are mapped from the walk's refusal STAGES and
+  from the status a fetch carried — which meant teaching two things to say what they know: the walk's
+  fetch refusals now carry the HTTP status they answered (a dead mirror and a 404 are different
+  facts), and `verifyBundleShape` distinguishes "not shaped like a bundle" from "contradicts its own
+  manifest" (`kind: "structure" | "rebuild"`), which the walk files at the right stage — a bundle
+  lying about its own root is a ROOT refusal, not a shape one. The resolve CLI prints `[kind]` per
+  attempt and a tally. Verified live: a wrong-root reference against the deployed registry reads
+  `attempts: mismatch 3`.
+- `findVerifiedBundleFromSeeds` keeps its evidence on both paths: a winning copy carries the
+  refusals accumulated on the way to it, and a refusal throws WITH its refusals instead of a bare
+  message — which is what let the resolver's attempts become structural at all.
 - **The mirror's verify page resolves a `rarext:` reference in the reader's own browser** — paste
   one, and the page parses it with core's parser, fetches the location, and verifies it through the
   readings: a bundle through the page's own verifier, a record by hashing the preimage core computes

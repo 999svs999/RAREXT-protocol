@@ -112,7 +112,19 @@ if (!parsed.ok) {
 }
 
 console.log(`reference ${formatRarextUri(parsed.uri)}`);
-for (const attempt of resolved.attempts) console.log(`  tried ${attempt.url}\n    ${attempt.reason}`);
+const tally = {};
+for (const attempt of resolved.attempts) {
+  console.log(`  [${attempt.kind}] ${attempt.url}\n    ${attempt.reason}`);
+  tally[attempt.kind] = (tally[attempt.kind] ?? 0) + 1;
+}
+if (resolved.attempts.length > 0) {
+  console.log(
+    "  attempts: " +
+      Object.entries(tally)
+        .map(([kind, count]) => `${kind} ${count}`)
+        .join(" · "),
+  );
+}
 
 if (!resolved.ok) {
   console.error(`\nNOT VERIFIED: ${resolved.reason}`);
