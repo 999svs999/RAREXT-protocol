@@ -120,7 +120,12 @@ export type {
   VoteRefusalReason,
   VoteStatement,
 } from "./governance.ts";
-export { publicationFromSignedInput } from "./publications.ts";
+export {
+  publicationRoot,
+  PUBLICATION_ROOT_DOMAIN,
+  PUBLICATION_ROOT_EXCLUDED_FIELDS,
+  publicationFromSignedInput,
+} from "./publications.ts";
 export type { PublishInput } from "./publications.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";

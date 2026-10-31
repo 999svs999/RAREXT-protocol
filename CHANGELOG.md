@@ -11,6 +11,30 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A publication now has a recomputable identity, so the records the storage economy is written in
+  are answerable instead of asserted.** A publication's name was an `id` the registry minted — a
+  label, which meant a client could only take the node's word for what it was holding. Core now
+  computes `publicationRoot(publication, hash)`: canonical, domain-separated, and taken over what
+  the AUTHOR published, so the same content is the same object whichever node wrote it down and
+  however many ids it was filed under. `id`, `attestedAt`, the attestation's own key id and
+  signature, and `durability` are excluded BY NAME — the last one because core's own type already
+  calls it "a reader's observation, not part of the publication".
+- **What a root covers is a decision, not an omission, and the gate enforces it.** The test declares
+  one mutator per field as `Record<keyof Publication, …>`, so adding a field to `Publication` fails
+  the TYPE CHECK until somebody decides whether the root covers it or excludes it; the runtime half
+  then proves the decision: every covered field moves the root, every excluded field provably does
+  not, and every field of the record was decided on. A `HashFn` is a port, so the test also brings a
+  hashing function that LOOKS at the preimage and shows the domain prefix is really there and the
+  excluded labels are really absent.
+- **`GET /v1/publications/:id` accepts the root too**, and every publication the API hands out now
+  carries its `root` — recomputed at read time inside the one decorator all eight
+  publication-returning paths already pass through, so no route has to remember. The served record
+  rebuilds to the served root: the client recomputes the node's claim from the bytes it received.
+  Two copies of one record under different minted ids share a root and therefore answer for each
+  other, and a 64-hex segment no record rebuilds to is a 404 rather than a guess.
+- The two record-root hashers became one: `governanceSha256` is now `recordRootHash`, a `HashFn` that
+  takes bytes as well as text, because a second hasher for one kind of identity drifts the first time
+  a digest's encoding is questioned. (tsc caught the width mismatch, not a test.)
 - **A reference names CONTENT, not a format: bytes resolve by their sha256, and one URL can be two
   objects.** `resolveRarextUri` had one reading — a registry's bundle, checked by the root its content
   rebuilds to. It now has two, and a reference does not say which it means (only the root does), so

@@ -1,3 +1,5 @@
+import { canonicalize } from "./canonical.ts";
+import type { HashFn } from "./ai.ts";
 import type {
   Attestation,
   Challenge,
@@ -92,4 +94,51 @@ export function publicationFromSignedInput(input: PublishInput, extras: {
     attestationKeyId: extras.attestationKeyId,
     attestationSignature: extras.attestationSignature,
   };
+}
+
+/** Domain separation: a publication's root can never be mistaken for another rule's output. */
+export const PUBLICATION_ROOT_DOMAIN = "rarext.publication.root.v1";
+
+/**
+ * The fields a publication's root does NOT cover, because they are bookkeeping rather than content:
+ * `id` is a label the publisher mints, `attestedAt` is when a particular node wrote the record
+ * down, the attestation's own key id and signature say WHO attested (not what was published), and
+ * `durability` is that node's storage tier for the bytes.
+ *
+ * Named in one place, and held by a test that enumerates the record's fields: adding a field to
+ * `Publication` fails that test until the new field is either covered or listed here. Identity by
+ * silence is how a rule rots — the failure mode this avoids is a future field quietly NOT being
+ * part of the thing the root is supposed to commit to.
+ */
+export const PUBLICATION_ROOT_EXCLUDED_FIELDS = [
+  "id",
+  "attestedAt",
+  "attestationKeyId",
+  "attestationSignature",
+  "durability",
+] as const;
+
+/**
+ * A publication's identity, recomputed from the record itself.
+ *
+ * A publication is how the storage economy writes anything down, and until now its name was an
+ * `id` the registry minted — a label, so a client could only take the node's word for what it was
+ * holding. A root makes the record answerable: the same published content is the same object
+ * whichever node wrote it down, a copy that differs in one covered field is a different object, and
+ * a reference can name it (RFC 0022).
+ *
+ * Canonicalization does the field-order work (the governance lesson: an identity that depends on
+ * key order is an identity that changes for no reason), and `hash` is a PORT so a browser, a node
+ * and a test can each bring their own digest and still agree on what the record is.
+ */
+export function publicationRoot(publication: Publication, hash: HashFn): string {
+  const covered: Record<string, unknown> = {};
+  const excluded: readonly string[] = PUBLICATION_ROOT_EXCLUDED_FIELDS;
+
+  for (const key of Object.keys(publication).sort()) {
+    if (excluded.includes(key)) continue;
+    covered[key] = (publication as unknown as Record<string, unknown>)[key];
+  }
+
+  return hash(`${PUBLICATION_ROOT_DOMAIN}\n${canonicalize(covered)}`);
 }

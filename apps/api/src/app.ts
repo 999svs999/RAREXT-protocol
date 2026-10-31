@@ -136,7 +136,9 @@ import {
   RAREXT_SITE_BINDING_PATH,
   proposalProblems,
   proposalRoot,
+  publicationRoot,
   sha256Hex,
+  toHex,
   tallyVotes,
   voteProblems,
   voteStatement,
@@ -146,6 +148,7 @@ import {
   type OperatorAttestation,
   type StorageInclusionProof,
   type TallyResult,
+  type HashFn,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
 import {
@@ -766,7 +769,13 @@ function asExternalProof(value: unknown): TracIdentityProof | undefined {
  * One adapter, used by everything that needs it here, so the root this node stores, the root it
  * serves, and the root the tally recomputes cannot be three different numbers.
  */
-const governanceSha256 = (value: string): string => sha256Hex(nodeSha256, value);
+/**
+ * The hex hasher every record root is computed with — a proposal's, a vote's, a publication's.
+ * ONE name and one implementation: two hashers for one kind of identity drift the first time a
+ * digest's encoding is questioned, and a root nobody can predict is not an identity.
+ */
+const recordRootHash: HashFn = (value) =>
+  typeof value === "string" ? sha256Hex(nodeSha256, value) : toHex(nodeSha256(value));
 
 /**
  * Does this vote's signature hold? The algorithm comes from the KEY (`verifyPayload` resolves the
@@ -793,11 +802,11 @@ function votesSignatureHolds(vote: GovernanceVote): boolean {
  * is core's. A node that computed its own tally would be the committee RFC 0021 exists to avoid.
  */
 function tallyFor(store: RarextStore, proposal: GovernanceProposal): TallyResult | { error: string } {
-  const root = proposalRoot(proposal, governanceSha256);
+  const root = proposalRoot(proposal, recordRootHash);
   return tallyVotes({
     proposal,
     votes: store.governanceVotesFor(root),
-    sha256: governanceSha256,
+    sha256: recordRootHash,
     verify: (vote) => votesSignatureHolds(vote),
     ...(proposal.policy.kind === "work"
       ? {
@@ -995,10 +1004,18 @@ export function createApp(options: AppOptions = {}): AppServer {
    * Durability is an observation by the reader, not a field the author signed.
    * It is attached on the way out so it cannot go stale inside the store.
    */
-  function observeDurability<T extends Publication>(publication: T): T {
+  function observeDurability<T extends Publication>(publication: T): T & { root: string } {
     const observation = publicationDurability(publication, placements, durability);
 
-    return observation ? { ...publication, durability: observation } : publication;
+    // The record's IDENTITY travels with it, and is RECOMPUTED here from the record itself rather
+    // than stored: a client runs `publicationRoot` the same way and gets the same answer, which is
+    // what makes a publication answerable instead of a node's word for what it is holding. This is
+    // the one place every publication response passes through, so no route has to remember.
+    const root = publicationRoot(publication, recordRootHash);
+
+    return observation
+      ? { ...publication, durability: observation, root }
+      : { ...publication, root };
   }
 
   /**
@@ -1420,7 +1437,7 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
         const proposal = document as GovernanceProposal;
-        const root = proposalRoot(proposal, governanceSha256);
+        const root = proposalRoot(proposal, recordRootHash);
         const existing = store.proposalRootForId(proposal.id);
         if (existing !== null && existing !== root) {
           send(res, 409, {
@@ -2778,7 +2795,19 @@ export function createApp(options: AppOptions = {}): AppServer {
 
       if (req.method === "GET" && pathname.startsWith("/v1/publications/")) {
         const id = pathname.slice("/v1/publications/".length);
-        const publication = store.getPublication(id);
+
+        // Addressed by its id OR by its ROOT. The id is a label the publisher minted; the root is
+        // recomputed from the record, so a client holding one can fetch the record and CHECK it
+        // instead of trusting a name. A 64-hex segment is looked up as a root — the id space is
+        // free-form, so a label that happens to be 64 hex is simply checked both ways.
+        let publication = store.getPublication(id);
+
+        if (!publication && /^[0-9a-f]{64}$/i.test(id)) {
+          const wanted = id.toLowerCase();
+          publication =
+            store.listPublications().find((entry) => publicationRoot(entry, recordRootHash) === wanted) ??
+            null;
+        }
 
         if (!publication) {
           send(res, 404, { error: "publication not found" });

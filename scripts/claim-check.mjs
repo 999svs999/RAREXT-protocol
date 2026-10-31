@@ -2495,6 +2495,8 @@ function checkRolesRfc(overrides = {}) {
     "keyId",
     "verifyVoteSponsorship",
     "createSponsorRegistry",
+    "publicationRoot",
+    "PUBLICATION_ROOT_EXCLUDED_FIELDS",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {
@@ -2542,6 +2544,10 @@ function checkRolesRfc(overrides = {}) {
     ["no token sale by the protocol or its maintainers", "the standing refusal this RFC does not reopen"],
     ["the same votes in a different order recompute to the same root", "the determinism a recomputable tally depends on"],
     ["the identity that votes is the key, not the label", "which identifier counts a voter"],
+    [
+      "a publication's identity is recomputed from the record",
+      "that the entries the economy is written in are answerable rather than asserted",
+    ],
   ]) {
     if (!haystack.includes(squash(sentence))) {
       fail(`RFC 0021 no longer states ${why}`);

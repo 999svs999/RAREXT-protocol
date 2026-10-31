@@ -79,6 +79,14 @@ in the tree:
 - **Nothing is minted by the protocol.** This is not a detail of this RFC; it is the ROADMAP's
   standing refusal to run a token sale, and this RFC does not reopen it.
 
+One more property belongs to the money half, because without it the accounting is a node's word: a
+publication's identity is recomputed from the record (`publicationRoot`), so the entry a node holds
+can be checked by whoever holds it. The same published content is the same object whichever node
+wrote it down, a copy that differs in one covered field is a different object, and the `id` a
+publisher mints stays a label rather than becoming identity. What a covered field is, is stated in
+one place and held by a test that enumerates the record's fields — adding a field to a publication
+fails the gate until somebody decides whether it is content or bookkeeping.
+
 ### On AI tokens
 
 "AI lives on RAREXT" has an economic reading, and it is not "the protocol issues a coin". It is
