@@ -105,6 +105,9 @@ export {
   proposalRoot,
   tallyRoot,
   proposalProblems,
+  GOVERNANCE_BUDGET_KIND,
+  governanceBudgetProblems,
+  budgetPaymentRecords,
   tallyVotes,
   voteProblems,
   voteStatement,
@@ -119,6 +122,7 @@ export type {
   VoteRefusal,
   VoteRefusalReason,
   VoteStatement,
+  GovernanceBudget,
 } from "./governance.ts";
 export {
   publicationRoot,

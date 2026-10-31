@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A budget line exists as a protocol rule — and only as a rule, and the RFC says so.** The piece
+  that lets a DECISION move credits instead of merely describing them: a pledge is the pledger's
+  signed commitment (the payload carries the whole proposal it funds, the sponsorship pattern), it
+  names the choice whose decision triggers payment, and it is refused by name for an unsound
+  proposal, a non-positive or fractional amount, a pledge to yourself, or a `payOn` the proposal does
+  not offer. `budgetPaymentRecords` derives what a decided budget becomes: exactly TWO ledger entries
+  — the pledger debited, the recipient credited, summing to zero because the protocol never mints —
+  both referencing the decision's root, the field the board already uses to keep the same work from
+  being paid twice, so a decision is payable once. The ledger commitment covers both sides with no
+  new machinery, and a ledger holding only the credit is provably not the ledger with both.
+  Deliberately NOT in this commit: the route, the snapshot persistence, and the execution trigger —
+  the rules are the part that must be right, and shipping them alone keeps the wiring an afternoon
+  behind them instead of half-wired.
 - **The credit ledger carries a commitment, so "the accounting is a node's word" is now false in
   the strongest sense available without the chain.** `creditLedgerRoot(records, hash)` in core
   recomputes a Merkle root over the records' identities — leaves sorted by the records' own roots, so

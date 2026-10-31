@@ -2495,6 +2495,9 @@ function checkRolesRfc(overrides = {}) {
     "proposalRoot",
     "voteStatement",
     "GOVERNANCE_PROPOSAL_KIND",
+    "GOVERNANCE_BUDGET_KIND",
+    "governanceBudgetProblems",
+    "budgetPaymentRecords",
     "GOVERNANCE_VOTE_KIND",
     "UNKNOWN_WEIGHT",
     "proposalProblems",
@@ -2562,6 +2565,10 @@ function checkRolesRfc(overrides = {}) {
     [
       "a receipt travels with its inclusion proof",
       "that a worker proves its payment is in the committed ledger rather than asking to be believed",
+    ],
+    [
+      "the payload carries the whole proposal it funds, names the choice whose decision triggers payment",
+      "that a budget is the pledger's signed commitment to a specific question, payable on a specific outcome",
     ],
   ]) {
     if (!haystack.includes(squash(sentence))) {

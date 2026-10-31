@@ -151,6 +151,19 @@ ledger it reads is the one the ballot was actually signed by.
   number. Deciding what is good is left to the people deciding, which is what letting them
   decide means.
 
+A budget line now exists as a **protocol rule, and only as a rule so far**. A pledge is the
+pledger's signed commitment — the payload carries the whole proposal it funds, names the choice
+whose decision triggers payment, and is refused by name if the proposal is unsound, the amount is
+not a positive integer, the payer and payee are the same key, or `payOn` is not a choice the
+proposal offers. `budgetPaymentRecords` derives what it becomes: exactly TWO ledger entries, the
+pledger debited and the recipient credited, both referencing the decision's root — the same field
+the board uses to keep the same work from being paid twice, so a decision is payable once. The
+protocol never mints: the debit and the credit sum to zero.
+
+What does NOT ship yet, and this RFC says so rather than blurring it: no route accepts a budget, no
+snapshot field persists one, and no execution triggers on a decided tally. The rules ship first
+because they are the part that must be right; the wiring is an afternoon behind them.
+
 ## The constraint, verified rather than assumed
 
 Keys are free, so **one key is not one person**, and this RFC does not pretend otherwise. An

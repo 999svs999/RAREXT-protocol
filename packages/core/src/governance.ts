@@ -374,3 +374,116 @@ export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
   };
 }
 
+/**
+ * A budget line: the piece that lets a DECISION move credits instead of merely describing them.
+ *
+ * A proposal decides; nothing in the protocol turned that decision into a payment, so 民主 could
+ * steer everything except the money it was supposed to steer. A budget is the pledger's commitment —
+ * signed by the key that WILL be debited, carrying the whole proposal it funds, naming the choice
+ * that triggers payment — and the payment itself is two ledger entries derived from it by ONE rule,
+ * so the debit and the credit can never drift apart.
+ *
+ * The shape follows the sponsorship pattern exactly: the payload carries the object it is about, the
+ * signature covers the whole payload, and nothing is trusted apart from the signer's key. A budget
+ * whose proposal is unsound, whose `payOn` is not a choice the proposal offers, or whose amount is
+ * not a positive integer is refused by name.
+ */
+export const GOVERNANCE_BUDGET_KIND = "rarext.governance-budget.v1";
+
+export interface GovernanceBudget {
+  kind: typeof GOVERNANCE_BUDGET_KIND;
+  version: 1;
+  /** The key that will be DEBITED — the pledger, and the signer of this payload. */
+  from: string;
+  /** The key that will be CREDITED. */
+  to: string;
+  /** A positive integer: credits are indivisible, and a zero or negative pledge is not a pledge. */
+  amount: number;
+  /** Why the money is being pledged — the line a voter reads. */
+  reason: string;
+  /** The choice whose TALLY DECISION triggers payment. A "no" outcome pays nothing. */
+  payOn: string;
+  createdAt: string;
+  /** The whole proposal being funded, carried so the signature covers the exact question. */
+  proposal: GovernanceProposal;
+}
+
+/**
+ * What is wrong with a budget, if anything — refused BY NAME, like every other record the protocol
+ * accepts, so a caller can tell a malformed pledge from one it should not have asked for.
+ */
+export function governanceBudgetProblems(budget: GovernanceBudget): string[] {
+  const problems: string[] = [];
+
+  if (budget === null || typeof budget !== "object") return ["a budget must be an object"];
+  if (budget.kind !== GOVERNANCE_BUDGET_KIND) {
+    problems.push(`a budget must be a ${GOVERNANCE_BUDGET_KIND} payload`);
+  }
+  if (budget.version !== 1) problems.push("a budget must be a version 1 payload");
+  if (typeof budget.from !== "string" || budget.from.length === 0) {
+    problems.push("a budget needs the key that will be debited");
+  }
+  if (typeof budget.to !== "string" || budget.to.length === 0) {
+    problems.push("a budget needs the key that will be credited");
+  }
+  if (budget.from === budget.to) {
+    problems.push("a budget's payer and payee must be different keys: a pledge to yourself is not a commitment");
+  }
+  if (typeof budget.amount !== "number" || !Number.isInteger(budget.amount) || budget.amount <= 0) {
+    problems.push("a budget's amount must be a positive integer of credits");
+  }
+  if (typeof budget.reason !== "string" || budget.reason.length === 0) {
+    problems.push("a budget needs the reason a voter reads");
+  }
+  if (typeof budget.createdAt !== "string" || budget.createdAt.length === 0) {
+    problems.push("a budget needs its creation time");
+  }
+
+  const proposalProblemsFound = proposalProblems(budget.proposal);
+  if (proposalProblemsFound.length > 0) {
+    problems.push(`a budget carries an unsound proposal: ${proposalProblemsFound[0]}`);
+    return problems;
+  }
+
+  if (typeof budget.payOn !== "string" || budget.payOn.length === 0) {
+    problems.push("a budget needs the choice whose decision triggers payment");
+  } else if (!budget.proposal.choices.includes(budget.payOn)) {
+    problems.push(
+      `a budget's payOn must be a choice the proposal offers — ${JSON.stringify(budget.payOn)} is not one of ${budget.proposal.choices.map((choice) => JSON.stringify(choice)).join(", ")}`,
+    );
+  }
+
+  return problems;
+}
+
+/**
+ * The payment a decided budget becomes: TWO ledger entries, derived by this one rule so they can
+ * never disagree. The pledger's entry is negative — the ledger already understands a record that
+ * reduces a balance, because `bounty` is a number — and both entries carry the proposal's ROOT as
+ * their artifact reference, which is the same field the board uses to keep the same work from being
+ * paid twice: a decision, like a job, is payable once.
+ *
+ * `at` is the moment of execution, a parameter rather than an input: core stays pure, and the route
+ * that executes a decided budget stamps the time.
+ */
+export function budgetPaymentRecords(
+  budget: GovernanceBudget,
+  at: string,
+  sha256: (value: string) => string,
+): Array<{ keyId: string; action: string; bounty: number; challengeId: string; artifactHash: string; at: string }> {
+  // The reference is the proposal's ROOT — a real digest, the same identity a reference names — and
+  // it is what makes the payment once-only: both entries carry it as their artifact reference, the
+  // field the board already uses to keep the same work from being paid twice.
+  const reference = proposalRoot(budget.proposal, sha256);
+  const shared = {
+    action: "governance",
+    challengeId: budget.proposal.id,
+    artifactHash: reference,
+    at,
+  };
+
+  return [
+    { keyId: budget.from, bounty: -budget.amount, ...shared },
+    { keyId: budget.to, bounty: budget.amount, ...shared },
+  ];
+}
