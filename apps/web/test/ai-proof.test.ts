@@ -22,6 +22,7 @@ import {
   federationFromBundle,
 } from "../src/ai.ts";
 import {
+  attestBoundedRun,
   attestGenerativeRun,
   parseRegistrySeedList,
   registryListDigest,
@@ -387,4 +388,52 @@ test("the page's trace hash is the hash of the trace CORE's attestation builds f
     "the page's evidence must be byte-identical to the attestation core builds for the same run",
   );
   assert.equal(run.proof.correct, true);
+});
+
+test("the page's bounded evidence is the evidence CORE's bounded attestation builds for the same run", async () => {
+  const reference = [0, 0];
+  const values = [3, 4];
+  const metric = "meanAbsError" as const;
+  const bound = 6;
+  const proof = await runBoundedProof(reference, values, metric, bound);
+  const body = proof.body;
+  const artifact = {
+    app: "ai-bounded",
+    kind: "ai.bounded",
+    version: 1,
+    mediaType: "application/json",
+    body,
+  };
+
+  // The bounded twin of the generative pin: the page assembles the trace by hand, the
+  // MCP's attest-local asks core's attestBoundedRun. Both must build the same evidence
+  // for the same run — a change to either trace shape fails here, on the day it is made.
+  const attestation = attestBoundedRun({
+    artifact: artifact as never,
+    body,
+    spec: { metric, bound, reference } as never,
+    app: "ai-bounded",
+    challengeId: "bounded-starter",
+    verifier: "test",
+    verifierManifest: {},
+    bound: null,
+    id: "pin-the-two-bounded-makers",
+    createdAt: "2026-10-31T00:00:00.000Z",
+    sha256: (value: string | Uint8Array) => {
+      const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+      return createHash("sha256").update(bytes).digest("hex");
+    },
+  });
+
+  assert.equal(
+    proof.traceHash,
+    attestation.traceHash,
+    "the page's bounded trace must be byte-identical to the attestation core builds for the same run",
+  );
+  assert.equal(
+    proof.artifactHash,
+    attestation.circuitHash,
+    "the page's bounded artifact hash must equal core's circuit hash for the same artifact",
+  );
+  assert.equal(proof.correct, true);
 });
