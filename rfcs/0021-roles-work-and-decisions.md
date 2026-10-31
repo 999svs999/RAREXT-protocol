@@ -7,9 +7,14 @@ Implemented today: the **action board** (`apps/api/src/work.ts` — `ACTIONS`, `
 records in the store, storage rent (`apps/api/src/storage-rent.ts`, RFC 0018), and the work
 rules in `docs/WORK.md`. An operator, a builder and an agent can already be paid for work.
 
-Proposed here: the **role model** stated as one thing rather than scattered across the board,
-the position on **tokens**, and **how the community decides** — the governance half, which does
-not exist in the tree today in any form.
+Implemented since this RFC was written: the **tally** — `proposalRoot`, `voteStatement`,
+`tallyVotes` and `tallyRoot` in `packages/core/src/governance.ts` — which makes the central claim
+of this document executable rather than described: a decision is an artifact, and its outcome is
+recomputed.
+
+Proposed here and still not implemented: the **role model** stated as one thing rather than
+scattered across the board, the position on **tokens**, the route and storage path a vote travels
+over, and who pays for one.
 
 ## The problem
 
@@ -87,9 +92,15 @@ announced.**
 - A **vote** is a signed attestation over `(proposalRoot, choice, voter, issuedAt)` — the same
   payload and signature primitives the protocol already uses for publications. It can be
   published as an artifact, mirrored, anchored, and read offline like anything else.
-- The **tally** is a pure function of the published votes and the pinned policy. Anyone —
-  a browser, an operator, a stranger auditing the vote — recomputes it and gets the same answer,
-  or finds the disagreement in writing. **The tally is recomputed, never announced.**
+- The **tally** is a pure function of the published votes and the pinned policy
+  (`tallyVotes` in core, with signature verification and the credit ledger taken as PORTS, so the
+  rule never touches a key or a balance). Anyone — a browser, an operator, a stranger auditing the
+  vote — recomputes it and gets the same bytes; `tallyRoot` is what they compare. **The tally is
+  recomputed, never announced.** The property is stronger than a count: the same votes in a
+  different order recompute to the same root, refusals included, so arrival order is never
+  evidence. Every vote that does not count is reported by name — a wrong proposal, an unknown
+  choice, a time outside the window, a forged or edited signature, a second ballot from one voter,
+  a voter the ledger does not know — because a silent subtraction is not an audit.
 - The **result** is published beside the votes, so the decision and its evidence travel
   together, and a decision that changes the rules must itself be made under the rules that were
   pinned before it.

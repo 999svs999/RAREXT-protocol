@@ -2380,6 +2380,13 @@ function checkRolesRfc(overrides = {}) {
     "readAgentKeyfile",
     "semanticsCommitmentHolds",
     "parseSiteBinding",
+    "tallyVotes",
+    "tallyRoot",
+    "proposalRoot",
+    "voteStatement",
+    "GOVERNANCE_PROPOSAL_KIND",
+    "GOVERNANCE_VOTE_KIND",
+    "UNKNOWN_WEIGHT",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {
@@ -2412,18 +2419,22 @@ function checkRolesRfc(overrides = {}) {
     }
   }
 
-  // Compared case-insensitively: these sentences open a clause or a bullet in the RFC, so a
-  // capital letter is wording rather than substance, and a needle that breaks on one would
-  // report an argument as missing because it was dressed differently.
-  const haystack = rfc.toLowerCase();
+  // Compared with COLLAPSED WHITESPACE and lowercased, because these are sentences in a wrapped
+  // markdown file: the same claim is the same claim whether or not a line break lands in the
+  // middle of it, and a needle that breaks on a wrap reports an argument as missing because the
+  // paragraph got reflowed. (Both failures happened here on the first run — one needle straddled
+  // a wrap, the other opened a line — and neither was a change to what the RFC says.)
+  const squash = (text) => text.replace(/\s+/g, " ").toLowerCase();
+  const haystack = squash(rfc);
   for (const [sentence, why] of [
     ["participation costs nothing and pays nothing", "the participant's position (free to join, unpaid for presence)"],
     ["the tally is recomputed, never announced.", "that a decision's outcome is recomputed rather than announced"],
     ["one key is not one person", "the sybil limit the RFC does not claim to solve"],
     ["the protocol supplies the accounting; the application supplies", "the protocol/application boundary for tokens"],
     ["no token sale by the protocol or its maintainers", "the standing refusal this RFC does not reopen"],
+    ["the same votes in a different order recompute to the same root", "the determinism a recomputable tally depends on"],
   ]) {
-    if (!haystack.includes(sentence)) {
+    if (!haystack.includes(squash(sentence))) {
       fail(`RFC 0021 no longer states ${why}`);
     }
   }

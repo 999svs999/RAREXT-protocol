@@ -88,6 +88,26 @@ export {
   verifySiteBinding,
 } from "./site-binding.ts";
 export type { SiteBinding, SiteBindingParse, SiteBindingVerdict } from "./site-binding.ts";
+export {
+  GOVERNANCE_PROPOSAL_KIND,
+  GOVERNANCE_VOTE_KIND,
+  UNKNOWN_WEIGHT,
+  proposalRoot,
+  tallyRoot,
+  tallyVotes,
+  voteStatement,
+} from "./governance.ts";
+export type {
+  GovernanceProposal,
+  GovernanceVote,
+  Quorum,
+  TallyInput,
+  TallyResult,
+  VotePolicy,
+  VoteRefusal,
+  VoteRefusalReason,
+  VoteStatement,
+} from "./governance.ts";
 export { publicationFromSignedInput } from "./publications.ts";
 export type { PublishInput } from "./publications.ts";
 export type { AttestationBinding } from "./attest.ts";

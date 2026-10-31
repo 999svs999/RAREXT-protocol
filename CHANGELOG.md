@@ -11,6 +11,31 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RFC 0021's central claim is now executable: the tally ships.** `packages/core/src/governance.ts`
+  adds `proposalRoot`, `voteStatement`, `tallyVotes` and `tallyRoot` — a proposal is a document
+  whose root the votes are bound to, a vote is a signed statement over exactly five fields, and
+  the tally is a pure function of the published votes and the pinned policy. Signature verification
+  and the credit ledger are PORTS (`verify`, `weights`), the same shape as the injected hash in
+  every other core primitive, so the rule never touches a key or a balance — and a work-weighted
+  policy with no ledger is an ERROR rather than a tally of zeroes, because a silent zero looks
+  exactly like a community that did not show up. Verdicts are `decided`, `tie` (no winner invented
+  from a tie) and `no-quorum`; every vote that does not count is refused BY NAME — wrong proposal,
+  unknown choice, outside the window, forged or edited signature, a second ballot from one voter,
+  a voter the ledger does not know — because a silent subtraction is not an audit. `tallyRoot` is
+  what two independent recomputations compare instead of arguing.
+- **A determinism bug my own test caught, and the regression that now holds it.** The duplicate
+  rule originally ran BEFORE signature verification, and two ballots from one voter sort by
+  signature when their issue times match — so the same set of votes could be reported as
+  "invalid + duplicate" or "duplicate + invalid" depending on which ballot sorted first, yielding
+  two different result roots for identical inputs. Order independence of the COUNTS was not enough
+  when the refusals ride along in the same root. Validity is now checked first (an invalid vote is
+  not a duplicate of anything — it is an invalid vote), and a regression test recomputes four
+  permutations of a set containing a duplicate and an edited ballot, requiring ONE root.
+- **The checker's sentence needles were breaking on markdown line wraps, and two false "no longer
+  states" failures on the first run were that bug rather than a change to the RFC.** A wrap is not
+  a change to a claim, so the comparison now collapses whitespace (and lowercases) on both sides —
+  the same treatment the earlier prose-matching bug in the URL policy earned, applied to this
+  rule's own instrument.
 - **RFC 0021 — roles, work, and how the community decides (the economics half, grounded and
   labelled).** Three questions a person arriving with an idea asks in the first hour had no
   single answer: what am I here, where does money come from, and who decides what is good. The
