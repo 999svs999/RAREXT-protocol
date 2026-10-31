@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mirror verification — AI claims included</title>
+    <title>Mirror verification</title>
     <style>
       body { margin: 0; padding: 40px; background: #080a0e; color: #e3eaf3;
              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -19,7 +19,7 @@
     </style>
   </head>
   <body>
-    <h1>This mirror is a copy. Here is whether it is a faithful one — and whether its AI claims replay.</h1>
+    <h1>This mirror is a copy. Here is whether it is a faithful one.</h1>
     <div id="out"></div>
     <button id="check">Re-verify</button>
     <h2>Reference — name and verify an object</h2>
@@ -356,6 +356,17 @@
         let candidateObject = null;
         try { candidateObject = JSON.parse(new TextDecoder().decode(bytes)); } catch (error) { /* not JSON — the byte reading may still hold */ }
         if (candidateObject && typeof candidateObject === "object" && !Array.isArray(candidateObject)) {
+          // The bundle reading first, through the page's own verifier — the same function that
+          // judged the copy above. A bundle is a JSON object too, and without this reading the panel
+          // would verify a registry's central object as "not a bundle, not a record, not bytes".
+          try {
+            const probe = await verifyBundle(candidateObject, undefined, wanted);
+            if (probe.valid && probe.root === wanted) {
+              refout.innerHTML += htmlRow("VERIFIED", "a registry bundle, by the root its content rebuilds to", "ok");
+              return;
+            }
+          } catch (error) { /* not a bundle — the record and byte readings may still hold */ }
+
           for (const candidate of recordRootPreimages(candidateObject)) {
             const digest = await sha256Hex(candidate.preimage);
             if (digest === wanted) {
