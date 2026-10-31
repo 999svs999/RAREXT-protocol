@@ -8,13 +8,17 @@ records in the store, storage rent (`apps/api/src/storage-rent.ts`, RFC 0018), a
 rules in `docs/WORK.md`. An operator, a builder and an agent can already be paid for work.
 
 Implemented since this RFC was written: the **tally** — `proposalRoot`, `voteStatement`,
-`tallyVotes` and `tallyRoot` in `packages/core/src/governance.ts` — which makes the central claim
-of this document executable rather than described: a decision is an artifact, and its outcome is
-recomputed.
+`tallyVotes` and `tallyRoot` in `packages/core/src/governance.ts`, with `proposalProblems` and
+`voteProblems` as the one shape validation both the tally and the routes use — and the **route a
+vote travels over**: `POST /v1/governance/proposals`, `GET /v1/governance/proposals/:root` and
+`POST /v1/governance/proposals/:root/votes`, with proposals and votes in the store's snapshot so a
+decision survives the process that recorded it. The node is a bulletin board on that path, never a
+judge: it refuses an unusable row at the door (a proposal the tally could not compute, a signature
+that does not verify) and recomputes the verdict with the same core function a stranger runs
+offline.
 
 Proposed here and still not implemented: the **role model** stated as one thing rather than
-scattered across the board, the position on **tokens**, the route and storage path a vote travels
-over, and who pays for one.
+scattered across the board, the position on **tokens**, and who pays for a vote.
 
 ## The problem
 
@@ -106,6 +110,14 @@ announced.**
   pinned before it.
 
 Two properties this gives the ecosystem, both of which are the point:
+
+**The identity that votes is the key, not the label.** A vote carries a `voter` field for
+attribution — a name a voter chooses for itself — and a `publicKey` the signature was verified
+against. Everything that must identify a voter (one key is one vote; the account a work-weighted
+policy reads) uses the KEY. Implemented against the label first, which meant one key could vote
+every choice simply by relabelling itself, and the count showed two voters; the tally now keys on
+`canonicalize(publicKey)`, and the weight port receives the vote rather than a voter name so the
+ledger it reads is the one the ballot was actually signed by.
 
 - **No committee.** There is no body whose word is the outcome. There is a function, and
   whoever disagrees runs it.

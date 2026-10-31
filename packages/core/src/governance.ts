@@ -64,8 +64,13 @@ export interface GovernanceVote {
   choice: string;
   /** Who the vote is attributed to — signed, so it cannot be rewritten. */
   voter: string;
-  /** The key that signed, carried so a reader can verify with a port of their own. */
-  publicKey: string;
+  /**
+   * The key that signed, carried so a reader can verify with a port of their own. Its SHAPE is the
+   * verifier's business and not core's: a registry carries JWKs, an agent may carry an opaque key
+   * id, and core never looks inside — it passes the carrier to the `verify` port unchanged, the
+   * same way it passes a hash implementation instead of importing one.
+   */
+  publicKey: string | Record<string, unknown>;
   issuedAt: string;
   suite: string;
   /** Base64 signature over `votePayload(vote)`. */
@@ -129,14 +134,90 @@ export function tallyRoot(result: TallyResult, sha256: (value: string) => string
   return sha256(canonicalize(result));
 }
 
+/**
+ * What is wrong with a proposal, if anything — the ONE validation, called by the tally and by any
+ * route that accepts a proposal. A node that accepted a proposal the tally would refuse would be
+ * storing a decision nobody can compute, so the two must not be able to disagree about what a
+ * proposal is.
+ */
+export function proposalProblems(proposal: GovernanceProposal): string[] {
+  const problems: string[] = [];
+  if (proposal === null || typeof proposal !== "object") return ["a proposal must be an object"];
+  if (proposal.kind !== GOVERNANCE_PROPOSAL_KIND) {
+    problems.push(`a proposal must be a ${GOVERNANCE_PROPOSAL_KIND} document`);
+  }
+  if (typeof proposal.id !== "string" || proposal.id.length === 0) problems.push("a proposal needs an id");
+  if (typeof proposal.question !== "string" || proposal.question.length === 0) {
+    problems.push("a proposal needs the question voters are answering");
+  }
+  if (!Array.isArray(proposal.choices) || proposal.choices.length === 0) {
+    problems.push("a proposal must offer at least one choice");
+  } else if (new Set(proposal.choices).size !== proposal.choices.length) {
+    problems.push("a proposal must not offer the same choice twice");
+  }
+  if (typeof proposal.closesAt !== "string" || proposal.closesAt.length === 0) {
+    problems.push("a proposal must close: a vote window with no end is not a decision");
+  }
+  if (proposal.quorum === null || typeof proposal.quorum !== "object") {
+    problems.push("a proposal must state its quorum, even if the value is zero");
+  } else if (proposal.quorum.kind !== "keys" && proposal.quorum.kind !== "weight") {
+    problems.push("a quorum is counted in keys or in weight");
+  } else if (typeof proposal.quorum.value !== "number" || !Number.isFinite(proposal.quorum.value) || proposal.quorum.value < 0) {
+    problems.push("a quorum value must be a number of zero or more");
+  }
+  if (proposal.policy === null || typeof proposal.policy !== "object") {
+    problems.push("a proposal must pin a weight policy");
+  } else if (proposal.policy.kind !== "key" && proposal.policy.kind !== "work") {
+    problems.push("a weight policy is either one key one vote or work-weighted");
+  } else if (proposal.policy.kind === "work" && typeof proposal.policy.creditUnit !== "string") {
+    problems.push("a work-weighted policy must name the credit unit it reads");
+  }
+  return problems;
+}
+
+/**
+ * What is wrong with a vote's SHAPE, if anything — the ONE shape validation, called by the tally
+ * and by any route that accepts a vote.
+ *
+ * It deliberately says nothing about the signature, the voting window, the choice, or the voter's
+ * history. Those are the TALLY's findings, and they are reported by name in its result rather than
+ * asserted at a boundary that could disagree with it: a node may decline to store an unusable
+ * record, but the node is never the one deciding whether a vote counts.
+ */
+export function voteProblems(vote: GovernanceVote): string[] {
+  if (vote === null || typeof vote !== "object") return ["a vote must be an object"];
+  const problems: string[] = [];
+  if (vote.kind !== GOVERNANCE_VOTE_KIND) problems.push(`a vote must be a ${GOVERNANCE_VOTE_KIND} record`);
+  if (typeof vote.proposalRoot !== "string" || vote.proposalRoot.length === 0) {
+    problems.push("a vote must name the proposal root it answers");
+  }
+  if (typeof vote.choice !== "string" || vote.choice.length === 0) problems.push("a vote must name a choice");
+  if (typeof vote.voter !== "string" || vote.voter.length === 0) problems.push("a vote must name a voter");
+  if (
+    vote.publicKey === null ||
+    vote.publicKey === undefined ||
+    (typeof vote.publicKey === "string" && vote.publicKey.length === 0)
+  ) {
+    problems.push("a vote must carry the key that signed it");
+  }
+  if (typeof vote.issuedAt !== "string" || vote.issuedAt.length === 0) problems.push("a vote must say when it was issued");
+  if (typeof vote.suite !== "string" || vote.suite.length === 0) problems.push("a vote must name its signature suite");
+  if (typeof vote.signature !== "string" || vote.signature.length === 0) problems.push("a vote must carry a signature");
+  return problems;
+}
+
 export interface TallyInput {
   proposal: GovernanceProposal;
   votes: GovernanceVote[];
   sha256: (value: string) => string;
   /** Verify one vote's signature. Returns false for a vote that must not count. */
   verify: (vote: GovernanceVote, statement: VoteStatement) => boolean;
-  /** Work a voter has done, read when the policy says weight is earned. Absent otherwise. */
-  weights?: ((voter: string) => number | undefined) | undefined;
+  /**
+   * Work a voter has done, read when the policy says weight is earned. It receives the VOTE and
+   * not a voter name, because the account it reads must be the one the ballot was actually signed
+   * by: a ledger keyed on a self-chosen label would let anyone vote with someone else's credits.
+   */
+  weights?: ((vote: GovernanceVote) => number | undefined) | undefined;
 }
 
 /**
@@ -149,14 +230,9 @@ export const UNKNOWN_WEIGHT = "the pinned policy weights votes by work, and no l
 export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
   const { proposal, sha256 } = input;
   const policy = proposal.policy;
-  if (!Array.isArray(proposal.choices) || proposal.choices.length === 0) {
-    return { error: "a proposal must offer at least one choice" };
-  }
-  if (new Set(proposal.choices).size !== proposal.choices.length) {
-    return { error: "a proposal must not offer the same choice twice" };
-  }
-  if (typeof proposal.closesAt !== "string" || proposal.closesAt.length === 0) {
-    return { error: "a proposal must close: a vote window with no end is not a decision" };
+  const problems = proposalProblems(proposal);
+  if (problems.length > 0) {
+    return { error: problems[0] as string };
   }
   if (policy.kind === "work" && typeof input.weights !== "function") {
     return { error: UNKNOWN_WEIGHT };
@@ -181,24 +257,15 @@ export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
   });
 
   const accepted: Array<{ vote: GovernanceVote; weight: number }> = [];
+  // Keyed by the SIGNING KEY, not by the voter field. The voter field is a label a voter chooses
+  // for itself, so keying duplication on it meant one key could vote every choice simply by
+  // labelling itself differently — "one key is one vote" would have been a sentence in a document
+  // rather than a property of the tally. The key is the identity because the signature was
+  // verified against it, and `canonicalize` is enough to tell two keys apart.
   const seen = new Map<string, GovernanceVote>();
 
   for (const vote of ordered) {
-    if (
-      typeof vote !== "object" ||
-      vote === null ||
-      vote.kind !== GOVERNANCE_VOTE_KIND ||
-      typeof vote.proposalRoot !== "string" ||
-      typeof vote.choice !== "string" ||
-      typeof vote.voter !== "string" ||
-      vote.voter.length === 0 ||
-      typeof vote.publicKey !== "string" ||
-      vote.publicKey.length === 0 ||
-      typeof vote.issuedAt !== "string" ||
-      typeof vote.suite !== "string" ||
-      typeof vote.signature !== "string" ||
-      vote.signature.length === 0
-    ) {
+    if (voteProblems(vote).length > 0) {
       malformed(vote ?? ({} as GovernanceVote), "the vote does not carry the fields a vote needs");
       continue;
     }
@@ -239,7 +306,8 @@ export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
       refused.push({ voter: vote.voter, choice: vote.choice, reason: "invalid-signature", detail: "the signature did not verify" });
       continue;
     }
-    const earlier = seen.get(vote.voter);
+    const identity = canonicalize(vote.publicKey);
+    const earlier = seen.get(identity);
     if (earlier) {
       refused.push({
         voter: vote.voter,
@@ -252,7 +320,7 @@ export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
 
     let weight = 1;
     if (policy.kind === "work") {
-      const earned = input.weights?.(vote.voter);
+      const earned = input.weights?.(vote);
       if (typeof earned !== "number" || !Number.isFinite(earned) || earned < 0) {
         refused.push({
           voter: vote.voter,
@@ -265,7 +333,7 @@ export function tallyVotes(input: TallyInput): TallyResult | { error: string } {
       weight = earned;
     }
 
-    seen.set(vote.voter, vote);
+    seen.set(identity, vote);
     accepted.push({ vote, weight });
   }
 

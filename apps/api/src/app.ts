@@ -133,9 +133,20 @@ import { isRevocationKind } from "./revocations.ts";
 import { buildLaunchTrajectory, type LaunchCheckInput } from "./trajectory.ts";
 import {
   RAREXT_SITE_BINDING_PATH,
+  proposalProblems,
+  proposalRoot,
+  sha256Hex,
+  tallyVotes,
+  voteProblems,
+  voteStatement,
+  type GovernanceProposal,
+  type GovernanceVote,
+  type JsonWebKey as RarextJsonWebKey,
   type OperatorAttestation,
   type StorageInclusionProof,
+  type TallyResult,
 } from "../../../packages/core/src/index.ts";
+import { nodeSha256 } from "./digest.ts";
 import {
   createVerifierRegistry,
   type VerifierRegistry,
@@ -748,6 +759,62 @@ function asExternalProof(value: unknown): TracIdentityProof | undefined {
  * record. The location comes from `requestOrigin`, the same helper every other self-describing
  * route uses, so a node behind a proxy names the address a client actually reached.
  */
+/**
+ * The digest a proposal's root is computed with, and the root a vote is bound to.
+ *
+ * One adapter, used by everything that needs it here, so the root this node stores, the root it
+ * serves, and the root the tally recomputes cannot be three different numbers.
+ */
+const governanceSha256 = (value: string): string => sha256Hex(nodeSha256, value);
+
+/**
+ * Does this vote's signature hold? The algorithm comes from the KEY (`verifyPayload` resolves the
+ * suite from the JWK), so a vote cannot claim a suite its key does not have, and core never sees
+ * this: the tally takes verification as a port and treats the answer as given.
+ */
+function votesSignatureHolds(vote: GovernanceVote): boolean {
+  const key = vote.publicKey;
+  if (typeof key !== "object" || key === null) return false;
+  return verifyPayload(
+    // Core's own key type, not the platform's: the two differ by an index signature, and the one
+    // that matters is the one `verifyPayload` was written against.
+    key as unknown as RarextJsonWebKey,
+    voteStatement(vote) as unknown as Record<string, unknown>,
+    vote.signature,
+  );
+}
+
+/**
+ * The node's own recomputation — the SAME function a stranger runs offline.
+ *
+ * Nothing here decides anything: the votes come from the store, the weight comes from the credit
+ * ledger the work board pays into (when the pinned policy says weight is earned), and the verdict
+ * is core's. A node that computed its own tally would be the committee RFC 0021 exists to avoid.
+ */
+function tallyFor(store: RarextStore, proposal: GovernanceProposal): TallyResult | { error: string } {
+  const root = proposalRoot(proposal, governanceSha256);
+  return tallyVotes({
+    proposal,
+    votes: store.governanceVotesFor(root),
+    sha256: governanceSha256,
+    verify: (vote) => votesSignatureHolds(vote),
+    ...(proposal.policy.kind === "work"
+      ? {
+          // The ledger is per KEY, and this reads the key the ballot was signed by — not the voter
+          // label, which a voter chooses. Otherwise a ballot could be weighted with another
+          // worker's earnings by naming them.
+          weights: (vote: GovernanceVote): number | undefined => {
+            const key = vote.publicKey;
+            if (typeof key !== "object" || key === null) return undefined;
+            const id = keyId(key as unknown as RarextJsonWebKey);
+            const records = store.listCredits().filter((record) => record.keyId === id);
+            return records.length === 0 ? undefined : summarizeEarnings(id, records).credits;
+          },
+        }
+      : {}),
+  });
+}
+
 function nodeSiteBinding(
   store: RarextStore,
   req: IncomingMessage,
@@ -1333,6 +1400,88 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
         send(res, 200, binding);
+        return;
+      }
+
+      // Governance: a proposal pinned as a document, votes stored as they arrive, and a tally
+      // anyone can recompute.
+      //
+      // The node is a BULLETIN BOARD here, never a judge. It declines a proposal the tally could
+      // not compute (one validation, in core) and a vote whose signature does not verify — hygiene,
+      // so the store does not fill with unusable rows — but no verdict is the node's: GET recomputes
+      // it with core's tallyVotes, the same function a stranger runs offline, and every vote that
+      // does not count comes back refused BY NAME in that answer.
+      if (req.method === "POST" && pathname === "/v1/governance/proposals") {
+        const document = await readJson(req);
+        const problems = proposalProblems(document as GovernanceProposal);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems[0] });
+          return;
+        }
+        const proposal = document as GovernanceProposal;
+        const root = proposalRoot(proposal, governanceSha256);
+        const existing = store.proposalRootForId(proposal.id);
+        if (existing !== null && existing !== root) {
+          send(res, 409, {
+            error: `proposal id ${proposal.id} already names a different document (root ${existing.slice(0, 16)}…)`,
+          });
+          return;
+        }
+        store.addProposal(proposal, root);
+        send(res, 201, { root, proposal });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/v1/governance/proposals") {
+        send(res, 200, store.listProposals());
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/governance/proposals/") &&
+        pathname.endsWith("/votes")
+      ) {
+        const root = pathname.slice("/v1/governance/proposals/".length, -"/votes".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+        const vote = (await readJson(req)) as GovernanceVote;
+        const problems = voteProblems(vote);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems[0] });
+          return;
+        }
+        if (vote.proposalRoot !== root) {
+          send(res, 400, {
+            error: `this vote answers ${vote.proposalRoot.slice(0, 16)}…, not ${root.slice(0, 16)}…`,
+          });
+          return;
+        }
+        if (!votesSignatureHolds(vote)) {
+          send(res, 401, { error: "invalid vote signature" });
+          return;
+        }
+        store.addGovernanceVote(vote);
+        send(res, 201, { vote, tally: tallyFor(store, proposal) });
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/governance/proposals/")) {
+        const root = pathname.slice("/v1/governance/proposals/".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+        send(res, 200, {
+          root,
+          proposal,
+          votes: store.governanceVotesFor(root),
+          tally: tallyFor(store, proposal),
+        });
         return;
       }
 

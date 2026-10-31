@@ -11,6 +11,34 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A vote now has somewhere to travel: the governance route, and a decision survives the
+  process that recorded it.** `POST /v1/governance/proposals` pins a proposal and answers with the
+  root the node COMPUTED for it; `GET /v1/governance/proposals` lists what the node holds;
+  `GET /v1/governance/proposals/:root` returns the proposal, its votes and the tally; and
+  `POST /v1/governance/proposals/:root/votes` accepts a signed vote. Proposals and votes live in
+  the store's snapshot — migration 3 → 4 adds `proposals` and `governanceVotes` — so a decision
+  outlives a restart, held by a test that stops the deployment and starts a second one on the same
+  file.
+- **The node is a bulletin board, never a judge.** It refuses what it cannot store honestly: a
+  proposal the tally could not compute (one validation in core, shared by the route and the tally)
+  and a vote whose signature does not verify, so the store does not fill with unusable rows. But
+  acceptance is not a verdict — `one key is one vote`, the window, the choice and the weight are
+  the tally's findings, and GET recomputes them with core's `tallyVotes`, the same function a
+  stranger runs offline. A test recomputes the tally independently from the published votes and
+  requires the SAME root as the node's answer, so the node's arithmetic is never taken on trust.
+- **A real vulnerability, found by the test that was written to check it: the identity that votes
+  is the KEY, not the label.** Duplicate detection keyed on the `voter` field — a name a voter
+  chooses for itself — so one key could vote every choice simply by relabelling itself, and the
+  count showed two voters. The same field would have let a work-weighted ballot inherit another
+  worker's credits by naming them. The tally now keys duplication on `canonicalize(publicKey)`,
+  and the weight port receives the VOTE rather than a voter name, so the ledger entry it reads is
+  the one the ballot was actually signed by (`keyId(publicKey)` — the key the ledger already pays).
+  A regression test votes twice with one key under two labels and requires one counted vote.
+- **Two doc claims the checker caught before a reader could: one invented route and one stale
+  version.** This iteration's APP-PROTOCOL entry named `GET /v1/earnings/:keyId` — written from
+  memory, and handled by nothing; the real route is `GET /v1/work/earnings`, and the doc↔code rule
+  said so immediately. The same run caught `OPERATIONS.md` still calling snapshot version 3
+  current, which is exactly the kind of drift a migration creates.
 - **RFC 0021's central claim is now executable: the tally ships.** `packages/core/src/governance.ts`
   adds `proposalRoot`, `voteStatement`, `tallyVotes` and `tallyRoot` — a proposal is a document
   whose root the votes are bound to, a vote is a signed statement over exactly five fields, and

@@ -94,7 +94,9 @@ export {
   UNKNOWN_WEIGHT,
   proposalRoot,
   tallyRoot,
+  proposalProblems,
   tallyVotes,
+  voteProblems,
   voteStatement,
 } from "./governance.ts";
 export type {

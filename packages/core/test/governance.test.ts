@@ -139,7 +139,7 @@ test("votes are refused by name: wrong proposal, unknown choice, outside the win
 test("a work-weighted policy reads the ledger through a port — and refuses to run without one", () => {
   const prop = proposal({ policy: { kind: "work", creditUnit: "verify-credits" }, quorum: { kind: "weight", value: 10 } });
   const votes = [vote(prop, "alice", "yes"), vote(prop, "bob", "no")];
-  const weights = (voter: string) => (voter === "alice" ? 12 : voter === "bob" ? 4 : undefined);
+  const weights = (entry: GovernanceVote) => (entry.voter === "alice" ? 12 : entry.voter === "bob" ? 4 : undefined);
 
   const weighted = expectTally(tallyOf(prop, votes, { weights }));
   assert.deepEqual(weighted.outcome, { kind: "decided", choice: "yes" });
@@ -214,6 +214,28 @@ test("REGRESSION: refusals are deterministic too — a duplicate and an invalid 
   assert.equal(permutations[0]!.accepted, 2);
   assert.deepEqual(permutations[0]!.counts, [
     { choice: "yes", keys: 2, weight: 2 },
+    { choice: "no", keys: 0, weight: 0 },
+  ]);
+});
+
+test("REGRESSION: one key cannot vote every choice by relabelling itself", () => {
+  // Reproduced before the fix: duplication was keyed on the voter FIELD, which a voter chooses, so
+  // a single key could vote "yes" and "no" by labelling itself differently each time — and the
+  // count showed two voters. "One key is one vote" has to be a property of the tally, not a
+  // sentence in a document, and the identity that votes is the key the signature verified against.
+  const prop = proposal({ quorum: { kind: "keys", value: 1 } });
+  const key = vote(prop, "alice", "yes");
+  // The attack is not a tampered signature (that is a different failure, and already held), it is
+  // a SECOND, properly signed ballot from the same key wearing a different name. Signing the
+  // relabelled statement is what makes the case real: the key is unchanged, so only the identity
+  // rule can catch it.
+  const relabelled: GovernanceVote = { ...key, voter: "definitely-not-alice", choice: "no" };
+  relabelled.signature = sign(canonicalize(voteStatement(relabelled)));
+  const result = expectTally(tallyOf(prop, [key, relabelled]));
+  assert.equal(result.accepted, 1);
+  assert.deepEqual(reasons(result), ["duplicate-voter"]);
+  assert.deepEqual(result.counts, [
+    { choice: "yes", keys: 1, weight: 1 },
     { choice: "no", keys: 0, weight: 0 },
   ]);
 });

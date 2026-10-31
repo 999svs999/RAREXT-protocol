@@ -123,17 +123,22 @@ test("the store refuses a corrupt or newer snapshot instead of starting empty", 
   }
 });
 
-test("migration 2 → 3 adds an empty challenges array and preserves the rest", () => {
+test("an older snapshot migrates forward, each step adding its own fields", () => {
   const result = migrateSnapshot({
     version: 2,
     publications: [],
     rotations: [{ handle: "h", fromKeyId: "k", fromPublicKey: "p", fromAlgorithm: "ecdsa-p256", createdAt: "t" }],
   });
 
-  assert.equal(result.snapshot.version, 3);
+  assert.equal(result.snapshot.version, 4);
   assert.deepEqual(result.snapshot.challenges, []);
+  assert.deepEqual(result.snapshot.proposals, [], "the newest step adds governance");
+  assert.deepEqual(result.snapshot.governanceVotes, []);
   assert.equal((result.snapshot.rotations as unknown[]).length, 1, "the v2 fields are preserved");
-  assert.deepEqual(result.applied, ["add durable challenge storage and sponsor nonce tracking"]);
+  assert.deepEqual(result.applied, [
+    "add durable challenge storage and sponsor nonce tracking",
+    "add governance proposals and their votes",
+  ]);
 });
 
 test("a challenge created at runtime survives a restart", () => {

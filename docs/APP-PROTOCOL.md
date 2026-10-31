@@ -144,6 +144,30 @@ with 409. When no member roster is configured it returns 503.
 
 A successful request returns 201 with the stored `Challenge`, including
 `status: "sponsored"` and `sponsor`. Sponsored challenges then appear in
+### Governance
+
+A community's decisions travel the same way everything else does: as artifacts a stranger can
+recompute. A node keeps them and serves them; it never decides anything.
+
+| Route | What it does |
+| --- | --- |
+| `POST /v1/governance/proposals` | Pin a proposal document. The node answers with the root it COMPUTED for it — the number every vote is bound to. A proposal the tally could not compute (no close time, no choices, no pinned policy) is refused here, using the same validation the tally uses. One id names one document: a second, different document under an id already in use is a `409`. |
+| `GET /v1/governance/proposals` | Every proposal this node holds, with the root it computed for each. |
+| `GET /v1/governance/proposals/:root` | One proposal, its votes, and the tally. |
+| `POST /v1/governance/proposals/:root/votes` | Accept a signed vote. The signature is checked at the door — an unusable row is not worth storing — but acceptance is NOT a verdict: `one key is one vote`, the window, the choice and the weight are the tally's findings, and it reports each one by name. |
+
+`GET /v1/governance/proposals/:root` answers with `{ root, proposal, votes, tally }`, where the
+tally is `tallyVotes` from `@rarext/core` run by this node — the same function a stranger runs
+offline over the same published votes. Its digest (`tallyRoot`) is what two independent
+recomputations compare, so a reader does not have to trust this node's arithmetic: they can
+repeat it. A vote that does not count is refused BY NAME in that answer — a wrong proposal root,
+an unknown choice, a time outside the window, a forged or edited signature, a second ballot from
+one key, a key the credit ledger does not know — because a silent subtraction is not an audit.
+
+When a proposal pins `policy: { kind: "work", creditUnit: … }`, weight is read from the same
+credit ledger the work board pays into (`GET /v1/work/earnings`), keyed by the KEY EACH BALLOT
+WAS SIGNED BY — not by the voter label, which a voter chooses for itself.
+
 `GET /v1/challenges` and `GET /v1/challenges/:id`. The registry currently keeps
 them in memory, so a restart requires re-submitting the signed payload; durable
 challenge storage is not part of this version.

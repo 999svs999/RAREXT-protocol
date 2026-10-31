@@ -456,10 +456,11 @@ A corrupt or partially written file stops the process with `could not load …` 
 of starting from an empty store. That is deliberate: the first write after an empty
 start would replace the only copy of the registry's history.
 
-Snapshot version 3 is current. Versions 1 and 2 are still readable: migration 1 → 2 adds empty
-`rotations` and `delegations` arrays, so a store that never rotated a key loads unchanged, and
+Snapshot version 4 is current. Versions 1, 2 and 3 are still readable: migration 1 → 2 adds empty
+`rotations` and `delegations` arrays, so a store that never rotated a key loads unchanged,
 migration 2 → 3 adds an empty `challenges` array and an empty `sponsorNonces` array, so a
-store that never created a challenge at runtime loads unchanged. `sponsorNonces` is
+store that never created a challenge at runtime loads unchanged, and migration 3 → 4 adds empty
+`proposals` and `governanceVotes` arrays, so a store that never held a decision loads unchanged. `sponsorNonces` is
 anti-replay state: it records which sponsorship nonces this node has consumed, so a restart
 cannot accept a second sponsorship under a nonce it already spent.
 Adding a migration means adding an entry to `snapshotMigrations` in

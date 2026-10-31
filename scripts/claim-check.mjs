@@ -2387,6 +2387,9 @@ function checkRolesRfc(overrides = {}) {
     "GOVERNANCE_PROPOSAL_KIND",
     "GOVERNANCE_VOTE_KIND",
     "UNKNOWN_WEIGHT",
+    "proposalProblems",
+    "voteProblems",
+    "keyId",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {
@@ -2433,6 +2436,7 @@ function checkRolesRfc(overrides = {}) {
     ["the protocol supplies the accounting; the application supplies", "the protocol/application boundary for tokens"],
     ["no token sale by the protocol or its maintainers", "the standing refusal this RFC does not reopen"],
     ["the same votes in a different order recompute to the same root", "the determinism a recomputable tally depends on"],
+    ["the identity that votes is the key, not the label", "which identifier counts a voter"],
   ]) {
     if (!haystack.includes(squash(sentence))) {
       fail(`RFC 0021 no longer states ${why}`);

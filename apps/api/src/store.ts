@@ -7,6 +7,7 @@ import type {
   RevocationKind,
 } from "./revocations.ts";
 import type { CreditRecord } from "./work.ts";
+import type { GovernanceProposal, GovernanceVote } from "../../../packages/core/src/index.ts";
 import type {
   Anchor,
   Artifact,
@@ -53,6 +54,8 @@ interface Snapshot {
   delegations?: Delegation[];
   challenges?: Challenge[];
   sponsorNonces?: string[];
+  proposals?: Array<{ root: string; proposal: GovernanceProposal }>;
+  governanceVotes?: GovernanceVote[];
 }
 
 export class RarextStore {
@@ -71,6 +74,8 @@ export class RarextStore {
   private readonly identityLinks = new Map<string, IdentityLink>();
   private readonly revocations = new Map<string, Revocation>();
   private readonly credits: CreditRecord[] = [];
+  private readonly proposalsByRoot = new Map<string, { root: string; proposal: GovernanceProposal }>();
+  private readonly governanceVotes: GovernanceVote[] = [];
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -505,6 +510,50 @@ export class RarextStore {
       .reverse();
   }
 
+  /**
+   * Governance: what a node keeps so a decision's evidence survives a restart.
+   *
+   * A proposal is stored with the root this node COMPUTED for it, and a vote is stored exactly as
+   * it arrived. Neither is stored with a verdict: the store is a bulletin board, not a judge. The
+   * tally refuses what it refuses, by name, and recomputes that verdict for anyone who asks —
+   * including this node — so nothing here may pre-empt it. Votes are kept in arrival order and
+   * never deduplicated here, because "one key is one vote" is a rule of the tally and a store that
+   * enforced it too would be a second rule that could disagree with the first.
+   */
+  addProposal(proposal: GovernanceProposal, root: string, persist = true): void {
+    this.proposalsByRoot.set(root, { root, proposal });
+    if (persist) this.persist();
+  }
+
+  getProposal(root: string): GovernanceProposal | null {
+    return this.proposalsByRoot.get(root)?.proposal ?? null;
+  }
+
+  listProposals(): Array<{ root: string; proposal: GovernanceProposal }> {
+    return [...this.proposalsByRoot.values()];
+  }
+
+  /** The root this node computed for a proposal id, so one id cannot quietly mean two documents. */
+  proposalRootForId(id: string): string | null {
+    for (const entry of this.proposalsByRoot.values()) {
+      if (entry.proposal.id === id) return entry.root;
+    }
+    return null;
+  }
+
+  addGovernanceVote(vote: GovernanceVote, persist = true): void {
+    this.governanceVotes.push(vote);
+    if (persist) this.persist();
+  }
+
+  governanceVotesFor(root: string): GovernanceVote[] {
+    return this.governanceVotes.filter((vote) => vote.proposalRoot === root);
+  }
+
+  listGovernanceVotes(): GovernanceVote[] {
+    return [...this.governanceVotes];
+  }
+
   addCredit(record: CreditRecord): void {
     this.credits.push(record);
     this.persist();
@@ -654,6 +703,14 @@ export class RarextStore {
       for (const credit of snapshot.credits ?? []) {
         this.credits.push(credit);
       }
+
+      for (const entry of snapshot.proposals ?? []) {
+        this.proposalsByRoot.set(entry.root, entry);
+      }
+
+      for (const vote of snapshot.governanceVotes ?? []) {
+        this.governanceVotes.push(vote);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`could not load ${this.filePath}: ${message}`);
@@ -677,6 +734,8 @@ export class RarextStore {
       delegations: [...this.delegations],
       challenges: this.challenges(),
       sponsorNonces: [...this.usedSponsorNonces],
+      proposals: [...this.proposalsByRoot.values()],
+      governanceVotes: [...this.governanceVotes],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });
