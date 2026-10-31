@@ -32,6 +32,7 @@ Tools:
 - `rarext_verify`
 - `rarext_verify_ai`
 - `rarext_verify_semantics`
+- `rarext_verify_federation`
 - `rarext_attest_local`
 - `rarext_anchor`
 - `rarext_anchor_proof`

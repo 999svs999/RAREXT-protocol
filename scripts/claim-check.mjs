@@ -1861,6 +1861,42 @@ function checkAnnouncementRfc(overrides = {}) {
   }
 
 
+  // THE FEDERATION COMMITMENT IS ONE RULE: core owns the reader and the digest, and every
+  // resident — the browser page, the SDK's federation query, the MCP verb — reads through
+  // them. A client that JSON-parses the commitment body itself is a second reader, free to
+  // disagree about what a commitment looks like; that duplication existed once and is what
+  // this rule prevents.
+  {
+    const readers = {
+      "apps/web/src/ai.ts": "parseFederationCommitmentArtifact",
+      "apps/mcp/src/verify-federation.ts": "parseFederationCommitmentArtifact",
+      "packages/agent-sdk/src/registries.ts": "parseFederationCommitmentArtifact",
+    };
+    let checked = 0;
+    for (const [file, marker] of Object.entries(readers)) {
+      checked += 1;
+      const source = readFileSync(new URL(file, root), "utf8");
+      // A USE, not a mention: an import line satisfies `.includes(marker)`, so the marker is
+      // the call itself — a client that imports the parser and parses the body by hand is
+      // exactly the second reader this rule exists to prevent.
+      if (!source.includes(marker + "(")) {
+        fail(`${file} reads the federation commitment without calling core's parser`);
+      }
+    }
+    if (checked === 0) fail("the federation one-rule sweep read no client — a sweep that reads nothing proves nothing");
+    const web = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
+    if (/JSON\.parse\(String\(commitment\.artifact/.test(web)) {
+      fail("the browser page parses the federation commitment body itself instead of using core's parser");
+    }
+    const mcpVerb = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
+    if (!mcpVerb.includes('name: "rarext_verify_federation"')) {
+      fail("the MCP server no longer exposes rarext_verify_federation");
+    }
+    console.log(
+      `federation commitment: ${checked} resident(s) read it through core's parser | the MCP verb is exposed`,
+    );
+  }
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit

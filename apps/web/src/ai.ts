@@ -9,6 +9,7 @@ import {
 } from "@rarext/core";
 import {
   REGISTRY_LIST_COMMITMENT_KIND,
+  parseFederationCommitmentArtifact,
   parseRegistrySeedList,
   registryListDigestSource,
 } from "@rarext/core";
@@ -76,18 +77,16 @@ export const STARTER_STEPS = 32;
 export function federationFromBundle(bundle: {
   publications?: Array<{ artifact?: { kind?: unknown; body?: unknown } }>;
 }): { listUrl: string; digest: string } | null {
-  const commitment = (bundle.publications ?? []).find(
-    (publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND,
-  );
-  if (!commitment) return null;
-
-  try {
-    const body = JSON.parse(String(commitment.artifact?.body)) as { listUrl?: unknown; digest?: unknown };
-    if (typeof body.listUrl !== "string" || typeof body.digest !== "string") return null;
+  // The READER is core's (`parseFederationCommitmentArtifact`), the same one the SDK's
+  // federation query uses — a page that parsed the body itself would be a second reader, free
+  // to disagree with the SDK about what a commitment looks like.
+  for (const publication of bundle.publications ?? []) {
+    if (publication.artifact?.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;
+    const body = parseFederationCommitmentArtifact(publication.artifact as never);
+    if (!body) continue;
     return { listUrl: body.listUrl, digest: body.digest };
-  } catch {
-    return null;
   }
+  return null;
 }
 
 export async function sha256Hex(text: string): Promise<string> {

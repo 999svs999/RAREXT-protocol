@@ -20,6 +20,7 @@ import {
 import { attestLocalFromArgs } from "./attest-local.ts";
 import { verifyAiLocally } from "./verify-ai.ts";
 import { verifyRegistrySemantics } from "./verify-semantics.ts";
+import { verifyRegistryFederation } from "./verify-federation.ts";
 import {
   storageAudit,
   storageChallenge,
@@ -163,6 +164,12 @@ const tools = [
         },
       },
     },
+  },
+  {
+    name: "rarext_verify_federation",
+    description:
+      "Check whether the registry's PUBLISHED SEED LIST matches what its own bundle commits to: fetch the bundle, read the federation commitment, fetch the list at the URL it names, and recompute the list's digest HERE with core's rule. Reports both digests, the registries the list names as data, and what the check does not establish: matching proves the list is the one committed to, not that any registry in it is trustworthy.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "rarext_verify_semantics",
@@ -501,6 +508,18 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         );
       }
       return client.semantics();
+
+    case "rarext_verify_federation": {
+      const report = await verifyRegistryFederation(client);
+      // null is not false: a bundle that records no federation commitment never made the claim.
+      if (!report) {
+        return {
+          matches: null,
+          note: "this bundle records no federation commitment, so there is nothing it has committed to",
+        };
+      }
+      return report;
+    }
 
     case "rarext_verify_semantics": {
       const report = await verifyRegistrySemantics(client);
