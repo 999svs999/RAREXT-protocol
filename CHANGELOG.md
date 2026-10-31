@@ -11,6 +11,29 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A node declares its own binding — the reference deployment is now the first site that
+  transited, and it says so from its own state.** Iterations #1 and #2 made a site's binding mean
+  something and readable; this makes a node answer the question about itself, at the same path a
+  static site publishes: `GET /.well-known/rarext.json` returns
+  `{registry, root, bundle, issuedAt}`, where the root is the newest anchor **this deployment
+  actually made** (so the statement cannot drift from the record it describes) and the location
+  comes from `requestOrigin`, the helper every other self-describing route already uses, so a
+  node behind a proxy names the address a client actually reached. Nothing is hand-written and
+  nothing is guessed: `RAREXT_REGISTRY_ID` names the registry the node answers for, and unset (or
+  blank) means it publishes **no** binding rather than a plausible one, because a node that picks
+  its own name is making a claim about someone else's registry; a node that has anchored nothing
+  answers 404 with the reason, because it cannot state a root it does not have. Both refusals are
+  tested, and the client reads the node with the ordinary reader — `readSiteBinding` against a
+  loopback node, then `node scripts/site-binding.mjs http://127.0.0.1:8787 --registry rarext
+  --root <64-hex> --allow-private` printing JOINED. The environment setting is in the OPERATIONS
+  table, which the checker enforces in both directions, so it could not be added silently.
+- **One limit stated plainly rather than glossed.** The file carrier lives at
+  `/.well-known/rarext.json` on the ORIGIN, because a binding binds a host and not a path. A
+  project page under a shared origin — the usual `user.github.io/project` shape, which is what
+  this project's own site is — therefore cannot declare for that origin: the origin root belongs
+  to whoever controls the origin. TRANSITION.md now says so, and names the three ways such a site
+  joins instead: its own hostname, the `_rarext` record at its own host, or running a node and
+  serving the route.
 - **The transition can now be READ, in one command, and the client says which of four things
   happened.** Iteration #1 made a site's binding mean something; this one reads it. The reader
   (`readSiteBinding`, exported from `@rarext/agent-sdk`, living in the SDK because core decides

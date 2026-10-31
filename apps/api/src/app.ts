@@ -131,9 +131,10 @@ import {
 import { registrySeedList } from "./registries.ts";
 import { isRevocationKind } from "./revocations.ts";
 import { buildLaunchTrajectory, type LaunchCheckInput } from "./trajectory.ts";
-import type {
-  OperatorAttestation,
-  StorageInclusionProof,
+import {
+  RAREXT_SITE_BINDING_PATH,
+  type OperatorAttestation,
+  type StorageInclusionProof,
 } from "../../../packages/core/src/index.ts";
 import {
   createVerifierRegistry,
@@ -737,6 +738,50 @@ function asExternalProof(value: unknown): TracIdentityProof | undefined {
   };
 }
 
+/**
+ * What this node says about itself, computed and never authored.
+ *
+ * A registry id is required because a node that picks its own name is making a claim about
+ * someone else's registry: `RAREXT_REGISTRY_ID` is the one thing an operator must state, and
+ * with it unset this node publishes no binding rather than a plausible one. The root comes
+ * from the newest anchor this deployment actually made, so the statement is derived from the
+ * record. The location comes from `requestOrigin`, the same helper every other self-describing
+ * route uses, so a node behind a proxy names the address a client actually reached.
+ */
+function nodeSiteBinding(
+  store: RarextStore,
+  req: IncomingMessage,
+): { registry: string; root: string; bundle?: string; issuedAt?: string } | { error: string } {
+  const registryId = (process.env.RAREXT_REGISTRY_ID ?? "").trim();
+  if (registryId.length === 0) {
+    return {
+      error:
+        "this node serves no named registry, so it publishes no binding: set RAREXT_REGISTRY_ID to the registry it answers for",
+    };
+  }
+
+  const latest = store.listAnchors()[0];
+  if (!latest) {
+    return { error: "this node has anchored nothing yet, so it cannot state a root; anchor a batch first" };
+  }
+
+  const binding: { registry: string; root: string; bundle?: string; issuedAt?: string } = {
+    registry: registryId,
+    root: latest.root,
+    issuedAt: latest.createdAt,
+  };
+
+  try {
+    binding.bundle = `${requestOrigin(req)}/v1/bundles/latest`;
+  } catch {
+    // A request without a Host header (HTTP/1.0, a synthetic client) cannot be told where it
+    // found this node. The root is what makes the statement true, so an unnamed location is
+    // dropped rather than invented.
+  }
+
+  return binding;
+}
+
 function requestOrigin(req: IncomingMessage): string {
   const configured = process.env.RAREXT_ORIGIN;
   if (configured) return configured;
@@ -1268,6 +1313,26 @@ export function createApp(options: AppOptions = {}): AppServer {
           identityLinks: store.identityLinkCount(),
           adapters: registry.list().length,
         });
+        return;
+      }
+
+      // A node declares its own transition.
+      //
+      // Every server can be a node here, and the first thing a node should be able to say
+      // about itself is which registry it serves and at which root — in the same statement an
+      // existing website publishes to join (docs/TRANSITION.md). This serves it from the
+      // node's OWN state rather than from a hand-written file: the root is the one this
+      // deployment actually anchored, so the statement cannot drift away from the record it
+      // describes, and a node that has anchored nothing refuses rather than guessing.
+      if (req.method === "GET" && pathname === RAREXT_SITE_BINDING_PATH) {
+        const binding = nodeSiteBinding(store, req);
+        if ("error" in binding) {
+          // 404 rather than 500: the client's question is "did this site publish a binding",
+          // and the honest answer is no. The body says why, for the operator reading it.
+          send(res, 404, { error: binding.error });
+          return;
+        }
+        send(res, 200, binding);
         return;
       }
 

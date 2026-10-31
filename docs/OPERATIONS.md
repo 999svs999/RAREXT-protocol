@@ -386,6 +386,7 @@ name the code reads that no document explains both fail the gate.
 | API | `RAREXT_PUBLIC_DIR` | the web app's built `public/` | the directory served as the public tree |
 | API | `RAREXT_ANCHOR_EVERY` | `0` (off) | write an anchor automatically once this many publications have accumulated |
 | API | `RAREXT_REVOCATIONS` | empty | revocations to honour, as inline JSON or a file path; empty means none are loaded, so a deployment that needs them must set this |
+| API | `RAREXT_REGISTRY_ID` | unset (no binding served) | the registry this node answers for; unset means the node serves no `/.well-known/rarext.json` rather than a plausible one, and blank counts as unset |
 | API | `RAREXT_PIN_MAX_BYTES` | unset (no cap) | largest pin request body the pinning service accepts |
 | API | `RAREXT_PIN_MAX_REQUESTS` | unset (no cap) | requests per window the pinning service accepts from one caller |
 | MCP | `RAREXT_API_KEY` | unset | the key the MCP client sends to the API |

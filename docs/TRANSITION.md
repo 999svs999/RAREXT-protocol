@@ -65,6 +65,44 @@ A host that wants to do more — publish, attest, run an API or an MCP server �
 same tree runs all of it on plain `node` (see [OPERATIONS.md](OPERATIONS.md)). That is an
 upgrade, not a requirement.
 
+## A node declares its own binding
+
+Every server can be a node, and a node that runs the API answers the transition question about
+itself — at the same path a static site publishes:
+
+```
+GET /.well-known/rarext.json
+{"registry":"rarext","root":"<the root this node anchored>","bundle":"<this node>/v1/bundles/latest","issuedAt":"…"}
+```
+
+Nothing here is hand-written. The root is the newest anchor **this deployment actually made**,
+so the statement cannot drift from the record it describes, and the location comes from the
+same origin helper every other self-describing route uses, so a node behind a proxy names the
+address a client actually reached.
+
+Two settings of the same kind, both fail-closed:
+
+- `RAREXT_REGISTRY_ID` names the registry the node answers for. Unset (or blank) it publishes
+  **no** binding rather than a plausible one: a node that picks its own name is making a claim
+  about someone else's registry.
+- A node that has anchored nothing answers `404` with the reason. It cannot state a root it does
+  not have, and inventing one would be the one thing a binding must never do.
+
+So the reference deployment is a node that has transited, by the ordinary path:
+
+```bash
+RAREXT_REGISTRY_ID=rarext node apps/api/src/server.ts
+node scripts/site-binding.mjs http://127.0.0.1:8787 --registry rarext --root <64-hex> --allow-private
+# JOINED: this site serves rarext at the pinned root …
+```
+
+**One limit worth stating plainly.** The file carrier lives at `/.well-known/rarext.json` on the
+**origin**, because a binding binds a host — not a path. A project page served under a shared
+origin (the usual `user.github.io/project` shape) cannot declare for that origin: the origin
+root belongs to whoever controls the origin, and this protocol will not pretend otherwise. Such
+a site joins by publishing the statement at its own hostname, or by the record carrier at
+`_rarext.<its-own-host>`, or by running a node and serving the route above.
+
 ## What this is not
 
 - **Not a name service, and not a replacement for DNS.** The hostname is still resolved by

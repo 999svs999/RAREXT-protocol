@@ -2373,7 +2373,14 @@ function checkSiteTransition(overrides) {
 
   // The reading half is documented, exists, and keeps its honest refusal: a client that
   // cannot check against a pinned root must not print a verdict.
-  for (const marker of ["scripts/site-binding.mjs", "readSiteBinding", "URL_POLICY_REFUSAL_CODE", "refuses to invent a verdict"]) {
+  for (const marker of [
+    "scripts/site-binding.mjs",
+    "readSiteBinding",
+    "URL_POLICY_REFUSAL_CODE",
+    "refuses to invent a verdict",
+    "A node declares its own binding",
+    "RAREXT_REGISTRY_ID",
+  ]) {
     if (!doc.includes(marker)) {
       fail(`TRANSITION.md no longer documents the reading half (${marker})`);
     }
