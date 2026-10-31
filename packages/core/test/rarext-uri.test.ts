@@ -6,7 +6,9 @@ import {
   formatRarextUri,
   parseRarextUri,
   rarextUriForRoot,
+  rarextUriFromUrl,
   sameRarextObject,
+  urlForRarextUri,
 } from "../src/index.ts";
 import type { RarextUri } from "../src/index.ts";
 
@@ -107,4 +109,41 @@ test("surrounding structure is not invented: an empty body, a bare authority, an
     const result = parseRarextUri(text);
     assert.equal(result.ok, false, `${text} must be refused`);
   }
+});
+
+test("a surface that holds a URL and a root can say both, and the pair round-trips", () => {
+  const built = rarextUriFromUrl("https://example.com/registry/bundle.json", ROOT);
+  assert.equal(built.ok, true, built.ok ? "" : built.reason);
+  if (!built.ok) return;
+  assert.equal(formatRarextUri(built.uri), `rarext:example.com/registry/bundle.json@${ROOT}`);
+  assert.equal(urlForRarextUri(built.uri), "https://example.com/registry/bundle.json");
+
+  // A port is part of the authority, and the scheme is the caller's to name — a reference carries
+  // none, because it is not a URL.
+  const loopback = rarextUriFromUrl("http://127.0.0.1:8787/v1/bundles/latest", ROOT);
+  assert.equal(loopback.ok, true, loopback.ok ? "" : loopback.reason);
+  if (!loopback.ok) return;
+  assert.equal(loopback.uri.authority, "127.0.0.1:8787");
+  assert.equal(urlForRarextUri(loopback.uri, "http"), "http://127.0.0.1:8787/v1/bundles/latest");
+
+  // A query survives the trip.
+  const withQuery = rarextUriFromUrl("https://example.com/x.json?full=1", ROOT);
+  assert.equal(withQuery.ok, true);
+  if (withQuery.ok) assert.equal(urlForRarextUri(withQuery.uri), "https://example.com/x.json?full=1");
+
+  // And a bare root names no location, so there is no URL to build — null, not a guess.
+  assert.equal(urlForRarextUri(parsed(`rarext:${ROOT}`)), null);
+});
+
+test("building a reference from a location refuses what a reader cannot go to, and a root that is not one", () => {
+  const file = rarextUriFromUrl("file:///etc/passwd", ROOT);
+  assert.equal(file.ok, false);
+  if (!file.ok) assert.match(file.reason, /not a location a reader can go to/);
+
+  const badRoot = rarextUriFromUrl("https://example.com/x.json", "nope");
+  assert.equal(badRoot.ok, false);
+  if (!badRoot.ok) assert.match(badRoot.reason, /64-hex/);
+
+  const notUrl = rarextUriFromUrl("example.com/x.json", ROOT);
+  assert.equal(notUrl.ok, false);
 });

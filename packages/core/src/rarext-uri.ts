@@ -161,3 +161,57 @@ export function rarextUriForRoot(root: string): string {
 export function sameRarextObject(left: RarextUri, right: RarextUri): boolean {
   return left.root === right.root;
 }
+
+/**
+ * A reference built from a URL and the root its bytes rebuild to.
+ *
+ * The ordinary way a surface produces a reference: it already holds where the object lives (the
+ * URL it fetched, the bundle URL a binding named) and the root it verified, so it can say both
+ * without inventing anything. Refused by name for a scheme a RAREXT reference cannot mean — a
+ * `file:` or `data:` location is not a place a reader can go.
+ */
+export function rarextUriFromUrl(url: string, root: string): RarextUriParse {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, reason: `${JSON.stringify(url)} is not a URL` };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, reason: `${parsed.protocol}// is not a location a reader can go to` };
+  }
+  if (!HEX64.test(root.toLowerCase())) {
+    return { ok: false, reason: `a reference needs the 64-hex root its bytes rebuild to, got ${JSON.stringify(root)}` };
+  }
+
+  const path = parsed.pathname
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map(decodeURIComponent);
+  const authority = parsed.host.toLowerCase();
+
+  return {
+    ok: true,
+    uri: {
+      ...(authority.length === 0 ? {} : { authority }),
+      ...(path.length === 0 ? {} : { path }),
+      root: root.toLowerCase(),
+      ...(parsed.search.length > 1 ? { query: parsed.search.slice(1) } : {}),
+    },
+  };
+}
+
+/**
+ * Where to go for a reference — and `null` for one that names no location.
+ *
+ * A bare root deliberately returns null: it says what to look for and not where, and a caller that
+ * wants a URL for it has to choose the candidate itself. The scheme is the caller's to name because
+ * a `rarext:` reference carries none — it is not a URL — and a loopback deployment knows something
+ * a public one does not.
+ */
+export function urlForRarextUri(uri: RarextUri, scheme: "https" | "http" = "https"): string | null {
+  if (uri.authority === undefined) return null;
+  const path = uri.path === undefined || uri.path.length === 0 ? "" : `/${uri.path.map(encodeURIComponent).join("/")}`;
+  const query = uri.query === undefined ? "" : `?${uri.query}`;
+  return `${scheme}://${uri.authority}${path}${query}`;
+}

@@ -16,7 +16,13 @@
 // Plain `node`, no install: the reader and the rule both resolve inside the tree.
 
 import { readSiteBinding } from "../packages/agent-sdk/src/index.ts";
-import { RAREXT_SITE_BINDING_PATH, verifySiteBinding } from "../packages/core/src/index.ts";
+import {
+  RAREXT_SITE_BINDING_PATH,
+  formatRarextUri,
+  rarextUriForRoot,
+  rarextUriFromUrl,
+  verifySiteBinding,
+} from "../packages/core/src/index.ts";
 
 const argv = process.argv.slice(2);
 const positional = [];
@@ -105,5 +111,18 @@ if (outcome.verdictError !== null) {
 console.log(
   `\nJOINED: this site serves ${binding.registry} at the pinned root ${binding.root.slice(0, 16)}… — ` +
     "it keeps its hostname, its certificate and its deployment, and the network can verify its bytes.",
+);
+
+// The reference to what just verified, so the reader can carry it somewhere else. With a bundle URL
+// it names a location and the root; without one it names only the root, which is the honest form:
+// the object, and no place to look — whoever holds it can find the bytes anywhere.
+const reference =
+  typeof binding.bundle === "string" && binding.bundle.length > 0
+    ? rarextUriFromUrl(binding.bundle, binding.root)
+    : { ok: true, uri: { root: binding.root } };
+console.log(
+  reference.ok
+    ? `reference: ${formatRarextUri(reference.uri)}\n  (or the same object with no location: ${rarextUriForRoot(binding.root)})`
+    : `reference: rarext:${binding.root} — its bundle URL could not be named (${reference.reason})`,
 );
 process.exit(0);

@@ -133,12 +133,21 @@ node scripts/site-binding.mjs https://example.com --registry rarext --root <64-h
 
 # JSON, for a pipeline. Exit code is 0 only when the site has joined.
 node scripts/site-binding.mjs https://example.com --root <64-hex> --json
+
+# And resolve a reference — the object named, wherever it lives. Exit 0 verified, 1 not verified,
+# 2 for a usage error; every refused candidate is printed with its reason.
+node scripts/resolve.mjs 'rarext:example.com/registry/bundle.json@<64-hex>'
 ```
 
 Exit codes are the contract: `0` when the statement is readable and, if a root was given, it
 matches; `1` when the site published no binding or does not match the pin; `2` for a usage
 error. With no `--root` the command prints the statement and **refuses to invent a verdict**,
 because a binding cannot certify itself.
+
+Once a copy has verified, a client can name it: `demo:resident` ends by printing the reference of
+the copy it checked, and so does the site-binding CLI for a joined site — a `rarext:` reference
+carries the root it commits to (RFC 0022), so what it names travels without this run having to be
+trusted.
 
 Two details are load-bearing and both are held by tests:
 

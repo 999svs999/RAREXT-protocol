@@ -28,6 +28,7 @@ import {
   readBundleResponseBytes,
   parseRarextUri,
   unresolvedIdentity,
+  urlForRarextUri,
   verifyAiArtifact,
   verifyBundleShape,
   verifyCandidates,
@@ -493,8 +494,9 @@ export async function resolveRarextUri(
         attempts: [],
       };
     }
-    const path = uri.path === undefined ? "" : `/${uri.path.join("/")}`;
-    candidates.push(`${options.scheme ?? "https"}://${uri.authority}${path}`);
+    // The reference-to-URL rule lives in core, beside the parser it has to agree with.
+    const located = urlForRarextUri(uri, options.scheme ?? "https");
+    if (located !== null) candidates.push(located);
   }
   for (const candidate of options.candidates ?? []) candidates.push(candidate);
 

@@ -93,7 +93,9 @@ export {
   formatRarextUri,
   parseRarextUri,
   rarextUriForRoot,
+  rarextUriFromUrl,
   sameRarextObject,
+  urlForRarextUri,
 } from "./rarext-uri.ts";
 export type { RarextUri, RarextUriParse } from "./rarext-uri.ts";
 export {

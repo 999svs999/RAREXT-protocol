@@ -11,8 +11,15 @@ rather than guessed (an id needs the federation list, and guessing would make th
 load-bearing), and a bare root with no candidates is refused with the reason: it says what to look
 for, not where.
 
-What still does not exist: resolution of anything but a bundle, and any client that PRINTS a
-`rarext:` reference for a human. Retrieval remains HTTPS plus the binding convention.
+Surfaces now PRINT references rather than only accepting them: `demo:resident` ends by naming the
+copy it verified, `scripts/site-binding.mjs` names the object a joined site serves, and
+`scripts/resolve.mjs` resolves a reference from the command line — exit 0 verified, 1 not, 2 for a
+usage error — printing every candidate it refused and why. Verified in the ordinary case against
+the project's own live registry: the demo's reference resolves, and a version of it with a wrong
+root fails naming both roots.
+
+What still does not exist: resolution of anything but a bundle (a publication or a blob by CID), and
+any browser support. Retrieval remains HTTPS plus the binding convention.
 
 ## The problem
 

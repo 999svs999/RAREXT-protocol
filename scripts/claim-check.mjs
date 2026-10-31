@@ -2406,6 +2406,8 @@ function checkNamingRfc(overrides = {}) {
     "verifySiteBinding",
     "resolveRarextUri",
     "findVerifiedBundleFromSeeds",
+    "rarextUriFromUrl",
+    "urlForRarextUri",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {
@@ -2610,6 +2612,7 @@ function checkSiteTransition(overrides) {
     "refuses to invent a verdict",
     "A node declares its own binding",
     "RAREXT_REGISTRY_ID",
+    "scripts/resolve.mjs",
   ]) {
     if (!doc.includes(marker)) {
       fail(`TRANSITION.md no longer documents the reading half (${marker})`);
@@ -3477,6 +3480,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     "packages/agent-sdk/src/index.ts",
     "findVerifiedBundle",
     "replayBundleAi",
+    "rarextUriFromUrl",
     "https://999svs999.github.io/RAREXT-protocol/registry/seed.json",
     "--local",
   ]) {

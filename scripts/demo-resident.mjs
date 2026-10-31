@@ -26,6 +26,11 @@ import { fileURLToPath } from "node:url";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
 import { attestAiLocally } from "../apps/mcp/src/attest-local.ts";
+import {
+  formatRarextUri,
+  rarextUriForRoot,
+  rarextUriFromUrl,
+} from "../packages/core/src/index.ts";
 
 const LIVE_SEED_URL = "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
 const TIMEOUT_MS = Number(process.env.RAREXT_DEMO_TIMEOUT_MS ?? 20_000);
@@ -289,6 +294,16 @@ async function main() {
 
     const publications = Array.isArray(found.bundle.publications) ? found.bundle.publications.length : 0;
     console.log(`\nServed from ${found.source}`);
+
+    // The reference a reader carries away. It names the object by the root the copy rebuilt to, so
+    // pasting it somewhere else does not have to trust this run — and the bare form names the same
+    // object without naming a place at all.
+    const named = rarextUriFromUrl(found.source, found.root);
+    console.log(
+      named.ok
+        ? `Carry it away as: ${formatRarextUri(named.uri)}`
+        : `Carry it away as: ${rarextUriForRoot(found.root)}`,
+    );
     console.log(`verified root ${found.root} · ${publications} publication(s)`);
 
     const replay = sdk.replayBundleAi(found.bundle);

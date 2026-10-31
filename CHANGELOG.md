@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The reference form is now USED, not merely specified: the surfaces print one, and a command
+  resolves one.** `demo:resident` ends by naming the copy it verified — against the live registry it
+  prints `rarext:999svs999.github.io/RAREXT-protocol/registry/bundle.json@7ebdf81a…` — and
+  `scripts/site-binding.mjs` names the object a joined site serves (falling back to the bare-root
+  form when the binding names no bundle URL, which is the honest one: the object, and no place to
+  look). `scripts/resolve.mjs` resolves a reference from the command line with the same contract as
+  the other CLIs: exit 0 verified, 1 not verified, 2 for a usage error, and every refused candidate
+  printed with its reason. The round trip is proven against the project's own live registry — the
+  demo's reference resolves, and the same reference with a wrong root fails naming BOTH roots
+  ("verifies internally but rebuilds …, not the pinned …").
+- **Two conversions moved into core, so nothing re-implements them.** `rarextUriFromUrl` (a
+  location plus a verified root becomes a reference, refused by name for a `file:`-style scheme) and
+  `urlForRarextUri` (where to go, or `null` for a bare root that names no location) now sit beside
+  the parser they must agree with, and the resolver uses them instead of building URLs inline.
 - **Who pays for a vote: a ballot can be sponsored, and the payer is in the record.** RFC 0021's
   last open governance question is closed. Participation is free and unpaid, so a participant with
   no credits must still be able to vote — and "free for the voter" must not become "anyone can vote
