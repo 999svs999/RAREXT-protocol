@@ -139,7 +139,26 @@ function registryListDigestSource(entries) {
     }))
   );
 }
+var FEDERATION_APP = "federation";
 var REGISTRY_LIST_COMMITMENT_KIND = "registry-list-commitment";
+function parseFederationCommitmentArtifact(artifact) {
+  if (artifact.app !== FEDERATION_APP) return null;
+  if (artifact.kind !== REGISTRY_LIST_COMMITMENT_KIND) return null;
+  const raw = artifact.body;
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { listUrl, digest, generatedAt } = parsed;
+  if (typeof listUrl !== "string" || listUrl.length === 0) return null;
+  if (typeof digest !== "string" || digest.length === 0) return null;
+  return { listUrl, digest, generatedAt: typeof generatedAt === "string" ? generatedAt : "" };
+}
 
 // packages/core/src/semantics.ts
 var SEMANTICS_APP = "rarext-semantics";
@@ -183,17 +202,13 @@ function bundleSemanticsCommitment(bundle) {
 
 // apps/web/src/ai.ts
 function federationFromBundle(bundle) {
-  const commitment = (bundle.publications ?? []).find(
-    (publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND
-  );
-  if (!commitment) return null;
-  try {
-    const body = JSON.parse(String(commitment.artifact?.body));
-    if (typeof body.listUrl !== "string" || typeof body.digest !== "string") return null;
+  for (const publication of bundle.publications ?? []) {
+    if (publication.artifact?.kind !== REGISTRY_LIST_COMMITMENT_KIND) continue;
+    const body = parseFederationCommitmentArtifact(publication.artifact);
+    if (!body) continue;
     return { listUrl: body.listUrl, digest: body.digest };
-  } catch {
-    return null;
   }
+  return null;
 }
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));

@@ -1,27 +1,27 @@
 {
   "manifest": {
     "version": 1,
-    "root": "d12a3569c271b13c5a105795a317623332865c60a59d465867c3b7b8e254a200",
+    "root": "7ebdf81a1660f395d294040d378f7d76c0efa5d6d8b5b6d70954f54089a27de8",
     "leafVersion": 4,
-    "anchorId": "df807371-1b6b-4550-a9ce-5db32fb3af9a",
-    "anchorRoot": "d12a3569c271b13c5a105795a317623332865c60a59d465867c3b7b8e254a200",
-    "createdAt": "2026-10-31T04:29:38.836Z",
+    "anchorId": "4ced406c-baac-4b48-bc7d-4aa2952ecc69",
+    "anchorRoot": "7ebdf81a1660f395d294040d378f7d76c0efa5d6d8b5b6d70954f54089a27de8",
+    "createdAt": "2026-10-31T05:53:40.802Z",
     "publications": [
       {
-        "id": "80bc1973-9a5b-4fff-8bff-1f4ef2f8d452",
-        "leaf": "b4036335585f25dab669b1aa204bcb02e45a8fa76dbc77cb1d78aa7030be09ac"
+        "id": "e2daac82-fa0b-454b-8c51-328a0ce4c37d",
+        "leaf": "94b3e978d6059bb222f0878fcfa083046c338b64dfbbd0609b5e64879058eccb"
       },
       {
-        "id": "ea7faa0a-a0cd-4698-b3f1-5bab67cf8a61",
-        "leaf": "1c143e6724d766e1e5ff322e794cf74f528279dce2d8640e4a0e755d16b86672"
+        "id": "6b35d72d-3c28-4cf2-936a-195132d5bf77",
+        "leaf": "e975faeef5037a49b9dfdc9edeee4f07c8446e43cc6160a484aa4dcc6a70de9f"
       },
       {
         "id": "pub-federation-commitment",
-        "leaf": "2c63d8ace1e8713a1fcf9f1e69b8e985f1fece6f58534cf29f9fad7f9f2b303f"
+        "leaf": "88dc44d8bb9d2a8c3eaf91e004f872cc68cd41833597d512cd31414c646a0623"
       },
       {
         "id": "pub-semantics-commitment",
-        "leaf": "c63e4fcf0e51b30cc308b0d94dcc473829585d154341be9fd98ab2756cba315b"
+        "leaf": "3c47710c51a92d7f033e5836b915724c26d4c26e986e3d58f9a02120aa5f3f3b"
       }
     ],
     "counts": {
@@ -33,9 +33,9 @@
   },
   "publications": [
     {
-      "id": "80bc1973-9a5b-4fff-8bff-1f4ef2f8d452",
+      "id": "e2daac82-fa0b-454b-8c51-328a0ce4c37d",
       "author": "ai-proof",
-      "authorKey": "42adb12fcff4161b00741b6ba8cf3d8f552c384596698630d5ef85eee394d044",
+      "authorKey": "f636e44711bc1160324f2f51d389e29061371d3897fb22b52bb2f0392ba2159c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -79,13 +79,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T04:29:38.822Z",
-      "attestedAt": "2026-10-31T04:29:38.826Z",
+      "createdAt": "2026-10-31T05:53:40.788Z",
+      "attestedAt": "2026-10-31T05:53:40.791Z",
       "verified": true,
-      "signature": "fNEGask+OJ5mAF5SCK+yFFhAYAFQY9CN5uX+54KAL9Oo/7ZPKZ5x5Mb4kf3DTHdq2WQmkfpiV32r9vTmszogug==",
-      "nonce": "66b8e8b9-cda0-4c21-86ad-f37047ba5388",
+      "signature": "Xdyl2JRPBFONkwFIdYmh/gv01XTRrMqSvx1z6FOiR7MUP1KHR05AWkbfRvN0ee7taKG0NXaFlAX6LqNK+HcjIA==",
+      "nonce": "95a1272b-225c-4567-81ca-5c8e7f18499e",
       "attestation": {
-        "id": "022dd284-a466-4fb5-bfc7-816aafc10ea9",
+        "id": "b4f7acb1-fda0-404b-be26-98e692a1b02c",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -105,16 +105,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T04:29:38.826Z"
+        "createdAt": "2026-10-31T05:53:40.791Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "ea7faa0a-a0cd-4698-b3f1-5bab67cf8a61",
+      "id": "6b35d72d-3c28-4cf2-936a-195132d5bf77",
       "author": "ai-proof",
-      "authorKey": "42adb12fcff4161b00741b6ba8cf3d8f552c384596698630d5ef85eee394d044",
+      "authorKey": "f636e44711bc1160324f2f51d389e29061371d3897fb22b52bb2f0392ba2159c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -153,13 +153,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T04:29:38.828Z",
-      "attestedAt": "2026-10-31T04:29:38.830Z",
+      "createdAt": "2026-10-31T05:53:40.794Z",
+      "attestedAt": "2026-10-31T05:53:40.795Z",
       "verified": true,
-      "signature": "fCNvHSZLHm7mN70SgsRLYs5C/YCzgvut5OclGefNVpfjO0q6toD+YxzLVIyLBG0xy66NCGf30FOe0ggT+ujF/Q==",
-      "nonce": "cdea2e1b-16ea-496e-a587-add63f595612",
+      "signature": "tNd4GtY2JbL8r6IC4MskSyE0z/A3grbuL4JLGVATaR7m0ayKr9YhCn9eb6xAX0YjfValYhTMlsJ1CI+rWbTngw==",
+      "nonce": "48f0404f-7fb0-4348-bf88-867bec421a60",
       "attestation": {
-        "id": "8b10a8c6-db45-4c0b-9032-6a2b85dd10a9",
+        "id": "32c56511-1f11-4a5d-846b-501873c2a9a0",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -181,7 +181,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-31T04:29:38.830Z"
+        "createdAt": "2026-10-31T05:53:40.795Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -190,7 +190,7 @@
     {
       "id": "pub-federation-commitment",
       "author": "ai-proof",
-      "authorKey": "42adb12fcff4161b00741b6ba8cf3d8f552c384596698630d5ef85eee394d044",
+      "authorKey": "f636e44711bc1160324f2f51d389e29061371d3897fb22b52bb2f0392ba2159c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "The federation seed list this bundle commits to",
@@ -202,20 +202,20 @@
         "kind": "registry-list-commitment",
         "version": 1,
         "mediaType": "application/json",
-        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"b710848464a3d097fa3b42bf09d21c587b9a9b8d3d64670bd221a5be20f6c1d7\",\"generatedAt\":\"2026-10-31T04:29:39.294Z\"}"
+        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"b710848464a3d097fa3b42bf09d21c587b9a9b8d3d64670bd221a5be20f6c1d7\",\"generatedAt\":\"2026-10-31T05:53:41.257Z\"}"
       },
       "taskId": "gen-starter",
       "visibility": "public",
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T04:29:38.822Z",
-      "attestedAt": "2026-10-31T04:29:38.826Z",
+      "createdAt": "2026-10-31T05:53:40.788Z",
+      "attestedAt": "2026-10-31T05:53:40.791Z",
       "verified": true,
-      "signature": "fNEGask+OJ5mAF5SCK+yFFhAYAFQY9CN5uX+54KAL9Oo/7ZPKZ5x5Mb4kf3DTHdq2WQmkfpiV32r9vTmszogug==",
-      "nonce": "66b8e8b9-cda0-4c21-86ad-f37047ba5388",
+      "signature": "Xdyl2JRPBFONkwFIdYmh/gv01XTRrMqSvx1z6FOiR7MUP1KHR05AWkbfRvN0ee7taKG0NXaFlAX6LqNK+HcjIA==",
+      "nonce": "95a1272b-225c-4567-81ca-5c8e7f18499e",
       "attestation": {
-        "id": "022dd284-a466-4fb5-bfc7-816aafc10ea9",
+        "id": "b4f7acb1-fda0-404b-be26-98e692a1b02c",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -234,7 +234,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T04:29:38.826Z"
+        "createdAt": "2026-10-31T05:53:40.791Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -243,7 +243,7 @@
     {
       "id": "pub-semantics-commitment",
       "author": "ai-proof",
-      "authorKey": "42adb12fcff4161b00741b6ba8cf3d8f552c384596698630d5ef85eee394d044",
+      "authorKey": "f636e44711bc1160324f2f51d389e29061371d3897fb22b52bb2f0392ba2159c",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "The 5 semantics records this bundle commits to",
@@ -262,13 +262,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T04:29:38.822Z",
-      "attestedAt": "2026-10-31T04:29:38.826Z",
+      "createdAt": "2026-10-31T05:53:40.788Z",
+      "attestedAt": "2026-10-31T05:53:40.791Z",
       "verified": true,
-      "signature": "fNEGask+OJ5mAF5SCK+yFFhAYAFQY9CN5uX+54KAL9Oo/7ZPKZ5x5Mb4kf3DTHdq2WQmkfpiV32r9vTmszogug==",
-      "nonce": "66b8e8b9-cda0-4c21-86ad-f37047ba5388",
+      "signature": "Xdyl2JRPBFONkwFIdYmh/gv01XTRrMqSvx1z6FOiR7MUP1KHR05AWkbfRvN0ee7taKG0NXaFlAX6LqNK+HcjIA==",
+      "nonce": "95a1272b-225c-4567-81ca-5c8e7f18499e",
       "attestation": {
-        "id": "022dd284-a466-4fb5-bfc7-816aafc10ea9",
+        "id": "b4f7acb1-fda0-404b-be26-98e692a1b02c",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -287,7 +287,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T04:29:38.826Z"
+        "createdAt": "2026-10-31T05:53:40.791Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -296,24 +296,24 @@
   ],
   "anchors": [
     {
-      "id": "df807371-1b6b-4550-a9ce-5db32fb3af9a",
-      "root": "d12a3569c271b13c5a105795a317623332865c60a59d465867c3b7b8e254a200",
+      "id": "4ced406c-baac-4b48-bc7d-4aa2952ecc69",
+      "root": "7ebdf81a1660f395d294040d378f7d76c0efa5d6d8b5b6d70954f54089a27de8",
       "publicationIds": [
-        "80bc1973-9a5b-4fff-8bff-1f4ef2f8d452",
-        "ea7faa0a-a0cd-4698-b3f1-5bab67cf8a61",
+        "e2daac82-fa0b-454b-8c51-328a0ce4c37d",
+        "6b35d72d-3c28-4cf2-936a-195132d5bf77",
         "pub-federation-commitment",
         "pub-semantics-commitment"
       ],
       "leafCount": 4,
       "leafVersion": 4,
-      "createdAt": "2026-10-31T04:29:39.313Z",
+      "createdAt": "2026-10-31T05:53:41.275Z",
       "adapter": "local",
-      "reference": "local:d12a3569c271b13c",
+      "reference": "local:7ebdf81a1660f395",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:d12a3569c271b13c"
+          "reference": "local:7ebdf81a1660f395"
         },
         {
           "adapter": "trac",
@@ -324,7 +324,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreihlezxbdlah454gqaojfcz5mr2zfqibq2qkyr3vub7k2swj5wbsde"
+          "reference": "cid:bafkreigsnkwconn3gosckj6f6572bxwt4s5xahltvsnjpin4xm5ltourfa"
         }
       ]
     }
