@@ -8,6 +8,11 @@ import {
   verifyGenerativeReplay,
 } from "@rarext/core";
 import {
+  REGISTRY_LIST_COMMITMENT_KIND,
+  parseRegistrySeedList,
+  registryListDigestSource,
+} from "@rarext/core";
+import {
   bundleSemanticsCommitment,
   semanticsCommitmentHolds as compareSemanticsCommitment,
   semanticsKey,
@@ -56,6 +61,35 @@ export const STARTER_SEED = 42;
 export const STARTER_STEPS = 32;
 
 /** sha256, the browser's way — the same bytes in, the same hex out. */
+/**
+ * The FEDERATION commitment a bundle carries, or null when it records none.
+ *
+ * RFC 0020 commits the registry to the list of registries that exist. A reader of the proof
+ * page should be able to see WHICH registries a bundle says exist and WHETHER the list beside
+ * it is the one committed to — the same "is this copy faithful" question the page already
+ * answers for roots, pins, and meanings.
+ *
+ * The body arrives as a canonical JSON STRING, so it is parsed rather than trusted as an
+ * object, and a commitment that does not say where to look and what it committed to is null —
+ * an artifact that never made the claim, not one whose claim failed.
+ */
+export function federationFromBundle(bundle: {
+  publications?: Array<{ artifact?: { kind?: unknown; body?: unknown } }>;
+}): { listUrl: string; digest: string } | null {
+  const commitment = (bundle.publications ?? []).find(
+    (publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND,
+  );
+  if (!commitment) return null;
+
+  try {
+    const body = JSON.parse(String(commitment.artifact?.body)) as { listUrl?: unknown; digest?: unknown };
+    if (typeof body.listUrl !== "string" || typeof body.digest !== "string") return null;
+    return { listUrl: body.listUrl, digest: body.digest };
+  } catch {
+    return null;
+  }
+}
+
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");

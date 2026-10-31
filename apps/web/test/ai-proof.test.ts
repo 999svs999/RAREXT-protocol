@@ -19,7 +19,15 @@ import {
   semanticsCommitmentHolds,
   verifyPublishedBoundedRendition,
   verifyPublishedRendition,
+  federationFromBundle,
 } from "../src/ai.ts";
+import {
+  parseRegistrySeedList,
+  registryListDigest,
+  registryListDigestSource,
+  REGISTRY_LIST_COMMITMENT_KIND,
+} from "@rarext/core";
+import { nodeSha256 } from "../../api/src/digest.ts";
 
 /**
  * The proof, made in the browser's runtime. These run under node, which has the
@@ -307,4 +315,35 @@ test("the PUBLISHED lossy claim verifies itself from the registry's own bundle",
   const bad = await verifyPublishedBoundedRendition(tampered);
   assert.equal(bad!.within, false, "a tampered reconstruction is reported OUTSIDE, not accepted");
   assert.equal(bad!.renditionMatches, false, "and it no longer re-renders to the committed digest");
+});
+
+test("the page reads the federation commitment the live bundle carries", () => {
+  const commitment = federationFromBundle(committed as never);
+  assert.ok(commitment, "the live bundle commits to a federation list");
+  assert.match(commitment!.listUrl, /seed\.json$/, "the commitment names where the list lives");
+  assert.match(commitment!.digest, /^[0-9a-f]{64}$/, "the commitment carries a sha256 digest");
+  assert.equal(federationFromBundle({ publications: [] } as never), null);
+  // null is not false: a commitment that does not say where to look and what it committed to
+  // never made the claim, and the page must not report it as a failed one.
+  assert.equal(
+    federationFromBundle({ publications: [{ artifact: { kind: REGISTRY_LIST_COMMITMENT_KIND, body: "{}" } }] } as never),
+    null,
+  );
+  assert.equal(
+    federationFromBundle({ publications: [{ artifact: { kind: REGISTRY_LIST_COMMITMENT_KIND, body: "not json" } }] } as never),
+    null,
+  );
+});
+
+test("the digest the PAGE computes for the published seed is the digest the PUBLISHER committed", async () => {
+  const commitment = federationFromBundle(committed as never)!;
+  const seed = JSON.parse(readFileSync("site/registry/seed.json", "utf8"));
+  const entries = parseRegistrySeedList(seed.registries);
+  // The page hashes the canonical source with WebCrypto; the publisher hashed the same source
+  // with node's createHash. If these disagree, the page would report a mismatch on a faithful
+  // copy — the same class as comparing a digest against a Promise.
+  const pageDigest = await sha256Hex(registryListDigestSource(entries));
+  const publisherDigest = registryListDigest(entries, nodeSha256);
+  assert.equal(pageDigest, publisherDigest, "the browser's list digest is the publisher's, byte for byte");
+  assert.equal(pageDigest, commitment.digest, "and it is the digest the live bundle commits to");
 });

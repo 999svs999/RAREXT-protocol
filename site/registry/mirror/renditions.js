@@ -109,6 +109,38 @@ function clampByte(value) {
   return Math.round(value);
 }
 
+// packages/core/src/registries.ts
+function parseRegistrySeedList(value) {
+  const list = Array.isArray(value) ? value : typeof value === "object" && value !== null && "registries" in value ? value.registries : null;
+  if (!Array.isArray(list)) return [];
+  return list.map((entry) => {
+    if (typeof entry !== "object" || entry === null) return null;
+    const record = entry;
+    if (typeof record.id !== "string" || typeof record.url !== "string") return null;
+    return {
+      id: record.id,
+      url: record.url,
+      operator: typeof record.operator === "string" ? record.operator : "",
+      chains: Array.isArray(record.chains) ? record.chains.filter((chain) => typeof chain === "string") : [],
+      note: typeof record.note === "string" ? record.note : null,
+      seed: typeof record.seed === "string" ? record.seed : null
+    };
+  }).filter((entry) => entry !== null);
+}
+function registryListDigestSource(entries) {
+  return canonicalize(
+    entries.map((entry) => ({
+      id: entry.id,
+      url: entry.url,
+      operator: entry.operator,
+      chains: entry.chains,
+      note: entry.note,
+      seed: entry.seed
+    }))
+  );
+}
+var REGISTRY_LIST_COMMITMENT_KIND = "registry-list-commitment";
+
 // packages/core/src/semantics.ts
 var SEMANTICS_APP = "rarext-semantics";
 var SEMANTICS_COMMITMENT_KIND = "semantics-commitment";
@@ -150,6 +182,19 @@ function bundleSemanticsCommitment(bundle) {
 }
 
 // apps/web/src/ai.ts
+function federationFromBundle(bundle) {
+  const commitment = (bundle.publications ?? []).find(
+    (publication) => publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND
+  );
+  if (!commitment) return null;
+  try {
+    const body = JSON.parse(String(commitment.artifact?.body));
+    if (typeof body.listUrl !== "string" || typeof body.digest !== "string") return null;
+    return { listUrl: body.listUrl, digest: body.digest };
+  } catch {
+    return null;
+  }
+}
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -220,6 +265,9 @@ async function semanticsRecordDigestAsync(record, sha256) {
   return await sha256(canonicalize(record));
 }
 export {
+  federationFromBundle,
+  parseRegistrySeedList,
+  registryListDigestSource,
   renderBoundedPicture,
   renderProofPicture,
   semanticsCommitmentHolds2 as semanticsCommitmentHolds,

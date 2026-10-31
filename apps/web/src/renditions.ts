@@ -13,4 +13,6 @@ export {
   semanticsCommitmentHolds,
   sha256Bytes,
   sha256Hex,
+  federationFromBundle,
 } from "./ai.ts";
+export { parseRegistrySeedList, registryListDigestSource } from "@rarext/core";

@@ -37,7 +37,13 @@ export function mirrorVerifyPage({ title, heading }) {
     <button id="check">Re-verify</button>
     <script type="module">
       import { verifyBundle } from "./verify.js";
-      import { semanticsCommitmentHolds, sha256Hex } from "./renditions.js";
+      import {
+        semanticsCommitmentHolds,
+        sha256Hex,
+        federationFromBundle,
+        parseRegistrySeedList,
+        registryListDigestSource,
+      } from "./renditions.js";
       const out = document.getElementById("out");
 
       // The same cap every client path shares (MAX_BUNDLE_RESPONSE_BYTES in
@@ -189,6 +195,58 @@ export function mirrorVerifyPage({ title, heading }) {
             matched ? "ok" : "bad",
           ));
           if (!matched) sections.push(htmlRow("Unmatched", semantics.missing.join(", "), "bad"));
+        }
+
+        // The FEDERATION commitment: which registries this bundle says exist, and whether the
+        // list published beside it is the one committed to. The digest is recomputed here from
+        // the canonical source core owns, so this is a verification, not a display.
+        const federation = federationFromBundle(bundle);
+        sections.push("<h2>Federation — the registries this bundle commits to</h2>");
+        if (!federation) {
+          sections.push(htmlRow("Federation commitment", "this bundle records none", "dim"));
+        } else {
+          let list = null;
+          let listSource = federation.listUrl;
+          try {
+            const response = await fetch(federation.listUrl, { cache: "no-cache" });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            list = parseRegistrySeedList(await response.json());
+          } catch {
+            try {
+              const response = await fetch("../seed.json", { cache: "no-cache" });
+              if (!response.ok) throw new Error("HTTP " + response.status);
+              listSource = "../seed.json (the copy beside this page)";
+              list = parseRegistrySeedList(await response.json());
+            } catch {
+              sections.push(htmlRow("Seed list", "could not be fetched from " + federation.listUrl, "bad"));
+            }
+          }
+          if (list) {
+            const digest = await sha256Hex(registryListDigestSource(list));
+            const matches = digest === federation.digest;
+            sections.push(
+              htmlRow(
+                "Committed digest",
+                federation.digest.slice(0, 24) + "\u2026",
+                matches ? "ok" : "bad",
+              ),
+            );
+            sections.push(
+              htmlRow(
+                "Seed list at " + listSource,
+                matches ? "digest MATCHES the commitment" : "digest DOES NOT match the commitment",
+                matches ? "ok" : "bad",
+              ),
+            );
+            for (const entry of list) {
+              sections.push(
+                htmlRow(
+                  "Registry " + entry.id,
+                  entry.operator + " \u00b7 " + entry.url + " \u00b7 chains: " + entry.chains.join(", "),
+                ),
+              );
+            }
+          }
         }
 
         const ai = (result.aiClaims ?? []).filter((claim) => claim.representation);

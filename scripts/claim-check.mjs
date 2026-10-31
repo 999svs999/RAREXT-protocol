@@ -1179,6 +1179,29 @@ checkVerifySequence();
 checkFrontDoor();
 checkConfigSurface();
 checkDefaultsIndependence();
+
+  // THE VERIFY PAGE ANSWERS THE FEDERATION QUESTION TOO. The bundle commits to a seed list of
+  // registries; a page whose job is "is this copy faithful" should show WHICH registries and
+  // whether the list beside it is the one committed to — recomputed in the browser, not
+  // displayed from trust. The generated page and the generator that is its one source are both
+  // checked, because the twin-pages trap is how a fix lands in one copy and not the other.
+  {
+    const page = readFileSync(new URL("site/registry/mirror/verify.html", root), "utf8");
+    for (const marker of [
+      "Federation \u2014 the registries this bundle commits to",
+      "digest MATCHES the commitment",
+      "federationFromBundle",
+    ]) {
+      if (!page.includes(marker)) {
+        fail(`the verify page no longer surfaces the federation commitment (${marker})`);
+      }
+    }
+    const generator = readFileSync(new URL("scripts/mirror-verify-page.mjs", root), "utf8");
+    if (!generator.includes("Federation \u2014 the registries this bundle commits to")) {
+      fail("the verify page's generator no longer renders the federation section, so the page's source is no longer the one place");
+    }
+  }
+
 checkAnnouncementRfc();
 checkMdsFloor();
 checkRepairRecord();
