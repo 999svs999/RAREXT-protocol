@@ -151,18 +151,22 @@ ledger it reads is the one the ballot was actually signed by.
   number. Deciding what is good is left to the people deciding, which is what letting them
   decide means.
 
-A budget line now exists as a **protocol rule, and only as a rule so far**. A pledge is the
-pledger's signed commitment — the payload carries the whole proposal it funds, names the choice
-whose decision triggers payment, and is refused by name if the proposal is unsound, the amount is
-not a positive integer, the payer and payee are the same key, or `payOn` is not a choice the
-proposal offers. `budgetPaymentRecords` derives what it becomes: exactly TWO ledger entries, the
-pledger debited and the recipient credited, both referencing the decision's root — the same field
-the board uses to keep the same work from being paid twice, so a decision is payable once. The
-protocol never mints: the debit and the credit sum to zero.
+A budget line exists as protocol rules **and as wiring**. A pledge is the pledger's signed
+commitment — the payload names the proposal by its ROOT, the identity everything else defers to,
+names the choice whose decision triggers payment, and is signed by the key that will be debited. It
+is refused by name if the proposal is unsound, the amount is not a positive integer, the payer and
+payee are the same key, the pledging key is not a registered identity, or `payOn` is not a choice
+the proposal offers. `budgetPaymentRecords` derives what execution becomes: exactly TWO ledger
+entries, the pledger debited and the recipient credited, both referencing the decision's root — the
+same field the board uses to keep the same work from being paid twice, so a decision is payable
+once, and a replay is refused rather than re-paid. The protocol never mints: the debit and the
+credit sum to zero, and the ledger commitment covers both sides with no new machinery.
 
-What does NOT ship yet, and this RFC says so rather than blurring it: no route accepts a budget, no
-snapshot field persists one, and no execution triggers on a decided tally. The rules ship first
-because they are the part that must be right; the wiring is an afternoon behind them.
+Execution is gated on what the NODE recomputes, not on anyone's request: the vote window must be
+closed, the outcome must be DECIDED (a tie funds nothing; an unmet quorum funds nothing), and the
+decided choice must be the one the budget named — otherwise the refusal says nothing is owed. The
+rules shipped first (#17) because they are the part that must be right; the wiring followed them
+rather than leading them.
 
 ## The constraint, verified rather than assumed
 

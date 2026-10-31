@@ -316,7 +316,7 @@ test("rotations and delegations persist across a snapshot version change", async
       rotations: unknown[];
       delegations: unknown[];
     };
-    assert.equal(snapshot.version, 5, "the store writes the version it supports");
+    assert.equal(snapshot.version, 6, "the store writes the version it supports");
     assert.equal(snapshot.rotations.length, 1);
     assert.equal(snapshot.delegations.length, 1);
 

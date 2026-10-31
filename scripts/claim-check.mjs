@@ -2567,7 +2567,7 @@ function checkRolesRfc(overrides = {}) {
       "that a worker proves its payment is in the committed ledger rather than asking to be believed",
     ],
     [
-      "the payload carries the whole proposal it funds, names the choice whose decision triggers payment",
+      "the payload names the proposal by its ROOT, the identity everything else defers to, names the choice whose decision triggers payment",
       "that a budget is the pledger's signed commitment to a specific question, payable on a specific outcome",
     ],
   ]) {

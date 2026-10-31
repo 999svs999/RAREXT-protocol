@@ -66,6 +66,7 @@ interface Snapshot {
   proposals?: Array<{ root: string; proposal: GovernanceProposal }>;
   governanceVotes?: GovernanceVote[];
   voteSponsorships?: VoteSponsorshipRecord[];
+  governanceBudgets?: Array<{ proposalRoot: string; budget: Record<string, unknown> }>;
 }
 
 export class RarextStore {
@@ -87,6 +88,7 @@ export class RarextStore {
   private readonly proposalsByRoot = new Map<string, { root: string; proposal: GovernanceProposal }>();
   private readonly governanceVotes: GovernanceVote[] = [];
   private readonly voteSponsorships: VoteSponsorshipRecord[] = [];
+  private readonly governanceBudgets = new Map<string, Record<string, unknown>>();
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -574,6 +576,21 @@ export class RarextStore {
     return this.voteSponsorships.filter((record) => record.proposalRoot === root);
   }
 
+  /**
+   * A proposal's budget, stored beside it so a pledge outlives the request that made it: execution
+   * may happen days after the pledge, and the tally that triggers it is recomputed from stored
+   * votes. One budget per proposal — the map is keyed by root, and a second pledge for the same
+   * decision is refused by the route rather than replacing the first.
+   */
+  addGovernanceBudget(proposalRoot: string, budget: Record<string, unknown>): void {
+    this.governanceBudgets.set(proposalRoot, budget);
+    this.persist();
+  }
+
+  getGovernanceBudget(proposalRoot: string): Record<string, unknown> | null {
+    return this.governanceBudgets.get(proposalRoot) ?? null;
+  }
+
   governanceVotesFor(root: string): GovernanceVote[] {
     return this.governanceVotes.filter((vote) => vote.proposalRoot === root);
   }
@@ -743,6 +760,10 @@ export class RarextStore {
       for (const record of snapshot.voteSponsorships ?? []) {
         this.voteSponsorships.push(record);
       }
+
+      for (const entry of snapshot.governanceBudgets ?? []) {
+        this.governanceBudgets.set(entry.proposalRoot, entry.budget);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`could not load ${this.filePath}: ${message}`);
@@ -769,6 +790,7 @@ export class RarextStore {
       proposals: [...this.proposalsByRoot.values()],
       governanceVotes: [...this.governanceVotes],
       voteSponsorships: [...this.voteSponsorships],
+      governanceBudgets: [...this.governanceBudgets.entries()].map(([proposalRoot, budget]) => ({ proposalRoot, budget })),
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

@@ -20,7 +20,13 @@ export type ActionId =
   | "relay"
   | "publish"
   | "remix"
-  | "report";
+  | "report"
+  /**
+   * A GOVERNANCE payment: the debit and credit a decided budget becomes. It is recorded in the same
+   * ledger and covered by the same commitment as work, but the board does not offer it as a job —
+   * nobody earns it by doing work, and it exists because a community can fund what it decides.
+   */
+  | "governance";
 
 export interface ActionDefinition {
   id: ActionId;

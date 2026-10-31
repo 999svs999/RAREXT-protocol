@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The budget wiring ships: a community can fund what it decides.** `POST
+  /v1/governance/proposals/:root/budget` accepts the pledger's signed commitment — the payload names
+  the proposal by its ROOT (the identity everything else defers to), the choice whose decision
+  triggers payment, and is signed by the key that will be debited; the key must be a registered
+  identity, one budget per proposal, and a pledge whose signature does not match the debited key is
+  refused with "the money leaves THAT key or it leaves nothing" as the operating principle.
+  `POST /v1/governance/proposals/:root/execute` pays a DECIDED budget — the node recomputes the
+  tally itself, so the window must be closed, the outcome decided, and the decided choice the one
+  the budget named (a tie funds nothing; an unmet quorum funds nothing; a "no" owes nothing) — and a
+  replay is refused by the once-only field the debit and credit share. Snapshot migration 5 → 6
+  persists budgets, so a pledge outlives the request that made it; every version pin moved with it.
+  The audit chain is complete: pledge → decision → two ledger entries → the commitment a stranger
+  recomputes.
 - **A budget line exists as a protocol rule — and only as a rule, and the RFC says so.** The piece
   that lets a DECISION move credits instead of merely describing them: a pledge is the pledger's
   signed commitment (the payload carries the whole proposal it funds, the sponsorship pattern), it

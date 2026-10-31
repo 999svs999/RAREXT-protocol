@@ -29,6 +29,7 @@ import type {
   IdentityLinkPayload,
   InputValues,
   Anchor,
+  GovernanceBudget,
   Publication,
   PublicationPayload,
   PublicationSource,
@@ -116,6 +117,7 @@ import {
   summarizeEarnings,
   workOrders,
   type VerificationSubmission,
+  type CreditRecord,
 } from "./work.ts";
 import { verifyCapability, decodeCapability } from "./capabilities.ts";
 import {
@@ -154,6 +156,9 @@ import {
   type StorageInclusionProof,
   type TallyResult,
   type HashFn,
+  GOVERNANCE_BUDGET_KIND,
+  governanceBudgetProblems,
+  budgetPaymentRecords,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
 import {
@@ -1461,6 +1466,150 @@ export function createApp(options: AppOptions = {}): AppServer {
         }
         store.addProposal(proposal, root);
         send(res, 201, { root, proposal });
+        return;
+      }
+
+      // A BUDGET: the pledger's signed commitment to fund a decision.
+      //
+      // The payload follows the sponsorship pattern — the signature covers the pledge fields and
+      // names the proposal by its ROOT, the identity everything else defers to — and the route
+      // attaches the stored proposal before validating, because the rule that refuses an unsound
+      // pledge needs the whole question. The pledging key must be REGISTERED: a pledge binds a real
+      // identity, and `from` names the key that will be debited. One budget per proposal: a decision
+      // is funded once, and a second pledge is refused rather than replacing the first.
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/governance/proposals/") &&
+        pathname.endsWith("/budget")
+      ) {
+        const root = pathname.slice("/v1/governance/proposals/".length, -"/budget".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+        if (store.getGovernanceBudget(root)) {
+          send(res, 409, { error: "this proposal already carries a budget: a decision is funded once" });
+          return;
+        }
+
+        const body = asRecord(await readJson(req));
+        if (typeof body.signature !== "string" || body.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        const payload = asRecord(body.payload);
+        if (payload.kind !== GOVERNANCE_BUDGET_KIND || payload.version !== 1) {
+          send(res, 400, { error: `payload must be a version 1 ${GOVERNANCE_BUDGET_KIND} pledge` });
+          return;
+        }
+        if (payload.proposalRoot !== root) {
+          send(res, 400, {
+            error: `the pledge names proposal ${String(payload.proposalRoot).slice(0, 16)}…, not this one`,
+          });
+          return;
+        }
+        const from = payload.from;
+        if (typeof from !== "string" || from.length === 0) {
+          send(res, 400, { error: "a budget needs the key that will be debited" });
+          return;
+        }
+        const registered = store.resolveKey(from);
+        if (!registered) {
+          send(res, 403, { error: "the pledging key is not registered: a pledge binds a real identity" });
+          return;
+        }
+        if (!verifyPayload(registered.publicKey as unknown as RarextJsonWebKey, payload, body.signature)) {
+          send(res, 401, { error: "the pledge's signature does not match the key that will be debited" });
+          return;
+        }
+
+        const budget: GovernanceBudget = {
+          kind: GOVERNANCE_BUDGET_KIND,
+          version: 1,
+          from,
+          to: payload.to as string,
+          amount: payload.amount as number,
+          reason: payload.reason as string,
+          payOn: payload.payOn as string,
+          createdAt: payload.createdAt as string,
+          proposal,
+        };
+        const problems = governanceBudgetProblems(budget);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems[0] });
+          return;
+        }
+
+        store.addGovernanceBudget(root, budget as unknown as Record<string, unknown>);
+        send(res, 201, { root, budget });
+        return;
+      }
+
+      // EXECUTE a decided budget: the bridge from the community's decision to the money it steers.
+      //
+      // The node recomputes the tally itself — the decision is nobody's word — and pays only when
+      // the window has closed, the outcome is DECIDED, and the decided choice is the one the budget
+      // named. The payment is exactly the two entries core derives (the debit and the credit, the
+      // protocol never mints), and it happens once: both entries carry the proposal's root as their
+      // artifact reference, the field the board already uses to keep the same work from being paid
+      // twice, so a replay is refused rather than re-paid. Anyone may call this; what they trigger is
+      // the decision the ledger already recorded.
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/governance/proposals/") &&
+        pathname.endsWith("/execute")
+      ) {
+        const root = pathname.slice("/v1/governance/proposals/".length, -"/execute".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+        const stored = store.getGovernanceBudget(root);
+        if (!stored) {
+          send(res, 404, { error: "this proposal carries no budget: there is nothing to execute" });
+          return;
+        }
+        const budget = stored as unknown as GovernanceBudget;
+        if (Date.parse(proposal.closesAt) > Date.now()) {
+          send(res, 409, { error: "the vote window is still open: a tally before the close is not a decision" });
+          return;
+        }
+
+        const tally = tallyFor(store, proposal);
+        if ("error" in tally) {
+          send(res, 409, { error: `the proposal does not tally: ${tally.error}` });
+          return;
+        }
+        if (tally.outcome.kind !== "decided") {
+          send(res, 409, {
+            error:
+              tally.outcome.kind === "tie"
+                ? "the tally is a tie: a tie funds nothing"
+                : "the quorum was not met: no decision, no payment",
+          });
+          return;
+        }
+        if (tally.outcome.choice !== budget.payOn) {
+          send(res, 409, {
+            error: `the decision was ${JSON.stringify(tally.outcome.choice)}, not the ${JSON.stringify(budget.payOn)} the budget named: nothing is owed`,
+          });
+          return;
+        }
+        if (store.listCredits().some((record) => record.artifactHash === root)) {
+          send(res, 409, { error: "this decision has already been executed: the same decision is never paid twice" });
+          return;
+        }
+
+        const records = budgetPaymentRecords(budget, new Date().toISOString(), recordRootHash);
+        for (const record of records) store.addCredit(record as unknown as CreditRecord);
+
+        send(res, 201, {
+          executed: true,
+          records,
+          ledgerRoot: creditLedgerRoot(store.listCredits(), recordRootHash),
+        });
         return;
       }
 
