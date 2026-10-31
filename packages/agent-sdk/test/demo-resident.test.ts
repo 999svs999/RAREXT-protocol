@@ -67,6 +67,14 @@ async function makeTree(tamper: boolean) {
   await writeFile(join(directory, "bundle.json"), served);
   await mkdir(join(directory, "mirror"));
   await writeFile(join(directory, "mirror", "bundle.json"), served);
+  // The seed's registry list is the one the committed bundle's federation
+  // commitment covers — copied from the committed seed rather than
+  // hand-maintained here, because a local copy that drifted from the list the
+  // commitment digests would fail the demo's own check, and that failing is
+  // the check working.
+  const committedSeed = JSON.parse(
+    (await readFile(join(repo, "site", "registry", "seed.json"))).toString("utf8"),
+  );
   await writeFile(
     join(directory, "seed.json"),
     JSON.stringify(
@@ -76,6 +84,7 @@ async function makeTree(tamper: boolean) {
         bundleRoot: verification.computedRoot,
         bundleCid: cidV1Raw(originalBytes),
         mirrors: [{ bundle: "mirror/bundle.json", root: verification.computedRoot }],
+        registries: committedSeed.registries,
       },
       null,
       2,
