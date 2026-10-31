@@ -19,11 +19,13 @@ the project's own live registry: the demo's reference resolves, and a version of
 root fails naming both roots.
 
 A reference names CONTENT, not a format. A root may name a bundle's content, a published record's
-content, or the sha256 of its bytes, and the resolver reads the same candidates every way: a
-registry's bundle is checked by the root its content rebuilds to, a publication record by
-`publicationRoot` recomputed over the record, and raw bytes by their sha256 — so an image, a model
-file, a tarball of a site or an entry in the storage economy can all be named and verified by a
-client that has never heard of their type. A record arrives with things attached that are not part
+content, an anchor's record, or the sha256 of its bytes, and the resolver reads the same candidates
+every way: a registry's bundle is checked by the root its content rebuilds to, a publication record
+or an anchor by the rule its kind owns (`publicationRoot`, `anchorRoot` — one registry of record
+identities, `matchRecordRoot`, so a new record kind is one entry in core and every client gains it),
+and raw bytes by their sha256 — so an image, a model file, a tarball of a site, an entry in the
+storage economy or the protocol's own trust root can all be named and verified by a client that has
+never heard of their type. A record arrives with things attached that are not part
 of it (its root, its durability observation), so the rule reads the fields it declares rather than
 whatever keys happen to be present: a client recomputes the digest from exactly what it received.
 
@@ -33,8 +35,8 @@ roots, is different objects.** That is verified against the project's own live d
 published `bundleCid` (a CIDv1, base32) and the hex sha256 of the same live bytes are the same
 32-byte digest spelled two ways while the bundle root is something else entirely.
 
-What still does not exist: resolving an ANCHOR by its root, and any browser support. Retrieval
-remains HTTPS plus the binding convention.
+What still does not exist: any browser support. Retrieval remains HTTPS plus the binding
+convention.
 
 ## The problem
 

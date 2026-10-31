@@ -11,6 +11,23 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **An anchor is addressable by the root its record rebuilds to** — the last object in the protocol
+  that was named only by a minted label. `anchorRoot(anchor, hash)` in core covers the CLAIM (which
+  root, over which publications, which leaf version, attested by which adapter under which reference
+  and receipts) and excludes what a node minted (`id`) or wrote down (`createdAt`), with the same
+  compile-time guard as a publication: `ANCHOR_ROOT_FIELDS` is `Record<keyof Anchor, boolean>`, so
+  adding a field fails the build until somebody decides. The API serves anchors with their
+  `anchorIdentity` (recomputed at read time), `GET /v1/anchors/:id` accepts the identity too, and
+  the CLI names what answered: `an anchor of 2 publication(s) via eip-3009-anchor (0xabc), by the
+  root the anchor rebuilds to`.
+- **The registry of record identities moved into core.** The resolver was on its way to one
+  hand-written reading per record kind; `matchRecordRoot(document, wanted, hash)` is now the ONE
+  place that asks which rule rebuilds a document to a held root (publication, anchor — and the next
+  record kind is one entry in core, after which every client gains the reading without another
+  branch). The rules are domain-separated from each other and from a byte digest, so trying them in
+  any order is safe, and the test proves neither document answers for the other's root.
+- RFC 0022's non-goal has shrunk to browser support: every kind of thing the protocol writes down —
+  a bundle, a publication, an anchor, raw bytes — is now nameable and verifiable by a reference.
 - **A `rarext:` reference can now name a publication record** — the entries the storage economy is
   written in — by the root the record rebuilds to. The resolver reads each candidate ONCE and
   interprets it three ways (a bundle, a record, raw bytes), because fetching twice could disagree

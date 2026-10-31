@@ -128,6 +128,13 @@ export {
   publicationFromSignedInput,
 } from "./publications.ts";
 export type { PublishInput } from "./publications.ts";
+export {
+  anchorRoot,
+  ANCHOR_ROOT_DOMAIN,
+  ANCHOR_ROOT_FIELDS,
+  ANCHOR_ROOT_EXCLUDED_FIELDS,
+} from "./anchors.ts";
+export { matchRecordRoot } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";

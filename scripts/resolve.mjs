@@ -64,15 +64,27 @@ const outcome = {
         ...(resolved.kind === "blob" ? { bytes: resolved.bytes?.length, mediaType: resolved.mediaType } : {}),
         // A record is small enough to name, and naming it is the point: whoever holds the root can
         // see WHICH record answered, not merely that something did.
+        // Name WHAT answered. A record is small enough to name, and naming it is the point: whoever
+        // holds the root can see which record answered, not merely that something did. An anchor's
+        // receipts stay out — they are evidence for a chain read, not for a summary line.
         ...(resolved.kind === "publication"
           ? {
-              publication: {
-                id: resolved.publication?.id,
-                author: resolved.publication?.author,
-                title: resolved.publication?.title,
+              record: {
+                id: resolved.record?.id,
+                author: resolved.record?.author,
+                title: resolved.record?.title,
               },
             }
-          : {}),
+          : resolved.kind === "anchor"
+            ? {
+                record: {
+                  anchoredRoot: resolved.record?.root,
+                  leafCount: resolved.record?.leafCount,
+                  adapter: resolved.record?.adapter,
+                  reference: resolved.record?.reference,
+                },
+              }
+            : {}),
       }
     : null,
   error: resolved.ok ? null : resolved.reason,
@@ -101,8 +113,10 @@ const what =
   resolved.kind === "blob"
     ? `a blob of ${resolved.bytes?.length ?? 0} bytes${resolved.mediaType ? ` (${resolved.mediaType})` : ""}, by the sha256 of its bytes`
     : resolved.kind === "publication"
-      ? `a published record by ${resolved.publication?.author ?? "an author"} ("${resolved.publication?.title ?? ""}"), by the root the record rebuilds to`
-      : "a registry bundle, by the root its content rebuilds to";
+      ? `a published record by ${resolved.record?.author ?? "an author"} ("${resolved.record?.title ?? ""}"), by the root the record rebuilds to`
+      : resolved.kind === "anchor"
+        ? `an anchor of ${resolved.record?.leafCount ?? "?"} publication(s) via ${resolved.record?.adapter ?? "an adapter"}${resolved.record?.reference ? ` (${resolved.record.reference})` : ""}, by the root the anchor rebuilds to`
+        : "a registry bundle, by the root its content rebuilds to";
 console.log(`\nVERIFIED: ${resolved.root} — ${what} — read from ${resolved.source}`);
 console.log(
   "The root decides: this copy is the object the reference named, wherever it was found, and " +

@@ -86,8 +86,10 @@ test("a wrong root is refused with BOTH roots named, and a bare root with no can
     assert.match(parsed.attempts[0]!.reason, new RegExp(ROOT));
     assert.match(parsed.attempts[0]!.reason, /c{16}/);
     // The record reading refuses by recomputation, and the byte reading by digest — different
-    // questions, so they get different answers rather than one merged "nope".
-    assert.match(parsed.attempts[1]!.reason, /rebuilds to [0-9a-f]{16}/);
+    // questions, so they get different answers rather than one merged "nope". The record refusal
+    // still says what the document WAS, so a reader can tell "wrong root" from "not a record".
+    assert.match(parsed.attempts[1]!.reason, /as a publication it is [0-9a-f]{16}/);
+    assert.match(parsed.attempts[1]!.reason, /no record rule rebuilds this document/);
     assert.match(parsed.attempts[2]!.reason, /its bytes hash to [0-9a-f]{16}/);
     assert.match(parsed.attempts[2]!.reason, /not the pinned c{16}/);
   } finally {
@@ -154,12 +156,47 @@ test("the CLI names a RECORD: the storage economy's entries are addressable by t
 
     const json = await runCli([`rarext:${origin.host}/bundle.json@${root}`, "--scheme", "http", "--json"]);
     const parsed = JSON.parse(json.stdout) as {
-      resolved: { kind: string; root: string; publication: { id: string; author: string; title: string } };
+      resolved: { kind: string; root: string; record: { id: string; author: string; title: string } };
     };
     assert.equal(parsed.resolved.kind, "publication");
     assert.equal(parsed.resolved.root, root);
-    assert.equal(parsed.resolved.publication.id, record.id);
-    assert.ok(parsed.resolved.publication.author, "who published it travels with the answer");
+    assert.equal(parsed.resolved.record.id, record.id);
+    assert.ok(parsed.resolved.record.author, "who published it travels with the answer");
+  } finally {
+    await origin.close();
+  }
+});
+
+test("the CLI names an ANCHOR: the protocol's trust root is addressable by the root the anchor rebuilds to", async () => {
+  const anchor = {
+    id: "minted-label",
+    root: "a".repeat(64),
+    publicationIds: ["p1", "p2"],
+    leafCount: 2,
+    leafVersion: 2,
+    createdAt: "2026-11-01T00:00:00.000Z",
+    adapter: "eip-3009-anchor",
+    reference: "0xabc",
+    receipts: [{ adapter: "eip-3009-anchor", status: "ok" }],
+  };
+  const hash = (value: string | Uint8Array) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
+  const { anchorRoot } = await import("../../core/src/index.ts");
+  const root = anchorRoot(anchor as never, hash);
+
+  const origin = await serve(JSON.stringify({ ...anchor, durabilityNote: "attached, not part of it" }), "application/json");
+  try {
+    const human = await runCli([`rarext:${origin.host}/anchor.json@${root}`, "--scheme", "http"]);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /an anchor of 2 publication\(s\) via eip-3009-anchor \(0xabc\), by the root the anchor rebuilds to/);
+
+    const json = await runCli([`rarext:${origin.host}/anchor.json@${root}`, "--scheme", "http", "--json"]);
+    const parsed = JSON.parse(json.stdout) as {
+      resolved: { kind: string; record: { anchoredRoot: string; adapter: string; reference: string } };
+    };
+    assert.equal(parsed.resolved.kind, "anchor");
+    assert.equal(parsed.resolved.record.anchoredRoot, anchor.root);
+    assert.equal(parsed.resolved.record.adapter, "eip-3009-anchor");
   } finally {
     await origin.close();
   }

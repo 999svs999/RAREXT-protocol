@@ -91,7 +91,7 @@ test("a LOCATION IS A HINT: a wrong copy is refused by name and a mirror still r
     assert.match(impossible.reason, /reading the same candidates as records and as bytes found none/);
     const evidence = impossible.attempts.map((entry) => entry.reason).join(" | ");
     assert.match(evidence, /its bytes hash to/, "the byte reading says what it hashed to");
-    assert.match(evidence, /rebuilds to/, "the record reading says what the record rebuilt to, or that it is not one");
+    assert.match(evidence, /as a publication it is/, "the record reading says what the document was, or that it is not one");
   } finally {
     await wrong.close();
     await right.close();
@@ -231,7 +231,7 @@ test("a record the economy is written in is named by its own root, as served —
     assert.equal(resolved.ok, true, resolved.ok ? "" : resolved.reason);
     if (!resolved.ok) return;
     assert.equal(resolved.kind, "publication");
-    assert.equal(resolved.publication?.id, record.id);
+    assert.equal((resolved.record as Publication).id, record.id);
     assert.equal(resolved.bytes, undefined, "a record reading carries no bytes");
     assert.equal(resolved.bundle, undefined, "and no bundle");
 

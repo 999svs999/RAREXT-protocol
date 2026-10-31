@@ -28,6 +28,7 @@ import type {
   IdentityLink,
   IdentityLinkPayload,
   InputValues,
+  Anchor,
   Publication,
   PublicationPayload,
   PublicationSource,
@@ -136,6 +137,7 @@ import {
   RAREXT_SITE_BINDING_PATH,
   proposalProblems,
   proposalRoot,
+  anchorRoot,
   publicationRoot,
   sha256Hex,
   toHex,
@@ -1004,6 +1006,15 @@ export function createApp(options: AppOptions = {}): AppServer {
    * Durability is an observation by the reader, not a field the author signed.
    * It is attached on the way out so it cannot go stale inside the store.
    */
+  /**
+   * An anchor's identity travels with it, recomputed from the record — the same rule as a
+   * publication's. An anchor is the protocol's trust root: a client that holds a reference to one
+   * recomputes this and compares, rather than trusting the id the node minted.
+   */
+  function withAnchorRoot(anchor: Anchor): Anchor & { anchorIdentity: string } {
+    return { ...anchor, anchorIdentity: anchorRoot(anchor, recordRootHash) };
+  }
+
   function observeDurability<T extends Publication>(publication: T): T & { root: string } {
     const observation = publicationDurability(publication, placements, durability);
 
@@ -3272,25 +3283,34 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
 
-        send(res, 201, anchor);
+        send(res, 201, withAnchorRoot(anchor));
         return;
       }
 
       if (req.method === "GET" && pathname === "/v1/anchors") {
-        send(res, 200, store.listAnchors());
+        send(res, 200, store.listAnchors().map(withAnchorRoot));
         return;
       }
 
       if (req.method === "GET" && pathname.startsWith("/v1/anchors/")) {
         const id = pathname.slice("/v1/anchors/".length);
-        const anchor = store.getAnchor(id);
+
+        // By the id the node minted, or by the root the record rebuilds to — the identity a client
+        // can check itself, which is what makes an anchor answerable instead of asserted.
+        let anchor = store.getAnchor(id);
+
+        if (!anchor && /^[0-9a-f]{64}$/i.test(id)) {
+          const wanted = id.toLowerCase();
+          anchor =
+            store.listAnchors().find((entry) => anchorRoot(entry, recordRootHash) === wanted) ?? null;
+        }
 
         if (!anchor) {
           send(res, 404, { error: "anchor not found" });
           return;
         }
 
-        send(res, 200, anchor);
+        send(res, 200, withAnchorRoot(anchor));
         return;
       }
 

@@ -20,6 +20,7 @@ import {
   attestRun,
   canonicalize,
   cidV1,
+  matchRecordRoot,
   publicationRoot,
   toHex,
   generate,
@@ -458,14 +459,17 @@ export interface RarextResolveOptions extends FindVerifiedBundleOptions {
 export type RarextResolveResult =
   | {
       ok: true;
-      /** What the root turned out to name: a registry's bundle, or raw bytes. */
-      kind: "bundle" | "publication" | "blob";
+      /**
+       * What the root turned out to name: a registry's bundle, a record (a publication or an
+       * anchor — core owns the registry of record identities), or raw bytes.
+       */
+      kind: "bundle" | "publication" | "anchor" | "blob";
       root: string;
       source: string;
       /** A bundle, when the root named one. */
       bundle?: Bundle;
-      /** A publication record, when the root named one. */
-      publication?: Publication;
+      /** The record, when the root named one — a publication or an anchor. */
+      record?: Publication | Anchor;
       /** A blob's bytes and the media type the host served them with, when the root named bytes. */
       bytes?: Uint8Array;
       mediaType?: string;
@@ -503,7 +507,7 @@ async function readCandidate(
     attempts: Array<{ url: string; reason: string }>;
   },
 ): Promise<
-  | { kind: "publication"; source: string; publication: Publication }
+  | { kind: "publication" | "anchor"; source: string; record: Publication | Anchor }
   | { kind: "blob"; source: string; bytes: Uint8Array; mediaType?: string }
   | null
 > {
@@ -548,17 +552,21 @@ async function readCandidate(
     }
 
     if (parsed !== undefined && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const recomputed = publicationRoot(parsed as Publication, hashFnFrom(sha256)).toLowerCase();
+      // Which record rule rebuilds this document to the pinned root — core owns the registry of
+      // record identities, so a new record kind is one entry there and every client gains it.
+      const matched = matchRecordRoot(parsed, wanted, hashFnFrom(sha256));
 
-      if (recomputed === wanted) {
-        return { kind: "publication", source: url, publication: parsed as Publication };
+      if (matched !== null) {
+        return { kind: matched.kind, source: url, record: parsed as Publication | Anchor };
       }
 
+      const asPublication = publicationRoot(parsed as never, hashFnFrom(sha256)).toLowerCase();
       ports.attempts.push({
         url,
         reason:
-          `its record rebuilds to ${recomputed.slice(0, 16)}…, not the pinned ${wanted.slice(0, 16)}… ` +
-          "(a record is served with its root and durability attached; those are not part of it)",
+          `no record rule rebuilds this document to the pinned ${wanted.slice(0, 16)}… ` +
+          `(as a publication it is ${asPublication.slice(0, 16)}…; a record is served with its root ` +
+          "and durability attached, and those are not part of it)",
       });
     }
   } else {
@@ -679,13 +687,13 @@ export async function resolveRarextUri(
 
       if (read === null) continue;
 
-      if (read.kind === "publication") {
+      if (read.kind !== "blob") {
         return {
           ok: true,
-          kind: "publication",
+          kind: read.kind,
           root: uri.root,
           source: read.source,
-          publication: read.publication,
+          record: read.record,
           candidates: unique.length,
           attempts,
         };

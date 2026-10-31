@@ -5,7 +5,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { anchorRoot } from "../../../packages/core/src/index.ts";
 import type { Anchor, Circuit, Publication } from "../../../packages/core/src/index.ts";
+import { createHash } from "node:crypto";
 import { AdapterRegistry } from "../src/adapters/registry.ts";
 import { anchorPending, anchorThreshold, publicationLeaf } from "../src/anchorer.ts";
 import { merkleRoot } from "../src/merkle.ts";
@@ -367,5 +369,47 @@ test("mechanism: policy — the anchor threshold parses the environment honestly
   } finally {
     if (restore === undefined) delete process.env.RAREXT_ANCHOR_EVERY;
     else process.env.RAREXT_ANCHOR_EVERY = restore;
+  }
+});
+
+test("an anchor is addressable by the root its record rebuilds to", async () => {
+  const record: Anchor = {
+    id: "minted-label",
+    root: "a".repeat(64),
+    publicationIds: ["p1"],
+    leafCount: 1,
+    leafVersion: 2,
+    createdAt: "2026-11-01T00:00:00.000Z",
+    adapter: "local",
+    reference: null,
+    receipts: [],
+  };
+  const clientHash = (value: string | Uint8Array) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
+  const expected = anchorRoot(record, clientHash);
+
+  const store = new RarextStore();
+  store.addAnchor(record);
+  const { server, base } = await start(store);
+
+  try {
+    const byId = (await (await fetch(`${base}/v1/anchors/minted-label`)).json()) as Anchor & { anchorIdentity: string };
+    assert.equal(byId.anchorIdentity, expected, "the node's answer is the client's own recomputation");
+    // From the response AS IT ARRIVED: the field the node attached is not part of the record, and
+    // the declared field map is what makes the naive recomputation still work.
+    assert.equal(anchorRoot(byId as unknown as Anchor, clientHash), byId.anchorIdentity);
+
+    const byRoot = await fetch(`${base}/v1/anchors/${expected}`);
+    assert.equal(byRoot.status, 200);
+    assert.equal(((await byRoot.json()) as Anchor).id, record.id);
+
+    assert.equal((await fetch(`${base}/v1/anchors/${"c".repeat(64)}`)).status, 404, "a root nobody anchored is a 404, not a guess");
+
+    // Identity, not labels: the same anchoring filed under another minted id is the same object.
+    store.addAnchor({ ...record, id: "another-label" });
+    const again = (await (await fetch(`${base}/v1/anchors/${expected}`)).json()) as Anchor & { anchorIdentity: string };
+    assert.equal(again.anchorIdentity, expected);
+  } finally {
+    await stop(server);
   }
 });
