@@ -298,3 +298,37 @@ test("the MCP's maker and the SDK's maker build the same evidence for the same r
   assert.equal(mcp.verification.correct, true);
   assert.equal(made.attestation.correct, true);
 });
+
+test("the MCP's bounded maker and the SDK's bounded maker build the same evidence for the same run", async () => {
+  // The bounded twin of the generative pin: the MCP's attestAiLocally and the SDK's
+  // selfPublishBounded both assemble a bounded run from the same values. A change to either
+  // body, artifact, or trace construction must fail here, on the day it is made.
+  const { AgentSigner, generateAgentKeypair, selfPublishBounded } = await import(
+    "../../../packages/agent-sdk/src/index.ts"
+  );
+  const values = [11, 21, 29, 44, 198, 251, 3, 124];
+
+  const mcp = await attestAiLocally("bounded-1", registryFor(boundedChallenge), { values });
+
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const made = selfPublishBounded(signer, {
+    author: "resident",
+    title: "the bounded pin",
+    values,
+    challenge: boundedChallenge as never,
+    binding: { id: "ai-bounded/bounded-1", version: 1, claimKind: "satisfies" as never },
+  });
+
+  assert.equal(
+    mcp.attestation.traceHash,
+    made.attestation.traceHash,
+    "the MCP's and the SDK's bounded makers must build the same trace for the same values",
+  );
+  assert.equal(
+    mcp.attestation.circuitHash,
+    made.attestation.circuitHash,
+    "the MCP's and the SDK's bounded makers must hash the same artifact for the same values",
+  );
+  assert.equal(mcp.verification.correct, true);
+  assert.equal(made.attestation.correct, true);
+});
