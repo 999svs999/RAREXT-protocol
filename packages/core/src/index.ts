@@ -89,6 +89,14 @@ export {
 } from "./site-binding.ts";
 export type { SiteBinding, SiteBindingParse, SiteBindingVerdict } from "./site-binding.ts";
 export {
+  RAREXT_URI_SCHEME,
+  formatRarextUri,
+  parseRarextUri,
+  rarextUriForRoot,
+  sameRarextObject,
+} from "./rarext-uri.ts";
+export type { RarextUri, RarextUriParse } from "./rarext-uri.ts";
+export {
   GOVERNANCE_PROPOSAL_KIND,
   GOVERNANCE_VOTE_KIND,
   UNKNOWN_WEIGHT,

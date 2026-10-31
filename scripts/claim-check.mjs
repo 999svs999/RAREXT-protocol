@@ -255,6 +255,10 @@ if (process.argv.includes("--self-test")) {
       readFileSync(new URL("README.md", root), "utf8").includes("npm is an optional rail"),
     );
     requireCondition(
+      "naming rfc states its one rule",
+      readFileSync(new URL("rfcs/0022-naming-a-reference.md", root), "utf8").includes("carries the root it commits to"),
+    );
+    requireCondition(
       "roles rfc states its role model",
       readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8").includes("## Roles, stated once"),
     );
@@ -722,6 +726,24 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted an RFC citing a missing document and a tally that is announced, not recomputed");
   }
   caught = caught && caughtRoles;
+
+  // And RFC 0022, in the two directions it can rot: a cited document that no longer exists, and the
+  // ONE rule softening into a name you have to trust.
+  const beforeNaming = failures;
+  const namingRfc = readFileSync(new URL("rfcs/0022-naming-a-reference.md", root), "utf8");
+  checkNamingRfc({
+    rfc: doctor(namingRfc, "namingRfcPath", (text) => text.replaceAll("`docs/TRANSITION.md`", "`docs/TRANSITION-OLD.md`")),
+  });
+  checkNamingRfc({
+    rfc: doctor(namingRfc, "namingRfcRule", (text) =>
+      text.replaceAll("A RAREXT reference carries the root it commits to.", "A RAREXT reference names an object, and the root is recommended."),
+    ),
+  });
+  const caughtNaming = failures > beforeNaming;
+  if (!caughtNaming) {
+    fail("self-test: the checker accepted a naming RFC citing a missing document and dropping its one rule");
+  }
+  caught = caught && caughtNaming;
 
   // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
   // but parses the body by hand is exactly the second reader the rule exists to prevent — and
@@ -1280,6 +1302,7 @@ checkDefaultsIndependence();
 checkNativeIndependence();
 checkSiteTransition();
 checkRolesRfc();
+checkNamingRfc();
 
   // THE VERIFY PAGE ANSWERS THE FEDERATION QUESTION TOO. The bundle commits to a seed list of
   // registries; a page whose job is "is this copy faithful" should show WHICH registries and
@@ -2352,6 +2375,77 @@ function checkFederationRule(sourcesOverride) {
  * the protocol stops and an application's token begins. An RFC that keeps promising a mechanism
  * the tree no longer has is the failure this exists for.
  */
+/**
+ * RFC 0022 — naming: does RAREXT need its own URL form?
+ *
+ * The RFC's answer is a syntax with one rule and no resolver, so this holds the three things that
+ * would rot silently: the primitives it says exist (the parser, the comparison, and the
+ * verification it defers to), the documents it cites, and the sentences its argument turns on —
+ * that a reference carries its root, that the root decides identity, and that this is not a name
+ * service. An RFC whose central rule quietly softened would still read as confidently, which is
+ * exactly the failure this checking exists for.
+ */
+function checkNamingRfc(overrides = {}) {
+  const rfc = overrides.rfc ?? readFileSync(new URL("rfcs/0022-naming-a-reference.md", root), "utf8");
+  console.log(`naming rfc (rfcs/0022-naming-a-reference.md${overrides.rfc ? ", DOCTORED" : ""} vs tree):`);
+  const { text: sources } = readSourceTrees({ includeScripts: true });
+
+  const EXISTING = [
+    "parseRarextUri",
+    "formatRarextUri",
+    "rarextUriForRoot",
+    "sameRarextObject",
+    "RAREXT_URI_SCHEME",
+    "verifyBundleShape",
+    "merkleRoot",
+    "cidV1",
+    "fetchWithUrlPolicy",
+    "findVerifiedBundle",
+    "planSeedUnion",
+    "parseSiteBinding",
+    "verifySiteBinding",
+  ];
+  for (const name of EXISTING) {
+    if (!sources.includes(name)) {
+      fail(`RFC 0022 leans on ${name}, which does not exist in the source trees`);
+    }
+  }
+
+  const referenced = new Set(
+    Array.from(rfc.matchAll(/`((?:rfcs|docs)\/[\w.-]+\.md)`/g)).map((match) => match[1]),
+  );
+  for (const path of referenced) {
+    try {
+      readFileSync(new URL(path, root), "utf8");
+    } catch {
+      fail(`RFC 0022 references ${path}, which does not exist`);
+    }
+  }
+
+  for (const section of ["## The problem", "## Decision", "## Security considerations", "## Non-goals", "## Compatibility", "## Open questions"]) {
+    if (!rfc.includes(section)) {
+      fail(`RFC 0022 no longer has its \`${section.replace("## ", "")}\` section`);
+    }
+  }
+
+  const squash = (text) => text.replace(/\s+/g, " ").toLowerCase();
+  const haystack = squash(rfc);
+  for (const [sentence, why] of [
+    ["a RAREXT reference carries the root it commits to", "the one rule the syntax exists for"],
+    ["the root decides identity, and only the root", "that identity is the commitment, not the location"],
+    ["not a name service, and not a replacement for DNS", "the limit it does not cross"],
+    ["nothing here resolves anything", "that the RFC specifies syntax, not resolution"],
+  ]) {
+    if (!haystack.includes(squash(sentence))) {
+      fail(`RFC 0022 no longer states ${why}`);
+    }
+  }
+
+  console.log(
+    `  naming: ${EXISTING.length} primitive(s) verified | ${referenced.size} document(s) resolve | one rule (the root), no resolver`,
+  );
+}
+
 function checkRolesRfc(overrides = {}) {
   const rfc = overrides.rfc ?? readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8");
   console.log(`roles rfc (rfcs/0021-roles-work-and-decisions.md${overrides.rfc ? ", DOCTORED" : ""} vs tree):`);

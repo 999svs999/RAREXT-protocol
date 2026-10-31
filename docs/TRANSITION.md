@@ -109,6 +109,9 @@ a site joins by publishing the statement at its own hostname, or by the record c
   DNS and the bytes are still fetched over HTTPS. A binding sits *on top of* the existing
   name system so that today's sites can join without moving; it does not ask anyone to
   re-point a domain at infrastructure they do not control.
+  The `rarext:` reference form argued in [RFC 0022](../rfcs/0022-naming-a-reference.md) is a way to
+  WRITE DOWN which object is meant — it carries the root it commits to — and it resolves nothing:
+  a client still finds the bytes over ordinary HTTPS and still decides by recomputing the root.
 - **Not a trust transfer.** Declaring a binding grants nothing: no write access, no
   custody, no say in the registry.
 - **Not a rewrite of the URL policy.** Fetching an arbitrary site's documents is subject to

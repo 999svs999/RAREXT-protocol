@@ -11,6 +11,35 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RFC 0022 — naming: does RAREXT need its own URL form? Answered with a syntax and one rule, and
+  with the alternative it refuses named in writing.** The protocol could verify an object and could
+  not WRITE ONE DOWN in a way that is checkable before fetching: quoting
+  `https://example.com/registry/bundle.json` in a document, a message or an artifact carries no
+  commitment, so the reader either fetches on faith or fetches and then finds out what it got.
+  `packages/core/src/rarext-uri.ts` now parses, canonicalizes and compares a `rarext:` reference
+  with one rule — **a RAREXT reference carries the root it commits to**; without one it is a name
+  you have to trust, and this protocol does not have those. Two forms, both carrying a root:
+  `rarext:<64-hex root>` (the root IS the address — nothing to resolve) and
+  `rarext:<authority>/<path>@<64-hex root>` (a location plus the pin). `sameRarextObject` compares
+  ROOTS, so two references that disagree about where to look still name one object when they agree
+  about what its bytes must rebuild to — which is what makes a reference safe to carry across
+  mirrors. Refusals are part of the design and are tested: no root, a root that is not 64 hex, a
+  path with an empty segment or `..` (how a written address quietly becomes a different address),
+  and any other scheme refused by name rather than coerced.
+- **The alternatives are named and rejected, which is the part that matters.** A new global name
+  service would be a name root run by someone — the third party as critical infrastructure this
+  project refuses, capturing every site's identity into a namespace they did not choose, duplicating
+  DNS badly to solve a problem about writing a reference down rather than looking one up. A `rarext`
+  TLD asks a standards body for a namespace that is not ours to take. A root in an https query
+  string works and is droppable by any layer that rewrites URLs, which for a commitment is a
+  contradiction. And the syntax resolves NOTHING: a client still finds the bytes over ordinary HTTPS
+  through the existing URL policy and still decides by recomputing the root, so the location is a
+  hint and never authority. Held by `claim-check` — 13 primitives, the document it cites, its
+  sections, and the four sentences its argument turns on, with two injections (a missing cited
+  document, and the one rule softening into a recommendation).
+- **The transition page now points at it**, because the two are one story: a DNS site joins by
+  declaring a binding (RFC-less, shipped), and a `rarext:` reference is how that object is written
+  down when it leaves the context that carries its root.
 - **A vote now has somewhere to travel: the governance route, and a decision survives the
   process that recorded it.** `POST /v1/governance/proposals` pins a proposal and answers with the
   root the node COMPUTED for it; `GET /v1/governance/proposals` lists what the node holds;
