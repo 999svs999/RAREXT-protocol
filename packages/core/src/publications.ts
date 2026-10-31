@@ -100,44 +100,71 @@ export function publicationFromSignedInput(input: PublishInput, extras: {
 export const PUBLICATION_ROOT_DOMAIN = "rarext.publication.root.v1";
 
 /**
- * The fields a publication's root does NOT cover, because they are bookkeeping rather than content:
- * `id` is a label the publisher mints, `attestedAt` is when a particular node wrote the record
- * down, the attestation's own key id and signature say WHO attested (not what was published), and
- * `durability` is that node's storage tier for the bytes.
+ * Every field of a publication, and whether the ROOT covers it — `true` is content, `false` is
+ * bookkeeping.
  *
- * Named in one place, and held by a test that enumerates the record's fields: adding a field to
- * `Publication` fails that test until the new field is either covered or listed here. Identity by
- * silence is how a rule rots — the failure mode this avoids is a future field quietly NOT being
- * part of the thing the root is supposed to commit to.
+ * One declaration, exhaustive BY THE TYPE: `Record<keyof Publication, boolean>` stops compiling the
+ * moment a field is added to `Publication`, so identity by silence is impossible — somebody has to
+ * write `true` or `false` for the new field, which is a decision, made in one visible place.
+ *
+ * It is a FIELD MAP rather than a walk over the record's own keys because a record is served with
+ * things attached to it that are not part of it: the API hands a publication out with its `root`
+ * and its durability observation on board, and a client recomputing a root over "whatever keys
+ * happen to be present" would get a different digest than the one it was told — the very thing the
+ * root exists to prevent. Reading the declared fields means a presentation key is ignored by
+ * construction, so a response recomputes to the root it was served with, no ceremony required.
  */
-export const PUBLICATION_ROOT_EXCLUDED_FIELDS = [
-  "id",
-  "attestedAt",
-  "attestationKeyId",
-  "attestationSignature",
-  "durability",
-] as const;
+export const PUBLICATION_ROOT_FIELDS: Record<keyof Publication, boolean> = {
+  id: false,
+  author: true,
+  authorKey: true,
+  delegatedBy: true,
+  signatureAlgorithm: true,
+  title: true,
+  body: true,
+  app: true,
+  challengeId: true,
+  artifact: true,
+  taskId: true,
+  circuit: true,
+  visibility: true,
+  artifactCommitment: true,
+  parentId: true,
+  source: true,
+  createdAt: true,
+  attestedAt: false,
+  verified: true,
+  signature: true,
+  nonce: true,
+  attestation: true,
+  verification: true,
+  attestationKeyId: false,
+  attestationSignature: false,
+  durability: false,
+};
 
 /**
- * A publication's identity, recomputed from the record itself.
- *
- * A publication is how the storage economy writes anything down, and until now its name was an
- * `id` the registry minted — a label, so a client could only take the node's word for what it was
- * holding. A root makes the record answerable: the same published content is the same object
- * whichever node wrote it down, a copy that differs in one covered field is a different object, and
- * a reference can name it (RFC 0022).
- *
- * Canonicalization does the field-order work (the governance lesson: an identity that depends on
- * key order is an identity that changes for no reason), and `hash` is a PORT so a browser, a node
- * and a test can each bring their own digest and still agree on what the record is.
+ * The fields a publication's root does NOT cover, derived from the map above so the two can never
+ * disagree: `id` is a label the publisher mints, `attestedAt` is when a particular node wrote the
+ * record down, the attestation's own key id and signature say WHO attested rather than what was
+ * published, and `durability` is that node's storage tier — which core's own type already calls "a
+ * reader's observation, not part of the publication".
  */
+export const PUBLICATION_ROOT_EXCLUDED_FIELDS: readonly string[] = Object.entries(
+  PUBLICATION_ROOT_FIELDS,
+)
+  .filter(([, isContent]) => !isContent)
+  .map(([field]) => field)
+  .sort();
+
 export function publicationRoot(publication: Publication, hash: HashFn): string {
   const covered: Record<string, unknown> = {};
-  const excluded: readonly string[] = PUBLICATION_ROOT_EXCLUDED_FIELDS;
+  const record = publication as unknown as Record<string, unknown>;
 
-  for (const key of Object.keys(publication).sort()) {
-    if (excluded.includes(key)) continue;
-    covered[key] = (publication as unknown as Record<string, unknown>)[key];
+  for (const [field, isContent] of Object.entries(PUBLICATION_ROOT_FIELDS)) {
+    if (!isContent) continue;
+    const value = record[field];
+    if (value !== undefined) covered[field] = value;
   }
 
   return hash(`${PUBLICATION_ROOT_DOMAIN}\n${canonicalize(covered)}`);

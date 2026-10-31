@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { publicationRoot } from "../../core/src/index.ts";
 
 const committed = readFileSync(new URL("../../../site/registry/bundle.json", import.meta.url), "utf8");
 const seed = JSON.parse(readFileSync(new URL("../../../site/registry/seed.json", import.meta.url), "utf8")) as {
@@ -77,16 +78,18 @@ test("a wrong root is refused with BOTH roots named, and a bare root with no can
     const parsed = JSON.parse(wrong.stdout) as { resolved: null; error: string; attempts: Array<{ url: string; reason: string }> };
     assert.equal(parsed.resolved, null);
     assert.match(parsed.error, /no candidate rebuilt the pinned root/);
-    assert.match(parsed.error, /and reading the same candidates as bytes found none/);
-    // TWO attempts for ONE candidate: a reference does not say what it names, so both readings are
-    // tried and both are reported — "not a bundle" is not the same answer as "not there".
-    assert.equal(parsed.attempts.length, 2);
+    assert.match(parsed.error, /reading the same candidates as records and as bytes found none/);
+    // THREE attempts for ONE candidate: a reference does not say what it names, so a bundle, a
+    // record and the bytes are all tried and all reported — "not a bundle" is not "not there".
+    assert.equal(parsed.attempts.length, 3);
     // The evidence says what was rebuilt and what was pinned, so a reader can see the difference.
     assert.match(parsed.attempts[0]!.reason, new RegExp(ROOT));
     assert.match(parsed.attempts[0]!.reason, /c{16}/);
-    // And the byte reading's refusal is about a digest, not about a schema.
-    assert.match(parsed.attempts[1]!.reason, /its bytes hash to [0-9a-f]{16}/);
-    assert.match(parsed.attempts[1]!.reason, /not the pinned c{16}/);
+    // The record reading refuses by recomputation, and the byte reading by digest — different
+    // questions, so they get different answers rather than one merged "nope".
+    assert.match(parsed.attempts[1]!.reason, /rebuilds to [0-9a-f]{16}/);
+    assert.match(parsed.attempts[2]!.reason, /its bytes hash to [0-9a-f]{16}/);
+    assert.match(parsed.attempts[2]!.reason, /not the pinned c{16}/);
   } finally {
     await origin.close();
   }
@@ -132,6 +135,31 @@ test("the CLI says WHICH reading answered: a blob is named by the sha256 of its 
     // fetches it themselves.
     assert.equal(parsed.resolved.bytes, bytes.length);
     assert.ok(json.stdout.length < 4096, "the object's bytes never enter the output");
+  } finally {
+    await origin.close();
+  }
+});
+
+test("the CLI names a RECORD: the storage economy's entries are addressable by the root they rebuild to", async () => {
+  const record = (JSON.parse(committed) as { publications: Array<Record<string, unknown>> }).publications[0]!;
+  const hash = (value: string | Uint8Array) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
+  const root = publicationRoot(record as never, hash);
+
+  const origin = await serve(JSON.stringify({ ...record, root }), "application/json");
+  try {
+    const human = await runCli([`rarext:${origin.host}/bundle.json@${root}`, "--scheme", "http"]);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /a published record by .+, by the root the record rebuilds to/);
+
+    const json = await runCli([`rarext:${origin.host}/bundle.json@${root}`, "--scheme", "http", "--json"]);
+    const parsed = JSON.parse(json.stdout) as {
+      resolved: { kind: string; root: string; publication: { id: string; author: string; title: string } };
+    };
+    assert.equal(parsed.resolved.kind, "publication");
+    assert.equal(parsed.resolved.root, root);
+    assert.equal(parsed.resolved.publication.id, record.id);
+    assert.ok(parsed.resolved.publication.author, "who published it travels with the answer");
   } finally {
     await origin.close();
   }

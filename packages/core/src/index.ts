@@ -123,6 +123,7 @@ export type {
 export {
   publicationRoot,
   PUBLICATION_ROOT_DOMAIN,
+  PUBLICATION_ROOT_FIELDS,
   PUBLICATION_ROOT_EXCLUDED_FIELDS,
   publicationFromSignedInput,
 } from "./publications.ts";
@@ -162,6 +163,7 @@ export {
   readBundleResponseBytes,
   seedLabel,
   verifyBundleShape,
+  bundleShapeProblem,
   verifyCandidates,
 } from "./bundle.ts";
 export type { BundleResponse } from "./bundle.ts";

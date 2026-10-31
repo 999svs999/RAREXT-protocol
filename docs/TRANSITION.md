@@ -140,7 +140,9 @@ node scripts/resolve.mjs 'rarext:example.com/registry/bundle.json@<64-hex>'
 ```
 
 A reference names content, not a format, so the same command verifies any content-addressed file a
-site serves — an image, a stylesheet, a tarball of the site itself — by the sha256 of its bytes:
+site serves — an image, a stylesheet, a tarball of the site itself — by the sha256 of its bytes. A
+node's records resolve the same way, by the root each record rebuilds to (`publicationRoot`), so an
+entry in the storage economy is addressable by what it IS rather than by the id it was filed under:
 
 ```
 node scripts/resolve.mjs 'rarext:example.com/assets/header.png@<sha256 of those bytes>'

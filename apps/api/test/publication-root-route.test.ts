@@ -56,10 +56,15 @@ test("a publication is addressable by its ROOT: the client recomputes what the n
     assert.equal(served.id, stored.id);
     assert.equal(served.root, expected, "the node's answer is the client's own recomputation");
 
-    // 2. The claim is not a field to trust: recompute it from the bytes that were SERVED, with the
-    //    node's own mapping and hasher out of the picture entirely.
-    const { root, ...rest } = served;
-    assert.equal(publicationRoot(rest as Publication, clientHash), root, "the served record rebuilds to the served root");
+    // 2. The claim is not a field to trust: recompute it from exactly what was SERVED, with the
+    //    node's own mapping and hasher out of the picture entirely. No stripping the `root` field
+    //    off first — a client that had to know to do that would not really be able to check
+    //    anything, and the first version of this rule secretly required it.
+    assert.equal(
+      publicationRoot(served as Publication, clientHash),
+      served.root,
+      "the served record rebuilds to the served root, using the response as it arrived",
+    );
 
     // 3. And the root addresses it, which is what a client that holds only a reference has.
     assert.notEqual(expected, stored.id, "the root is not the minted label");

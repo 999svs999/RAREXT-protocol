@@ -20,6 +20,7 @@ import {
   attestRun,
   canonicalize,
   cidV1,
+  publicationRoot,
   toHex,
   generate,
   foldAnnouncements,
@@ -39,6 +40,7 @@ import {
   semanticsRecordDigest,
   semanticsKey,
   type SemanticsCommitmentStatus,
+
 } from "../../core/src/index.ts";
 import {
   allowPrivateFromSeeds,
@@ -93,6 +95,7 @@ import type {
   LeaderboardEntry,
   OperatorAttestation,
   Profile,
+  HashFn,
   Publication,
   PublicationPayload,
   PublicationSource,
@@ -456,11 +459,13 @@ export type RarextResolveResult =
   | {
       ok: true;
       /** What the root turned out to name: a registry's bundle, or raw bytes. */
-      kind: "bundle" | "blob";
+      kind: "bundle" | "publication" | "blob";
       root: string;
       source: string;
       /** A bundle, when the root named one. */
       bundle?: Bundle;
+      /** A publication record, when the root named one. */
+      publication?: Publication;
       /** A blob's bytes and the media type the host served them with, when the root named bytes. */
       bytes?: Uint8Array;
       mediaType?: string;
@@ -476,23 +481,19 @@ function authorityIsHost(authority: string): boolean {
 }
 
 /**
- * Read a candidate as BYTES and compare the digest the reference carried.
+ * Read each candidate ONCE, then interpret what came back.
  *
- * The second reading of a reference, and the reason a `rarext:` name is not tied to one kind of
- * object: a bundle's root is a hash of its content, a blob's root is the sha256 of its bytes, and
- * both say "this is what I mean". A client that has never heard of the object's type can therefore
- * still verify it — an image, a model file, a tarball of a site — which is what makes a reference a
- * name for CONTENT rather than for a document format.
+ * The readings after the bundle are: a PUBLICATION record (the root recomputed from the record — the
+ * identity the storage economy writes things down under) and raw BYTES (their sha256). Both need the
+ * same fetch, and fetching twice would be worse than wasteful: a mirror could change between calls
+ * and the client would then be reasoning about two different objects while calling them one.
  *
- * The two readings cannot both accept one copy: a bundle root is domain-separated from the sha256
- * of the bytes that carry it, so the same URL named by two different roots is two different
- * objects. That is a property the tests exercise rather than assume.
- *
- * The fetch is the walk's own policy-guarded one, with the same timeout and the same allowance —
- * the honest reading of "third-party bytes" does not change because we stopped expecting JSON.
+ * The fetch is the walk's own policy-guarded one, with the same timeout and the same private-address
+ * allowance, because what counts as a readable third-party location does not change because we
+ * stopped expecting a bundle.
  */
-async function readAsBlob(
-  urls: string[],
+async function readCandidate(
+  url: string,
   root: string,
   ports: {
     fetch?: typeof fetch;
@@ -501,45 +502,88 @@ async function readAsBlob(
     allowPrivate: boolean;
     attempts: Array<{ url: string; reason: string }>;
   },
-): Promise<{ source: string; bytes: Uint8Array; mediaType?: string } | null> {
+): Promise<
+  | { kind: "publication"; source: string; publication: Publication }
+  | { kind: "blob"; source: string; bytes: Uint8Array; mediaType?: string }
+  | null
+> {
   const request = ports.fetch ?? fetch;
   const sha256 = ports.sha256 ?? nodeSha256;
   const timeoutMs = ports.timeoutMs ?? 15_000;
 
-  for (const url of urls) {
-    let response: Response;
+  let response: Response;
 
-    try {
-      response = await fetchWithUrlPolicy(
-        url,
-        { signal: AbortSignal.timeout(timeoutMs) },
-        { fetch: request, allowPrivate: ports.allowPrivate },
-      );
-    } catch (error) {
-      ports.attempts.push({ url, reason: `bytes not read: ${(error as Error).message}` });
-      continue;
-    }
-
-    if (!response.ok) {
-      ports.attempts.push({ url, reason: `bytes not read: the host answered ${response.status}` });
-      continue;
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const digest = toHex(sha256(bytes)).toLowerCase();
-
-    if (digest !== root.toLowerCase()) {
-      ports.attempts.push({
-        url,
-        reason: `its bytes hash to ${digest.slice(0, 16)}…, not the pinned ${root.slice(0, 16)}…`,
-      });
-      continue;
-    }
-
-    return { source: url, bytes, mediaType: response.headers.get("content-type") ?? undefined };
+  try {
+    response = await fetchWithUrlPolicy(
+      url,
+      { signal: AbortSignal.timeout(timeoutMs) },
+      { fetch: request, allowPrivate: ports.allowPrivate },
+    );
+  } catch (error) {
+    ports.attempts.push({ url, reason: `not read: ${(error as Error).message}` });
+    return null;
   }
 
+  if (!response.ok) {
+    ports.attempts.push({ url, reason: `not read: the host answered ${response.status}` });
+    return null;
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const mediaType = response.headers.get("content-type") ?? undefined;
+  const wanted = root.toLowerCase();
+
+  // The publication reading. A cheap shape test first: a publication is a JSON OBJECT, so the first
+  // significant byte decides and a binary never reaches JSON.parse.
+  const text = new TextDecoder().decode(bytes);
+
+  if (text.trimStart().startsWith("{")) {
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      parsed = undefined;
+      ports.attempts.push({ url, reason: `its JSON does not parse: ${(error as Error).message}` });
+    }
+
+    if (parsed !== undefined && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const recomputed = publicationRoot(parsed as Publication, hashFnFrom(sha256)).toLowerCase();
+
+      if (recomputed === wanted) {
+        return { kind: "publication", source: url, publication: parsed as Publication };
+      }
+
+      ports.attempts.push({
+        url,
+        reason:
+          `its record rebuilds to ${recomputed.slice(0, 16)}…, not the pinned ${wanted.slice(0, 16)}… ` +
+          "(a record is served with its root and durability attached; those are not part of it)",
+      });
+    }
+  } else {
+    ports.attempts.push({ url, reason: "its bytes are not a JSON object, so they name no record" });
+  }
+
+  // The byte reading: whatever it is, the digest decides.
+  const digest = toHex(sha256(bytes)).toLowerCase();
+
+  if (digest === wanted) {
+    return { kind: "blob", source: url, bytes, mediaType };
+  }
+
+  ports.attempts.push({
+    url,
+    reason: `its bytes hash to ${digest.slice(0, 16)}…, not the pinned ${wanted.slice(0, 16)}…`,
+  });
+
   return null;
+}
+
+/** A `HashFn` for core's rules, built from the digest the CALLER trusts. */
+function hashFnFrom(sha256: Sha256): HashFn {
+  return (value) =>
+    toHex(sha256(typeof value === "string" ? new TextEncoder().encode(value) : value));
 }
 
 export async function resolveRarextUri(
@@ -625,20 +669,35 @@ export async function resolveRarextUri(
     };
   } catch (error) {
     // The bundle reading is exhausted. A reference does not say what it names — only the root does —
-    // so the same candidates are now read as bytes, and the object may well have been a blob all
-    // along. A failure reports BOTH readings, because "not a bundle" is not the same answer as
-    // "not there".
+    // so the same candidates are read as RECORDS and as BYTES before anything is called missing.
     const bundleReason = (error as Error).message;
-    const blob = await readAsBlob(unique, uri.root, { ...rest, allowPrivate, attempts });
 
-    if (blob !== null) {
+    // One fetch per candidate, interpreted twice: a publication record, then raw bytes. A failure
+    // reports every reading, because "not a bundle" is not the same answer as "not there".
+    for (const url of unique) {
+      const read = await readCandidate(url, uri.root, { ...rest, allowPrivate, attempts });
+
+      if (read === null) continue;
+
+      if (read.kind === "publication") {
+        return {
+          ok: true,
+          kind: "publication",
+          root: uri.root,
+          source: read.source,
+          publication: read.publication,
+          candidates: unique.length,
+          attempts,
+        };
+      }
+
       return {
         ok: true,
         kind: "blob",
         root: uri.root,
-        source: blob.source,
-        bytes: blob.bytes,
-        mediaType: blob.mediaType,
+        source: read.source,
+        bytes: read.bytes,
+        mediaType: read.mediaType,
         candidates: unique.length,
         attempts,
       };
@@ -647,8 +706,8 @@ export async function resolveRarextUri(
     return {
       ok: false,
       reason:
-        `${bundleReason}; and reading the same candidates as bytes found none whose sha256 is ` +
-        `${uri.root.slice(0, 16)}…`,
+        `${bundleReason}; and reading the same candidates as records and as bytes found none whose ` +
+        `root is ${uri.root.slice(0, 16)}…`,
       attempts,
     };
   }

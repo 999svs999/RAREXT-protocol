@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
 
+import { bundleShapeProblem, verifyBundleShape } from "../src/index.ts";
 import {
   PUBLICATION_ROOT_DOMAIN,
   PUBLICATION_ROOT_EXCLUDED_FIELDS,
+  PUBLICATION_ROOT_FIELDS,
   publicationRoot,
 } from "../src/index.ts";
 import type { Publication } from "../src/index.ts";
+
+/** The BYTE hasher core's sha256-shaped ports take, next to the HashFn above: two contracts, and a
+ *  test that mixes them up gets a type error rather than a wrong answer. */
+const bytesSha256 = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
 
 const nodeSha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
@@ -130,6 +136,11 @@ test("EVERY field is either covered or excluded on purpose — and the excluded 
   }
 
   assert.deepEqual(tried.sort(), Object.keys(base).sort(), "every field of the record was decided on");
+  assert.deepEqual(
+    Object.keys(PUBLICATION_ROOT_FIELDS).sort(),
+    Object.keys(base).sort(),
+    "the field map is exactly the record's fields, so the compile-time guard is the whole guard",
+  );
   // The exclusion list is exactly the bookkeeping half — no more, no less.
   assert.deepEqual([...PUBLICATION_ROOT_EXCLUDED_FIELDS].sort(), ["attestationKeyId", "attestationSignature", "attestedAt", "durability", "id"].sort());
 });
@@ -153,4 +164,48 @@ test("the root is domain-separated, and what it hashes is the record minus its l
   assert.ok(!preimage.includes("reg-1"), "a minted id is not");
   assert.ok(!preimage.includes("2026-11-01T00:00:01.000Z"), "nor when a node wrote it down");
   assert.ok(!preimage.includes("registry-key"), "nor which key attested it");
+});
+
+test("a record is served with things attached that are NOT part of it, and the root ignores them", () => {
+  // The API hands a publication out with its `root` and its durability observation on board, and a
+  // client must be able to recompute the digest it was given from exactly what it received — no
+  // stripping, no ceremony. This was broken in the first version, which walked the record's own
+  // keys: the served copy hashed differently from the stored one, and a naive client could not
+  // check the node's claim at all. The field map is why it is now ignored by construction.
+  const stored = record();
+  const root = publicationRoot(stored, nodeSha256);
+
+  const asServed = { ...stored, root, durability: null, links: { self: "/v1/publications/x" } } as Publication;
+  assert.equal(publicationRoot(asServed, nodeSha256), root, "presentation keys do not move the root");
+
+  // And an UNKNOWN key is ignored even when it looks like content — the map is the list, so a
+  // client adding a field of its own cannot invent a different object.
+  const withExtra = { ...stored, myNotes: "scribbled in the margin" } as Publication;
+  assert.equal(publicationRoot(withExtra, nodeSha256), root);
+
+  // Content still counts, whichever way it arrives.
+  const withRealChange = { ...stored, title: "changed" } as Publication;
+  assert.notEqual(publicationRoot(withRealChange, nodeSha256), root);
+});
+
+test("a document that is not a bundle is refused BY NAME, not with a TypeError", () => {
+  // The resolver reaches this with whatever a candidate served: a publication record, a search
+  // result, an error envelope. Walking into `bundle.publications.map` threw
+  // "Cannot read properties of undefined (reading 'map')" — and that string reached the command
+  // line as the REASON a reference failed, which explains nothing to the person reading it.
+  assert.match(bundleShapeProblem({})!, /no manifest/);
+  assert.match(bundleShapeProblem({ manifest: {} })!, /states no root/);
+  assert.match(bundleShapeProblem({ manifest: { root: "a".repeat(64) } })!, /lists no publications/);
+  assert.match(bundleShapeProblem({ manifest: { root: "a".repeat(64), publications: [] } })!, /carries no publications/);
+  assert.match(bundleShapeProblem([])!, /not a JSON object/);
+  assert.match(bundleShapeProblem(record())!, /carries no manifest/, "a publication is not a bundle and is refused as such");
+  assert.equal(bundleShapeProblem({ manifest: { root: "a".repeat(64), publications: [] }, publications: [] }), null);
+
+  // The verifier says the same thing rather than throwing, with no invented root.
+  const refused = verifyBundleShape(record() as never, bytesSha256);
+  assert.equal(refused.valid, false);
+  assert.match(refused.reason!, /not a bundle/);
+  assert.equal(refused.root, "");
+  assert.equal(refused.computedRoot, "");
+  assert.equal(refused.publications, 0);
 });

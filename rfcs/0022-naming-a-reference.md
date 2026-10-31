@@ -18,18 +18,22 @@ usage error — printing every candidate it refused and why. Verified in the ord
 the project's own live registry: the demo's reference resolves, and a version of it with a wrong
 root fails naming both roots.
 
-A reference names CONTENT, not a format. A root may name a bundle's content or the sha256 of its
-bytes, and the resolver reads the same candidates both ways: a registry's bundle is checked by the
-root its content rebuilds to, and raw bytes are checked by their sha256 — so an image, a model file
-or a tarball of a site can be named and verified by a client that has never heard of its type. The
-two readings cannot both accept one copy, because a bundle's root is domain-separated from the
-sha256 of the bytes that carry it: **the same URL, named by two different roots, is two different
-objects.** That is verified against the project's own live deployment, where the published
-`bundleCid` (a CIDv1, base32) and the hex sha256 of the same bytes are the same 32-byte digest
-spelled two ways, while the bundle root is something else entirely.
+A reference names CONTENT, not a format. A root may name a bundle's content, a published record's
+content, or the sha256 of its bytes, and the resolver reads the same candidates every way: a
+registry's bundle is checked by the root its content rebuilds to, a publication record by
+`publicationRoot` recomputed over the record, and raw bytes by their sha256 — so an image, a model
+file, a tarball of a site or an entry in the storage economy can all be named and verified by a
+client that has never heard of their type. A record arrives with things attached that are not part
+of it (its root, its durability observation), so the rule reads the fields it declares rather than
+whatever keys happen to be present: a client recomputes the digest from exactly what it received.
 
-What still does not exist: resolution of an object whose root is neither a bundle's nor the sha256 of
-its bytes — a publication resolved on its own, or an anchor — and any browser support. Retrieval
+None of the readings can quietly accept another's copy: a bundle's root and a record's root are
+domain-separated from the sha256 of the bytes that carry them, so **the same URL, named by different
+roots, is different objects.** That is verified against the project's own live deployment, where the
+published `bundleCid` (a CIDv1, base32) and the hex sha256 of the same live bytes are the same
+32-byte digest spelled two ways while the bundle root is something else entirely.
+
+What still does not exist: resolving an ANCHOR by its root, and any browser support. Retrieval
 remains HTTPS plus the binding convention.
 
 ## The problem

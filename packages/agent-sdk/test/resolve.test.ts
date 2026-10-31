@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
 import { resolveRarextUri } from "../src/index.ts";
+import { publicationRoot } from "../../core/src/index.ts";
+import type { Publication } from "../../core/src/index.ts";
 import type { RarextResolveOptions } from "../src/index.ts";
 
 // The object this suite resolves is the project's OWN published bundle: real bytes, the real
@@ -81,12 +83,15 @@ test("a LOCATION IS A HINT: a wrong copy is refused by name and a mirror still r
     const impossible = await resolveRarextUri(`rarext:${wrong.host}/bundle.json@${elsewhere}`, opts({ candidates: [right.url] }));
     assert.equal(impossible.ok, false);
     if (impossible.ok) return;
-    // FOUR attempts: two candidates, read two ways. A reference does not say what it names, so a
-    // failure has to report both readings — "not a bundle" is not the same answer as "not there".
-    assert.equal(impossible.attempts.length, 4);
+    // SIX attempts: two candidates, read THREE ways each — a bundle, a record, then bytes. A
+    // reference does not say what it names, so a failure reports every reading: "not a bundle" is
+    // not the same answer as "not there".
+    assert.equal(impossible.attempts.length, 6);
     assert.match(impossible.reason, /c{16}/, "the failure names the root it looked for");
-    assert.match(impossible.reason, /and reading the same candidates as bytes found none/);
-    assert.match(impossible.attempts.map((entry) => entry.reason).join(" | "), /its bytes hash to/);
+    assert.match(impossible.reason, /reading the same candidates as records and as bytes found none/);
+    const evidence = impossible.attempts.map((entry) => entry.reason).join(" | ");
+    assert.match(evidence, /its bytes hash to/, "the byte reading says what it hashed to");
+    assert.match(evidence, /rebuilds to/, "the record reading says what the record rebuilt to, or that it is not one");
   } finally {
     await wrong.close();
     await right.close();
@@ -189,7 +194,7 @@ test("a reference names CONTENT, not a format: bytes resolve by their sha256, an
   }
 });
 
-test("the byte reading obeys the SAME policy as the walk: a private candidate under a public reference is refused, not fetched", async () => {
+test("the readings AFTER a bundle obey the SAME policy as the walk: a private candidate under a public reference is refused, not fetched", async () => {
   const bytes = Buffer.from("private", "utf8");
   const root = createHash("sha256").update(bytes).digest("hex");
   const origin = await serve(bytes, "application/octet-stream");
@@ -199,9 +204,43 @@ test("the byte reading obeys the SAME policy as the walk: a private candidate un
     if (outward.ok) return;
     assert.match(
       outward.attempts.map((entry) => entry.reason).join(" | "),
-      /bytes not read: .*private or link-local/,
-      "the blob reading refuses by policy too, and says which reading refused",
+      /not read: .*private or link-local/,
+      "the later readings refuse by policy too — a record is not readable just because we stopped expecting a bundle",
     );
+  } finally {
+    await origin.close();
+  }
+});
+
+test("a record the economy is written in is named by its own root, as served — with the root attached", async () => {
+  // A REAL publication from the project's committed bundle, not a fixture: the storage economy's
+  // records are what this reading exists for.
+  const bundle = JSON.parse(committed) as { publications: Publication[] };
+  const record = bundle.publications[0]!;
+  const root = publicationRoot(record, (value) =>
+    createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex"),
+  );
+
+  // Served the way the API serves it: the record, plus the `root` it was told and a durability
+  // observation. Those are attached to the record, not part of it, and the client must be able to
+  // recompute the digest from exactly what arrived.
+  const served = JSON.stringify({ ...record, root, durability: null });
+  const origin = await serve(served);
+  try {
+    const resolved = await resolveRarextUri(`rarext:${origin.host}/bundle.json@${root}`, opts());
+    assert.equal(resolved.ok, true, resolved.ok ? "" : resolved.reason);
+    if (!resolved.ok) return;
+    assert.equal(resolved.kind, "publication");
+    assert.equal(resolved.publication?.id, record.id);
+    assert.equal(resolved.bytes, undefined, "a record reading carries no bytes");
+    assert.equal(resolved.bundle, undefined, "and no bundle");
+
+    // The same URL named by the sha256 of the bytes it served is a DIFFERENT object, and the root
+    // decides which one the client asked for — the same property as a bundle, one reading on.
+    const bytesRoot = createHash("sha256").update(Buffer.from(served, "utf8")).digest("hex");
+    const asBlob = await resolveRarextUri(`rarext:${origin.host}/bundle.json@${bytesRoot}`, opts());
+    assert.equal(asBlob.ok, true, asBlob.ok ? "" : asBlob.reason);
+    if (asBlob.ok) assert.equal(asBlob.kind, "blob");
   } finally {
     await origin.close();
   }

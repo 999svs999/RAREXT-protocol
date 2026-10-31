@@ -45,10 +45,50 @@ export interface BundleVerification {
  * injects the digest, so the registry (node:crypto) and an agent client share
  * exactly this code.
  */
+/**
+ * What is wrong with this document as a bundle, or null if nothing is.
+ *
+ * A bundle is reached from the outside: a candidate serves bytes, they parse as JSON, and the next
+ * step assumes a manifest with a leaf list and an array of publications. A publication record, a
+ * search result, a truncated file or an error envelope is an ORDINARY thing to receive — so it is
+ * refused by name, in the same voice as every other refusal, instead of throwing a TypeError that
+ * the caller then has to explain to a human. (Found by pointing the resolver at a node serving
+ * records: `Cannot read properties of undefined (reading 'map')` was reaching the command line.)
+ */
+export function bundleShapeProblem(bundle: unknown): string | null {
+  if (bundle === null || typeof bundle !== "object" || Array.isArray(bundle)) {
+    return "this document is not a bundle: it is not a JSON object";
+  }
+
+  const candidate = bundle as Partial<Bundle>;
+  const manifest = candidate.manifest as Partial<Bundle["manifest"]> | undefined;
+
+  if (manifest === undefined || manifest === null || typeof manifest !== "object") {
+    return "this document is not a bundle: it carries no manifest";
+  }
+  if (typeof manifest.root !== "string") {
+    return "this document is not a bundle: its manifest states no root";
+  }
+  if (!Array.isArray(manifest.publications)) {
+    return "this document is not a bundle: its manifest lists no publications";
+  }
+  if (!Array.isArray(candidate.publications)) {
+    return "this document is not a bundle: it carries no publications";
+  }
+
+  return null;
+}
+
 export function verifyBundleShape(
   bundle: Bundle,
   sha256: Sha256,
 ): BundleVerification {
+  const problem = bundleShapeProblem(bundle);
+
+  if (problem !== null) {
+    return { valid: false, root: "", computedRoot: "", publications: 0, reason: problem };
+  }
+
   const leaves = bundle.publications.map((publication) =>
     publicationLeaf(publication, sha256, bundle.manifest.leafVersion),
   );

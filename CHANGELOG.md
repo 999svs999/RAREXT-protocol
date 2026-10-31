@@ -11,6 +11,31 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A `rarext:` reference can now name a publication record** — the entries the storage economy is
+  written in — by the root the record rebuilds to. The resolver reads each candidate ONCE and
+  interprets it three ways (a bundle, a record, raw bytes), because fetching twice could disagree
+  with itself about what a mirror said, and a failure reports every reading. Verified END TO END
+  against a real node: a store seeded with a record from the committed bundle, the API serving
+  `GET /v1/publications/<root>`, and the CLI resolving
+  `rarext:127.0.0.1:<port>/v1/publications/<root>@<root>` into `a published record by ai-proof
+  ("Replay of the committed starter model (32 steps)")` — while a wrong root is refused with all
+  three readings' evidence.
+- **A document that is not a bundle is refused BY NAME, not with a TypeError.** `verifyBundleShape`
+  walked into `bundle.publications.map` on anything that was not a bundle, and the resulting
+  `Cannot read properties of undefined (reading 'map')` reached the command line as the REASON a
+  reference failed. It was found by pointing the resolver at a node serving records, which is the
+  ordinary case, not the exceptional one: a candidate serves bytes, and the next step assumes a
+  manifest. `bundleShapeProblem` now names the first missing piece ("it carries no manifest", "its
+  manifest states no root", …), and the resolver's failure reads like a refusal because it is one.
+- **The served record recomputes to the served root, with no ceremony** — a fix to yesterday's
+  identity work, found by asking what a client actually receives. The API attaches `root` and a
+  durability observation to a record when it serves it, and the first version of `publicationRoot`
+  walked the record's own keys, so a NAIVE client recomputing over the response got a different
+  digest than the one it was told (confirmed against live data: `78014d41…` vs `bd504c4a…`). The
+  root now reads a DECLARED field map — `PUBLICATION_ROOT_FIELDS`, exhaustive by the type, `true`
+  content / `false` bookkeeping — so presentation keys are ignored by construction, and the route
+  test now asserts the recomputation from the response AS IT ARRIVED. The excluded-fields list is
+  derived from that map, so it can never disagree with it.
 - **A publication now has a recomputable identity, so the records the storage economy is written in
   are answerable instead of asserted.** A publication's name was an `id` the registry minted — a
   label, which meant a client could only take the node's word for what it was holding. Core now

@@ -62,6 +62,17 @@ const outcome = {
         // A LENGTH, never the bytes: a caller that wants the object fetches it, and a JSON dump of
         // a model file would help nobody. The media type is cheap and says what was served.
         ...(resolved.kind === "blob" ? { bytes: resolved.bytes?.length, mediaType: resolved.mediaType } : {}),
+        // A record is small enough to name, and naming it is the point: whoever holds the root can
+        // see WHICH record answered, not merely that something did.
+        ...(resolved.kind === "publication"
+          ? {
+              publication: {
+                id: resolved.publication?.id,
+                author: resolved.publication?.author,
+                title: resolved.publication?.title,
+              },
+            }
+          : {}),
       }
     : null,
   error: resolved.ok ? null : resolved.reason,
@@ -89,7 +100,9 @@ if (!resolved.ok) {
 const what =
   resolved.kind === "blob"
     ? `a blob of ${resolved.bytes?.length ?? 0} bytes${resolved.mediaType ? ` (${resolved.mediaType})` : ""}, by the sha256 of its bytes`
-    : "a registry bundle, by the root its content rebuilds to";
+    : resolved.kind === "publication"
+      ? `a published record by ${resolved.publication?.author ?? "an author"} ("${resolved.publication?.title ?? ""}"), by the root the record rebuilds to`
+      : "a registry bundle, by the root its content rebuilds to";
 console.log(`\nVERIFIED: ${resolved.root} — ${what} — read from ${resolved.source}`);
 console.log(
   "The root decides: this copy is the object the reference named, wherever it was found, and " +
