@@ -25,6 +25,10 @@ The protocol is open and the reference implementation is public. Anyone can run 
 registry and anchor to the same chain; the chain is a notary, not the database. See the
 [litepaper](docs/LITEPAPER.md) and the [branding rules](docs/BRANDING.md).
 
+No third party is required to run, verify, or reproduce any of this: every external
+integration is an opt-in adapter that stands down when unconfigured, and the defaults name
+only this project's own deployments.
+
 ## Build with us
 
 RAREXT is open source and meant to be built by more than its maintainers. Run a

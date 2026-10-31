@@ -2223,6 +2223,15 @@ function checkDefaultsIndependence(defaultsOverride) {
       if (!readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8").includes("No third party is required to run, verify, or reproduce any of this.")) {
         fail("ARCHITECTURE.md no longer states this project's independence from third parties");
       }
+      for (const [file, marker, label] of [
+        ["README.md", "No third party is required to run, verify, or reproduce any of this", "the root README"],
+        ["apps/mcp/README.md", "Every third-party integration is an opt-in adapter", "the MCP README"],
+        ["apps/mcp/src/server.ts", "Every adapter is opt-in: an unconfigured adapter is absent from the deployment's behaviour, not broken", "the rarext_adapters verb"],
+      ] ) {
+        if (!readFileSync(new URL(file, root), "utf8").includes(marker)) {
+          fail(`${label} no longer states that third parties are opt-in and the defaults are this project's own`);
+        }
+      }
       console.log(
         `independence: ${defaultUrls} default URL(s), all this project's own | ${optIn} third-party adapter(s), each opt-in`,
       );

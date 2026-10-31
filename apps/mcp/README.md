@@ -36,6 +36,11 @@ Tools:
 - `rarext_anchor`
 - `rarext_anchor_proof`
 - `rarext_tapeout_status`
+
+Every third-party integration is an opt-in adapter: an unconfigured adapter stands down to
+null and refuses loudly rather than inventing an endpoint, so a deployment runs nothing it did
+not choose. The federation seed list this server's registry commits to is published beside the
+bundle and re-verified by `rarext_verify_semantics`.
 - `rarext_storage_put`
 - `rarext_storage_get`
 - `rarext_storage_challenge`

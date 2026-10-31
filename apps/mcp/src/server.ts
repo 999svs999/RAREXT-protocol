@@ -436,7 +436,7 @@ const tools = [
   {
     name: "rarext_adapters",
     description:
-      "List network and source adapters, their capabilities, and whether they are configured.",
+      "List network and source adapters, their capabilities, and whether they are configured. Every adapter is opt-in: an unconfigured adapter is absent from the deployment's behaviour, not broken.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },
