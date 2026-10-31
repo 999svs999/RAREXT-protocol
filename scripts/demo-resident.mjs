@@ -327,19 +327,44 @@ async function main() {
       if (!meaningsOk) console.error(`  unmatched: ${semantics.missing.join(", ")}`);
     }
 
+    // The third question: the bundle COMMITS to a federation list of registries, and the list
+    // published beside it must be the one committed to. The SDK's own function does the fetch,
+    // the parse, and the digest check — the resident verifies, it does not re-implement.
+    let federationOk = true;
+    const commitment = sdk.federationCommitment(found.bundle);
+    if (!commitment) {
+      console.log("\nfederation: this bundle records no federation commitment");
+    } else {
+      try {
+        const entries = await sdk.registriesFromPublishedList(commitment.listUrl, {
+          expectDigest: commitment.digest,
+        });
+        console.log(
+          `\nfederation: the seed list at ${commitment.listUrl} matches the committed digest ` +
+            `(${entries.length} registrie(s): ${entries.map((entry) => entry.id).join(", ")})`,
+        );
+      } catch (error) {
+        federationOk = false;
+        console.error(`\nfederation: ${error.message}`);
+      }
+    }
+
     if (replay.claims.length > 0) {
       console.log(`\nverdicts tie to the verified root ${replay.root}`);
-      if (failed > 0 || !meaningsOk) {
+      if (failed > 0 || !meaningsOk || !federationOk) {
         const why =
           failed > 0
             ? `${failed} of ${replay.claims.length} AI claim(s) did not replay true`
-            : `${semantics.missing.length} committed meaning(s) do not match this copy`;
+            : !meaningsOk
+              ? `${semantics.missing.length} committed meaning(s) do not match this copy`
+              : "the federation seed list does not match the commitment";
         console.error(`\nDEMO FAILED: ${why} from ${found.source} (root ${replay.root}).`);
         exitCode = 1;
       } else {
         console.log(
-          `\nDEMO PASSED: ${replay.claims.length} AI claim(s) replayed true and ` +
-            `${semantics ? `${semantics.matched} committed meaning(s) matched` : "the registry records no meanings"} ` +
+          `\nDEMO PASSED: ${replay.claims.length} AI claim(s) replayed true, ` +
+            `${semantics ? `${semantics.matched} committed meaning(s) matched` : "the registry records no meanings"}, and ` +
+            `${commitment ? "the federation seed list matches the commitment" : "the bundle records no federation commitment"} ` +
             `from the verified copy at ${found.source} (root ${replay.root}), found from seed ${seedUrl}. ` +
             `No keys, no server, no writes.`,
         );

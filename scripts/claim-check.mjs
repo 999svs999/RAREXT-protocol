@@ -638,6 +638,20 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted a default naming a third party's deployment");
   }
   caught = caught && caughtIndependence;
+
+  // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
+  // but parses the body by hand is exactly the second reader the rule exists to prevent — and
+  // a mention-only marker would have accepted it.
+  const beforeFederation = failures;
+  checkFederationRule({
+    "apps/mcp/src/verify-federation.ts":
+      'import { parseFederationCommitmentArtifact } from "@rarext/core";\nconst body = JSON.parse(String(artifact.body));',
+  });
+  const caughtFederation = failures > beforeFederation;
+  if (!caughtFederation) {
+    fail("self-test: the checker accepted a federation reader that does not call core's parser");
+  }
+  caught = caught && caughtFederation;
   caught = caught && caughtConfig;
   // And a front door that lost its proof link must be reported — a landing
   // page that only describes the proof is the failure this check exists for.
@@ -1861,43 +1875,8 @@ function checkAnnouncementRfc(overrides = {}) {
   }
 
 
-  // THE FEDERATION COMMITMENT IS ONE RULE: core owns the reader and the digest, and every
-  // resident — the browser page, the SDK's federation query, the MCP verb — reads through
-  // them. A client that JSON-parses the commitment body itself is a second reader, free to
-  // disagree about what a commitment looks like; that duplication existed once and is what
-  // this rule prevents.
-  {
-    const readers = {
-      "apps/web/src/ai.ts": "parseFederationCommitmentArtifact",
-      "apps/mcp/src/verify-federation.ts": "parseFederationCommitmentArtifact",
-      "packages/agent-sdk/src/registries.ts": "parseFederationCommitmentArtifact",
-    };
-    let checked = 0;
-    for (const [file, marker] of Object.entries(readers)) {
-      checked += 1;
-      const source = readFileSync(new URL(file, root), "utf8");
-      // A USE, not a mention: an import line satisfies `.includes(marker)`, so the marker is
-      // the call itself — a client that imports the parser and parses the body by hand is
-      // exactly the second reader this rule exists to prevent.
-      if (!source.includes(marker + "(")) {
-        fail(`${file} reads the federation commitment without calling core's parser`);
-      }
-    }
-    if (checked === 0) fail("the federation one-rule sweep read no client — a sweep that reads nothing proves nothing");
-    const web = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
-    if (/JSON\.parse\(String\(commitment\.artifact/.test(web)) {
-      fail("the browser page parses the federation commitment body itself instead of using core's parser");
-    }
-    const mcpVerb = readFileSync(new URL("apps/mcp/src/server.ts", root), "utf8");
-    if (!mcpVerb.includes('name: "rarext_verify_federation"')) {
-      fail("the MCP server no longer exposes rarext_verify_federation");
-    }
-    console.log(
-      `federation commitment: ${checked} resident(s) read it through core's parser | the MCP verb is exposed`,
-    );
-  }
+  checkFederationRule();
 
-  // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
   // test and both checker modes green. This parses each one for real, without executing it.
@@ -2210,6 +2189,43 @@ function checkAnnouncementRfc(overrides = {}) {
   console.log(
     `  ${EXISTING.length} primitive(s) exist | sections present | "locations, never facts" stated`,
   );
+}
+
+function checkFederationRule(sourcesOverride) {
+  // The seam: an injected source map lets the self-test falsify this rule without doctoring
+  // the real tree — the decorative-guard shape is a guard that only ever reads the real files.
+  const reader = (file) => sourcesOverride?.[file] ?? readFileSync(new URL(file, root), "utf8");
+  const readers = {
+    "apps/web/src/ai.ts": "parseFederationCommitmentArtifact",
+    "apps/mcp/src/verify-federation.ts": "parseFederationCommitmentArtifact",
+    "packages/agent-sdk/src/registries.ts": "parseFederationCommitmentArtifact",
+  };
+  let checked = 0;
+  for (const [file, marker] of Object.entries(readers)) {
+    checked += 1;
+    const source = reader(file);
+    // A USE, not a mention: an import line satisfies `.includes(marker)`, so the marker is
+    // the call itself — a client that imports the parser and parses the body by hand is
+    // exactly the second reader this rule exists to prevent.
+    if (!source.includes(marker + "(")) {
+      fail(`${file} reads the federation commitment without calling core's parser`);
+    }
+  }
+  if (checked === 0) fail("the federation one-rule sweep read no client — a sweep that reads nothing proves nothing");
+  const web = reader("apps/web/src/ai.ts");
+  if (/JSON\.parse\(String\(commitment\.artifact/.test(web)) {
+    fail("the browser page parses the federation commitment body itself instead of using core's parser");
+  }
+  const mcpVerb = reader("apps/mcp/src/server.ts");
+  if (!mcpVerb.includes('name: "rarext_verify_federation"')) {
+    fail("the MCP server no longer exposes rarext_verify_federation");
+  }
+  // Only the real tree reports; an injected run's count beside the real one reads as a regression.
+  if (!sourcesOverride) {
+    console.log(
+      `federation commitment: ${checked} resident(s) read it through core's parser | the MCP verb is exposed`,
+    );
+  }
 }
 
 function checkDefaultsIndependence(defaultsOverride) {
@@ -2996,6 +3012,16 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // does it, so both halves are compared rather than one being trusted.
   if (!demoSource.includes("sdk.verifyBundleSemantics(found.bundle)")) {
     fail("the resident demo no longer verifies the registry's anchored meanings");
+  }
+  // And the third question: the demo must check the FEDERATION commitment through the SDK's
+  // own verdict function, not by re-implementing the digest.
+  if (!demoSource.includes("sdk.registriesFromPublishedList(commitment.listUrl, {\n          expectDigest: commitment.digest,\n        })")) {
+    if (!demoSource.includes("sdk.registriesFromPublishedList(commitment.listUrl, { expectDigest: commitment.digest })")) {
+      fail("the resident demo no longer checks the federation commitment through the SDK");
+    }
+  }
+  if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("It also checks the FEDERATION commitment: the seed list the bundle commits to is fetched through the SDK's")) {
+    fail("MIRRORS.md no longer describes the resident demo's federation check");
   }
   if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("It also calls `verifyBundleSemantics` to confirm that every committed meaning the registry")) {
     fail("MIRRORS.md no longer describes the resident demo's meanings check");

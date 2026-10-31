@@ -205,7 +205,7 @@ keys, no server, and no write access, and it exits non-zero when the bundle
 cannot be verified or any claim replays false. `npm run demo:resident -- --local
 <dir>` serves the same flow from a local tree (a `seed.json` beside the bundle
 paths it names) over loopback HTTP, so the end-to-end test runs the actual
-command without touching the network. It also calls `verifyBundleSemantics` to confirm that every committed meaning the registry anchored is the one this copy carries — the same core comparison the browser proof page runs — and exits non-zero if any committed digest does not match.
+command without touching the network. It also calls `verifyBundleSemantics` to confirm that every committed meaning the registry anchored is the one this copy carries — the same core comparison the browser proof page runs — and exits non-zero if any committed digest does not match. It also checks the FEDERATION commitment: the seed list the bundle commits to is fetched through the SDK's `registriesFromPublishedList` with the committed digest as `expectDigest`, so a list that grew or lost a registry — or had a URL swapped — fails the demo.
 
 When the seed names announcement documents, the demo folds them and prints each
 record as accepted with its mirror or refused with its reason, resolving the
