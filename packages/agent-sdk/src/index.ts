@@ -199,6 +199,8 @@ export type {
   PublishedIdentityOptions,
 } from "./published-identity.ts";
 export { DEFAULT_IDENTITY_TIMEOUT_MS } from "./published-identity.ts";
+export { readSiteBinding, DEFAULT_SITE_BINDING_TIMEOUT_MS } from "./site-binding.ts";
+export type { CarrierOutcome, SiteBindingRead, SiteBindingReadOptions } from "./site-binding.ts";
 
 /**
  * The seed list a client discovers mirrors from (docs/MIRRORS.md).

@@ -11,6 +11,36 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The transition can now be READ, in one command, and the client says which of four things
+  happened.** Iteration #1 made a site's binding mean something; this one reads it. The reader
+  (`readSiteBinding`, exported from `@rarext/agent-sdk`, living in the SDK because core decides
+  what a binding MEANS and a caller decides how it reaches the site) reads both carriers and
+  reports each as `served`, `absent`, `refused`, or `unreachable`, then hands the bytes to
+  core's parser and nothing else. Fetching and resolving are ports — an injectable `fetch` and
+  an injectable TXT resolver, with `fetch` and `node:dns` as the real defaults — so a suite
+  reads a binding from a loopback server and a stub resolver and never touches the network. A
+  TXT record's chunking is joined here, because that is a transport fact this layer owns and not
+  something the parser should know. And `node scripts/site-binding.mjs <origin> [--registry]
+  [--root]` makes it one command: exit 0 only when the site has joined (readable and matching
+  the pin), 1 when it published no binding or does not match, 2 for a usage error — and with no
+  `--root` it prints the statement and REFUSES to invent a verdict, because a binding cannot
+  certify itself.
+- **A policy refusal is no longer confused with an unreachable site — and the fix was to stop
+  matching prose.** The reader's first version classified a refusal by matching `/private
+  address|not fetchable|scheme/` against the policy's message. The message says "private **or
+  link-local** address", so the pattern never matched, and a refusal was silently reported as a
+  network failure — the exact confusion the reporting exists to prevent, and invisible because
+  both outcomes are "no binding". `fetchWithUrlPolicy` now tags its refusals with a
+  machine-readable `URL_POLICY_REFUSAL_CODE`, the reader compares the code, and a core test
+  holds the distinction in both directions: a refused URL is not contacted at all, and a
+  genuinely unreachable host is not tagged as a refusal. Every caller that must tell a decision
+  from a failure — the API and the SDK included — now can.
+- **The reading half is held, not just documented.** `claim-check` requires TRANSITION.md to
+  name the CLI, the reader and the refusal code, requires the CLI to keep its honest refusal
+  (checked against the CLI's own source), and requires core to stay free of any reader of its
+  own — with both of those guards INJECTED (a CLI that invents verdicts, a core that grew a
+  reader) so neither can pass vacuously. The CLI suite spawns the real command against a
+  loopback site and a committed seed's root, so the exit codes are exercised end to end.
 - **A DNS site can join RAREXT without moving — the transition is now a verified rule, not an
   intention.** The web4 network should not ask anyone to leave the web they already have, so
   the smallest possible step onto it is a statement: a site that answers on a hostname declares

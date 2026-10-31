@@ -107,6 +107,22 @@ export function allowPrivateFromSeeds(seeds: Array<{ url?: string | undefined; b
  * This lives in core for the reason the policy does: the API and the SDK must not
  * be able to disagree about what a hop is.
  */
+/**
+ * The code a REFUSAL carries.
+ *
+ * A policy refusal is a decision this client made; an unreachable host is a failure the
+ * network made. Callers that must report which one they hit — an operator reading "this site
+ * published nothing" needs to know it was not "my client refused to look" — compare this code
+ * rather than the message, because prose drifts and a checker cannot hold it.
+ */
+export const URL_POLICY_REFUSAL_CODE = "url-policy";
+
+function policyRefusal(message: string): Error {
+  const error = new Error(message);
+  (error as Error & { code?: string }).code = URL_POLICY_REFUSAL_CODE;
+  return error;
+}
+
 export async function fetchWithUrlPolicy(
   url: string,
   init: RequestInit,
@@ -120,7 +136,11 @@ export async function fetchWithUrlPolicy(
       ...(options.allowPrivate === undefined ? {} : { allowPrivate: options.allowPrivate }),
     });
     if (!allowed.ok) {
-      throw new Error(
+      // Tagged, because "the client declined to look" and "the site could not be reached" are
+      // different findings and a caller that has to tell them apart by reading the message text
+      // will get it wrong the first time the wording changes — which is exactly what happened
+      // when a binding reader matched /private address/ against "private or link-local address".
+      throw policyRefusal(
         hop === 0 ? allowed.reason : `${allowed.reason} (reached by ${hop} redirect${hop === 1 ? "" : "s"} from ${url})`,
       );
     }
@@ -134,7 +154,7 @@ export async function fetchWithUrlPolicy(
       throw new Error(`${target} answered ${response.status} without a Location`);
     }
     if (hop >= maxRedirects) {
-      throw new Error(`${url} redirected more than ${maxRedirects} times — a chain this long is not a registry moving`);
+      throw policyRefusal(`${url} redirected more than ${maxRedirects} times — a chain this long is not a registry moving`);
     }
     target = new URL(location, target).href;
   }

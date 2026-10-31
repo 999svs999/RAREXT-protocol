@@ -77,6 +77,42 @@ upgrade, not a requirement.
   the same scheme, address, and redirect-hop policy as every other outbound read — see
   [HARDENING.md](HARDENING.md).
 
+## Reading it from a client
+
+A client reads both carriers and hands them to the parser. The reader lives in the agent SDK
+(`readSiteBinding`, exported from `@rarext/agent-sdk`) and reports what each carrier did —
+`served`, `absent`, `refused`, `unreachable` — together with core's parse of whatever it found:
+
+```bash
+# What does this site say about itself? (no verdict: this is the site's own statement)
+node scripts/site-binding.mjs https://example.com
+
+# Has it actually joined? Check against the root its registry pins.
+node scripts/site-binding.mjs https://example.com --registry rarext --root <64-hex>
+
+# JSON, for a pipeline. Exit code is 0 only when the site has joined.
+node scripts/site-binding.mjs https://example.com --root <64-hex> --json
+```
+
+Exit codes are the contract: `0` when the statement is readable and, if a root was given, it
+matches; `1` when the site published no binding or does not match the pin; `2` for a usage
+error. With no `--root` the command prints the statement and **refuses to invent a verdict**,
+because a binding cannot certify itself.
+
+Two details are load-bearing and both are held by tests:
+
+- **A refusal is not an absence.** When the client's own policy declines to look — a private
+  address, a scheme that is not http or https — the carrier is reported `refused`, with the
+  policy's reason. Reporting it as "the site published nothing" would send an operator to
+  debug a site that was never contacted. Policy refusals carry a machine-readable code
+  (`URL_POLICY_REFUSAL_CODE`) rather than being recognised by their wording, which is a
+  distinction that broke the first time the sentence changed.
+- **Fetching and resolving are ports.** `readSiteBinding` takes an injectable `fetch` and an
+  injectable TXT resolver, so a suite reads a binding from a loopback server and a stub
+  resolver without touching the network, while a real client gets `fetch` and `node:dns` by
+  default. DNS TXT records arrive split into chunks; joining them back into one string is a
+  transport fact this layer owns, not something the parser should know about.
+
 ## Where this lives in code
 
 | Piece | Where |

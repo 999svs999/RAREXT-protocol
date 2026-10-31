@@ -679,6 +679,28 @@ if (process.argv.includes("--self-test")) {
   }
   caught = caught && caughtTransition;
 
+  // And the reading half's two guards, injected rather than trusted: a CLI that prints a
+  // verdict without a pinned root, and a core that grew a reader of its own.
+  const beforeReading = failures;
+  checkSiteTransition({
+    "docs/TRANSITION.md": transitionDoc,
+    "scripts/site-binding.mjs": doctor(
+      readFileSync(new URL("scripts/site-binding.mjs", root), "utf8"),
+      "siteBindingCli",
+      (text) => text.replace("no --root given, so there is no verdict", "here is what I think"),
+    ),
+    "packages/core/src/site-binding.ts": doctor(
+      readFileSync(new URL("packages/core/src/site-binding.ts", root), "utf8"),
+      "coreReader",
+      (text) => `${text}\nexport async function readSiteBinding() { return null; }\n`,
+    ),
+  });
+  const caughtReading = failures > beforeReading;
+  if (!caughtReading) {
+    fail("self-test: the checker accepted a CLI that invents verdicts and a core that reads bindings");
+  }
+  caught = caught && caughtReading;
+
   // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
   // but parses the body by hand is exactly the second reader the rule exists to prevent — and
   // a mention-only marker would have accepted it.
@@ -2347,6 +2369,25 @@ function checkSiteTransition(overrides) {
     if (record.ok && parsed.binding.root !== record.binding.root) {
       fail("the file carrier and the TXT carrier no longer parse into the same binding");
     }
+  }
+
+  // The reading half is documented, exists, and keeps its honest refusal: a client that
+  // cannot check against a pinned root must not print a verdict.
+  for (const marker of ["scripts/site-binding.mjs", "readSiteBinding", "URL_POLICY_REFUSAL_CODE", "refuses to invent a verdict"]) {
+    if (!doc.includes(marker)) {
+      fail(`TRANSITION.md no longer documents the reading half (${marker})`);
+    }
+  }
+  const cli = override["scripts/site-binding.mjs"] ?? readFileSync(new URL("scripts/site-binding.mjs", root), "utf8");
+  if (!cli.includes("no --root given, so there is no verdict")) {
+    fail("the site-binding CLI no longer refuses to print a verdict without a pinned root");
+  }
+  // The boundary is stated in TRANSITION.md and held here: core decides what a binding MEANS,
+  // a caller reads one. This is checked against core's SOURCE rather than the imported module so
+  // that it can be injected like every other guard here.
+  const coreSource = override["packages/core/src/site-binding.ts"] ?? readFileSync(new URL("packages/core/src/site-binding.ts", root), "utf8");
+  if (/export\s+(?:async\s+)?function\s+readSiteBinding/.test(coreSource)) {
+    fail("core now reads bindings; reading belongs to the caller, and core keeps the rule");
   }
 
   if (!readFileSync(new URL("README.md", root), "utf8").includes("docs/TRANSITION.md")) {

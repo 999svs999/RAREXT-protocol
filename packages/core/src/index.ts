@@ -75,6 +75,7 @@ export {
   canFetchRegistryScheme,
   canFetchRegistryUrl,
   fetchWithUrlPolicy,
+  URL_POLICY_REFUSAL_CODE,
 } from "./urls.ts";
 export {
   RAREXT_SITE_BINDING_PATH,
