@@ -35,8 +35,8 @@ roots, is different objects.** That is verified against the project's own live d
 published `bundleCid` (a CIDv1, base32) and the hex sha256 of the same live bytes are the same
 32-byte digest spelled two ways while the bundle root is something else entirely.
 
-What still does not exist: any browser support. Retrieval remains HTTPS plus the binding
-convention.
+What still does not exist: a browser handler for the scheme itself, and resolution of anything
+whose root is none of the rules core owns. Retrieval remains HTTPS plus the binding convention.
 
 ## The problem
 
@@ -144,9 +144,11 @@ cannot invalidate anything already written.
   accepts only a copy that rebuilds to the root the caller already holds; it never turns a name into
   a fact, and it holds no registry of names. Deciding what a name means is not deferred or
   delegated — it is not done at all, because the root already did it.
-- **No browser support claim.** A browser will hand a `rarext:` string to whatever the user
-  configured, or to nothing; the reference is designed for documents, artifacts, agents and
-  command lines first.
+- **No browser HANDLER claim.** A browser will hand a `rarext:` string to whatever the user
+  configured, or to nothing; typing one into an address bar still goes nowhere. What DOES exist is
+  the mirror's verify page: a reference pasted there is parsed with core's parser and verified
+  through the readings in the reader's own browser — so verification needs no install, while the
+  address-bar question remains somebody else's.
 - **No wallet, no chain, no fee.** A reference costs what the bytes it names cost.
 
 ## Open questions

@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The mirror's verify page resolves a `rarext:` reference in the reader's own browser** — paste
+  one, and the page parses it with core's parser, fetches the location, and verifies it through the
+  readings: a bundle through the page's own verifier, a record by hashing the preimage core computes
+  (the rule whole in core, the one await at the page's boundary — the async-digest seam, tested to
+  agree with the synchronous rules byte for byte), or raw bytes by their sha256. Verified LIVE
+  against the deployed registry: a reference to the new bundle resolves to "VERIFIED: a registry
+  bundle, by the root its content rebuilds to". RFC 0022's non-goal shrinks accordingly: what does
+  not exist is a browser HANDLER for the scheme, not verification in a browser. The republish moved
+  the pinned root to 33ebe079ecff007c…, mirrors OK 2 of 2, and the checker holds the panel in the
+  published page and its one generator.
 - **The budget wiring ships: a community can fund what it decides.** `POST
   /v1/governance/proposals/:root/budget` accepts the pledger's signed commitment — the payload names
   the proposal by its ROOT (the identity everything else defers to), the choice whose decision
