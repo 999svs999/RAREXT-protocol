@@ -3023,6 +3023,22 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("It also checks the FEDERATION commitment: the seed list the bundle commits to is fetched through the SDK's")) {
     fail("MIRRORS.md no longer describes the resident demo's federation check");
   }
+  // And the FOURTH answer: the MAKE direction. The demo must actually MAKE a fresh
+  // attestation (core's attestGenerativeRun, the same maker the MCP's attest-local uses)
+  // and verify it with the same local verifier the registry's own publications pass — a
+  // registry that only re-verifies its own output is a museum, not a living one.
+  if (!demoSource.includes("attestGenerativeRun")) {
+    fail("the resident demo no longer makes a fresh attestation through core's attestGenerativeRun");
+  }
+  if (!demoSource.includes("verifyAiArtifact(madeArtifact, makeChallenge)")) {
+    fail("the resident demo no longer verifies its fresh attestation with the local verifier");
+  }
+  if (!demoSource.includes("a fresh attestation made just now verifies locally")) {
+    fail("the resident demo no longer reports the make-direction verdict");
+  }
+  if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("a fresh attestation made just now verifies locally")) {
+    fail("MIRRORS.md no longer describes the resident demo's make-direction answer");
+  }
   if (!readFileSync(new URL("docs/MIRRORS.md", root), "utf8").includes("It also calls `verifyBundleSemantics` to confirm that every committed meaning the registry")) {
     fail("MIRRORS.md no longer describes the resident demo's meanings check");
   }

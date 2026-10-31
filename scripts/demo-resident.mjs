@@ -25,6 +25,9 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
+import { attestGenerativeRun, generate, verifyAiArtifact } from "@rarext/core";
+import { createHash, randomUUID } from "node:crypto";
+const sha256Of = (value) => createHash("sha256").update(value).digest("hex");
 
 const LIVE_SEED_URL = "https://999svs999.github.io/RAREXT-protocol/registry/seed.json";
 const TIMEOUT_MS = Number(process.env.RAREXT_DEMO_TIMEOUT_MS ?? 20_000);
@@ -349,15 +352,59 @@ async function main() {
       }
     }
 
+    // The fourth answer — the MAKE direction. Everything so far re-verified what the
+    // registry already published. A registry is only alive if a NEW run can make evidence
+    // it accepts, right now, locally: so make one — the committed starter model, a fresh
+    // seed, the attestation core builds — and hand it to the same local verifier the
+    // registry's own publications pass. One maker, not two: the MCP's attest-local runs
+    // this same core path.
+    let makingOk = false;
+    const makeChallenge = (Array.isArray(found.bundle.challenges) ? found.bundle.challenges : [])
+      .find((c) => c && c.id === "gen-starter");
+    if (!makeChallenge || typeof makeChallenge.spec?.steps !== "number" || !makeChallenge.sampleArtifact?.body?.model) {
+      console.error("\nmaking: the verified bundle carries no generative-starter challenge with a committed model — nothing fresh could be made");
+    } else {
+      try {
+        const model = makeChallenge.sampleArtifact.body.model;
+        const steps = makeChallenge.spec.steps;
+        const seed = 20261031 % 2147483647;
+        const madeBody = { model, seed, output: generate(model, seed, steps) };
+        const madeArtifact = { app: "ai-generative", kind: "ai.generative", version: 1, mediaType: "application/json", body: madeBody };
+        const madeAttestation = attestGenerativeRun({
+          artifact: madeArtifact,
+          body: madeBody,
+          spec: { steps },
+          app: "ai-generative",
+          challengeId: makeChallenge.id,
+          verifier: "xorshift32-replay",
+          verifierManifest: { app: "ai-generative", version: 1, algorithm: "xorshift32-replay", representation: "generative" },
+          bound: null,
+          id: randomUUID(),
+          createdAt: new Date().toISOString(),
+          sha256: sha256Of,
+        });
+        const madeVerdict = verifyAiArtifact(madeArtifact, makeChallenge);
+        makingOk = !("error" in madeVerdict) && madeVerdict.correct === true;
+        console.log(
+          `\nmaking: a fresh run (seed ${seed}, ${steps} steps) attested as ${madeAttestation.id.slice(0, 16)}… ` +
+            `${makingOk ? "VERIFIES against the committed challenge — made right now, locally" : "DID NOT verify — the maker and the verifier disagree"}`,
+        );
+      } catch (error) {
+        console.error(`\nmaking: ${error.message}`);
+      }
+    }
+
     if (replay.claims.length > 0) {
       console.log(`\nverdicts tie to the verified root ${replay.root}`);
-      if (failed > 0 || !meaningsOk || !federationOk) {
+      if (failed > 0 || !meaningsOk || !federationOk || !makingOk) {
         const why =
           failed > 0
             ? `${failed} of ${replay.claims.length} AI claim(s) did not replay true`
             : !meaningsOk
               ? `${semantics.missing.length} committed meaning(s) do not match this copy`
-              : "the federation seed list does not match the commitment";
+              : !federationOk
+                ? "the federation seed list does not match the commitment"
+                : "a fresh attestation made just now did not verify locally";
         console.error(`\nDEMO FAILED: ${why} from ${found.source} (root ${replay.root}).`);
         exitCode = 1;
       } else {
@@ -365,6 +412,7 @@ async function main() {
           `\nDEMO PASSED: ${replay.claims.length} AI claim(s) replayed true, ` +
             `${semantics ? `${semantics.matched} committed meaning(s) matched` : "the registry records no meanings"}, and ` +
             `${commitment ? "the federation seed list matches the commitment" : "the bundle records no federation commitment"} ` +
+            `${makingOk ? "a fresh attestation made just now verifies locally" : "no fresh attestation could be made"}, ` +
             `from the verified copy at ${found.source} (root ${replay.root}), found from seed ${seedUrl}. ` +
             `No keys, no server, no writes.`,
         );
