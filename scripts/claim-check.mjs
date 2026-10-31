@@ -31,6 +31,7 @@ const architecturePath = new URL("docs/ARCHITECTURE.md", root);
 const das = await import(new URL("apps/api/src/das.ts", root).href);
 const rent = await import(new URL("apps/api/src/storage-rent.ts", root).href);
 const coreAi = await import(new URL("packages/core/src/ai.ts", root).href);
+const siteBinding = await import(new URL("packages/core/src/site-binding.ts", root).href);
 const storageConstants = await import(new URL("apps/api/src/storage.ts", root).href);
 const durabilityConstants = await import(new URL("apps/api/src/durability.ts", root).href);
 const work = await import(new URL("apps/api/src/work.ts", root).href);
@@ -253,6 +254,10 @@ if (process.argv.includes("--self-test")) {
       "native path claim",
       readFileSync(new URL("README.md", root), "utf8").includes("npm is an optional rail"),
     );
+    requireCondition(
+      "transition doc names the code's binding path",
+      readFileSync(new URL("docs/TRANSITION.md", root), "utf8").includes("/.well-known/rarext.json"),
+    );
     const aiModuleReal = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
     const aiPageReal = readFileSync(new URL("apps/web/src/ai-page.ts", root), "utf8");
     requireCondition("page fixture parser", aiModuleReal.includes("export function fixtureFromBundle"));
@@ -393,10 +398,13 @@ if (process.argv.includes("--self-test")) {
   // And the snapshot/migration doc — a published version the code no longer
   // supports must be caught.
   const beforeSnapshot = failures;
-  const doctoredSnapshotDoc = doctor(originalOperations, "doctoredSnapshotDoc", (s) => s.replace(
-    "Snapshot version 2 is current.",
-    "Snapshot version 3 is current.",
-  ));
+  const doctoredSnapshotDoc = doctor(originalOperations, "doctoredSnapshotDoc", (s) =>
+    // Doctored by PATTERN, not by one version literal: pinning the literal made this injection
+    // go stale the moment the document was updated to v3 (the doctor said so, which is the only
+    // reason it was noticed). A version number the code cannot support is what the rule is for,
+    // and 99 is that number today and after the next bump.
+    s.replace(/Snapshot version \d+ is current\./, "Snapshot version 99 is current."),
+  );
   checkSnapshotMigrationDoc(doctoredSnapshotDoc);
   // And an RFC that leans on a primitive which does not exist must be reported.
   // The phantom name is built at runtime: a literal in this file would be
@@ -655,6 +663,21 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted a bare sibling import on the runtime path");
   }
   caught = caught && caughtNative;
+
+  // And the transition page, through its seam: a page that sends every site to the wrong
+  // address is the failure this rule exists for, and the address comes from the code.
+  const beforeTransition = failures;
+  const transitionDoc = readFileSync(new URL("docs/TRANSITION.md", root), "utf8");
+  checkSiteTransition({
+    "docs/TRANSITION.md": doctor(transitionDoc, "transitionDoc", (text) =>
+      text.replaceAll("/.well-known/rarext.json", "/.well-known/registry.json"),
+    ),
+  });
+  const caughtTransition = failures > beforeTransition;
+  if (!caughtTransition) {
+    fail("self-test: the checker accepted a transition page that sends sites to the wrong address");
+  }
+  caught = caught && caughtTransition;
 
   // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
   // but parses the body by hand is exactly the second reader the rule exists to prevent — and
@@ -1211,6 +1234,7 @@ checkFrontDoor();
 checkConfigSurface();
 checkDefaultsIndependence();
 checkNativeIndependence();
+checkSiteTransition();
 
   // THE VERIFY PAGE ANSWERS THE FEDERATION QUESTION TOO. The bundle commits to a seed list of
   // registries; a page whose job is "is this copy faithful" should show WHICH registries and
@@ -2261,6 +2285,79 @@ function checkFederationRule(sourcesOverride) {
  * tarballs by name to prove that rail. That file is the one exemption, and it is exempt because
  * it is the proof of the optional path rather than a participant in the native one.
  */
+/**
+ * A DNS site can join the network without moving — and the page that says so must be true.
+ *
+ * The transition convention lives in one place (`packages/core/src/site-binding.ts`), and
+ * this holds TRANSITION.md against it in both directions that can rot: the ADDRESS a site is
+ * told to publish at comes from the code constant rather than the prose, and the verdicts the
+ * page promises are EXERCISED — a binding with no registry pin must be refused, a mismatched
+ * root must be reported as `root-mismatch`, and a matching one must pass. A page describing a
+ * convention the code does not implement is exactly the failure this checker exists for.
+ */
+function checkSiteTransition(overrides) {
+  const override = overrides ?? {};
+  const docPath = "docs/TRANSITION.md";
+  const doc = override[docPath] ?? readFileSync(new URL(docPath, root), "utf8");
+
+  const wellKnown = siteBinding.RAREXT_SITE_BINDING_PATH;
+  const txtPrefix = siteBinding.RAREXT_SITE_BINDING_TXT_PREFIX;
+
+  if (!doc.includes(wellKnown)) {
+    fail(`TRANSITION.md does not tell a site where to publish its binding (the code says ${wellKnown})`);
+  }
+  if (!doc.includes(`${txtPrefix}.`)) {
+    fail(`TRANSITION.md does not name the TXT carrier a name-only site uses (_${txtPrefix}.<host>)`);
+  }
+  for (const marker of ["root-mismatch", "registry-mismatch", "Not a name service", "Every server is a node"]) {
+    if (!doc.includes(marker)) {
+      fail(`TRANSITION.md no longer states ${JSON.stringify(marker)}`);
+    }
+  }
+
+  // The verdicts, exercised rather than described. A pin that matches must pass; a pin that
+  // does not must say WHICH mismatch it is; and no pin at all must refuse to certify.
+  const pinned = "a".repeat(64);
+  const other = "b".repeat(64);
+  const parsed = siteBinding.parseSiteBindingDocument(JSON.stringify({ registry: "rarext", root: pinned }), {
+    host: "example.com",
+  });
+  requireCondition("site binding parses", parsed.ok === true);
+
+  if (parsed.ok) {
+    const withoutPin = siteBinding.verifySiteBinding(parsed.binding, {});
+    if (withoutPin.ok !== false) {
+      fail("TRANSITION.md says a binding cannot certify itself, but verifySiteBinding accepted one with no pinned root");
+    }
+    const mismatched = siteBinding.verifySiteBinding(parsed.binding, { pinnedRoot: other });
+    if (mismatched.ok !== false || !String(mismatched.reason).startsWith("root-mismatch")) {
+      fail("TRANSITION.md promises a root-mismatch verdict, but a site claiming the wrong root was not reported as one");
+    }
+    const wrongRegistry = siteBinding.verifySiteBinding(parsed.binding, { pinnedRoot: other, expectedRegistry: "someone-else" });
+    if (wrongRegistry.ok !== false || !String(wrongRegistry.reason).startsWith("registry-mismatch")) {
+      fail("TRANSITION.md promises a registry-mismatch verdict, but a site answering for another registry was not reported as one");
+    }
+    const matching = siteBinding.verifySiteBinding(parsed.binding, { pinnedRoot: pinned, expectedRegistry: "rarext" });
+    if (matching.ok !== true) {
+      fail("TRANSITION.md promises that a site declaring its registry's pinned root has transitioned, but that binding was refused");
+    }
+    // Both carriers parse into ONE shape, which is what lets a name-only site join.
+    const record = siteBinding.parseSiteBindingTxt(`"registry=rarext; root=${pinned}"`, { host: "example.com" });
+    requireCondition("the TXT carrier parses", record.ok === true);
+    if (record.ok && parsed.binding.root !== record.binding.root) {
+      fail("the file carrier and the TXT carrier no longer parse into the same binding");
+    }
+  }
+
+  if (!readFileSync(new URL("README.md", root), "utf8").includes("docs/TRANSITION.md")) {
+    fail("README.md no longer links the transition page, so a site owner has no way to find it");
+  }
+
+  console.log(
+    `transition: ${wellKnown} or ${txtPrefix}.<host> TXT | verdicts exercised: no-pin refused, root-mismatch, registry-mismatch, match | one shape, two carriers`,
+  );
+}
+
 function checkNativeIndependence(overrides) {
   const override = overrides ?? {};
   const exemptions = new Set(["scripts/verify-packages.mjs"]);

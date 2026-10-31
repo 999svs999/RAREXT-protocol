@@ -11,6 +11,33 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A DNS site can join RAREXT without moving — the transition is now a verified rule, not an
+  intention.** The web4 network should not ask anyone to leave the web they already have, so
+  the smallest possible step onto it is a statement: a site that answers on a hostname declares
+  which registry's copy it serves, in one of two carriers — `/.well-known/rarext.json` (any site
+  that can serve a file) or a `_rarext.<host>` TXT record (a site that controls its name and not
+  its tree). Both parse into ONE shape and must AGREE: a site whose file and whose name record
+  name different roots is reported as disagreeing, by carrier, rather than averaged. The verdict
+  never comes from the site's own word — `verifySiteBinding` refuses without the registry's
+  pinned root, then distinguishes `root-mismatch` (serving a copy that is not the one its
+  registry pins) from `registry-mismatch` (answering for a different registry), because those
+  are different operator problems. This lives in `packages/core/src/site-binding.ts` and is
+  exported from `@rarext/core`; reading the document and resolving the record are deliberately
+  left to the caller, so the rule stays in one place and the I/O stays where it belongs.
+  `docs/TRANSITION.md` states the convention and its limits (it is not a name service and does
+  not replace DNS; it proposes a location, never a fact), the README links it, and
+  `claim-check.mjs` holds the page against the code in both directions that rot: the ADDRESS a
+  site is told to use is read from the constant, never from the prose, and the promised verdicts
+  are EXERCISED — no-pin refused, root-mismatch, registry-mismatch, and a matching binding
+  accepted.
+- **Two injections repaired, and one of them was lying.** The snapshot-migration injection
+  doctored the literal "Snapshot version 2 is current." — which stopped existing when the
+  document was updated to v3, so it mutated nothing and its case proved nothing; the doctor
+  guard reported it STALE, which is the only reason it was caught. It now doctors the PATTERN
+  (`Snapshot version \d+ is current.`), which stays valid across future bumps instead of needing
+  a matching edit each time. And the new transition injection used `replace`, which rewrites
+  only the FIRST occurrence — the doctored page still named the real path further down and the
+  rule correctly found nothing wrong, so the case was vacuous until `replaceAll` made it honest.
 - **The native path is now real, and held: npm is an optional rail, not a foundation.** RAREXT
   is for web4, so natively it should depend on nothing but Node itself — and it nearly did: the
   API, the core, the verifiers and the tests already resolved inside the tree, but

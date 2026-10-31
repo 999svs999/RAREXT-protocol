@@ -93,6 +93,13 @@ packages are also packaged as `@rarext/core`, `@rarext/agent-sdk`, `@rarext/api`
 prefer the ecosystem's usual install. Use either if you like it; nothing in the protocol
 requires it, and every npm script below has a plain-`node` equivalent above.
 
+**An existing website can join without moving.** A site that answers on a DNS hostname
+declares one small statement — `/.well-known/rarext.json`, or a `_rarext.<host>` TXT record
+for a site that controls its name and not its tree — saying which registry's copy it serves.
+Deployments do not change, names do not move, and the network can then verify the site's
+bytes against the registry's pinned root the same way it verifies every other copy. See
+[moving a DNS site onto RAREXT](docs/TRANSITION.md).
+
 The web app speaks eight languages: English, Simplified Chinese, Traditional Chinese,
 Spanish, French, Portuguese, Japanese, and Arabic. Pick one from the top bar, or open
 `?lang=ja`. The choice is stored in the browser, and Arabic switches the layout to

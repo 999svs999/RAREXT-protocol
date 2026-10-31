@@ -76,6 +76,17 @@ export {
   canFetchRegistryUrl,
   fetchWithUrlPolicy,
 } from "./urls.ts";
+export {
+  RAREXT_SITE_BINDING_PATH,
+  RAREXT_SITE_BINDING_TXT_PREFIX,
+  parseSiteBinding,
+  parseSiteBindingDocument,
+  parseSiteBindingTxt,
+  siteBindingTxtName,
+  siteBindingUrl,
+  verifySiteBinding,
+} from "./site-binding.ts";
+export type { SiteBinding, SiteBindingParse, SiteBindingVerdict } from "./site-binding.ts";
 export { publicationFromSignedInput } from "./publications.ts";
 export type { PublishInput } from "./publications.ts";
 export type { AttestationBinding } from "./attest.ts";
