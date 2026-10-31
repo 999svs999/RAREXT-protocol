@@ -42,6 +42,15 @@ export interface RetiredKey {
   retiredAt: string;
 }
 
+/** Who paid for a ballot's storage, and under which sponsorship nonce. */
+export interface VoteSponsorshipRecord {
+  proposalRoot: string;
+  voter: string;
+  member: string;
+  nonce: string;
+  at: string;
+}
+
 interface Snapshot {
   version: number;
   publications: Publication[];
@@ -56,6 +65,7 @@ interface Snapshot {
   sponsorNonces?: string[];
   proposals?: Array<{ root: string; proposal: GovernanceProposal }>;
   governanceVotes?: GovernanceVote[];
+  voteSponsorships?: VoteSponsorshipRecord[];
 }
 
 export class RarextStore {
@@ -76,6 +86,7 @@ export class RarextStore {
   private readonly credits: CreditRecord[] = [];
   private readonly proposalsByRoot = new Map<string, { root: string; proposal: GovernanceProposal }>();
   private readonly governanceVotes: GovernanceVote[] = [];
+  private readonly voteSponsorships: VoteSponsorshipRecord[] = [];
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -546,6 +557,23 @@ export class RarextStore {
     if (persist) this.persist();
   }
 
+  /**
+   * Who paid for a ballot, when somebody did.
+   *
+   * Kept beside the votes rather than inside them: a vote is a voter's signed statement and adding
+   * a payer field to it would change what the voter signed. This is a statement about the ballot,
+   * made by the sponsor, and it is recorded so the cost is visible in the same record as the vote
+   * instead of being implied.
+   */
+  addVoteSponsorship(record: VoteSponsorshipRecord, persist = true): void {
+    this.voteSponsorships.push(record);
+    if (persist) this.persist();
+  }
+
+  voteSponsorshipsFor(root: string): VoteSponsorshipRecord[] {
+    return this.voteSponsorships.filter((record) => record.proposalRoot === root);
+  }
+
   governanceVotesFor(root: string): GovernanceVote[] {
     return this.governanceVotes.filter((vote) => vote.proposalRoot === root);
   }
@@ -711,6 +739,10 @@ export class RarextStore {
       for (const vote of snapshot.governanceVotes ?? []) {
         this.governanceVotes.push(vote);
       }
+
+      for (const record of snapshot.voteSponsorships ?? []) {
+        this.voteSponsorships.push(record);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`could not load ${this.filePath}: ${message}`);
@@ -736,6 +768,7 @@ export class RarextStore {
       sponsorNonces: [...this.usedSponsorNonces],
       proposals: [...this.proposalsByRoot.values()],
       governanceVotes: [...this.governanceVotes],
+      voteSponsorships: [...this.voteSponsorships],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

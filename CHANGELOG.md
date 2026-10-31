@@ -11,6 +11,29 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Who pays for a vote: a ballot can be sponsored, and the payer is in the record.** RFC 0021's
+  last open governance question is closed. Participation is free and unpaid, so a participant with
+  no credits must still be able to vote — and "free for the voter" must not become "anyone can vote
+  in their name". `POST /v1/governance/proposals/:root/votes/sponsored` therefore requires TWO
+  signatures that mean different things: the sponsor's assertion carries the whole ballot (change a
+  field and their signature stops matching, so a sponsor cannot be tricked into paying for a
+  different one), and the ballot's OWN signature is verified against the voter's key, so a sponsor
+  cannot push a vote nobody cast. **Money buys storage; it never buys a choice.** The payer is
+  recorded beside the vote (`voteSponsorships`, snapshot migration 4 → 5) and returned by the
+  proposal `GET`, so the cost of free participation is visible in the same record instead of being
+  implied.
+- **One sponsorship rule, not two.** The existing challenge-sponsorship verifier was a monolith;
+  the half that is the same whoever is being sponsored — the roster check, the freshness window,
+  the nonce bounds, the member's signature — is now extracted and called by both paths, with the
+  messages still naming what is being sponsored (`vote sponsorship is not configured` tells an
+  operator something `sponsorship is not configured` hides). The ballot's own signature is checked
+  through a PORT, because the same check runs on the unsponsored route; one rule, two callers. The
+  challenge suite stayed green through the extraction, which is what makes it a refactor rather
+  than a rewrite.
+- **A crash mid-sponsorship is recoverable rather than corrupting**, and the order is chosen for
+  it: the ballot is stored first and the nonce last, and because the tally keys duplication on the
+  voter's KEY, a ballot stored twice counts once and the second copy is refused by name — so the
+  window between the writes cannot produce a double vote.
 - **A `rarext:` reference now resolves to a VERIFIED object — the client half of RFC 0022.**
   `resolveRarextUri` (in `@rarext/agent-sdk`) turns a reference into candidates, walks them with the
   SDK's existing search — `findVerifiedBundleFromSeeds` owns the walk, the pins and the refusal

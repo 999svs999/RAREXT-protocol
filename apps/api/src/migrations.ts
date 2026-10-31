@@ -7,7 +7,7 @@
  * empty store and then overwriting the file is how a registry loses its history.
  */
 
-export const CURRENT_SNAPSHOT_VERSION = 4;
+export const CURRENT_SNAPSHOT_VERSION = 5;
 
 export interface SnapshotMigration {
   from: number;
@@ -50,6 +50,17 @@ export const snapshotMigrations: SnapshotMigration[] = [
         ...snapshot,
         proposals: Array.isArray(snapshot.proposals) ? snapshot.proposals : [],
         governanceVotes: Array.isArray(snapshot.governanceVotes) ? snapshot.governanceVotes : [],
+      };
+    },
+  },
+  {
+    from: 4,
+    to: 5,
+    description: "add vote sponsorships, so a payer is visible in the record",
+    migrate(snapshot) {
+      return {
+        ...snapshot,
+        voteSponsorships: Array.isArray(snapshot.voteSponsorships) ? snapshot.voteSponsorships : [],
       };
     },
   },

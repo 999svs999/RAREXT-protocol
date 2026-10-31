@@ -130,7 +130,7 @@ test("an older snapshot migrates forward, each step adding its own fields", () =
     rotations: [{ handle: "h", fromKeyId: "k", fromPublicKey: "p", fromAlgorithm: "ecdsa-p256", createdAt: "t" }],
   });
 
-  assert.equal(result.snapshot.version, 4);
+  assert.equal(result.snapshot.version, 5);
   assert.deepEqual(result.snapshot.challenges, []);
   assert.deepEqual(result.snapshot.proposals, [], "the newest step adds governance");
   assert.deepEqual(result.snapshot.governanceVotes, []);
@@ -138,6 +138,7 @@ test("an older snapshot migrates forward, each step adding its own fields", () =
   assert.deepEqual(result.applied, [
     "add durable challenge storage and sponsor nonce tracking",
     "add governance proposals and their votes",
+    "add vote sponsorships, so a payer is visible in the record",
   ]);
 });
 

@@ -260,8 +260,11 @@ test("the migration plan is a deferred no-op with deterministic digests", () => 
   assert.equal(plan.mode, "no-op");
   assert.equal(plan.target, null);
   assert.equal(plan.sourceVersion, 3);
-  assert.equal(plan.snapshotVersion, 4);
-  assert.deepEqual(plan.appliedMigrations, ["add governance proposals and their votes"]);
+  assert.equal(plan.snapshotVersion, 5);
+  assert.deepEqual(plan.appliedMigrations, [
+    "add governance proposals and their votes",
+    "add vote sponsorships, so a payer is visible in the record",
+  ]);
   assert.equal(plan.fallback.sourceMutated, false);
   assert.equal(plan.fallback.targetWritten, false);
   assert.match(plan.sourceDigest, /^[a-f0-9]{64}$/);
@@ -363,11 +366,12 @@ test("an older snapshot is advanced in memory while its records survive", () => 
   const bundle = buildGameStateMigrationBundle(old, { generatedAt: NOW });
 
   assert.equal(bundle.sourceVersion, 1);
-  assert.equal(bundle.snapshotVersion, 4);
+  assert.equal(bundle.snapshotVersion, 5);
   assert.deepEqual(bundle.appliedMigrations, [
     "add key rotations and delegated publishing keys",
     "add durable challenge storage and sponsor nonce tracking",
     "add governance proposals and their votes",
+    "add vote sponsorships, so a payer is visible in the record",
   ]);
   assert.deepEqual(bundle.snapshot.publications, [publication]);
   assert.deepEqual(bundle.snapshot.identities, [identity]);
@@ -379,7 +383,7 @@ test("an older snapshot is advanced in memory while its records survive", () => 
 
 test("malformed and newer snapshots are refused", () => {
   assert.throws(
-    () => buildGameStateMigrationPlan({ version: 5, publications: [] }),
+    () => buildGameStateMigrationPlan({ version: 6, publications: [] }),
     /newer than this build/,
   );
   assert.throws(

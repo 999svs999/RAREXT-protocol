@@ -63,6 +63,7 @@ import {
 import {
   createSponsorRegistry,
   verifyChallengeSponsorship,
+  verifyVoteSponsorship,
   type ChallengeEvent,
   type SponsorRegistry,
 } from "./sponsorship.ts";
@@ -1437,6 +1438,64 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // A SPONSORED ballot: somebody else pays for the storage, and the voter still signs.
+      //
+      // Participation is free and unpaid (RFC 0021), so a participant with no credits must still be
+      // able to vote — but "free for the voter" must not become "anyone can cast a ballot in their
+      // name". Two signatures are therefore required and they mean different things: the sponsor's
+      // assertion carries the whole ballot (change a field and their signature stops matching), and
+      // the ballot's OWN signature is verified against the voter's key, so the money buys storage
+      // and never a choice. The payer is recorded beside the vote, in the same record, rather than
+      // being implied.
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/governance/proposals/") &&
+        pathname.endsWith("/votes/sponsored")
+      ) {
+        const root = pathname.slice("/v1/governance/proposals/".length, -"/votes/sponsored".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+
+        const sponsored = verifyVoteSponsorship(await readJson(req), sponsors, votesSignatureHolds);
+        if ("status" in sponsored) {
+          send(res, sponsored.status, { error: sponsored.error });
+          return;
+        }
+        if (sponsored.vote.proposalRoot !== root) {
+          send(res, 400, {
+            error: `the sponsored ballot answers ${sponsored.vote.proposalRoot.slice(0, 16)}…, not ${root.slice(0, 16)}…`,
+          });
+          return;
+        }
+        if (store.hasSponsorNonce(sponsored.nonce)) {
+          send(res, 409, { error: "sponsorship nonce has already been used" });
+          return;
+        }
+
+        // Three writes, and a crash between them is recoverable rather than corrupting: the tally
+        // keys duplication on the voter's KEY, so a ballot stored twice counts once and the second
+        // copy is refused by name. The nonce goes last, so a replay of a half-finished sponsorship
+        // is refused by the nonce rule rather than silently re-executing.
+        store.addGovernanceVote(sponsored.vote);
+        store.addVoteSponsorship({
+          proposalRoot: root,
+          voter: sponsored.vote.voter,
+          member: sponsored.member,
+          nonce: sponsored.nonce,
+          at: new Date().toISOString(),
+        });
+        store.addSponsorNonce(sponsored.nonce);
+        send(res, 201, {
+          vote: sponsored.vote,
+          sponsoredBy: sponsored.member,
+          tally: tallyFor(store, proposal),
+        });
+        return;
+      }
+
       if (
         req.method === "POST" &&
         pathname.startsWith("/v1/governance/proposals/") &&
@@ -1480,6 +1539,9 @@ export function createApp(options: AppOptions = {}): AppServer {
           root,
           proposal,
           votes: store.governanceVotesFor(root),
+          // Who paid, when somebody did: beside the votes, so the cost of free participation is
+          // visible in the record instead of being implied by nobody mentioning it.
+          sponsorships: store.voteSponsorshipsFor(root),
           tally: tallyFor(store, proposal),
         });
         return;

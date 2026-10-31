@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
-import type { Challenge, JsonWebKey } from "../../../packages/core/src/index.ts";
+import { voteProblems } from "../../../packages/core/src/index.ts";
+import type { Challenge, GovernanceVote, JsonWebKey } from "../../../packages/core/src/index.ts";
 import { asChallenge } from "./challenges.ts";
 import { asPublicKey, verifyPayload } from "./identity.ts";
 
@@ -140,13 +141,31 @@ function fail(status: number, error: string): SponsorshipFailure {
   return { status, error };
 }
 
-export function verifyChallengeSponsorship(
+/**
+ * The half of a sponsorship that is the same whoever is being sponsored.
+ *
+ * A sponsor's assertion is one shape — which member, when, under which nonce, signed by that
+ * member's key — and the only thing that differs between sponsoring a challenge and sponsoring a
+ * vote is WHAT the assertion carries. Extracting this means a fix to the freshness window, the
+ * nonce bound, or the roster check lands in both at once, instead of in whichever path was
+ * remembered; the messages keep naming the thing being sponsored, because an operator reading
+ * "vote sponsorship is not configured" learns something "sponsorship is not configured" hides.
+ */
+interface SponsorAssertion {
+  sponsor: Sponsor;
+  nonce: string;
+  payload: Record<string, unknown>;
+}
+
+function verifySponsorAssertion(
   input: unknown,
   sponsors: SponsorRegistry,
-  now = Date.now(),
-): SponsorshipResult {
+  label: string,
+  kind: string,
+  now: number,
+): SponsorAssertion | SponsorshipFailure {
   if (sponsors.size === 0) {
-    return fail(503, "challenge sponsorship is not configured");
+    return fail(503, `${label} sponsorship is not configured`);
   }
 
   let body: Record<string, unknown>;
@@ -169,8 +188,8 @@ export function verifyChallengeSponsorship(
     return fail(400, error instanceof Error ? error.message : "invalid payload");
   }
 
-  if (payload.kind !== "rarext.challenge-sponsorship.v1" || payload.version !== 1) {
-    return fail(400, "payload must be a version 1 challenge sponsorship");
+  if (payload.kind !== kind || payload.version !== 1) {
+    return fail(400, `payload must be a version 1 ${label} sponsorship`);
   }
 
   if (typeof payload.member !== "string" || payload.member.length === 0) {
@@ -205,6 +224,20 @@ export function verifyChallengeSponsorship(
     return fail(401, "signature does not match the sponsor member");
   }
 
+  return { sponsor, nonce: payload.nonce, payload };
+}
+
+export function verifyChallengeSponsorship(
+  input: unknown,
+  sponsors: SponsorRegistry,
+  now = Date.now(),
+): SponsorshipResult {
+  const assertion = verifySponsorAssertion(input, sponsors, "challenge", "rarext.challenge-sponsorship.v1", now);
+
+  if ("status" in assertion) return assertion;
+
+  const { sponsor, payload, nonce } = assertion;
+
   let challenge: Challenge;
 
   try {
@@ -223,7 +256,7 @@ export function verifyChallengeSponsorship(
 
   return {
     challenge,
-    nonce: payload.nonce,
+    nonce,
     event: {
       kind: "rarext.challenge.v1",
       version: 1,
@@ -235,4 +268,57 @@ export function verifyChallengeSponsorship(
       challenge,
     },
   };
+}
+
+/**
+ * A sponsored ballot: THE SPONSOR PAYS, THE VOTER STILL SIGNS.
+ *
+ * Two signatures, two meanings, and the route must not confuse them. The SPONSOR signs an
+ * assertion that carries the whole ballot, so a sponsor cannot be tricked into paying for a
+ * different one — change a field and their signature stops matching. The VOTER signs the ballot
+ * itself, and that signature is verified here, so a sponsor cannot push a vote nobody cast: the
+ * money buys the storage, never the choice.
+ *
+ * The vote's own signature is checked through a PORT rather than re-implemented, because the same
+ * check runs when a ballot arrives unsponsored; one rule, two callers.
+ */
+export interface VoteSponsorship {
+  vote: GovernanceVote;
+  member: string;
+  nonce: string;
+}
+
+export type VoteSponsorshipResult = VoteSponsorship | SponsorshipFailure;
+
+export function verifyVoteSponsorship(
+  input: unknown,
+  sponsors: SponsorRegistry,
+  verifyVote: (vote: GovernanceVote) => boolean,
+  now = Date.now(),
+): VoteSponsorshipResult {
+  const assertion = verifySponsorAssertion(input, sponsors, "vote", "rarext.vote-sponsorship.v1", now);
+
+  if ("status" in assertion) return assertion;
+
+  const raw = assertion.payload.vote;
+
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return fail(400, "payload.vote must carry the ballot being sponsored");
+  }
+
+  const vote = raw as GovernanceVote;
+  const problems = voteProblems(vote);
+
+  if (problems.length > 0) {
+    return fail(400, problems[0] as string);
+  }
+
+  if (!verifyVote(vote)) {
+    return fail(
+      401,
+      "the sponsored vote's signature does not match its own voter: a sponsor pays for a ballot, it does not cast one",
+    );
+  }
+
+  return { vote, member: assertion.sponsor.handle, nonce: assertion.nonce };
 }

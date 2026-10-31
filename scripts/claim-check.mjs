@@ -2487,6 +2487,8 @@ function checkRolesRfc(overrides = {}) {
     "proposalProblems",
     "voteProblems",
     "keyId",
+    "verifyVoteSponsorship",
+    "createSponsorRegistry",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {

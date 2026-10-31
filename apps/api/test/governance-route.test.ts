@@ -17,6 +17,9 @@ import {
   voteStatement,
 } from "../../../packages/core/src/index.ts";
 import type { GovernanceProposal, GovernanceVote, TallyResult } from "../../../packages/core/src/index.ts";
+import { generateKeyPairSync as generateKeyPair } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { createSponsorRegistry } from "../src/sponsorship.ts";
 import { nodeSha256 } from "../src/digest.ts";
 import { keyId } from "../src/identity.ts";
 import { RarextStore } from "../src/store.ts";
@@ -253,5 +256,157 @@ test("a decision survives a restart — proposals and votes are in the snapshot,
   } finally {
     await stop(second.server);
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The payer: sponsorship, so participation can be free without being anonymous
+ * ------------------------------------------------------------------------------------------- */
+
+function sponsorKeypair() {
+  const { publicKey, privateKey } = generateKeyPair("ec", { namedCurve: "prime256v1" });
+  return { publicKey: publicKey.export({ format: "jwk" }) as Record<string, unknown>, privateKey };
+}
+
+function sponsorAssertion(member: string, vote: GovernanceVote, privateKey: ReturnType<typeof sponsorKeypair>["privateKey"], overrides: Record<string, unknown> = {}) {
+  const payload = {
+    kind: "rarext.vote-sponsorship.v1",
+    version: 1,
+    member,
+    createdAt: new Date().toISOString(),
+    nonce: randomUUID(),
+    vote,
+    ...overrides,
+  };
+  return {
+    payload,
+    signature: signBytes("sha256", Buffer.from(canonicalize(payload)), { key: privateKey, dsaEncoding: "ieee-p1363" }).toString("base64"),
+  };
+}
+
+test("a sponsored ballot is accepted, the payer is in the record, and the nonce cannot be replayed", async () => {
+  const sponsor = sponsorKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "rarext", publicKey: sponsor.publicKey as never },
+  ]);
+  const { server, base, store } = await start(new RarextStore(), { sponsors });
+  try {
+    const document = proposal();
+    const { root } = (await (await post(base, "/v1/governance/proposals", document)).json()) as { root: string };
+
+    const ballot = castVote(document, voter(), "yes");
+    const assertion = sponsorAssertion("alice", ballot, sponsor.privateKey);
+    const accepted = await post(base, `/v1/governance/proposals/${root}/votes/sponsored`, assertion);
+    // Read the body ONCE: an assertion message that reads it would consume the stream before the
+    // assertion that uses it — which is how the first version of this test failed.
+    const acceptedText = await accepted.text();
+    assert.equal(accepted.status, 201, acceptedText);
+    const body = JSON.parse(acceptedText) as { sponsoredBy: string; tally: TallyResult };
+    assert.equal(body.sponsoredBy, "alice");
+    assert.deepEqual(body.tally.outcome, { kind: "decided", choice: "yes" }, "a sponsored ballot counts exactly like any other");
+
+    // The cost is visible in the same record as the vote.
+    const read = await fetch(`${base}/v1/governance/proposals/${root}`);
+    const readBody = (await read.json()) as { votes: GovernanceVote[]; sponsorships: Array<{ member: string; nonce: string; voter: string }> };
+    assert.equal(readBody.votes.length, 1);
+    assert.equal(readBody.sponsorships.length, 1);
+    assert.equal(readBody.sponsorships[0]!.member, "alice");
+    assert.equal(readBody.sponsorships[0]!.nonce, assertion.payload.nonce);
+    assert.equal(readBody.sponsorships[0]!.voter, ballot.voter);
+
+    // And the sponsorship itself cannot be replayed into a second write.
+    const replay = await post(base, `/v1/governance/proposals/${root}/votes/sponsored`, assertion);
+    assert.equal(replay.status, 409);
+    assert.match(((await replay.json()) as { error: string }).error, /nonce has already been used/);
+
+    // A sponsorship survives a restart, like everything else a decision is made of.
+    assert.equal(store.voteSponsorshipsFor(root).length, 1);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("money buys the storage, never the choice: a sponsor cannot push a ballot nobody cast", async () => {
+  const sponsor = sponsorKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "rarext", publicKey: sponsor.publicKey as never },
+  ]);
+  const { server, base } = await start(new RarextStore(), { sponsors });
+  try {
+    const document = proposal();
+    const { root } = (await (await post(base, "/v1/governance/proposals", document)).json()) as { root: string };
+
+    // The ballot is real but its SIGNATURE is stale: the choice was edited after the voter signed.
+    // A sponsor who signs an assertion carrying it has paid for a ballot nobody cast, and the
+    // voter's signature is what catches that — separately from the sponsor's own.
+    const honest = castVote(document, voter(), "yes");
+    const forged: GovernanceVote = { ...honest, choice: "no" };
+    const pushed = await post(
+      base,
+      `/v1/governance/proposals/${root}/votes/sponsored`,
+      sponsorAssertion("alice", forged, sponsor.privateKey),
+    );
+    assert.equal(pushed.status, 401);
+    assert.match(
+      ((await pushed.json()) as { error: string }).error,
+      /does not match its own voter: a sponsor pays for a ballot, it does not cast one/,
+    );
+
+    // And a sponsor cannot be tricked either: edit the ballot after THEY signed, and their own
+    // signature stops matching.
+    const assertion = sponsorAssertion("alice", honest, sponsor.privateKey);
+    const rewired = { payload: { ...assertion.payload, vote: forged }, signature: assertion.signature };
+    const tampered = await post(base, `/v1/governance/proposals/${root}/votes/sponsored`, rewired);
+    assert.equal(tampered.status, 401);
+    assert.match(((await tampered.json()) as { error: string }).error, /signature does not match the sponsor member/);
+
+    // Nothing was stored by either attempt.
+    const read = await fetch(`${base}/v1/governance/proposals/${root}`);
+    const readBody = (await read.json()) as { votes: GovernanceVote[]; sponsorships: unknown[] };
+    assert.equal(readBody.votes.length, 0);
+    assert.equal(readBody.sponsorships.length, 0);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("sponsorship refuses what it cannot vouch for: a stranger, and nobody at all", async () => {
+  const sponsor = sponsorKeypair();
+  const stranger = sponsorKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "rarext", publicKey: sponsor.publicKey as never },
+  ]);
+  const { server, base } = await start(new RarextStore(), { sponsors });
+  try {
+    const document = proposal();
+    const { root } = (await (await post(base, "/v1/governance/proposals", document)).json()) as { root: string };
+    const ballot = castVote(document, voter(), "yes");
+
+    const notAMember = await post(
+      base,
+      `/v1/governance/proposals/${root}/votes/sponsored`,
+      sponsorAssertion("mallory", ballot, stranger.privateKey),
+    );
+    assert.equal(notAMember.status, 403);
+    assert.match(((await notAMember.json()) as { error: string }).error, /not an authorized sponsor/);
+  } finally {
+    await stop(server);
+  }
+
+  // With no roster configured, a node runs no sponsorships at all — and says so, rather than
+  // accepting a statement nobody is accountable for.
+  const openNode = await start(new RarextStore());
+  try {
+    const document = proposal();
+    const { root } = (await (await post(openNode.base, "/v1/governance/proposals", document)).json()) as { root: string };
+    const refused = await post(
+      openNode.base,
+      `/v1/governance/proposals/${root}/votes/sponsored`,
+      sponsorAssertion("alice", castVote(document, voter(), "yes"), sponsor.privateKey),
+    );
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /vote sponsorship is not configured/);
+  } finally {
+    await stop(openNode.server);
   }
 });

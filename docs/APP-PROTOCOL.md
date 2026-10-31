@@ -155,6 +155,7 @@ recompute. A node keeps them and serves them; it never decides anything.
 | `GET /v1/governance/proposals` | Every proposal this node holds, with the root it computed for each. |
 | `GET /v1/governance/proposals/:root` | One proposal, its votes, and the tally. |
 | `POST /v1/governance/proposals/:root/votes` | Accept a signed vote. The signature is checked at the door — an unusable row is not worth storing — but acceptance is NOT a verdict: `one key is one vote`, the window, the choice and the weight are the tally's findings, and it reports each one by name. |
+| `POST /v1/governance/proposals/:root/votes/sponsored` | Accept a ballot somebody else paid for. Participation is free (RFC 0021), so a participant with no credits must still be able to vote — without "free for the voter" becoming "anyone can vote in their name". TWO signatures are required and they mean different things: the sponsor's assertion carries the whole ballot (change a field and it stops matching), and the ballot's OWN signature is verified against the voter's key. Money buys storage, never a choice. The payer is recorded beside the vote and returned by the `GET` above as `sponsorships`. |
 
 `GET /v1/governance/proposals/:root` answers with `{ root, proposal, votes, tally }`, where the
 tally is `tallyVotes` from `@rarext/core` run by this node — the same function a stranger runs

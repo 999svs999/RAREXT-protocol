@@ -17,8 +17,17 @@ judge: it refuses an unusable row at the door (a proposal the tally could not co
 that does not verify) and recomputes the verdict with the same core function a stranger runs
 offline.
 
+Implemented too: **who pays for a vote**. A ballot can now be sponsored —
+`POST /v1/governance/proposals/:root/votes/sponsored`, with `verifyVoteSponsorship` reusing the
+sponsorship machinery that already exists for challenges (the same member roster, the same
+freshness window, the same durable nonce) — and the payer is recorded beside the vote
+(`voteSponsorships` in the snapshot) rather than being implied. Two signatures are required and
+they mean different things: the sponsor's assertion carries the whole ballot, so a sponsor cannot
+be tricked into paying for a different one, and the ballot's OWN signature is verified, so a
+sponsor cannot push a vote nobody cast. Money buys storage; it never buys a choice.
+
 Proposed here and still not implemented: the **role model** stated as one thing rather than
-scattered across the board, the position on **tokens**, and who pays for a vote.
+scattered across the board, and the position on **tokens**.
 
 ## The problem
 
@@ -200,10 +209,10 @@ verification apply without modification, and a deployment that never holds a vot
    gives ordering, not truth, and the tally's truth is its recomputability from votes anyone
    can fetch.
 4. **Who pays for a vote, when the participant has no credits?** —
-   **ANSWERED: today nobody, and this RFC does not pretend otherwise.** A vote costs storage
-   like any other published artifact. The primitives to pay for someone else's are present —
-   storage rent (`apps/api/src/storage-rent.ts`, RFC 0018) and the pin service — and a
-   sponsored path already exists for challenges, but extending sponsorship to votes is a
-   change this RFC does not specify. A community that wants free participation must pin a
-   policy naming who pays, and the payer's cost is then visible in the same record as the
-   vote instead of being implied.
+   **ANSWERED, and since this RFC was written, implemented: a sponsor can.** A ballot may be
+   submitted sponsored, with a member's signed assertion carrying the whole ballot and the voter's
+   own signature still required, and the payer is recorded next to the vote. What the sponsorship
+   machinery deliberately does NOT decide is who should need sponsoring: that is the community's
+   pinned policy, and a roster is something an operator configures rather than something this
+   protocol invents. Storage rent (RFC 0018) and the pin service remain the other ways to pay for
+   someone else's bytes.
