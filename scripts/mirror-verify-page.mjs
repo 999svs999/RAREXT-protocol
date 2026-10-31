@@ -369,6 +369,17 @@ export function mirrorVerifyPage({ title, heading }) {
         let candidateObject = null;
         try { candidateObject = JSON.parse(new TextDecoder().decode(bytes)); } catch (error) { /* not JSON \u2014 the byte reading may still hold */ }
         if (candidateObject && typeof candidateObject === "object" && !Array.isArray(candidateObject)) {
+          // The bundle reading first, through the page's own verifier \u2014 the same function that
+          // judged the copy above. A bundle is a JSON object too, and without this reading the panel
+          // would verify a registry's central object as "not a bundle, not a record, not bytes".
+          try {
+            const probe = await verifyBundle(candidateObject, undefined, wanted);
+            if (probe.valid && probe.root === wanted) {
+              refout.innerHTML += htmlRow("VERIFIED", "a registry bundle, by the root its content rebuilds to", "ok");
+              return;
+            }
+          } catch (error) { /* not a bundle \u2014 the record and byte readings may still hold */ }
+
           for (const candidate of recordRootPreimages(candidateObject)) {
             const digest = await sha256Hex(candidate.preimage);
             if (digest === wanted) {
