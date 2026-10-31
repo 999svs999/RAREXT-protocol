@@ -2404,6 +2404,8 @@ function checkNamingRfc(overrides = {}) {
     "planSeedUnion",
     "parseSiteBinding",
     "verifySiteBinding",
+    "resolveRarextUri",
+    "findVerifiedBundleFromSeeds",
   ];
   for (const name of EXISTING) {
     if (!sources.includes(name)) {
@@ -2434,7 +2436,8 @@ function checkNamingRfc(overrides = {}) {
     ["a RAREXT reference carries the root it commits to", "the one rule the syntax exists for"],
     ["the root decides identity, and only the root", "that identity is the commitment, not the location"],
     ["not a name service, and not a replacement for DNS", "the limit it does not cross"],
-    ["nothing here resolves anything", "that the RFC specifies syntax, not resolution"],
+    ["the location never overrides the root", "that a hint is a hint and the pin is what decides"],
+    ["no lookup that decides anything", "the limit the resolver itself does not cross"],
   ]) {
     if (!haystack.includes(squash(sentence))) {
       fail(`RFC 0022 no longer states ${why}`);
@@ -2442,7 +2445,7 @@ function checkNamingRfc(overrides = {}) {
   }
 
   console.log(
-    `  naming: ${EXISTING.length} primitive(s) verified | ${referenced.size} document(s) resolve | one rule (the root), no resolver`,
+    `  naming: ${EXISTING.length} primitive(s) verified | ${referenced.size} document(s) resolve | one rule (the root) | a resolver that only verifies against it`,
   );
 }
 

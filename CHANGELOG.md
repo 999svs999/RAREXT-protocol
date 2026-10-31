@@ -11,6 +11,27 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A `rarext:` reference now resolves to a VERIFIED object — the client half of RFC 0022.**
+  `resolveRarextUri` (in `@rarext/agent-sdk`) turns a reference into candidates, walks them with the
+  SDK's existing search — `findVerifiedBundleFromSeeds` owns the walk, the pins and the refusal
+  records, so no second walk exists — and accepts only a copy whose recomputed root equals the root
+  THE REFERENCE CARRIES. The test resolves the project's own published bundle through a reference
+  served over loopback, rather than a fixture invented for the occasion.
+- **The property that makes a reference safe to pass around is exercised, not asserted: a location
+  is a hint.** A copy that lies about its own root (the committed bytes with the manifest's root
+  rewritten) is refused BY NAME and the mirror still resolves; with no location serving the pinned
+  root, every candidate is named and the failure says which root it was looking for. A bare root
+  with no candidates is refused with its reason — it says what to look for, not where. A registry ID
+  as an authority is refused rather than guessed, because an id needs the federation list and a
+  guessed host would make the hint load-bearing.
+- **Two instrument bugs, both about honesty rather than correctness.** The reference was put in the
+  seed's `url` field, and the private-address allowance reads exactly that field — a `rarext:` string
+  parses with an empty hostname, which passes the address policy, so a caller's own loopback node was
+  refused as if it were public; the seed's location is now the candidate, and a loopback reference
+  earns the allowance the same way a local seed does. And the checker's own summary line still said
+  "no resolver" after the resolver shipped, while the RFC's non-goal still claimed "nothing here
+  resolves anything" — both were made true: the sentence now says a lookup decides nothing, and the
+  line reports a resolver that only verifies against the root.
 - **RFC 0022 — naming: does RAREXT need its own URL form? Answered with a syntax and one rule, and
   with the alternative it refuses named in writing.** The protocol could verify an object and could
   not WRITE ONE DOWN in a way that is checkable before fetching: quoting

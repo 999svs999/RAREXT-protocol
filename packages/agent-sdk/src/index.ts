@@ -26,6 +26,7 @@ import {
   publicationFromSignedInput,
   renditionFor,
   readBundleResponseBytes,
+  parseRarextUri,
   unresolvedIdentity,
   verifyAiArtifact,
   verifyBundleShape,
@@ -418,6 +419,137 @@ function generativeModelDigest(body: unknown): string {
 }
 
 /** What core's math returned for one AI claim, plus the model's digest. */
+/**
+ * Resolve a `rarext:` reference to a VERIFIED object — the client half of RFC 0022.
+ *
+ * The reference says what is meant and where to look; this says nothing about what to believe.
+ * It turns the reference into the candidate set the SDK already knows how to walk
+ * (`findVerifiedBundleFromSeeds` owns that walk, the pins and the refusal records — this adds no
+ * second one) and accepts only a copy whose recomputed root equals the root THE REFERENCE
+ * CARRIES. A location is a hint: when the first candidate serves bytes that do not rebuild to the
+ * pinned root they are refused by name and the next candidate is tried, which is what makes a
+ * reference safe to carry across mirrors.
+ *
+ * What is deliberately not here: resolving a registry ID to a host. An id needs the federation
+ * list — a document, fetched with its own rules — and an authority in a reference is a hint about
+ * where to look, so this asks the caller for either a hostname or the candidates. Guessing would
+ * make the hint load-bearing.
+ */
+export interface RarextResolveOptions extends FindVerifiedBundleOptions {
+  /**
+   * Extra places to look. A bare root names an object and no location, so a caller that holds one
+   * supplies the candidates it knows (its node, a mirror, a registry's bundle URL).
+   */
+  candidates?: string[];
+  /**
+   * The scheme for the reference's own location. A `rarext:` reference carries none — it is not a
+   * URL — so a loopback deployment says `http` here rather than the reference pretending.
+   */
+  scheme?: "https" | "http";
+  /** Observe each candidate as it is tried, refused, or accepted. */
+  onCandidate?: (event: FindVerifiedBundleEvent) => void;
+}
+
+export type RarextResolveResult =
+  | {
+      ok: true;
+      root: string;
+      source: string;
+      bundle: Bundle;
+      candidates: number;
+      /** Locations that were tried and refused before one verified. Evidence, not noise. */
+      attempts: Array<{ url: string; reason: string }>;
+    }
+  | { ok: false; reason: string; attempts: Array<{ url: string; reason: string }> };
+
+/** Is this authority something DNS can resolve, or just a name a registry uses for itself? */
+function authorityIsHost(authority: string): boolean {
+  return authority.includes(".") || authority.includes(":");
+}
+
+export async function resolveRarextUri(
+  reference: string,
+  options: RarextResolveOptions = {},
+): Promise<RarextResolveResult> {
+  const parsed = parseRarextUri(reference);
+  if (!parsed.ok) {
+    return { ok: false, reason: parsed.reason, attempts: [] };
+  }
+  const { uri } = parsed;
+
+  const candidates: string[] = [];
+  if (uri.authority !== undefined || (uri.path !== undefined && uri.path.length > 0)) {
+    if (uri.authority === undefined) {
+      return {
+        ok: false,
+        reason: "a reference with a path but no authority says where inside something it wants, but not what that something is",
+        attempts: [],
+      };
+    }
+    if (!authorityIsHost(uri.authority)) {
+      return {
+        ok: false,
+        reason: `${uri.authority} is a registry id, not a host: name the hostname its operator publishes at, or pass the candidates yourself`,
+        attempts: [],
+      };
+    }
+    const path = uri.path === undefined ? "" : `/${uri.path.join("/")}`;
+    candidates.push(`${options.scheme ?? "https"}://${uri.authority}${path}`);
+  }
+  for (const candidate of options.candidates ?? []) candidates.push(candidate);
+
+  const unique = [...new Set(candidates)];
+  if (unique.length === 0) {
+    return {
+      ok: false,
+      reason:
+        "a bare root says what to look for, not where: name at least one candidate (a registry's bundle URL, a mirror, your own node) and the root will decide",
+      attempts: [],
+    };
+  }
+
+  // Every refusal is recorded as it happens, so a failure reads as evidence: which location was
+  // tried, and why it did not count.
+  const attempts: Array<{ url: string; reason: string }> = [];
+  const { onCandidate, ...rest } = options;
+  const seed: SeedDocument = {
+    // The seed's own location is the CANDIDATE, not the reference string. `allowPrivateFromSeeds`
+    // reads this field to decide whether a local tree earns the private-address allowance, and a
+    // "rarext:" string is not a URL: it parses with an empty hostname, which passes the address
+    // policy, so the caller's own loopback node would have been refused as if it were public.
+    url: unique[0] as string,
+    bundle: unique[0] as string,
+    bundleRoot: uri.root,
+    ...(unique.length > 1
+      ? { mirrors: unique.slice(1).map((url) => ({ bundle: url, root: uri.root })) }
+      : {}),
+  };
+
+  try {
+    const found = await findVerifiedBundleFromSeeds([seed], {
+      ...rest,
+      onCandidate: (event) => {
+        if (event.status === "refused") attempts.push({ url: event.url, reason: event.reason });
+        onCandidate?.(event);
+      },
+    });
+    return {
+      ok: true,
+      root: found.root,
+      source: found.source,
+      bundle: found.bundle,
+      candidates: found.candidates,
+      attempts,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: (error as Error).message,
+      attempts,
+    };
+  }
+}
+
 export interface BundleAiClaimEvidence {
   /** Generative: the seed and step count the replay ran with. */
   seed?: number;

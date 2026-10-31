@@ -1,9 +1,18 @@
 # RFC 0022 — Naming: does RAREXT need its own URL form?
 
-**Status:** The syntax ships. `packages/core/src/rarext-uri.ts` parses, canonicalizes and compares
-a RAREXT reference, and `packages/core/test/rarext-uri.test.ts` holds its one rule. What does NOT
-exist: anything that RESOLVES a `rarext:` reference — no client fetches by name yet, and retrieval
-still goes through a registry's origin and the binding convention in `docs/TRANSITION.md`.
+**Status:** The syntax ships, and so does a resolver for it.
+`packages/core/src/rarext-uri.ts` parses, canonicalizes and compares a RAREXT reference, and
+`packages/core/test/rarext-uri.test.ts` holds its one rule. `resolveRarextUri` (in
+`@rarext/agent-sdk`) turns a reference into a VERIFIED object: it plans the candidates the
+reference names, walks them with the SDK's existing search — `findVerifiedBundleFromSeeds` owns the
+walk, the pins and the refusal records, so no second walk exists — and accepts only a copy whose
+recomputed root equals the root the reference carries. A reference to a registry ID is refused
+rather than guessed (an id needs the federation list, and guessing would make the hint
+load-bearing), and a bare root with no candidates is refused with the reason: it says what to look
+for, not where.
+
+What still does not exist: resolution of anything but a bundle, and any client that PRINTS a
+`rarext:` reference for a human. Retrieval remains HTTPS plus the binding convention.
 
 ## The problem
 
@@ -107,8 +116,10 @@ cannot invalidate anything already written.
 ## Non-goals
 
 - **Not a name service, and not a replacement for DNS.**
-- **Nothing here resolves anything.** This RFC specifies how a reference is written, parsed and
-  compared — not how a name is looked up.
+- **No lookup that decides anything.** `resolveRarextUri` walks the candidates a reference names and
+  accepts only a copy that rebuilds to the root the caller already holds; it never turns a name into
+  a fact, and it holds no registry of names. Deciding what a name means is not deferred or
+  delegated — it is not done at all, because the root already did it.
 - **No browser support claim.** A browser will hand a `rarext:` string to whatever the user
   configured, or to nothing; the reference is designed for documents, artifacts, agents and
   command lines first.
