@@ -20,6 +20,7 @@ import {
   attestRun,
   canonicalize,
   cidV1,
+  toHex,
   generate,
   foldAnnouncements,
   planSeedUnion,
@@ -454,9 +455,15 @@ export interface RarextResolveOptions extends FindVerifiedBundleOptions {
 export type RarextResolveResult =
   | {
       ok: true;
+      /** What the root turned out to name: a registry's bundle, or raw bytes. */
+      kind: "bundle" | "blob";
       root: string;
       source: string;
-      bundle: Bundle;
+      /** A bundle, when the root named one. */
+      bundle?: Bundle;
+      /** A blob's bytes and the media type the host served them with, when the root named bytes. */
+      bytes?: Uint8Array;
+      mediaType?: string;
       candidates: number;
       /** Locations that were tried and refused before one verified. Evidence, not noise. */
       attempts: Array<{ url: string; reason: string }>;
@@ -466,6 +473,73 @@ export type RarextResolveResult =
 /** Is this authority something DNS can resolve, or just a name a registry uses for itself? */
 function authorityIsHost(authority: string): boolean {
   return authority.includes(".") || authority.includes(":");
+}
+
+/**
+ * Read a candidate as BYTES and compare the digest the reference carried.
+ *
+ * The second reading of a reference, and the reason a `rarext:` name is not tied to one kind of
+ * object: a bundle's root is a hash of its content, a blob's root is the sha256 of its bytes, and
+ * both say "this is what I mean". A client that has never heard of the object's type can therefore
+ * still verify it — an image, a model file, a tarball of a site — which is what makes a reference a
+ * name for CONTENT rather than for a document format.
+ *
+ * The two readings cannot both accept one copy: a bundle root is domain-separated from the sha256
+ * of the bytes that carry it, so the same URL named by two different roots is two different
+ * objects. That is a property the tests exercise rather than assume.
+ *
+ * The fetch is the walk's own policy-guarded one, with the same timeout and the same allowance —
+ * the honest reading of "third-party bytes" does not change because we stopped expecting JSON.
+ */
+async function readAsBlob(
+  urls: string[],
+  root: string,
+  ports: {
+    fetch?: typeof fetch;
+    sha256?: Sha256;
+    timeoutMs?: number;
+    allowPrivate: boolean;
+    attempts: Array<{ url: string; reason: string }>;
+  },
+): Promise<{ source: string; bytes: Uint8Array; mediaType?: string } | null> {
+  const request = ports.fetch ?? fetch;
+  const sha256 = ports.sha256 ?? nodeSha256;
+  const timeoutMs = ports.timeoutMs ?? 15_000;
+
+  for (const url of urls) {
+    let response: Response;
+
+    try {
+      response = await fetchWithUrlPolicy(
+        url,
+        { signal: AbortSignal.timeout(timeoutMs) },
+        { fetch: request, allowPrivate: ports.allowPrivate },
+      );
+    } catch (error) {
+      ports.attempts.push({ url, reason: `bytes not read: ${(error as Error).message}` });
+      continue;
+    }
+
+    if (!response.ok) {
+      ports.attempts.push({ url, reason: `bytes not read: the host answered ${response.status}` });
+      continue;
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const digest = toHex(sha256(bytes)).toLowerCase();
+
+    if (digest !== root.toLowerCase()) {
+      ports.attempts.push({
+        url,
+        reason: `its bytes hash to ${digest.slice(0, 16)}…, not the pinned ${root.slice(0, 16)}…`,
+      });
+      continue;
+    }
+
+    return { source: url, bytes, mediaType: response.headers.get("content-type") ?? undefined };
+  }
+
+  return null;
 }
 
 export async function resolveRarextUri(
@@ -527,9 +601,14 @@ export async function resolveRarextUri(
       : {}),
   };
 
+  // Derived ONCE, here, and handed to both readings: the walk would derive the same thing from the
+  // same seed, and a second derivation is a second rule waiting to disagree.
+  const allowPrivate = rest.allowPrivateHosts ?? allowPrivateFromSeeds([seed]);
+
   try {
     const found = await findVerifiedBundleFromSeeds([seed], {
       ...rest,
+      allowPrivateHosts: allowPrivate,
       onCandidate: (event) => {
         if (event.status === "refused") attempts.push({ url: event.url, reason: event.reason });
         onCandidate?.(event);
@@ -537,6 +616,7 @@ export async function resolveRarextUri(
     });
     return {
       ok: true,
+      kind: "bundle",
       root: found.root,
       source: found.source,
       bundle: found.bundle,
@@ -544,9 +624,31 @@ export async function resolveRarextUri(
       attempts,
     };
   } catch (error) {
+    // The bundle reading is exhausted. A reference does not say what it names — only the root does —
+    // so the same candidates are now read as bytes, and the object may well have been a blob all
+    // along. A failure reports BOTH readings, because "not a bundle" is not the same answer as
+    // "not there".
+    const bundleReason = (error as Error).message;
+    const blob = await readAsBlob(unique, uri.root, { ...rest, allowPrivate, attempts });
+
+    if (blob !== null) {
+      return {
+        ok: true,
+        kind: "blob",
+        root: uri.root,
+        source: blob.source,
+        bytes: blob.bytes,
+        mediaType: blob.mediaType,
+        candidates: unique.length,
+        attempts,
+      };
+    }
+
     return {
       ok: false,
-      reason: (error as Error).message,
+      reason:
+        `${bundleReason}; and reading the same candidates as bytes found none whose sha256 is ` +
+        `${uri.root.slice(0, 16)}…`,
       attempts,
     };
   }

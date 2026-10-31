@@ -11,6 +11,29 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A reference names CONTENT, not a format: bytes resolve by their sha256, and one URL can be two
+  objects.** `resolveRarextUri` had one reading — a registry's bundle, checked by the root its content
+  rebuilds to. It now has two, and a reference does not say which it means (only the root does), so
+  the same candidates are read both ways: bytes are checked by their sha256. An image, a model file
+  or a tarball of a site can therefore be named and verified by a client that has never heard of its
+  type — which is what makes a reference a name for content rather than for a document format. The
+  byte reading uses the walk's own policy-guarded fetch, timeout and private-address allowance
+  (derived once and handed to both readings, because a second derivation is a second rule waiting to
+  disagree), and a failure reports BOTH readings — "not a bundle" is not the same answer as "not
+  there".
+- **The two readings cannot both accept one copy**, and that is verified rather than assumed: a
+  bundle root is domain-separated from the sha256 of the bytes that carry it, so the same URL named
+  by two different roots is two different objects. Proven against the project's own live deployment —
+  the published `bundleCid` (a CIDv1, base32) and the hex sha256 of the same bytes are the same
+  32-byte digest spelled two ways, while the bundle root is something else — and both references to
+  the one live URL resolve: `…@7ebdf81a…` as a bundle, `…@a26f7e87…` as a blob of 27124 bytes.
+- **A new core test decodes a CID with an INDEPENDENT base32 implementation** (written in the test,
+  not borrowed from the module it checks) and shows its payload is version 1, raw codec, sha256,
+  32 bytes — the digest the hex form spells. It also moved the CID/hex equivalence out of prose and
+  into a test, since a reference carries hex while the seed publishes a CID.
+- The resolve CLI now says which reading answered (`VERIFIED: … — a blob of 27124 bytes
+  (application/json), by the sha256 of its bytes — read from …`) and reports a blob's size, never its
+  bytes: a JSON dump of a model file helps nobody, and a caller who wants the object fetches it.
 - **The reference form is now USED, not merely specified: the surfaces print one, and a command
   resolves one.** `demo:resident` ends by naming the copy it verified — against the live registry it
   prints `rarext:999svs999.github.io/RAREXT-protocol/registry/bundle.json@7ebdf81a…` — and

@@ -2439,6 +2439,10 @@ function checkNamingRfc(overrides = {}) {
     ["the root decides identity, and only the root", "that identity is the commitment, not the location"],
     ["not a name service, and not a replacement for DNS", "the limit it does not cross"],
     ["the location never overrides the root", "that a hint is a hint and the pin is what decides"],
+    [
+      "a root may name a bundle's content or the sha256 of its bytes",
+      "that a reference names content, not a format",
+    ],
     ["no lookup that decides anything", "the limit the resolver itself does not cross"],
   ]) {
     if (!haystack.includes(squash(sentence))) {

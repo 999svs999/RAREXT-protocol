@@ -122,6 +122,10 @@ test("a client reads the node exactly as it reads any site — and one command r
       const joined = await runCli([node.base, "--registry", "rarext", "--root", node.anchor.root, "--allow-private"]);
       assert.equal(joined.code, 0, joined.stderr);
       assert.match(joined.stdout, /JOINED: this site serves rarext at the pinned root/);
+      // The reference is printed, and printed from what was VERIFIED: the object, and the root the
+      // copy rebuilt to. A CLI naming a root it had not verified would be the whole problem back.
+      assert.match(joined.stdout, /reference: rarext:127\.0\.0\.1:\d+\/[^@]*@[0-9a-f]{64}/);
+      assert.match(joined.stdout, /the same object with no location: rarext:[0-9a-f]{64}/);
 
       const wrong = await runCli([node.base, "--root", "b".repeat(64), "--allow-private"]);
       assert.equal(wrong.code, 1);

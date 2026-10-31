@@ -139,6 +139,18 @@ node scripts/site-binding.mjs https://example.com --root <64-hex> --json
 node scripts/resolve.mjs 'rarext:example.com/registry/bundle.json@<64-hex>'
 ```
 
+A reference names content, not a format, so the same command verifies any content-addressed file a
+site serves — an image, a stylesheet, a tarball of the site itself — by the sha256 of its bytes:
+
+```
+node scripts/resolve.mjs 'rarext:example.com/assets/header.png@<sha256 of those bytes>'
+```
+
+One URL can therefore be two objects under two roots, and that is a feature: the bundle at
+`registry/bundle.json` verifies by the root its content rebuilds to, and the same bytes verify as a
+blob by their sha256. Neither reading can quietly accept the other's copy, so a mirror cannot
+substitute one for the other and call it the same name.
+
 Exit codes are the contract: `0` when the statement is readable and, if a root was given, it
 matches; `1` when the site published no binding or does not match the pin; `2` for a usage
 error. With no `--root` the command prints the statement and **refuses to invent a verdict**,

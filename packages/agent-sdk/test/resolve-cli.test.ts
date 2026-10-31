@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 const committed = readFileSync(new URL("../../../site/registry/bundle.json", import.meta.url), "utf8");
 const seed = JSON.parse(readFileSync(new URL("../../../site/registry/seed.json", import.meta.url), "utf8")) as {
@@ -13,9 +14,9 @@ const seed = JSON.parse(readFileSync(new URL("../../../site/registry/seed.json",
 const ROOT = seed.bundleRoot;
 const CLI = new URL("../../../scripts/resolve.mjs", import.meta.url).pathname;
 
-async function serve(bytes: string) {
+async function serve(bytes: string | Uint8Array, mediaType = "application/json") {
   const server = createServer((_request, response) => {
-    response.writeHead(200, { "content-type": "application/json" });
+    response.writeHead(200, { "content-type": mediaType });
     response.end(bytes);
   });
   server.listen(0, "127.0.0.1");
@@ -76,10 +77,16 @@ test("a wrong root is refused with BOTH roots named, and a bare root with no can
     const parsed = JSON.parse(wrong.stdout) as { resolved: null; error: string; attempts: Array<{ url: string; reason: string }> };
     assert.equal(parsed.resolved, null);
     assert.match(parsed.error, /no candidate rebuilt the pinned root/);
-    assert.equal(parsed.attempts.length, 1);
+    assert.match(parsed.error, /and reading the same candidates as bytes found none/);
+    // TWO attempts for ONE candidate: a reference does not say what it names, so both readings are
+    // tried and both are reported — "not a bundle" is not the same answer as "not there".
+    assert.equal(parsed.attempts.length, 2);
     // The evidence says what was rebuilt and what was pinned, so a reader can see the difference.
     assert.match(parsed.attempts[0]!.reason, new RegExp(ROOT));
     assert.match(parsed.attempts[0]!.reason, /c{16}/);
+    // And the byte reading's refusal is about a digest, not about a schema.
+    assert.match(parsed.attempts[1]!.reason, /its bytes hash to [0-9a-f]{16}/);
+    assert.match(parsed.attempts[1]!.reason, /not the pinned c{16}/);
   } finally {
     await origin.close();
   }
@@ -101,4 +108,31 @@ test("the CLI refuses what is not a reference, and a usage it cannot honour", as
   const badScheme = await runCli([`rarext:${ROOT}`, "--scheme", "rarext"]);
   assert.equal(badScheme.code, 2);
   assert.match(badScheme.stderr, /a reference resolves over http or https/);
+});
+
+test("the CLI says WHICH reading answered: a blob is named by the sha256 of its bytes, and its bytes are a length, not a dump", async () => {
+  const bytes = Buffer.from("an image, a model file, a tarball — the CLI does not care, and says so", "utf8");
+  const root = createHash("sha256").update(bytes).digest("hex");
+  const origin = await serve(bytes, "image/png");
+  try {
+    const human = await runCli([`rarext:${origin.host}/bundle.json@${root}`, "--scheme", "http"]);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /VERIFIED: /);
+    assert.match(human.stdout, /a blob of \d+ bytes \(image\/png\), by the sha256 of its bytes/);
+
+    const json = await runCli([`rarext:${origin.host}/bundle.json@${root}`, "--scheme", "http", "--json"]);
+    assert.equal(json.code, 0, json.stderr);
+    const parsed = JSON.parse(json.stdout) as {
+      resolved: { kind: string; root: string; bytes: number; mediaType: string };
+    };
+    assert.equal(parsed.resolved.kind, "blob");
+    assert.equal(parsed.resolved.root, root);
+    assert.equal(parsed.resolved.mediaType, "image/png");
+    // A LENGTH: a JSON dump of a model file would help nobody, and a caller who wants the object
+    // fetches it themselves.
+    assert.equal(parsed.resolved.bytes, bytes.length);
+    assert.ok(json.stdout.length < 4096, "the object's bytes never enter the output");
+  } finally {
+    await origin.close();
+  }
 });

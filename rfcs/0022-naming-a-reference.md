@@ -18,8 +18,19 @@ usage error — printing every candidate it refused and why. Verified in the ord
 the project's own live registry: the demo's reference resolves, and a version of it with a wrong
 root fails naming both roots.
 
-What still does not exist: resolution of anything but a bundle (a publication or a blob by CID), and
-any browser support. Retrieval remains HTTPS plus the binding convention.
+A reference names CONTENT, not a format. A root may name a bundle's content or the sha256 of its
+bytes, and the resolver reads the same candidates both ways: a registry's bundle is checked by the
+root its content rebuilds to, and raw bytes are checked by their sha256 — so an image, a model file
+or a tarball of a site can be named and verified by a client that has never heard of its type. The
+two readings cannot both accept one copy, because a bundle's root is domain-separated from the
+sha256 of the bytes that carry it: **the same URL, named by two different roots, is two different
+objects.** That is verified against the project's own live deployment, where the published
+`bundleCid` (a CIDv1, base32) and the hex sha256 of the same bytes are the same 32-byte digest
+spelled two ways, while the bundle root is something else entirely.
+
+What still does not exist: resolution of an object whose root is neither a bundle's nor the sha256 of
+its bytes — a publication resolved on its own, or an anchor — and any browser support. Retrieval
+remains HTTPS plus the binding convention.
 
 ## The problem
 
