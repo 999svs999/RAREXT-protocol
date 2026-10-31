@@ -295,7 +295,7 @@ test("rotating the root invalidates delegated keys but keeps capabilities valid"
   }
 });
 
-test("rotations and delegations persist at snapshot version 2", async () => {
+test("rotations and delegations persist at snapshot version 3", async () => {
   const context = await setup();
 
   try {
@@ -316,7 +316,7 @@ test("rotations and delegations persist at snapshot version 2", async () => {
       rotations: unknown[];
       delegations: unknown[];
     };
-    assert.equal(snapshot.version, 2);
+    assert.equal(snapshot.version, 3);
     assert.equal(snapshot.rotations.length, 1);
     assert.equal(snapshot.delegations.length, 1);
 

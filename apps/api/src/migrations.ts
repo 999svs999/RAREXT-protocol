@@ -7,7 +7,7 @@
  * empty store and then overwriting the file is how a registry loses its history.
  */
 
-export const CURRENT_SNAPSHOT_VERSION = 2;
+export const CURRENT_SNAPSHOT_VERSION = 3;
 
 export interface SnapshotMigration {
   from: number;
@@ -26,6 +26,17 @@ export const snapshotMigrations: SnapshotMigration[] = [
         ...snapshot,
         rotations: Array.isArray(snapshot.rotations) ? snapshot.rotations : [],
         delegations: Array.isArray(snapshot.delegations) ? snapshot.delegations : [],
+      };
+    },
+  },
+  {
+    from: 2,
+    to: 3,
+    description: "add durable challenge storage",
+    migrate(snapshot) {
+      return {
+        ...snapshot,
+        challenges: Array.isArray(snapshot.challenges) ? snapshot.challenges : [],
       };
     },
   },

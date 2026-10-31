@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -120,5 +120,55 @@ test("the store refuses a corrupt or newer snapshot instead of starting empty", 
     assert.throws(() => new RarextStore(file), /publications must be an array/);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("migration 2 → 3 adds an empty challenges array and preserves the rest", () => {
+  const result = migrateSnapshot({
+    version: 2,
+    publications: [],
+    rotations: [{ handle: "h", fromKeyId: "k", fromPublicKey: "p", fromAlgorithm: "ecdsa-p256", createdAt: "t" }],
+  });
+
+  assert.equal(result.snapshot.version, 3);
+  assert.deepEqual(result.snapshot.challenges, []);
+  assert.equal((result.snapshot.rotations as unknown[]).length, 1, "the v2 fields are preserved");
+  assert.deepEqual(result.applied, ["add durable challenge storage"]);
+});
+
+test("a challenge created at runtime survives a restart", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rarext-challenges-"));
+  const path = join(dir, "rarext.json");
+  const challenge = {
+    id: "echo-1",
+    app: "echo-lab",
+    title: "Echo a signal",
+    description: "Return a deterministic proof for the submitted signal.",
+    version: 1,
+    spec: { kind: "echo" },
+    semanticsId: "echo-lab/echo-1",
+    semanticsVersion: 1,
+    createdAt: "2026-10-31T00:00:00.000Z",
+  };
+
+  try {
+    const first = new RarextStore(path);
+    first.addChallenge(challenge);
+    assert.equal(first.challenges().length, 1);
+
+    // A RESTART is a second store instance on the same path: the snapshot is the only
+    // thing that carries over, so the challenge must come back from it.
+    const restarted = new RarextStore(path);
+    const restored = restarted.challenges();
+    assert.equal(restored.length, 1, "the created challenge survives a restart");
+    assert.equal(restored[0]!.id, "echo-1");
+    assert.equal(restored[0]!.title, "Echo a signal");
+
+    // And the snapshot names its version, so a newer build refuses it loudly rather than
+    // starting empty.
+    const snapshot = JSON.parse(readFileSync(path, "utf8")) as { version: number };
+    assert.equal(snapshot.version, CURRENT_SNAPSHOT_VERSION);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

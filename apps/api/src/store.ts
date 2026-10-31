@@ -13,6 +13,7 @@ import type {
   BuildLineage,
   BuildSearchQuery,
   BuildSummary,
+  Challenge,
   Circuit,
   Delegation,
   Identity,
@@ -50,6 +51,7 @@ interface Snapshot {
   credits?: CreditRecord[];
   rotations?: KeyRotation[];
   delegations?: Delegation[];
+  challenges?: Challenge[];
 }
 
 export class RarextStore {
@@ -61,6 +63,7 @@ export class RarextStore {
   private readonly retiredKeys = new Map<string, RetiredKey>();
   private readonly rotations: KeyRotation[] = [];
   private readonly delegations: Delegation[] = [];
+  private readonly challengeRecords = new Map<string, Challenge>();
   private readonly anchors = new Map<string, Anchor>();
   private readonly anchoredIds = new Set<string>();
   private readonly identityLinks = new Map<string, IdentityLink>();
@@ -408,6 +411,22 @@ export class RarextStore {
     if (persist) this.persist();
   }
 
+  /**
+   * Durable challenge storage (ROADMAP): a challenge created through the API survives a
+   * restart, exactly like a publication does. Challenges configured through
+   * RAREXT_CHALLENGES stay configured — this collection only holds what a deployment
+   * created at runtime, and a duplicate id replaces rather than duplicates, because the
+   * route refuses a duplicate anyway and the store must not grow two rows for one id.
+   */
+  addChallenge(challenge: Challenge, persist = true): void {
+    this.challengeRecords.set(challenge.id, challenge);
+    if (persist) this.persist();
+  }
+
+  challenges(): Challenge[] {
+    return [...this.challengeRecords.values()];
+  }
+
   delegationsFor(handle: string): Delegation[] {
     return this.delegations.filter((delegation) => delegation.handle === handle);
   }
@@ -586,6 +605,10 @@ export class RarextStore {
         this.delegations.push(delegation);
       }
 
+      for (const challenge of snapshot.challenges ?? []) {
+        this.addChallenge(challenge, false);
+      }
+
       for (const publication of [...(snapshot.publications ?? [])].reverse()) {
         this.addPublication(publication, false);
       }
@@ -626,6 +649,7 @@ export class RarextStore {
       credits: [...this.credits],
       rotations: [...this.rotations],
       delegations: [...this.delegations],
+      challenges: this.challenges(),
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

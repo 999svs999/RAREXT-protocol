@@ -74,7 +74,7 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] TapeOut circuit/component indexer (read-only)
 - [x] Trac-native identity prototype
 - [x] Key rotation and delegated capability keys
-- [ ] First sponsored challenge — endpoint, signed proofs, `rarext.challenge.v1` event, and UI badge are in place; a live community-member roster, durable challenge storage, and a production sponsor run remain.
+- [ ] First sponsored challenge — endpoint, signed proofs, `rarext.challenge.v1` event, UI badge, and durable challenge storage (snapshot v3: a created challenge survives a restart) are in place; a live community-member roster and a production sponsor run remain.
 
 ## Later — v2 Anchored (weeks 9–12)
 

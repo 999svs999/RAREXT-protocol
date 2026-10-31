@@ -428,8 +428,10 @@ A corrupt or partially written file stops the process with `could not load …` 
 of starting from an empty store. That is deliberate: the first write after an empty
 start would replace the only copy of the registry's history.
 
-Snapshot version 2 is current. Version 1 is still readable: migration 1 → 2 adds empty
-`rotations` and `delegations` arrays, so a store that never rotated a key loads unchanged.
+Snapshot version 3 is current. Versions 1 and 2 are still readable: migration 1 → 2 adds empty
+`rotations` and `delegations` arrays, so a store that never rotated a key loads unchanged, and
+migration 2 → 3 adds an empty `challenges` array, so a store that never created a challenge
+at runtime loads unchanged.
 Adding a migration means adding an entry to `snapshotMigrations` in
 `apps/api/src/migrations.ts` with `from`, `to` (`from + 1`), a description, and a pure
 function from the old snapshot to the new one. An older snapshot without a full chain to

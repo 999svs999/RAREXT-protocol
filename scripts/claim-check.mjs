@@ -4679,15 +4679,25 @@ function checkSnapshotMigrationDoc(docOverride) {
   if (!Array.isArray(migrated.snapshot.publications) || migrated.snapshot.publications.length !== 1) {
     fail("the 1 → 2 migration did not preserve the existing publications array");
   }
-  if (migrated.snapshot.version !== 2) fail("the 1 → 2 migration did not advance the version to 2");
+  // The chain runs to CURRENT: a v1 snapshot passes through 1 → 2 AND 2 → 3, so the end
+  // state is the current version with every collection the current schema carries.
+  if (migrated.snapshot.version !== migrations.CURRENT_SNAPSHOT_VERSION) {
+    fail(`the migration chain did not advance the version to ${migrations.CURRENT_SNAPSHOT_VERSION}`);
+  }
+  if (!Array.isArray(migrated.snapshot.challenges) || migrated.snapshot.challenges.length !== 0) {
+    fail("the 2 → 3 migration did not add an empty challenges array");
+  }
   if (!doc.includes("adds empty") || !doc.includes("rotations")) {
     fail("OPERATIONS.md no longer states the 1 → 2 migration adds empty rotations");
   }
+  if (!doc.includes("empty `challenges` array")) {
+    fail("OPERATIONS.md no longer states the 2 → 3 migration adds an empty challenges array");
+  }
 
   // 3. A current-version snapshot loads unchanged (positive control).
-  const v2 = { version: 2, publications: [] };
-  const r2 = migrations.migrateSnapshot(v2);
-  if (r2.from !== 2 || r2.snapshot.version !== 2 || r2.applied.length !== 0) {
+  const current = { version: migrations.CURRENT_SNAPSHOT_VERSION, publications: [] };
+  const rCurrent = migrations.migrateSnapshot(current);
+  if (rCurrent.from !== migrations.CURRENT_SNAPSHOT_VERSION || rCurrent.snapshot.version !== migrations.CURRENT_SNAPSHOT_VERSION || rCurrent.applied.length !== 0) {
     fail("a current-version snapshot was not loaded unchanged");
   }
 

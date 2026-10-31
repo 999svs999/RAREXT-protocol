@@ -828,6 +828,11 @@ export function createApp(options: AppOptions = {}): AppServer {
   const registry = options.registry ?? createDefaultRegistry(options.fetch);
   const baseChallenges = options.challenges ?? createChallengeRegistry();
   const sponsoredChallenges = new Map<string, Challenge>();
+  // Durable challenge storage (ROADMAP): challenges created at runtime are loaded from the
+  // store's snapshot and written back on create, so a restart keeps what a deployment made.
+  for (const challenge of store.challenges()) {
+    sponsoredChallenges.set(challenge.id, challenge);
+  }
   const challenges: ChallengeRegistry = {
     list: () => [...baseChallenges.list(), ...sponsoredChallenges.values()],
     get: (id) => sponsoredChallenges.get(id) ?? baseChallenges.get(id),
@@ -1304,6 +1309,9 @@ export function createApp(options: AppOptions = {}): AppServer {
         }
 
         send(res, 201, result.challenge);
+        // Durable: the challenge outlives this process. Written after the event succeeded, so
+        // a failed event leaves nothing persisted behind.
+        store.addChallenge(result.challenge);
         return;
       }
 
