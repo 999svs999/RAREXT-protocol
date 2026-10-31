@@ -81,6 +81,28 @@ function signedRequest(
   };
 }
 
+async function startFailingReceiver() {
+  const attempts: number[] = [];
+  const server = createServer((req, res) => {
+    attempts.push(Number(req.headers["content-length"] ?? 0));
+    res.writeHead(500);
+    res.end();
+  });
+
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+
+  return {
+    attempts,
+    url: `http://127.0.0.1:${port}/events`,
+    async close() {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
 async function startEventReceiver() {
   const events: Array<Record<string, unknown>> = [];
   const headers: string[] = [];
@@ -343,4 +365,44 @@ test("a created challenge survives a restart of the deployment", async () => {
     await stop(second.server);
     rmSync(join(storePath, ".."), { recursive: true, force: true });
   }
+});
+
+test("a failed event delivery leaves nothing persisted and un-burns the nonce", async () => {
+  const storePath = join(mkdtempSync(join(tmpdir(), "rarext-rollback-")), "rarext.json");
+  const { publicKey, privateKey } = memberKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "trac", publicKey },
+  ]);
+  const receiver = await startFailingReceiver();
+  const payload = sponsorshipPayload("alice", { nonce: "rollback-nonce-0001" });
+  const signed = signedRequest(payload, privateKey);
+
+  const app = await start(new RarextStore(storePath), {
+    sponsors,
+    onChallengeEvent: undefined,
+    challengeEventUrl: receiver.url,
+  });
+  try {
+    const response = await post(app.base, "/v1/challenges/sponsored", signed);
+    assert.equal(response.status, 502, "the route reports the delivery failure loudly");
+    assert.match(((await response.json()) as { error: string }).error, /challenge event delivery failed/);
+    assert.equal(receiver.attempts.length, 1, "the event WAS attempted");
+  } finally {
+    await stop(app.server);
+    receiver.close();
+  }
+
+  // THE PROMISE: a failed event leaves nothing persisted. The challenge is not in the
+  // snapshot, and the nonce is not burned — the sponsor can retry the same signature.
+  const restarted = new RarextStore(storePath);
+  assert.equal(
+    restarted.challenges().some((challenge) => challenge.id === "sponsored-half-adder"),
+    false,
+    "a challenge whose event failed must not be in the snapshot",
+  );
+  assert.equal(
+    restarted.hasSponsorNonce("rollback-nonce-0001"),
+    false,
+    "a nonce whose event failed was never used, so the rollback must not burn it",
+  );
 });
