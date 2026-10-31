@@ -366,7 +366,7 @@ test("an older snapshot is advanced in memory while its records survive", () => 
   assert.equal(bundle.snapshotVersion, 3);
   assert.deepEqual(bundle.appliedMigrations, [
     "add key rotations and delegated publishing keys",
-    "add durable challenge storage",
+    "add durable challenge storage and sponsor nonce tracking",
   ]);
   assert.deepEqual(bundle.snapshot.publications, [publication]);
   assert.deepEqual(bundle.snapshot.identities, [identity]);

@@ -4687,11 +4687,17 @@ function checkSnapshotMigrationDoc(docOverride) {
   if (!Array.isArray(migrated.snapshot.challenges) || migrated.snapshot.challenges.length !== 0) {
     fail("the 2 → 3 migration did not add an empty challenges array");
   }
+  if (!Array.isArray(migrated.snapshot.sponsorNonces) || migrated.snapshot.sponsorNonces.length !== 0) {
+    fail("the 2 → 3 migration did not add an empty sponsorNonces array");
+  }
   if (!doc.includes("adds empty") || !doc.includes("rotations")) {
     fail("OPERATIONS.md no longer states the 1 → 2 migration adds empty rotations");
   }
   if (!doc.includes("empty `challenges` array")) {
     fail("OPERATIONS.md no longer states the 2 → 3 migration adds an empty challenges array");
+  }
+  if (!doc.includes("`sponsorNonces` is")) {
+    fail("OPERATIONS.md no longer describes sponsorNonces as anti-replay state");
   }
 
   // 3. A current-version snapshot loads unchanged (positive control).

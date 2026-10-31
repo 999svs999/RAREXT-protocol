@@ -838,7 +838,6 @@ export function createApp(options: AppOptions = {}): AppServer {
     get: (id) => sponsoredChallenges.get(id) ?? baseChallenges.get(id),
   };
   const sponsors = options.sponsors ?? createSponsorRegistry();
-  const sponsoredNonces = new Set<string>();
   const challengeEventUrl =
     options.challengeEventUrl ?? process.env.RAREXT_CHALLENGE_EVENT_URL?.trim() ?? null;
   const semantics = options.semantics ?? createSemanticsRegistry(() => challenges.list());
@@ -1285,7 +1284,7 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
 
-        if (sponsoredNonces.has(result.nonce)) {
+        if (store.hasSponsorNonce(result.nonce)) {
           send(res, 409, { error: "sponsorship nonce has already been used" });
           return;
         }
@@ -1295,13 +1294,13 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
 
-        sponsoredNonces.add(result.nonce);
+        store.addSponsorNonce(result.nonce);
         sponsoredChallenges.set(result.challenge.id, result.challenge);
 
         try {
           await emitChallengeEvent(result.event);
         } catch (error) {
-          sponsoredNonces.delete(result.nonce);
+          store.removeSponsorNonce(result.nonce);
           sponsoredChallenges.delete(result.challenge.id);
           const message = error instanceof Error ? error.message : "unknown error";
           send(res, 502, { error: `challenge event delivery failed: ${message}` });

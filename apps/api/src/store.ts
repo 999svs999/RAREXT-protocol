@@ -52,6 +52,7 @@ interface Snapshot {
   rotations?: KeyRotation[];
   delegations?: Delegation[];
   challenges?: Challenge[];
+  sponsorNonces?: string[];
 }
 
 export class RarextStore {
@@ -64,6 +65,7 @@ export class RarextStore {
   private readonly rotations: KeyRotation[] = [];
   private readonly delegations: Delegation[] = [];
   private readonly challengeRecords = new Map<string, Challenge>();
+  private readonly usedSponsorNonces = new Set<string>();
   private readonly anchors = new Map<string, Anchor>();
   private readonly anchoredIds = new Set<string>();
   private readonly identityLinks = new Map<string, IdentityLink>();
@@ -427,6 +429,26 @@ export class RarextStore {
     return [...this.challengeRecords.values()];
   }
 
+  /**
+   * The sponsor nonce set is ANTI-REPLAY state, so it is durable: a set that forgets on
+   * restart would accept a second sponsorship under a nonce this node already consumed.
+   * Removal exists for the delivery-failure rollback — a nonce whose event never went out
+   * was never used, and burning it forever would lock a sponsor out of their own signature.
+   */
+  addSponsorNonce(nonce: string, persist = true): void {
+    this.usedSponsorNonces.add(nonce);
+    if (persist) this.persist();
+  }
+
+  removeSponsorNonce(nonce: string, persist = true): void {
+    this.usedSponsorNonces.delete(nonce);
+    if (persist) this.persist();
+  }
+
+  hasSponsorNonce(nonce: string): boolean {
+    return this.usedSponsorNonces.has(nonce);
+  }
+
   delegationsFor(handle: string): Delegation[] {
     return this.delegations.filter((delegation) => delegation.handle === handle);
   }
@@ -609,6 +631,10 @@ export class RarextStore {
         this.addChallenge(challenge, false);
       }
 
+      for (const nonce of snapshot.sponsorNonces ?? []) {
+        this.usedSponsorNonces.add(nonce);
+      }
+
       for (const publication of [...(snapshot.publications ?? [])].reverse()) {
         this.addPublication(publication, false);
       }
@@ -650,6 +676,7 @@ export class RarextStore {
       rotations: [...this.rotations],
       delegations: [...this.delegations],
       challenges: this.challenges(),
+      sponsorNonces: [...this.usedSponsorNonces],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

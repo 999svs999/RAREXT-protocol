@@ -32,11 +32,12 @@ export const snapshotMigrations: SnapshotMigration[] = [
   {
     from: 2,
     to: 3,
-    description: "add durable challenge storage",
+    description: "add durable challenge storage and sponsor nonce tracking",
     migrate(snapshot) {
       return {
         ...snapshot,
         challenges: Array.isArray(snapshot.challenges) ? snapshot.challenges : [],
+        sponsorNonces: Array.isArray(snapshot.sponsorNonces) ? snapshot.sponsorNonces : [],
       };
     },
   },

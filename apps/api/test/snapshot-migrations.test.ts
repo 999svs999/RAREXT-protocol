@@ -133,7 +133,7 @@ test("migration 2 → 3 adds an empty challenges array and preserves the rest", 
   assert.equal(result.snapshot.version, 3);
   assert.deepEqual(result.snapshot.challenges, []);
   assert.equal((result.snapshot.rotations as unknown[]).length, 1, "the v2 fields are preserved");
-  assert.deepEqual(result.applied, ["add durable challenge storage"]);
+  assert.deepEqual(result.applied, ["add durable challenge storage and sponsor nonce tracking"]);
 });
 
 test("a challenge created at runtime survives a restart", () => {
@@ -168,6 +168,37 @@ test("a challenge created at runtime survives a restart", () => {
     // starting empty.
     const snapshot = JSON.parse(readFileSync(path, "utf8")) as { version: number };
     assert.equal(snapshot.version, CURRENT_SNAPSHOT_VERSION);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a consumed sponsor nonce survives a restart, and a rolled-back one does not", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rarext-nonces-"));
+  const path = join(dir, "rarext.json");
+
+  try {
+    const first = new RarextStore(path);
+    first.addSponsorNonce("nonce-used-and-delivered");
+    first.addSponsorNonce("nonce-event-failed");
+    first.removeSponsorNonce("nonce-event-failed");
+
+    // A RESTART is a second store instance on the same path.
+    const restarted = new RarextStore(path);
+    assert.equal(
+      restarted.hasSponsorNonce("nonce-used-and-delivered"),
+      true,
+      "an anti-replay set that forgets on restart would accept a second sponsorship under a consumed nonce",
+    );
+    assert.equal(
+      restarted.hasSponsorNonce("nonce-event-failed"),
+      false,
+      "a nonce whose event never went out was never used, so the rollback must not burn it",
+    );
+
+    // And the snapshot names them, so the state is inspectable.
+    const snapshot = JSON.parse(readFileSync(path, "utf8")) as { sponsorNonces: string[] };
+    assert.deepEqual(snapshot.sponsorNonces, ["nonce-used-and-delivered"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
