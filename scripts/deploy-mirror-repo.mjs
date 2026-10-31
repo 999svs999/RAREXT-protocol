@@ -8,7 +8,13 @@
 // deployment is not "done" until the live bytes on the peer verify to the same
 // root the origin serves.
 //
-//   site/registry/*              -> /registry/*   (bundle, seed, verify page)
+//   site/registry/bundle.json    -> /registry/bundle.json
+//   site/registry/seed.json      -> /registry/seed.json
+//   site/registry/mirror/*       -> /mirror/*     (the verify page)
+//
+// The peer's URL structure mirrors the origin's exactly, because the convention
+// that turns a registry URL into a bundle URL (`<registry>/registry/bundle.json`)
+// is the thing a second registry exists to honor.
 //
 // Pages is expected to serve the main branch root; the script enables it when
 // the repository does not have it yet (idempotent on subsequent runs).
@@ -73,12 +79,19 @@ git(["clone", "--depth", "1", `https://github.com/${REPO_SLUG}.git`, WORKTREE]);
 git(["config", "user.name", "R"], { cwd: WORKTREE });
 git(["config", "user.email", "r@R.local"], { cwd: WORKTREE });
 
-// Replace the registry tree wholesale; the repository carries nothing else.
+// Replace everything with the origin's URL structure: the registry documents
+// under /registry/, the verify page under /mirror/.
 for (const entry of readdirSafe(WORKTREE)) {
   if (entry === ".git") continue;
   rmSync(join(WORKTREE, entry), { recursive: true, force: true });
 }
-cpSync(SOURCE, WORKTREE, { recursive: true });
+mkdirSync(join(WORKTREE, "registry"), { recursive: true });
+mkdirSync(join(WORKTREE, "mirror"), { recursive: true });
+for (const entry of readdirSafe(SOURCE)) {
+  if (entry === "mirror") continue;
+  cpSync(join(SOURCE, entry), join(WORKTREE, "registry", entry), { recursive: true });
+}
+cpSync(join(SOURCE, "mirror"), join(WORKTREE, "mirror"), { recursive: true });
 
 git(["add", "-A"], { cwd: WORKTREE });
 const status = git(["status", "--porcelain"], { cwd: WORKTREE });
