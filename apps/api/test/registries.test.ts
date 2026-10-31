@@ -24,7 +24,7 @@ test("with nothing configured, the list is the known reference deployment", () =
   delete process.env.RAREXT_REGISTRIES;
   const list = registrySeedList();
   assert.equal(list.length, 1);
-  assert.equal(list[0].id, "apesdaily");
+  assert.equal(list[0].id, "rarext", "the default names this project, not a third party");
   assert.equal(list[0].seed, null, "no seed named: the convention applies");
 });
 
@@ -54,15 +54,15 @@ test("a file path is read, and a broken or useless one falls back", () => {
     const broken = join(dir, "broken.json");
     writeFileSync(broken, "{ not json");
     process.env.RAREXT_REGISTRIES = broken;
-    assert.equal(registrySeedList()[0].id, "apesdaily", "a broken file does not become an empty network");
+    assert.equal(registrySeedList()[0].id, "rarext", "a broken file does not become an empty network");
 
     // A list whose entries do not say where to look is an empty list, and an
     // empty list falls back: silence is not permission to have no registries.
     process.env.RAREXT_REGISTRIES = JSON.stringify([{ id: "no-url" }]);
-    assert.equal(registrySeedList()[0].id, "apesdaily");
+    assert.equal(registrySeedList()[0].id, "rarext");
 
     process.env.RAREXT_REGISTRIES = join(dir, "missing.json");
-    assert.equal(registrySeedList()[0].id, "apesdaily", "a missing file is not an outage of the default");
+    assert.equal(registrySeedList()[0].id, "rarext", "a missing file is not an outage of the default");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

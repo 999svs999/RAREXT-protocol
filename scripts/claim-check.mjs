@@ -626,6 +626,18 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted an environment name the code reads and no document names");
   }
   caught = caught && caughtEnvRead;
+
+  // And independence: a default that names someone else's deployment. Passed through the seam,
+  // because a rule that only ever reads the real tree cannot be falsified from here.
+  const beforeIndependence = failures;
+  checkDefaultsIndependence({
+    "apps/api/src/registries.ts": 'function defaultSeeds() { return [{ id: "x", url: "https://registry.someone-else.com" }]; }',
+  });
+  const caughtIndependence = failures > beforeIndependence;
+  if (!caughtIndependence) {
+    fail("self-test: the checker accepted a default naming a third party's deployment");
+  }
+  caught = caught && caughtIndependence;
   caught = caught && caughtConfig;
   // And a front door that lost its proof link must be reported — a landing
   // page that only describes the proof is the failure this check exists for.
@@ -1166,6 +1178,7 @@ checkArtifactSources();
 checkVerifySequence();
 checkFrontDoor();
 checkConfigSurface();
+checkDefaultsIndependence();
 checkAnnouncementRfc();
 checkMdsFloor();
 checkRepairRecord();
@@ -1824,6 +1837,7 @@ function checkAnnouncementRfc(overrides = {}) {
     }
   }
 
+
   // EVERY INLINE MODULE IN THE MIRROR MUST PARSE. Reading a page's text cannot see a
   // syntax error, and a single HTML comment inside <script type="module"> kills the whole
   // page: the live gallery rendered no cards and never ran its own check, with every unit
@@ -2137,6 +2151,60 @@ function checkAnnouncementRfc(overrides = {}) {
   console.log(
     `  ${EXISTING.length} primitive(s) exist | sections present | "locations, never facts" stated`,
   );
+}
+
+function checkDefaultsIndependence(defaultsOverride) {
+  const override = defaultsOverride ?? {};
+    // NO THIRD PARTY ON THE CRITICAL PATH. Every third-party integration here is an OPT-IN
+    // adapter: it reads its own setting, stands down to null when unset, and is absent from the
+    // defaults. A default naming someone else's deployment would make that party infrastructure
+    // by accident, and removing it would mean changing a default — which is the dependency this
+    // rule exists to prevent. Comments are stripped first: a comment explaining the rule must not
+    // be read as a violation of it.
+    {
+      const strip = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      const OURS = ["999svs999.github.io", "127.0.0.1", "localhost"];
+      let defaultUrls = 0;
+      for (const file of ["apps/api/src/registries.ts", "apps/api/src/discovery.ts"]) {
+        for (const match of strip(override[file] ?? readFileSync(new URL(file, root), "utf8")).matchAll(/https?:\/\/([a-zA-Z0-9.-]+)/g)) {
+          defaultUrls += 1;
+          if (!OURS.includes(match[1])) {
+            fail(`${file} defaults to a third-party host (${match[1]}); defaults name only this project's own deployments`);
+          }
+        }
+      }
+      if (defaultUrls === 0) {
+        fail("the independence rule found no default URL to check, so it proved nothing");
+      }
+
+      // And the adapters stay opt-in: a file that reads a third party's setting must stand down to
+      // null when it is unset rather than inventing an endpoint.
+      const adapterDir = new URL("apps/api/src/adapters", root);
+      let optIn = 0;
+      for (const name of readdirSync(adapterDir).filter((entry) => entry.endsWith(".ts"))) {
+        const source = strip(readFileSync(new URL(`apps/api/src/adapters/${name}`, root), "utf8"));
+        if (!/process\.env\.(?:TAPEOUT|TRAC|GITHUB|BSC|SOLANA|ETHERSCAN)_[A-Z0-9_]+/.test(source)) continue;
+        optIn += 1;
+        if (!/\?\?\s*null/.test(source)) {
+          fail(`adapters/${name} reads a third party's setting but never stands down to null`);
+        }
+        // An adapter may name the party it integrates — GitHub's API, TapeOut's site — because
+        // that IS the integration. What it may not do is name a party it reads no setting for:
+        // a host with no configuration beside it is a host nobody can replace, which is exactly
+        // the third party as critical infrastructure this rule exists to prevent.
+        const party = /process\.env\.(TAPEOUT|TRAC|GITHUB|BSC|SOLANA|ETHERSCAN)_[A-Z0-9_]+/.exec(source)?.[1];
+        if (party && /https?:\/\/(?!127\.0\.0\.1|localhost)[a-zA-Z0-9.-]+\.[a-z]{2,}/.test(source) && !source.includes(party)) {
+          fail(`adapters/${name} names an external host without reading any ${party} setting`);
+        }
+      }
+      if (!readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8").includes("No third party is required to run, verify, or reproduce any of this.")) {
+        fail("ARCHITECTURE.md no longer states this project's independence from third parties");
+      }
+      console.log(
+        `independence: ${defaultUrls} default URL(s), all this project's own | ${optIn} third-party adapter(s), each opt-in`,
+      );
+    }
+
 }
 
 function checkConfigSurface(docOverride, readNamesOverride) {

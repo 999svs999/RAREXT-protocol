@@ -248,6 +248,16 @@ P-256 key, writes it to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mo
 and registers the public key. `rarext_agent_publish` signs the payload, publishes it, and
 re-verifies the resulting attestation. Private key material is never returned to the model.
 
+### Independence from third parties
+
+No third party is required to run, verify, or reproduce any of this. Every external integration
+is an opt-in adapter: it reads its own setting, stands down to `null` when that setting is
+unset, and refuses loudly rather than inventing an endpoint. The defaults name only this
+project's own deployments, so a fresh clone talks to nothing it did not choose — federation,
+source imports, and chain indexing are adopted by configuring them, never inherited. The
+checker holds both halves: a default naming anyone else's host fails, and so does an adapter
+that reads a third party's setting without standing down.
+
 ### Adapters and provenance
 
 Adapters are optional integrations around a neutral proof core. `AdapterRegistry` exposes

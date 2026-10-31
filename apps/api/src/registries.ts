@@ -40,16 +40,26 @@ export function registrySeedList(): RegistrySeed[] {
 }
 
 function defaultSeeds(): RegistrySeed[] {
+  // THIS PROJECT'S OWN DEPLOYMENT, and nothing else. A default that names someone else's
+  // registry is a dependency wearing a fallback's clothes: every client of this build would
+  // learn one third party's address before it learned anything else, and removing that party
+  // would mean changing a default. Registries are federated by OPTING IN — RAREXT_REGISTRIES,
+  // or a published seed a deployment trusts — never by inheriting an address from us.
+  //
+  // The reference registry below is the same one `discovery.ts` defaults to, so the two
+  // defaults agree about what this project is.
   return [
     {
-      id: "apesdaily",
-      url: "https://registry.apesdaily.com",
-      operator: "apesdaily",
-      chains: ["rarex", "base", "solana", "bitcoin", "cosmos"],
-      note: "The reference deployment of the RAREXT registry.",
-      // No seed named: the convention applies, and whether that registry
-      // answers at ${url}/registry/seed.json is the network's business, not a
-      // claim this list makes.
+      id: "rarext",
+      url: "https://999svs999.github.io/RAREXT-protocol",
+      operator: "rarext",
+      // A CLAIM, not a fact: `rarex` is this project's own chain app and the only chain the
+      // project itself runs. Other chains are integrations a deployment may add, and a
+      // default is not the place to assert somebody else's.
+      chains: ["rarex"],
+      note: "The project's own reference deployment.",
+      // No seed named: the convention applies, and whether that registry answers at
+      // ${url}/registry/seed.json is the network's business, not a claim this list makes.
       seed: null,
     },
   ];
