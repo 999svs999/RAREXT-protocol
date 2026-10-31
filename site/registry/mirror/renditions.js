@@ -11,6 +11,209 @@ function canonicalize(value) {
   return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
 }
 
+// packages/core/src/rarext-uri.ts
+var RAREXT_URI_SCHEME = "rarext";
+var HEX64 = /^[0-9a-f]{64}$/;
+function parseRarextUri(text) {
+  if (typeof text !== "string") {
+    return { ok: false, reason: "a RAREXT reference must be a string" };
+  }
+  const colon = text.indexOf(":");
+  if (colon < 0) {
+    return { ok: false, reason: `a RAREXT reference starts with ${RAREXT_URI_SCHEME}: \u2014 ${JSON.stringify(text)} has no scheme` };
+  }
+  const scheme = text.slice(0, colon).toLowerCase();
+  if (scheme !== RAREXT_URI_SCHEME) {
+    return { ok: false, reason: `${JSON.stringify(scheme)} is not a RAREXT reference (expected ${RAREXT_URI_SCHEME}:)` };
+  }
+  let body = text.slice(colon + 1);
+  if (body.startsWith("//")) body = body.slice(2);
+  let query;
+  const question = body.indexOf("?");
+  if (question >= 0) {
+    query = body.slice(question + 1);
+    body = body.slice(0, question);
+  }
+  if (body.length === 0) {
+    return { ok: false, reason: "a RAREXT reference must name an object or a root" };
+  }
+  const bare = body.toLowerCase();
+  if (HEX64.test(bare)) {
+    return { ok: true, uri: { root: bare, ...query === void 0 ? {} : { query } } };
+  }
+  const at = body.lastIndexOf("@");
+  if (at < 0) {
+    return {
+      ok: false,
+      reason: "a RAREXT reference carries the root it commits to (rarext:<authority>/<path>@<64-hex root>); without one it is a name you have to trust"
+    };
+  }
+  const root = body.slice(at + 1).toLowerCase();
+  if (!HEX64.test(root)) {
+    return { ok: false, reason: `the root in ${JSON.stringify(body.slice(at))} must be a 64-hex digest` };
+  }
+  const located = body.slice(0, at);
+  const segments = located.split("/");
+  const authority = (segments.shift() ?? "").trim().toLowerCase().replace(/\.$/, "");
+  const path = [];
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      return { ok: false, reason: `the path in ${JSON.stringify(located)} has an empty segment` };
+    }
+    if (segment === "." || segment === "..") {
+      return { ok: false, reason: `the path in ${JSON.stringify(located)} contains ${JSON.stringify(segment)}, which points somewhere else` };
+    }
+    path.push(decodeURIComponent(segment));
+  }
+  if (authority.length === 0 && path.length === 0) {
+    return { ok: false, reason: "a reference with no location must be a bare root" };
+  }
+  return {
+    ok: true,
+    uri: {
+      ...authority.length === 0 ? {} : { authority },
+      ...path.length === 0 ? {} : { path },
+      root,
+      ...query === void 0 ? {} : { query }
+    }
+  };
+}
+function formatRarextUri(uri) {
+  const query = uri.query === void 0 ? "" : `?${uri.query}`;
+  if (uri.authority === void 0 && (uri.path === void 0 || uri.path.length === 0)) {
+    return `${RAREXT_URI_SCHEME}:${uri.root}${query}`;
+  }
+  const authority = uri.authority ?? "";
+  const path = uri.path === void 0 || uri.path.length === 0 ? "" : `/${uri.path.map(encodeURIComponent).join("/")}`;
+  return `${RAREXT_URI_SCHEME}:${authority}${path}@${uri.root}${query}`;
+}
+function urlForRarextUri(uri, scheme = "https") {
+  if (uri.authority === void 0) return null;
+  const path = uri.path === void 0 || uri.path.length === 0 ? "" : `/${uri.path.map(encodeURIComponent).join("/")}`;
+  const query = uri.query === void 0 ? "" : `?${uri.query}`;
+  return `${scheme}://${uri.authority}${path}${query}`;
+}
+
+// packages/core/src/publications.ts
+var PUBLICATION_ROOT_DOMAIN = "rarext.publication.root.v1";
+var PUBLICATION_ROOT_FIELDS = {
+  id: false,
+  author: true,
+  authorKey: true,
+  delegatedBy: true,
+  signatureAlgorithm: true,
+  title: true,
+  body: true,
+  app: true,
+  challengeId: true,
+  artifact: true,
+  taskId: true,
+  circuit: true,
+  visibility: true,
+  artifactCommitment: true,
+  parentId: true,
+  source: true,
+  createdAt: true,
+  attestedAt: false,
+  verified: true,
+  signature: true,
+  nonce: true,
+  attestation: true,
+  verification: true,
+  attestationKeyId: false,
+  attestationSignature: false,
+  durability: false
+};
+var PUBLICATION_ROOT_EXCLUDED_FIELDS = Object.entries(
+  PUBLICATION_ROOT_FIELDS
+).filter(([, isContent]) => !isContent).map(([field]) => field).sort();
+var PUBLICATION_ROOT_REQUIRED_FIELDS = [
+  "author",
+  "authorKey",
+  "signatureAlgorithm",
+  "title",
+  "body",
+  "app",
+  "challengeId",
+  "artifact",
+  "taskId",
+  "visibility",
+  "artifactCommitment",
+  "parentId",
+  "source",
+  "createdAt",
+  "attestedAt",
+  "verified",
+  "signature",
+  "nonce",
+  "attestation"
+];
+
+// packages/core/src/anchors.ts
+var ANCHOR_ROOT_DOMAIN = "rarext.anchor.root.v1";
+var ANCHOR_ROOT_FIELDS = {
+  id: false,
+  root: true,
+  publicationIds: true,
+  leafCount: true,
+  leafVersion: true,
+  createdAt: false,
+  adapter: true,
+  reference: true,
+  receipts: true
+};
+var ANCHOR_ROOT_EXCLUDED_FIELDS = Object.entries(ANCHOR_ROOT_FIELDS).filter(([, isContent]) => !isContent).map(([field]) => field).sort();
+var ANCHOR_ROOT_REQUIRED_FIELDS = [
+  "id",
+  "root",
+  "publicationIds",
+  "leafCount",
+  "createdAt",
+  "adapter",
+  "reference",
+  "receipts"
+];
+
+// packages/core/src/credits.ts
+var CREDIT_ROOT_DOMAIN = "rarext.credit.root.v1";
+var CREDIT_ROOT_FIELDS = {
+  keyId: true,
+  action: true,
+  bounty: true,
+  challengeId: true,
+  artifactHash: true,
+  at: true
+};
+var CREDIT_ROOT_EXCLUDED_FIELDS = Object.entries(CREDIT_ROOT_FIELDS).filter(([, isContent]) => !isContent).map(([field]) => field).sort();
+var CREDIT_ROOT_REQUIRED_FIELDS = Object.keys(CREDIT_ROOT_FIELDS).sort();
+
+// packages/core/src/records.ts
+function recordRootPreimages(document) {
+  if (document === null || typeof document !== "object" || Array.isArray(document)) return [];
+  const record = document;
+  const preimages = [];
+  const preimageFor = (domain, fields) => {
+    const covered = {};
+    for (const [field, isContent] of Object.entries(fields)) {
+      if (!isContent) continue;
+      const value = record[field];
+      if (value !== void 0) covered[field] = value;
+    }
+    return `${domain}
+${canonicalize(covered)}`;
+  };
+  if (PUBLICATION_ROOT_REQUIRED_FIELDS.every((field) => record[field] !== void 0)) {
+    preimages.push({ kind: "publication", preimage: preimageFor(PUBLICATION_ROOT_DOMAIN, PUBLICATION_ROOT_FIELDS) });
+  }
+  if (ANCHOR_ROOT_REQUIRED_FIELDS.every((field) => record[field] !== void 0)) {
+    preimages.push({ kind: "anchor", preimage: preimageFor(ANCHOR_ROOT_DOMAIN, ANCHOR_ROOT_FIELDS) });
+  }
+  if (CREDIT_ROOT_REQUIRED_FIELDS.every((field) => record[field] !== void 0)) {
+    preimages.push({ kind: "credit", preimage: preimageFor(CREDIT_ROOT_DOMAIN, CREDIT_ROOT_FIELDS) });
+  }
+  return preimages;
+}
+
 // packages/core/src/ai.ts
 var MAX_VOCAB = 4096;
 var MAX_GENERATIVE_TOKEN_LENGTH = 256;
@@ -281,13 +484,17 @@ async function semanticsRecordDigestAsync(record, sha256) {
 }
 export {
   federationFromBundle,
+  formatRarextUri,
+  parseRarextUri,
   parseRegistrySeedList,
+  recordRootPreimages,
   registryListDigestSource,
   renderBoundedPicture,
   renderProofPicture,
   semanticsCommitmentHolds2 as semanticsCommitmentHolds,
   sha256Bytes,
   sha256Hex,
+  urlForRarextUri,
   verifyPublishedRendition
 };
 //# sourceMappingURL=renditions.js.map

@@ -15,4 +15,11 @@ export {
   sha256Hex,
   federationFromBundle,
 } from "./ai.ts";
-export { parseRegistrySeedList, registryListDigestSource } from "../../../packages/core/src/index.ts";
+export {
+  parseRegistrySeedList,
+  registryListDigestSource,
+  parseRarextUri,
+  formatRarextUri,
+  urlForRarextUri,
+  recordRootPreimages,
+} from "../../../packages/core/src/index.ts";

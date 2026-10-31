@@ -1315,9 +1315,17 @@ checkNamingRfc();
       "Federation \u2014 the registries this bundle commits to",
       "digest MATCHES the commitment",
       "federationFromBundle",
+      "Reference \u2014 name and verify an object",
+      "recordRootPreimages",
+      "parseRarextUri",
     ]) {
       if (!page.includes(marker)) {
         fail(`the verify page no longer surfaces the federation commitment (${marker})`);
+      }
+    }
+    for (const marker of ["Reference \u2014 name and verify an object", "recordRootPreimages", "parseRarextUri"]) {
+      if (!page.includes(marker)) {
+        fail(`the verify page no longer offers the reference panel (${marker})`);
       }
     }
     const generator = readFileSync(new URL("scripts/mirror-verify-page.mjs", root), "utf8");

@@ -22,14 +22,26 @@
     <h1>This mirror is a copy. Here is whether it is a faithful one — and whether its AI claims replay.</h1>
     <div id="out"></div>
     <button id="check">Re-verify</button>
+    <h2>Reference — name and verify an object</h2>
+    <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <input id="ref" style="flex:1; min-width:280px; padding:8px; border-radius:7px; border:1px solid #2d3846; background:#0d1117; color:#e3eaf3; font:inherit;"
+             placeholder="rarext:host/path@64hex-root" />
+      <button id="resolve">Resolve</button>
+    </div>
+    <div id="refout" style="margin-top:10px;"></div>
     <script type="module">
       import { verifyBundle } from "./verify.js";
       import {
         semanticsCommitmentHolds,
         sha256Hex,
+        sha256Bytes,
         federationFromBundle,
         parseRegistrySeedList,
         registryListDigestSource,
+        parseRarextUri,
+        formatRarextUri,
+        urlForRarextUri,
+        recordRootPreimages,
       } from "./renditions.js";
       const out = document.getElementById("out");
 
@@ -44,8 +56,10 @@
 
       // Read the body through the cap: refuse a declared Content-Length above
       // MAX_BUNDLE_BYTES before reading, and count bytes while reading so the
-      // cap holds even when the header is absent or lying.
-      async function readCapped(response) {
+      // cap holds even when the header is absent or lying. One implementation,
+      // in BYTES; the text form is a decode of it, so a caller cannot bypass
+      // the cap by asking for the other shape.
+      async function readCappedBytes(response) {
         const declared = Number(response.headers.get("content-length"));
         if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
           if (response.body && response.body.cancel) { try { await response.body.cancel(); } catch (error) { /* the refusal stands either way */ } }
@@ -68,7 +82,12 @@
         const bytes = new Uint8Array(total);
         let offset = 0;
         for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-        return new TextDecoder().decode(bytes);
+        return bytes;
+      }
+
+      async function readCapped(response) {
+        const bytes = await readCappedBytes(response);
+        return bytes === null ? null : new TextDecoder().decode(bytes);
       }
 
       // Fail over between copies the way a client should: this mirror's own
@@ -285,6 +304,78 @@
         out.innerHTML = sections.join("");
       }
 
+      // THE REFERENCE PANEL: paste a rarext: reference, watch it verified in this browser.
+      //
+      // The readings are the resolver's, with ONE deliberate difference: the record rules are
+      // SYNCHRONOUS in core (a Promise compared against a digest silently matches nothing), so this
+      // page computes the rule's PREIMAGE — recordRootPreimages, the rule whole in core, domain
+      // prefix and declared field map and all — and does its one await per candidate here,
+      // comparing hex to hex afterwards. The bytes reading needs no preimage: the digest of the
+      // bytes is the whole rule. A location this browser may not read (a host without CORS headers)
+      // is refused BY NAME, not silently.
+      async function resolveReference() {
+        const refout = document.getElementById("refout");
+        const reference = document.getElementById("ref").value.trim();
+        refout.innerHTML = "";
+
+        const parsed = parseRarextUri(reference);
+        if (!parsed.ok) {
+          refout.innerHTML = htmlRow("Not a RAREXT reference", parsed.reason, "bad");
+          return;
+        }
+        const where = urlForRarextUri(parsed.uri, "https");
+        if (where === null) {
+          refout.innerHTML = htmlRow("Names no location", "a bare root says what to look for, not where — paste a reference that carries a location", "bad");
+          return;
+        }
+        refout.innerHTML = htmlRow("Reference", "<code>" + formatRarextUri(parsed.uri) + "</code>", "dim")
+          + htmlRow("Reading", "<code>" + where + "</code>", "dim");
+
+        let bytes;
+        try {
+          const response = await fetch(where, { cache: "no-cache" });
+          if (!response.ok) {
+            refout.innerHTML += htmlRow("Refused", "the host answered HTTP " + response.status, "bad");
+            return;
+          }
+          bytes = await readCappedBytes(response);
+          if (bytes === null) {
+            refout.innerHTML += htmlRow("Refused", "the host sent no readable body", "bad");
+            return;
+          }
+        } catch (error) {
+          refout.innerHTML += htmlRow("Unreachable", (error && error.message) || "the host did not answer a browser's fetch", "bad");
+          return;
+        }
+
+        const wanted = parsed.uri.root;
+
+        // The record readings: preimages from core, hashed HERE, compared HERE.
+        // (The variable is deliberately NOT named 'document': that would shadow the DOM global this
+        // function reached for two lines earlier, and the shadowed binding would be in its dead zone.)
+        let candidateObject = null;
+        try { candidateObject = JSON.parse(new TextDecoder().decode(bytes)); } catch (error) { /* not JSON — the byte reading may still hold */ }
+        if (candidateObject && typeof candidateObject === "object" && !Array.isArray(candidateObject)) {
+          for (const candidate of recordRootPreimages(candidateObject)) {
+            const digest = await sha256Hex(candidate.preimage);
+            if (digest === wanted) {
+              refout.innerHTML += htmlRow("VERIFIED", "a " + candidate.kind + " record, by the root the record rebuilds to", "ok");
+              return;
+            }
+          }
+        }
+
+        // The byte reading: whatever it is, the digest decides.
+        const digest = await sha256Bytes(bytes);
+        if (digest === wanted) {
+          refout.innerHTML += htmlRow("VERIFIED", "raw bytes (" + bytes.byteLength + " of them), by the sha256 of their content", "ok");
+          return;
+        }
+
+        refout.innerHTML += htmlRow("NOT VERIFIED", "no reading of this location rebuilt the root the reference carries", "bad");
+      }
+
+      document.getElementById("resolve").addEventListener("click", resolveReference);
       document.getElementById("check").addEventListener("click", run);
       run();
     </script>

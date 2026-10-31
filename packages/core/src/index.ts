@@ -151,7 +151,7 @@ export {
   CREDIT_ROOT_EXCLUDED_FIELDS,
   type CreditRecordFields,
 } from "./credits.ts";
-export { matchRecordRoot } from "./records.ts";
+export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";
 export * from "./ai.ts";
