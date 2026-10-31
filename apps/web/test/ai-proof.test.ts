@@ -22,6 +22,7 @@ import {
   federationFromBundle,
 } from "../src/ai.ts";
 import {
+  attestGenerativeRun,
   parseRegistrySeedList,
   registryListDigest,
   registryListDigestSource,
@@ -346,4 +347,44 @@ test("the digest the PAGE computes for the published seed is the digest the PUBL
   const publisherDigest = registryListDigest(entries, nodeSha256);
   assert.equal(pageDigest, publisherDigest, "the browser's list digest is the publisher's, byte for byte");
   assert.equal(pageDigest, commitment.digest, "and it is the digest the live bundle commits to");
+});
+
+test("the page's trace hash is the hash of the trace CORE's attestation builds for the same run", async () => {
+  const run = await runCommittedModel(STARTER_MODEL, STARTER_SEED, STARTER_STEPS);
+  const body = run.proof.body;
+  const artifact = {
+    app: "ai-generative",
+    kind: "ai.generative",
+    version: 1,
+    mediaType: "application/json",
+    body,
+  };
+
+  // The page and the MCP's attest-local are TWO makers of the same evidence: the page
+  // assembles the trace by hand (with WebCrypto), the MCP asks core's attestGenerativeRun.
+  // This pin pins them together — a change to either trace shape fails here, on the day it
+  // is made, instead of drifting until a verifier somewhere disagrees.
+  const attestation = attestGenerativeRun({
+    artifact: artifact as never,
+    body,
+    spec: { steps: STARTER_STEPS } as never,
+    app: "ai-generative",
+    challengeId: "generative-starter",
+    verifier: "test",
+    verifierManifest: {},
+    bound: null,
+    id: "pin-the-two-makers",
+    createdAt: "2026-10-31T00:00:00.000Z",
+    sha256: (value: string | Uint8Array) => {
+      const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+      return createHash("sha256").update(bytes).digest("hex");
+    },
+  });
+
+  assert.equal(
+    run.proof.traceHash,
+    attestation.traceHash,
+    "the page's evidence must be byte-identical to the attestation core builds for the same run",
+  );
+  assert.equal(run.proof.correct, true);
 });
