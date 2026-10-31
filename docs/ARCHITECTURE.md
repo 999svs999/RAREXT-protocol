@@ -268,7 +268,7 @@ The TapeOut indexer reads ERC-721 `Transfer` logs for circuits and ERC-1155
 `TransferSingle`/`TransferBatch` logs for components. It is bounded: callers pass
 `fromBlock`/`toBlock`, or the server scans the last `TAPEOUT_INDEX_WINDOW` blocks
 (5,000 by default). It never signs or writes. Configure it with
-`TAPEOUT_CIRCUIT_CONTRACT` and/or `TAPEOUT_COMPONENT_CONTRACT`; without either,
+the indexer's endpoint (`TAPEOUT_RPC_URL`, with `BSC_RPC_URL` taking precedence when set) and where its scan starts (`TAPEOUT_INDEX_FROM_BLOCK`; unset starts from `TAPEOUT_INDEX_WINDOW` blocks back), then `TAPEOUT_CIRCUIT_CONTRACT` and/or `TAPEOUT_COMPONENT_CONTRACT`; without either,
 the endpoint reports `configured: false`.
 
 Identity links are signed `rarext.identity-link` v1 payloads. GitHub proofs must live under the

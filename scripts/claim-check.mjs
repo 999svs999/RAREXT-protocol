@@ -615,6 +615,18 @@ if (process.argv.includes("--self-test")) {
   const caughtConfig = failures > beforeConfig;
   if (!caughtConfig) fail("self-test: the checker accepted a documented knob nothing reads");
   caught = caught && caughtConfig;
+
+  // And the other direction, through its own seam: a knob the CODE reads that no document
+  // names. Without the seam this check is invisible to a doctored fixture, so it could never be
+  // falsified from the self-test — which is how a decorative guard rides a green gate.
+  const beforeEnvRead = failures;
+  checkConfigSurface(undefined, new Set(["RAREXT_PHANTOM_KNOB"]));
+  const caughtEnvRead = failures > beforeEnvRead;
+  if (!caughtEnvRead) {
+    fail("self-test: the checker accepted an environment name the code reads and no document names");
+  }
+  caught = caught && caughtEnvRead;
+  caught = caught && caughtConfig;
   // And a front door that lost its proof link must be reported — a landing
   // page that only describes the proof is the failure this check exists for.
   const beforeFrontDoor = failures;
@@ -2127,7 +2139,7 @@ function checkAnnouncementRfc(overrides = {}) {
   );
 }
 
-function checkConfigSurface(docOverride) {
+function checkConfigSurface(docOverride, readNamesOverride) {
   const docs = [
     ["docs/ARCHITECTURE.md", "architecture"],
     ["docs/SEMANTICS.md", "semantics"],
@@ -2148,6 +2160,7 @@ function checkConfigSurface(docOverride) {
   let envChecked = 0;
   let rfcChecked = 0;
   let pathChecked = 0;
+  let envReadChecked = 0;
 
   for (const [relative, label] of docs) {
     const text = docOverride ?? readFileSync(new URL(relative, root), "utf8");
@@ -2156,6 +2169,80 @@ function checkConfigSurface(docOverride) {
       envChecked += 1;
       if (!sources.includes(name)) {
         fail(`${relative} documents ${name}, which nothing in the source trees reads`);
+      }
+    }
+
+    // The direction that was missing: a name the CODE reads that no config-surface document
+    // explains. Without it a knob could ship readable only by whoever wrote it — the reverse
+    // check cannot see it, because it starts from the docs. Scoped to the app and package
+    // sources: the checker's own environment (RAREXT_CLAIM_*) is not a deployment knob.
+    // The read direction has its own seam, because a guard that only runs on the REAL tree
+    // cannot be falsified by the self-test: without this the check is invisible to whoever
+    // doctors a fixture, and an unfalsifiable guard rides a green gate.
+    if (readNamesOverride || !docOverride) {
+      // The default walk is the five src trees, which excludes tests, dist, the checker itself
+      // and scripts/. The checker's own RAREXT_CLAIM_* names are not deployment knobs, and a
+      // file that invents config names on purpose must not read as evidence that they exist.
+      const { text: appSources, files: appFiles } = readSourceTrees();
+      const readNames = new Set();
+      for (const match of appSources.matchAll(/process\.env\.((?:RAREXT|TRAC|TAPEOUT|PIN|HOLDER|MCP)_[A-Z0-9_]{2,})/g)) {
+        readNames.add(match[1]);
+      }
+      for (const injected of readNamesOverride ?? []) readNames.add(injected);
+      if (appFiles.length === 0 || readNames.size === 0) {
+        fail(
+          `the config-surface rule read ${appFiles.length} source file(s) and found ${readNames.size} environment name(s) — a sweep with nothing to read proves nothing`,
+        );
+      }
+      // EVERY document, not the four this rule holds doc-to-code: those four are the docs whose
+      // claims are asserted here, and most knobs are explained somewhere else — docs/STORAGE.md,
+      // the app READMEs, the guides. Reading only those four reported twenty knobs as unexplained
+      // when the repository explains all but nine of them, which is a false alarm about the tree
+      // rather than a finding about it.
+      const docFiles = [];
+      const walkDocs = (relative) => {
+        for (const entry of readdirSync(new URL(relative, root), { withFileTypes: true })) {
+          const child = relative + entry.name;
+          if (entry.isDirectory()) {
+            if (entry.name === "node_modules") continue;
+            walkDocs(child + "/");
+          } else if (entry.name.endsWith(".md")) {
+            docFiles.push(child);
+          }
+        }
+      };
+      walkDocs("docs/");
+      for (const extra of ["README.md", "apps/api/README.md", "apps/mcp/README.md", "apps/web/README.md", "apps/chain/README.md", "packages/agent-sdk/README.md", "packages/core/README.md"]) {
+        try {
+          readFileSync(new URL(extra, root), "utf8");
+          docFiles.push(extra);
+        } catch {
+          // a README that does not exist is not a failure
+        }
+      }
+      if (docFiles.length === 0) fail("the config-surface rule found no documents to explain environment names with");
+      const configText = docFiles
+        .map((relative) => {
+          try {
+            return readFileSync(new URL(relative, root), "utf8");
+          } catch {
+            return "";
+          }
+        })
+        .join("\n");
+      const unexplained = [...readNames].filter((name) => !configText.includes(name)).sort();
+      if (unexplained.length > 0) {
+        fail(
+          `${unexplained.length} environment name(s) are read by the code and named in no document: ${unexplained.join(", ")}`,
+        );
+      }
+      envReadChecked = readNames.size;
+      // Only the real tree reports; an injected run's count beside the real one reads as a
+      // regression (it cost a chase once).
+      if (!readNamesOverride) {
+        console.log(
+          `config surface: ${envReadChecked} name(s) read by the app and package sources are all explained across ${docFiles.length} document(s)`,
+        );
       }
     }
 

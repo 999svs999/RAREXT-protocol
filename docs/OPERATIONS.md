@@ -348,6 +348,25 @@ one process cannot interleave. Limits are measured by
 of a pin whose metadata or content alone was orphaned is reported through
 `orphanContent`/`orphanMetadata`, not `deleted`.
 
+### Other environment variables
+
+The knobs a deployment sets that are not about collection. Every name below is read by the code
+in this repository; the checker holds both directions, so a documented name nothing reads and a
+name the code reads that no document explains both fail the gate.
+
+| Service | Env | Default | What it does |
+| --- | --- | --- | --- |
+| API | `RAREXT_PUBLIC_DIR` | the web app's built `public/` | the directory served as the public tree |
+| API | `RAREXT_ANCHOR_EVERY` | `0` (off) | write an anchor automatically once this many publications have accumulated |
+| API | `RAREXT_REVOCATIONS` | empty | revocations to honour, as inline JSON or a file path; empty means none are loaded, so a deployment that needs them must set this |
+| API | `RAREXT_PIN_MAX_BYTES` | unset (no cap) | largest pin request body the pinning service accepts |
+| API | `RAREXT_PIN_MAX_REQUESTS` | unset (no cap) | requests per window the pinning service accepts from one caller |
+| MCP | `RAREXT_API_KEY` | unset | the key the MCP client sends to the API |
+| Chain app | `RAREXT_CHAIN_ID` | `rarex-mainnet-1` | the chain id this node signs under |
+| Chain app | `RAREXT_CHAIN_KEY` | `.data/chain-key.json` | where the chain signing key is kept |
+| Chain app | `RAREXT_CHAIN_LOG` | `.data/chain-log.json` | where the chain's log of records is kept |
+
+
 ### Automatic garbage collection
 
 Both processes collect on a timer, so orphan bytes do not accumulate when nobody
