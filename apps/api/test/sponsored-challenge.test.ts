@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
 import { once } from "node:events";
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 
 import { canonicalize } from "../../../packages/core/src/index.ts";
@@ -11,6 +14,7 @@ import { post, start, stop } from "./helpers.ts";
 import { createVerifierRegistry } from "../src/verifiers.ts";
 import { generate } from "../src/generative.ts";
 import { createSponsorRegistry, verifyChallengeSponsorship } from "../src/sponsorship.ts";
+import { RarextStore } from "../src/store.ts";
 
 const halfAdder = {
   components: [
@@ -293,4 +297,50 @@ test("a community member can sponsor an AI challenge and it verifies with the bu
   assert.equal(attestation.correct, true);
   assert.equal(attestation.representation, "generative");
   assert.equal(attestation.challengeId, "sponsored-gen");
+});
+
+test("a created challenge survives a restart of the deployment", async () => {
+  const storePath = join(mkdtempSync(join(tmpdir(), "rarext-durable-")), "rarext.json");
+  const { publicKey, privateKey } = memberKeypair();
+  const sponsors = createSponsorRegistry([
+    { handle: "alice", community: "trac", publicKey },
+  ]);
+  const payload = sponsorshipPayload("alice");
+  const signed = signedRequest(payload, privateKey);
+  const events: Array<Record<string, unknown>> = [];
+
+  // First deployment: the challenge is created and persisted to the store's snapshot.
+  const first = await start(new RarextStore(storePath), {
+    sponsors,
+    onChallengeEvent: (event) => {
+      events.push(event as unknown as Record<string, unknown>);
+    },
+  });
+  const created = await post(first.base, "/v1/challenges/sponsored", signed);
+  assert.equal(created.status, 201);
+  await stop(first.server);
+
+  // The RESTART: a fresh app instance on the same store path. The snapshot is the only
+  // thing that carries over, so the challenge must come back from it — and so must the
+  // anti-replay state the creation consumed.
+  const second = await start(new RarextStore(storePath), {
+    sponsors,
+    onChallengeEvent: (event) => {
+      events.push(event as unknown as Record<string, unknown>);
+    },
+  });
+  try {
+    const listResponse = await fetch(`${second.base}/v1/challenges`);
+    const list = (await listResponse.json()) as Challenge[];
+    const restored = list.find((item) => item.id === "sponsored-half-adder");
+    assert.ok(restored, "the challenge created before the restart is listed after it");
+    assert.equal(restored?.status, "sponsored");
+    assert.equal(restored?.sponsor, "alice");
+
+    const replay = await post(second.base, "/v1/challenges/sponsored", signed);
+    assert.equal(replay.status, 409, "a replayed sponsorship is refused after a restart");
+  } finally {
+    await stop(second.server);
+    rmSync(join(storePath, ".."), { recursive: true, force: true });
+  }
 });
