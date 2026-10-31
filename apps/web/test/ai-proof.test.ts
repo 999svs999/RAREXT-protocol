@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { canonicalize } from "@rarext/core";
+import { canonicalize } from "../../../packages/core/src/index.ts";
 import {
   STARTER_MODEL,
   STARTER_SEED,
@@ -28,7 +28,7 @@ import {
   registryListDigest,
   registryListDigestSource,
   REGISTRY_LIST_COMMITMENT_KIND,
-} from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "../../api/src/digest.ts";
 
 /**

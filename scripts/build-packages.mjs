@@ -73,8 +73,21 @@ for (const pkg of packages) {
     target: "node22",
     sourcemap: true,
     banner: banner ? { js: banner } : undefined,
-    external: ["@rarext/core", "@rarext/agent-sdk", "node:*"],    logLevel: "warning",
+    external: ["@rarext/core", "@rarext/agent-sdk", "node:*", "../../core/src/index.ts"],
+    logLevel: "warning",
   });
+
+  // The SOURCE imports core by RELATIVE path, so a clean clone runs on plain node with no
+  // install at all — the native path. The PUBLISHED bundle must import it by PACKAGE NAME,
+  // because a tarball does not ship core's source tree. Rewrite it back, the same symmetry
+  // the declarations below already get for their .ts -> .js specifiers.
+  writeFileSync(
+    join(dist, "index.js"),
+    readFileSync(join(dist, "index.js"), "utf8").replace(
+      /\.\.\/\.\.\/core\/src\/index\.ts/g,
+      "@rarext/core",
+    ),
+  );
 
   // The declarations are emitted once for the whole workspace, laid out like the
   // repository. Each package takes its own subtree and flattens it next to the
@@ -88,10 +101,9 @@ for (const pkg of packages) {
 
   cpSync(emitted, dist, { recursive: true });
 
-  const declaration = readFileSync(source, "utf8").replace(
-    /(from\s+["'])(\.[^"']+)\.ts(["'])/g,
-    "$1$2.js$3",
-  );
+  const declaration = readFileSync(source, "utf8")
+    .replace(/\.\.\/\.\.\/core\/src\/index\.ts/g, "@rarext/core")
+    .replace(/(from\s+["'])(\.[^"']+)\.ts(["'])/g, "$1$2.js$3");
 
   const emittedName = pkg.types.split("/").pop();
   writeFileSync(join(dist, "index.d.ts"), declaration);

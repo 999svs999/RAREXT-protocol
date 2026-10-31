@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
-import { canonicalize } from "@rarext/core";
-import type { IdentityLink, IdentityLinkPayload } from "@rarext/core";
+import { canonicalize } from "../../core/src/index.ts";
+import type { IdentityLink, IdentityLinkPayload } from "../../core/src/index.ts";
 import {
   AgentSigner,
   RarextClient,

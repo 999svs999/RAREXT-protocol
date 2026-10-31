@@ -36,7 +36,7 @@ import {
   semanticsRecordDigest,
   semanticsKey,
   type SemanticsCommitmentStatus,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 import {
   allowPrivateFromSeeds,
   fetchWithUrlPolicy,
@@ -56,7 +56,7 @@ import type {
   GenerativeBody,
   GenerativeMedia,
   GenerativeSpec,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 import type {
   AdapterInfo,
   AdapterStatus,
@@ -103,7 +103,7 @@ import type {
   Task,
   Values,
   Visibility,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 
 export type {
   AnnouncementDocumentCache,
@@ -127,12 +127,12 @@ export type {
   SeedPin,
   Semantics,
   VerificationOutput,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 
 const nodeSha256: Sha256 = (bytes) =>
   new Uint8Array(createHash("sha256").update(bytes).digest());
 
-export { cidV1, verifyBundleShape, verifyCandidates } from "@rarext/core";
+export { cidV1, verifyBundleShape, verifyCandidates } from "../../core/src/index.ts";
 
 /** A bundle verified locally against the root a seed pins. */
 export function verifyBundle(bundle: Bundle): BundleVerification {
@@ -147,7 +147,7 @@ export function cidV1Raw(bytes: Uint8Array): string {
 /**
  * The seed list a client discovers mirrors from (docs/MIRRORS.md).
  */
-export type { AnnouncementEvent } from "@rarext/core";
+export type { AnnouncementEvent } from "../../core/src/index.ts";
 /**
  * A resident's own resolver: the keys of the world it lives in, read from the
  * documents a publisher serves (`GET /v1/identities/<handle>`, its rotations,

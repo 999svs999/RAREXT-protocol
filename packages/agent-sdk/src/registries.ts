@@ -7,9 +7,9 @@ import {
   registrySeedUrl,
   resolveRegistryUrl,
   readBundleResponseBytes,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 import { createHash } from "node:crypto";
-import type { RegistrySeedEntry } from "@rarext/core";
+import type { RegistrySeedEntry } from "../../core/src/index.ts";
 
 import { findVerifiedBundle, findVerifiedBundleFromSeeds, type SeedDocument, type VerifiedBundleSource } from "./index.ts";
 import { identityFromPublishedOrigin } from "./published-identity.ts";

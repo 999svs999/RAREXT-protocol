@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { createHash } from "node:crypto";
-import { canonicalize, generativeRenditionHolds, renderRaster } from "@rarext/core";
+import { canonicalize, generativeRenditionHolds, renderRaster } from "../../core/src/index.ts";
 import {
   AgentSigner,
   encodePngRaster,

@@ -5,6 +5,33 @@ up, how to restore it, and what happens when a snapshot is older or newer than t
 build you are running. The wire protocol is in [`APP-PROTOCOL.md`](APP-PROTOCOL.md);
 the storage contract is in [`STORAGE-ECONOMY.md`](STORAGE-ECONOMY.md).
 
+## Running it without npm
+
+Natively the protocol needs nothing but Node: no `npm install`, no lockfile, no package
+manager, and nothing fetched at startup. Every runtime import resolves inside the tree, so a
+clean clone runs all of this on plain `node`:
+
+```bash
+node apps/api/src/server.ts          # API, feed, static surface (RAREXT_DATA picks the store)
+node apps/mcp/src/server.ts          # MCP stdio server for agents
+node scripts/demo-resident.mjs       # verify a published copy, replay its AI claims, make one
+node scripts/demo-self-publish.mjs   # make, attest, sign, assemble — no server involved
+node scripts/claim-check.mjs         # hold the documents against the code
+node scripts/verify-seed-mirrors.mjs # rebuild the pinned root from each published mirror
+node --experimental-strip-types --test packages/core/test/*.test.ts
+```
+
+Two things use the repo's dev tooling, and neither is the protocol: rebuilding the browser
+workbench bundle (`npm run build:web`, esbuild — the deployed site needs no build), and the
+contract toolchain (solc and ethers) under `contracts/`.
+
+npm is therefore an optional rail. `npm run pack:all` builds the four publishable packages
+and `npm run verify:packages` proves they work when imported by name — which is the
+tarball's own contract: a tarball ships no source tree, so the packaged bundles import
+`@rarext/core` by name while the source imports it by relative path. `scripts/claim-check.mjs`
+holds that difference: no file on the runtime path may import a sibling package by name, or
+the native path would depend on a package manager again.
+
 ## Public testnet rehearsal
 
 `npm run testnet:rehearsal` runs the local half of the public-testnet handoff. It

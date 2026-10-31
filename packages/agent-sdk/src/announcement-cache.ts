@@ -1,7 +1,7 @@
 import type {
   AnnouncementDocumentCache,
   AnnouncementDocumentCacheEntry,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 
 /**
  * RFC 0019's question 5, on the SDK side: an in-memory cache a resident can

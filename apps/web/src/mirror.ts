@@ -1,6 +1,6 @@
 import { verifyBundle } from "./verify.ts";
 import type { Bundle } from "./verify.ts";
-import type { Challenge, Publication, Semantics } from "@rarext/core";
+import type { Challenge, Publication, Semantics } from "../../../packages/core/src/index.ts";
 
 /**
  * The mirror workbench used to trust the bytes it was shipped with: every read

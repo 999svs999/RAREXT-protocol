@@ -6,8 +6,8 @@ import {
   renderBoundedRaster,
   renderRaster,
   verifyAiArtifact,
-} from "@rarext/core";
-import type { AiLocalVerification, Challenge, Publication } from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
+import type { AiLocalVerification, Challenge, Publication } from "../../../packages/core/src/index.ts";
 
 /**
  * The browser-side mirror verifier.

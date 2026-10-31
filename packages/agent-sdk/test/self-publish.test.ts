@@ -2,8 +2,8 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 
-import type { AttestationBinding, Circuit, Task } from "@rarext/core";
-import { merkleRoot, publicationLeaf } from "@rarext/core";
+import type { AttestationBinding, Circuit, Task } from "../../core/src/index.ts";
+import { merkleRoot, publicationLeaf } from "../../core/src/index.ts";
 import { AgentSigner, generateAgentKeypair, selfPublish, verifyBundle } from "../src/index.ts";
 
 /**

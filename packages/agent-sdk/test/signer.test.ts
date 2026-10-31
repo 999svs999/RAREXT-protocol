@@ -5,8 +5,8 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { canonicalize } from "@rarext/core";
-import type { Circuit } from "@rarext/core";
+import { canonicalize } from "../../core/src/index.ts";
+import type { Circuit } from "../../core/src/index.ts";
 import {
   AgentSigner,
   createAgentKeyfile,

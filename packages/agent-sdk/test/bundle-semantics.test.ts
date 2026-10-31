@@ -8,7 +8,7 @@ import {
   semanticsDigests,
   semanticsKey,
   semanticsRecordDigest,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 import { createHash } from "node:crypto";
 
 import { verifyBundleSemantics } from "../src/index.ts";

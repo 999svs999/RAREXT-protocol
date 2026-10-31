@@ -1,4 +1,4 @@
-import { MAX_BOUNDED_LENGTH, MAX_GENERATIVE_STEPS } from "@rarext/core";
+import { MAX_BOUNDED_LENGTH, MAX_GENERATIVE_STEPS } from "../../core/src/index.ts";
 
 /**
  * The SDK's input boundary for the self-publish paths.

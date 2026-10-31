@@ -12,8 +12,8 @@ import {
   RASTER_RULE,
   renderBoundedRaster,
   renderRaster,
-} from "@rarext/core";
-import type { Publication } from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
+import type { Publication } from "../../../packages/core/src/index.ts";
 
 import { encodePngRaster } from "../../../scripts/png-raster.mjs";
 import { localVerdict, verifyBundle, type Bundle } from "../src/verify.ts";

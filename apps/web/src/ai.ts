@@ -6,13 +6,13 @@ import {
   generate,
   verifyBoundedReconstruction,
   verifyGenerativeReplay,
-} from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
 import {
   REGISTRY_LIST_COMMITMENT_KIND,
   parseFederationCommitmentArtifact,
   parseRegistrySeedList,
   registryListDigestSource,
-} from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
 import {
   bundleSemanticsCommitment,
   semanticsCommitmentHolds as compareSemanticsCommitment,
@@ -23,7 +23,7 @@ import {
   RASTER_RULE,
   renderBoundedRaster,
   renderRaster,
-} from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
 import type {
   BoundedBody,
   BoundedMetric,
@@ -31,7 +31,7 @@ import type {
   GenerativeBody,
   GenerativeSpec,
   XorshiftModel,
-} from "@rarext/core";
+} from "../../../packages/core/src/index.ts";
 
 /**
  * The AI proof, made in a browser — no server, no install, no key.
@@ -487,7 +487,7 @@ export async function verifyPublishedRendition(input: {
  * commitment — a different statement from "its commitment is wrong": one artifact never made
  * the claim, the other made a claim that failed.
  */
-export type { SemanticsCommitmentStatus } from "@rarext/core";
+export type { SemanticsCommitmentStatus } from "../../../packages/core/src/index.ts";
 
 export async function semanticsCommitmentHolds(
   bundle: {

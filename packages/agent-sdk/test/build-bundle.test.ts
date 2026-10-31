@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import type { Anchor, Bundle } from "../../../packages/core/src/index.ts";
-import { merkleRoot, publicationLeaf } from "@rarext/core";
+import { merkleRoot, publicationLeaf } from "../../core/src/index.ts";
 import { buildBundle, replayBundleAi, verifyBundle } from "../src/index.ts";
 
 /**

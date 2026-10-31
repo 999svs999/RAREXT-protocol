@@ -249,6 +249,10 @@ if (process.argv.includes("--self-test")) {
     requireCondition("announcement-document bound", hardeningReal.includes("MAX_ANNOUNCEMENT_DOCUMENTS"));
     requireCondition("redirect hop checks", hardeningReal.includes("each hop is resolved against the current URL and re-checked"));
     requireCondition("SDK input bounds", hardeningReal.includes("MAX_GENERATIVE_STEPS"));
+    requireCondition(
+      "native path claim",
+      readFileSync(new URL("README.md", root), "utf8").includes("npm is an optional rail"),
+    );
     const aiModuleReal = readFileSync(new URL("apps/web/src/ai.ts", root), "utf8");
     const aiPageReal = readFileSync(new URL("apps/web/src/ai-page.ts", root), "utf8");
     requireCondition("page fixture parser", aiModuleReal.includes("export function fixtureFromBundle"));
@@ -638,6 +642,19 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted a default naming a third party's deployment");
   }
   caught = caught && caughtIndependence;
+
+  // And the native path, through its seam: ONE bare sibling import is enough to make a package
+  // manager decide whether the protocol starts, so the rule must refuse it.
+  const beforeNative = failures;
+  checkNativeIndependence({
+    "packages/agent-sdk/src/validate.ts":
+      'import { MAX_BOUNDED_LENGTH, MAX_GENERATIVE_STEPS } from "@rarext/core";',
+  });
+  const caughtNative = failures > beforeNative;
+  if (!caughtNative) {
+    fail("self-test: the checker accepted a bare sibling import on the runtime path");
+  }
+  caught = caught && caughtNative;
 
   // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
   // but parses the body by hand is exactly the second reader the rule exists to prevent — and
@@ -1193,6 +1210,7 @@ checkVerifySequence();
 checkFrontDoor();
 checkConfigSurface();
 checkDefaultsIndependence();
+checkNativeIndependence();
 
   // THE VERIFY PAGE ANSWERS THE FEDERATION QUESTION TOO. The bundle commits to a seed list of
   // registries; a page whose job is "is this copy faithful" should show WHICH registries and
@@ -2226,6 +2244,91 @@ function checkFederationRule(sourcesOverride) {
       `federation commitment: ${checked} resident(s) read it through core's parser | the MCP verb is exposed`,
     );
   }
+}
+
+/**
+ * NPM IS AN OPTIONAL RAIL, NOT A FOUNDATION.
+ *
+ * RAREXT is for web4: natively it depends on nothing but Node itself. Every runtime source file
+ * imports its sibling packages by RELATIVE path, so a clean clone — no npm install, no
+ * node_modules, no lockfile — runs the API, the MCP server, both resident demos and the whole
+ * test suite on plain `node`. A single bare "@rarext/…" specifier on that path silently makes a
+ * package manager the thing that decides whether the protocol starts, which is exactly the
+ * dependency this rule exists to prevent.
+ *
+ * The npm rail keeps its bare specifiers on purpose: the PACKAGED tarballs import by name
+ * because a tarball ships no source tree, and `scripts/verify-packages.mjs` imports those
+ * tarballs by name to prove that rail. That file is the one exemption, and it is exempt because
+ * it is the proof of the optional path rather than a participant in the native one.
+ */
+function checkNativeIndependence(overrides) {
+  const override = overrides ?? {};
+  const exemptions = new Set(["scripts/verify-packages.mjs"]);
+  const trees = ["packages", "apps", "scripts"];
+  const files = [];
+
+  const walk = (relative) => {
+    let entries;
+    try {
+      entries = readdirSync(new URL(`${relative}/`, root), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (["node_modules", "dist", ".types", "public"].includes(entry.name)) continue;
+        walk(child);
+      } else if (/\.(ts|mjs)$/.test(entry.name)) {
+        files.push(child);
+      }
+    }
+  };
+  for (const tree of trees) walk(tree);
+
+  let scanned = 0;
+  let offenders = 0;
+  for (const file of files) {
+    if (exemptions.has(file)) continue;
+    if (/(^|\/)test\//.test(file) === false && !/\/src\/|^scripts\//.test(file)) continue;
+    scanned += 1;
+    const source = override[file] ?? readFileSync(new URL(file, root), "utf8");
+    // Comments and generated fixture strings are not imports: a doc comment may name a package,
+    // and claim-check itself builds snippets in strings. Only real specifiers count.
+    const stripped = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+      .replace(/`[\s\S]*?`/g, "")
+      .replace(/'(?:[^'\\]|\\.)*'/g, "")
+      .replace(/"(?:[^"\\]|\\.)*"/g, (match) => (match.startsWith('"@') || match.startsWith('"#') ? match : ""));
+    for (const match of stripped.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      const specifier = match[1];
+      if (!specifier.startsWith("@rarext/")) continue;
+      offenders += 1;
+      fail(
+        `${file} imports ${specifier} by package name; the runtime path resolves by relative path so a clean clone runs on plain node with no install (npm is the optional rail)`,
+      );
+    }
+  }
+  if (scanned === 0) {
+    fail("the native-independence rule scanned no runtime file, so it proved nothing");
+  }
+
+  const readme = readFileSync(new URL("README.md", root), "utf8");
+  if (!readme.includes("Natively, RAREXT depends on nothing but Node itself")) {
+    fail("README.md no longer states the native path (nothing but Node, no package manager)");
+  }
+  if (!readme.includes("npm is an optional rail")) {
+    fail("README.md no longer says npm is an optional rail rather than a requirement");
+  }
+  const operations = readFileSync(new URL("docs/OPERATIONS.md", root), "utf8");
+  if (!operations.includes("## Running it without npm")) {
+    fail("docs/OPERATIONS.md no longer documents running the protocol without npm");
+  }
+
+  console.log(
+    `native path: ${scanned} runtime file(s) scanned, ${offenders} bare sibling import(s) | npm is the optional rail, proven by scripts/verify-packages.mjs`,
+  );
 }
 
 function checkDefaultsIndependence(defaultsOverride) {

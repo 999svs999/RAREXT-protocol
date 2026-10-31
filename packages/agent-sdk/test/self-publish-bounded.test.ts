@@ -9,7 +9,7 @@ import {
   BOUNDED_RASTER_SCALE,
   boundedRenditionHolds,
   renderBoundedRaster,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 
 import { AgentSigner, generateAgentKeypair, replayBundleAi, selfPublishBounded, verifyBundle } from "../src/index.ts";
 

@@ -15,4 +15,4 @@ export {
   sha256Hex,
   federationFromBundle,
 } from "./ai.ts";
-export { parseRegistrySeedList, registryListDigestSource } from "@rarext/core";
+export { parseRegistrySeedList, registryListDigestSource } from "../../../packages/core/src/index.ts";

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import type { Bundle } from "../../../packages/core/src/index.ts";
-import { MAX_BUNDLE_RESPONSE_BYTES } from "@rarext/core";
+import { MAX_BUNDLE_RESPONSE_BYTES } from "../../core/src/index.ts";
 import { identityFromPublishedDocuments } from "../src/published-identity.ts";
 import { findVerifiedBundleFromSeeds, verifyBundle } from "../src/index.ts";
 import {

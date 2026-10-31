@@ -4,8 +4,8 @@ import type {
   AnnouncementRevocation,
   Identity,
   KeyRotation,
-} from "@rarext/core";
-import { readBundleResponseBytes } from "@rarext/core";
+} from "../../core/src/index.ts";
+import { readBundleResponseBytes } from "../../core/src/index.ts";
 
 /**
  * A resident's own resolver: the keys of the world it lives in, read from

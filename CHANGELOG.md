@@ -11,6 +11,26 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The native path is now real, and held: npm is an optional rail, not a foundation.** RAREXT
+  is for web4, so natively it should depend on nothing but Node itself — and it nearly did: the
+  API, the core, the verifiers and the tests already resolved inside the tree, but
+  `packages/agent-sdk/src` imported `@rarext/core` by package name, which meant the SDK, the MCP
+  server and BOTH resident demos could not start without `npm install` laying down workspace
+  symlinks. A package manager had become the thing that decided whether the protocol starts.
+  Every runtime specifier in that graph is now relative (source, tests, the web page, the
+  self-publish demo), so a clean clone with **no `npm install` and no `node_modules`** runs the
+  API, the MCP server, `demo:resident` (all four answers), `demo:self-publish`, `claim-check`
+  (and its self-test), `verify-seed-mirrors`, and the core/SDK/web test suites on plain `node`.
+  The npm rail is unchanged and still proven: `scripts/build-packages.mjs` keeps the packaged
+  bundles importing `@rarext/core` by name — a tarball ships no source tree — rewriting the
+  relative specifier back for both the bundle and its declarations, and `npm run verify:packages`
+  imports those tarballs by name to prove it. `scripts/claim-check.mjs` now holds the difference
+  with a dedicated rule and its own injection: **no file on the runtime path may import a sibling
+  package by name** (254 runtime files scanned), the one exemption being `verify-packages.mjs`,
+  which exists to prove the optional rail rather than participate in the native one. README and
+  OPERATIONS.md state the native path with plain-`node` commands, and the dev tooling that
+  genuinely needs npm — the esbuild workbench bundle and the solc/ethers contract toolchain —
+  is named as such instead of standing in for the whole project.
 - **RFC 0019 — mirror announcements, the last stated federation gap, argued in writing.** The
   agent wrote the RFC and its MIRRORS.md link; the claim kind and the commit were cut mid-turn and
   the supervisor finished them. The RFC proposes announcements as **signed locations**: an

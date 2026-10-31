@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { generativeRenditionHolds, renderRaster } from "@rarext/core";
+import { generativeRenditionHolds, renderRaster } from "../packages/core/src/index.ts";
 
 const sdk = await import(new URL("../packages/agent-sdk/src/index.ts", import.meta.url).href);
 

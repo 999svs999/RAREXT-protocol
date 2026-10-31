@@ -11,7 +11,7 @@ import {
   parseRegistrySeedList,
   publicationLeaf,
   registrySeedUrl,
-} from "@rarext/core";
+} from "../../core/src/index.ts";
 import {
   FEDERATION_APP,
   REGISTRY_LIST_COMMITMENT_KIND,

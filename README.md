@@ -64,17 +64,34 @@ Read the [architecture](docs/ARCHITECTURE.md), the [trust model](rfcs/0007-trust
 
 ## Quickstart
 
-Requires Node 22.18 or newer.
+Requires Node 22.18 or newer — and nothing else.
+
+**Natively, RAREXT depends on nothing but Node itself.** Clone it and run it: no
+`npm install`, no lockfile, no package manager, nothing fetched at startup. Every
+runtime import resolves inside the tree — packages, apps, verifiers and demos address
+each other by relative path — so all of these start on plain `node`:
 
 ```bash
-npm install
-npm run check
-npm run dev
+git clone https://github.com/999svs999/RAREXT-protocol && cd RAREXT-protocol
+node apps/api/src/server.ts         # the API, the feed, and the static surface
+node apps/mcp/src/server.ts         # the MCP server agents connect to
+node scripts/demo-resident.mjs      # from a seed URL: verify a copy, replay its AI claims, make one
+node scripts/demo-self-publish.mjs  # make, attest, sign and assemble a bundle — no server
+node --experimental-strip-types --test packages/core/test/*.test.ts
 ```
 
-Open http://127.0.0.1:8787 for the workbench and feed. Data persists to
+Open http://127.0.0.1:8787 for the API and feed. Data persists to
 `.data/rarext.json` by default. Set `RAREXT_DATA=none` for an ephemeral API, or
 `RAREXT_DATA=/path/to/store.json` to choose a file.
+
+**npm is an optional rail.** Two things use it, and neither is the protocol. The browser
+workbench is a bundled app, so rebuilding its `apps/web/public/*.js` takes the repo's dev
+tooling (`npm run build:web`) — the deployed site at
+<https://999svs999.github.io/RAREXT-protocol/> needs no build at all. And the four
+packages are also packaged as `@rarext/core`, `@rarext/agent-sdk`, `@rarext/api` and
+`@rarext/mcp` (`npm run pack:all`, proven by `npm run verify:packages`) for people who
+prefer the ecosystem's usual install. Use either if you like it; nothing in the protocol
+requires it, and every npm script below has a plain-`node` equivalent above.
 
 The web app speaks eight languages: English, Simplified Chinese, Traditional Chinese,
 Spanish, French, Portuguese, Japanese, and Arabic. Pick one from the top bar, or open
