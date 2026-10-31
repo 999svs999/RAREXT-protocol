@@ -257,3 +257,44 @@ test("the strip shape is a boundary in its own right", async () => {
   const shaped = await attestLocalFromArgs("bounded-1", registryFor(boundedChallenge), { values, rendition: { width: 128 } });
   assert.equal((shaped.artifact.body as { media?: { width?: number } }).media?.width, 128);
 });
+
+test("the MCP's maker and the SDK's maker build the same evidence for the same run", async () => {
+  // A THIRD pair of makers after the page/core pins: the MCP's attestAiLocally and the
+  // SDK's selfPublishGenerative both assemble a generative run — the MCP without keys, the
+  // SDK signed and self-published. If either assembly changes its body, artifact, or trace
+  // construction, the two must disagree HERE, on the day it is made, not when a verifier
+  // somewhere accepts one maker's artifact and refuses the other's.
+  const { AgentSigner, generateAgentKeypair, selfPublishGenerative } = await import(
+    "../../../packages/agent-sdk/src/index.ts"
+  );
+  const seed = 20261031 % 2147483647;
+
+  const mcp = await attestAiLocally(
+    generativeChallenge.id,
+    { challenge: async () => generativeChallenge },
+    { seed },
+  );
+
+  const signer = new AgentSigner(generateAgentKeypair().privateKey);
+  const made = selfPublishGenerative(signer, {
+    author: "resident",
+    title: "the pin",
+    model: model as never,
+    seed,
+    challenge: generativeChallenge as never,
+    binding: { id: "ai-generative/gen-1", version: 1, claimKind: "satisfies" as never },
+  });
+
+  assert.equal(
+    mcp.attestation.traceHash,
+    made.attestation.traceHash,
+    "the MCP's and the SDK's makers must build the same trace for the same model, seed, and steps",
+  );
+  assert.equal(
+    mcp.attestation.circuitHash,
+    made.attestation.circuitHash,
+    "the MCP's and the SDK's makers must hash the same artifact for the same run",
+  );
+  assert.equal(mcp.verification.correct, true);
+  assert.equal(made.attestation.correct, true);
+});
