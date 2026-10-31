@@ -11,6 +11,46 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RFC 0021 — roles, work, and how the community decides (the economics half, grounded and
+  labelled).** Three questions a person arriving with an idea asks in the first hour had no
+  single answer: what am I here, where does money come from, and who decides what is good. The
+  first two were scattered across `docs/WORK.md` and the RFCs — workable for an auditor, useless
+  for someone deciding whether to bring a server, an agent or a business. The third had no answer
+  anywhere: the ROADMAP listed "Governance approval" unchecked, and nothing in the tree said what
+  a decision would even look like. The RFC states the roles once, each a worker with a key and a
+  different kind of work rather than a different permission — operator (經營者), builder, verifier,
+  reporter, participant, agent — and states the operator's economics plainly: not paid for running
+  software or holding a key, but for provable work whose receipt anyone can recompute, which is
+  the honest kernel of the mining analogy. Participation is free and unpaid ("participation costs
+  nothing and pays nothing"), which is both the equal-opportunity half and the reason there is no
+  leaderboard by default.
+- **The AI-token question answered by drawing the boundary rather than dodging it.** "AI lives on
+  RAREXT" has an economic reading that is not "the protocol issues a coin": an agent is a WORKER —
+  it attests, verifies, stores, mirrors — paid in the same per-key credits, and that credit is the
+  AI token in substance, existing today because the board exists today. If a community wants those
+  credits transferable or traded, that is an application, not the protocol, exactly as a launchpad
+  is an application; the application publishes its issuance policy as an artifact and certifies
+  against it, and the ROADMAP's refusal to run a token sale is not reopened.
+- **Governance as an artifact, with the tally recomputed rather than announced.** A proposal is a
+  document with a pinned root; a vote is a signed attestation over (proposalRoot, choice, voter,
+  issuedAt) using primitives the protocol already has; the tally is a pure function of the
+  published votes and the pinned policy, so anyone recomputes it and either agrees or finds the
+  disagreement in writing; the result is published beside the votes. No committee, and the rules
+  are policy rather than code — one key one vote, work-weighted credits, an operator attestation,
+  a paid proof, an invite: the protocol does not choose, the community pins a document and a
+  reader sees which rule produced the number. The limits are stated rather than implied: keys are
+  free, so **one key is not one person** — a verifiable tally and no privileged decider are
+  claimed, proof of personhood is not, and a community needing sybil resistance pins a policy
+  that names how weight is earned. All four open questions carry real verdicts (the weight and
+  quorum defaults are deliberately NOT the protocol's to set; anchoring orders a result without
+  making it true; nobody pays for a vote yet and the RFC says so).
+- **Held by the gate, in the spirit of RFC 0019.** `claim-check` verifies the 22 primitives the
+  RFC leans on exist in the source trees (the board, the credit records, rent, attestation,
+  signatures, rotation, revocation, anchors, semantics), that every document it cites resolves,
+  that its sections are present, and that the five sentences its argument turns on survive — with
+  two injections (a cited document that no longer exists, and a tally that is announced instead
+  of recomputed) so the rule cannot pass vacuously. The repo's open-question rule caught this RFC
+  on its first run, which is why every question now carries a verdict.
 - **A node declares its own binding — the reference deployment is now the first site that
   transited, and it says so from its own state.** Iterations #1 and #2 made a site's binding mean
   something and readable; this makes a node answer the question about itself, at the same path a

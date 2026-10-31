@@ -255,6 +255,10 @@ if (process.argv.includes("--self-test")) {
       readFileSync(new URL("README.md", root), "utf8").includes("npm is an optional rail"),
     );
     requireCondition(
+      "roles rfc states its role model",
+      readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8").includes("## Roles, stated once"),
+    );
+    requireCondition(
       "transition doc names the code's binding path",
       readFileSync(new URL("docs/TRANSITION.md", root), "utf8").includes("/.well-known/rarext.json"),
     );
@@ -700,6 +704,24 @@ if (process.argv.includes("--self-test")) {
     fail("self-test: the checker accepted a CLI that invents verdicts and a core that reads bindings");
   }
   caught = caught && caughtReading;
+
+  // And RFC 0021, through its seam, in the two directions it can rot: a document it cites that
+  // no longer exists, and an argument weakened while the RFC still reads as confidently.
+  const beforeRoles = failures;
+  const rolesRfc = readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8");
+  checkRolesRfc({
+    rfc: doctor(rolesRfc, "rolesRfcPath", (text) => text.replaceAll("`docs/WORK.md`", "`docs/WORK-OLD.md`")),
+  });
+  checkRolesRfc({
+    rfc: doctor(rolesRfc, "rolesRfcTally", (text) =>
+      text.replaceAll("The tally is recomputed, never announced.", "The tally is announced by the operators."),
+    ),
+  });
+  const caughtRoles = failures > beforeRoles;
+  if (!caughtRoles) {
+    fail("self-test: the checker accepted an RFC citing a missing document and a tally that is announced, not recomputed");
+  }
+  caught = caught && caughtRoles;
 
   // And the federation one-rule family, through its seam: a client that IMPORTS core's parser
   // but parses the body by hand is exactly the second reader the rule exists to prevent — and
@@ -1257,6 +1279,7 @@ checkConfigSurface();
 checkDefaultsIndependence();
 checkNativeIndependence();
 checkSiteTransition();
+checkRolesRfc();
 
   // THE VERIFY PAGE ANSWERS THE FEDERATION QUESTION TOO. The bundle commits to a seed list of
   // registries; a page whose job is "is this copy faithful" should show WHICH registries and
@@ -2317,6 +2340,99 @@ function checkFederationRule(sourcesOverride) {
  * root must be reported as `root-mismatch`, and a matching one must pass. A page describing a
  * convention the code does not implement is exactly the failure this checker exists for.
  */
+/**
+ * RFC 0021 — roles, work, and how the community decides.
+ *
+ * The roles and money half is IMPLEMENTED (the board in apps/api/src/work.ts, per-key credit
+ * records, storage rent) and the governance half is PROPOSED, and the RFC says which is which
+ * rather than blurring them. This holds both: every primitive the RFC leans on exists in the
+ * source trees, every document it cites exists, its required sections are present, and the
+ * sentences its argument turns on survive edits — that participation is free and pays nothing,
+ * that a tally is recomputed rather than announced, that one key is not one person, and where
+ * the protocol stops and an application's token begins. An RFC that keeps promising a mechanism
+ * the tree no longer has is the failure this exists for.
+ */
+function checkRolesRfc(overrides = {}) {
+  const rfc = overrides.rfc ?? readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8");
+  console.log(`roles rfc (rfcs/0021-roles-work-and-decisions.md${overrides.rfc ? ", DOCTORED" : ""} vs tree):`);
+  const { text: sources } = readSourceTrees({ includeScripts: true });
+
+  const EXISTING = [
+    "ACTIONS",
+    "actionFor",
+    "workOrders",
+    "summarizeEarnings",
+    "CreditRecord",
+    "submissionDigest",
+    "attestRun",
+    "verifyPayload",
+    "publicKeyId",
+    "suiteOf",
+    "isRevoked",
+    "verifyRevocation",
+    "keyRotationPayload",
+    "merkleRoot",
+    "publicationLeaf",
+    "canonicalize",
+    "anchorPending",
+    "anchorThreshold",
+    "createAgentKeyfile",
+    "readAgentKeyfile",
+    "semanticsCommitmentHolds",
+    "parseSiteBinding",
+  ];
+  for (const name of EXISTING) {
+    if (!sources.includes(name)) {
+      fail(`RFC 0021 leans on ${name}, which does not exist in the source trees`);
+    }
+  }
+
+  const referenced = new Set(
+    Array.from(rfc.matchAll(/`((?:rfcs|docs)\/[\w.-]+\.md)`/g)).map((match) => match[1]),
+  );
+  for (const path of referenced) {
+    try {
+      readFileSync(new URL(path, root), "utf8");
+    } catch {
+      fail(`RFC 0021 references ${path}, which does not exist`);
+    }
+  }
+
+  for (const section of [
+    "## The problem",
+    "## Roles, stated once",
+    "## Where money comes from",
+    "## How the community decides",
+    "## Security considerations",
+    "## Decision",
+    "## Non-goals",
+  ]) {
+    if (!rfc.includes(section)) {
+      fail(`RFC 0021 no longer has its \`${section.replace("## ", "")}\` section`);
+    }
+  }
+
+  // Compared case-insensitively: these sentences open a clause or a bullet in the RFC, so a
+  // capital letter is wording rather than substance, and a needle that breaks on one would
+  // report an argument as missing because it was dressed differently.
+  const haystack = rfc.toLowerCase();
+  for (const [sentence, why] of [
+    ["participation costs nothing and pays nothing", "the participant's position (free to join, unpaid for presence)"],
+    ["the tally is recomputed, never announced.", "that a decision's outcome is recomputed rather than announced"],
+    ["one key is not one person", "the sybil limit the RFC does not claim to solve"],
+    ["the protocol supplies the accounting; the application supplies", "the protocol/application boundary for tokens"],
+    ["no token sale by the protocol or its maintainers", "the standing refusal this RFC does not reopen"],
+  ]) {
+    if (!haystack.includes(sentence)) {
+      fail(`RFC 0021 no longer states ${why}`);
+    }
+  }
+
+  console.log(
+    `  roles: ${EXISTING.length} primitive(s) verified | ${referenced.size} document(s) resolve | sybil limit, token boundary and free participation stated`,
+  );
+}
+
 function checkSiteTransition(overrides) {
   const override = overrides ?? {};
   const docPath = "docs/TRANSITION.md";
