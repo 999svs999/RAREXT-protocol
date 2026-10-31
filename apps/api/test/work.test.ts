@@ -2,11 +2,20 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
-import { CREDIT_ROOT_FIELDS, creditRoot } from "../../../packages/core/src/index.ts";
+import {
+  CREDIT_ROOT_FIELDS,
+  creditLeaf,
+  creditLedgerRoot,
+  creditRoot,
+  verifyProof,
+} from "../../../packages/core/src/index.ts";
 import { canonicalize } from "../../../packages/core/src/index.ts";
 import type { JsonWebKey } from "../../../packages/core/src/index.ts";
 import type { CreditRecord } from "../src/work.ts";
+import { RarextStore } from "../src/store.ts";
 import { post, start, stop } from "./helpers.ts";
+
+const bytesSha256 = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
 
 const hash = (value: string | Uint8Array) =>
   createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
@@ -163,8 +172,9 @@ test("a worker is paid for work the registry agrees with", async () => {
       await fetch(`${base}/v1/work/earnings?keyId=wk`)
     ).json()) as {
       credits: number;
+      ledgerRoot: string;
       byAction: Record<string, { jobs: number }>;
-      records: Array<CreditRecord & { root: string }>;
+      records: Array<CreditRecord & { root: string; ledger: { root: string; index: number; proof: string[] } }>;
     };
 
     assert.equal(earnings.credits, result.bounty);
@@ -178,6 +188,49 @@ test("a worker is paid for work the registry agrees with", async () => {
     assert.equal(receipt.keyId, "wk");
     assert.equal(receipt.root, creditRoot(receipt, hash));
     assert.equal(creditRoot(earnings.records[0] as unknown as CreditRecord, hash), receipt.root);
+
+    // THE AUDIT, from outside: the node publishes a commitment over the whole ledger, the receipt
+    // carries its inclusion proof, and a client holding nothing but this response verifies the
+    // payment against the published root — without trusting the node's word for any of it.
+    const published = (await (await fetch(`${base}/v1/work/ledger`)).json()) as { root: string; count: number };
+    assert.equal(published.root, earnings.ledgerRoot, "the published commitment is the one the receipts name");
+    assert.ok(published.count >= 1);
+    assert.equal(
+      verifyProof(
+        creditLeaf(receipt as unknown as CreditRecord, hash),
+        receipt.ledger.proof,
+        published.root,
+        receipt.ledger.index,
+        bytesSha256,
+      ),
+      true,
+      "the receipt is IN the ledger the node committed to",
+    );
+  } finally {
+    await stop(server);
+  }
+});
+
+test("the ledger commitment is recomputed, never stored, and moves when the ledger moves", async () => {
+  const { server, base, store } = await start(new RarextStore());
+  try {
+    const empty = (await (await fetch(`${base}/v1/work/ledger`)).json()) as { root: string; count: number };
+    assert.equal(empty.count, 0);
+
+    const record: CreditRecord = {
+      keyId: "wk",
+      action: "verify",
+      bounty: 12,
+      challengeId: "gen-starter",
+      artifactHash: "c".repeat(64),
+      at: "2026-11-01T00:00:00.000Z",
+    };
+    store.addCredit(record);
+
+    const after = (await (await fetch(`${base}/v1/work/ledger`)).json()) as { root: string; count: number };
+    assert.equal(after.count, 1);
+    assert.notEqual(after.root, empty.root, "a payment changes the commitment");
+    assert.equal(after.root, creditLedgerRoot([record], hash), "the client recomputes the same root from the records");
   } finally {
     await stop(server);
   }

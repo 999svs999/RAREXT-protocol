@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The credit ledger carries a commitment, so "the accounting is a node's word" is now false in
+  the strongest sense available without the chain.** `creditLedgerRoot(records, hash)` in core
+  recomputes a Merkle root over the records' identities — leaves sorted by the records' own roots, so
+  the same ledger in a different order recomputes to the same root (the tally's determinism lesson,
+  applied to money) — and `GET /v1/work/ledger` publishes it, recomputed at read time so it cannot
+  drift from the records it commits to. A payment dropped, edited, or quietly added produces a
+  different root; a partial copy is honestly a different ledger, because the count is bound by the
+  tree; an empty ledger has a defined root, because "nobody has been paid yet" is a state worth
+  committing to.
+- **A receipt travels with its inclusion proof.** `creditLedgerProof` returns the siblings and the
+  index (verifying needs both, and a worker holding only its own receipt cannot recompute where it
+  sits), `null` when the record is not in the ledger — the honest answer to the question, not an
+  error. The earnings response carries the proof per receipt, and the API test performs the whole
+  audit from outside: fetch the published commitment, verify the receipt against it with core's
+  `verifyProof`, trust nothing but the records named.
 - **A worker's receipt is verifiable: credit records carry a recomputable root.** The credits board
   is this node's policy, but the identity of what it pays out is the protocol's — so core owns
   `creditRoot` over a declared field map, and a credit record is the one protocol record with NO

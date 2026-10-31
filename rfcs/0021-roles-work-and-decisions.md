@@ -83,7 +83,12 @@ One more property belongs to the money half, because without it the accounting i
 publication's identity is recomputed from the record (`publicationRoot`), and a CREDIT carries its
 own recomputable root (`creditRoot`) — every field of a receipt is content, because a credit record
 has no minted label at all, so the receipt a worker holds for its earnings is checkable by whoever
-it is shown to. The entries a node holds can be checked by whoever holds them. The same published content is the same object whichever node
+it is shown to. And the ledger as a whole carries a commitment: `creditLedgerRoot` is recomputed
+from the records alone — leaves sorted by the records' own identities, so order does not matter —
+and a node publishes it, which makes a payment dropped, edited, or quietly added produce a different
+root instead of a quieter ledger. A receipt travels with its inclusion proof, so a worker proves its
+payment is in the committed ledger rather than asking to be believed. The entries a node holds can
+be checked by whoever holds them. The same published content is the same object whichever node
 wrote it down, a copy that differs in one covered field is a different object, and the `id` a
 publisher mints stays a label rather than becoming identity. What a covered field is, is stated in
 one place and held by a test that enumerates the record's fields — adding a field to a publication

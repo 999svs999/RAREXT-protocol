@@ -138,6 +138,8 @@ import {
   proposalProblems,
   proposalRoot,
   anchorRoot,
+  creditLedgerProof,
+  creditLedgerRoot,
   creditRoot,
   publicationRoot,
   sha256Hex,
@@ -1786,6 +1788,19 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      if (req.method === "GET" && pathname === "/v1/work/ledger") {
+        // The commitment over the WHOLE ledger, recomputed at read time from the records the node
+        // holds — never stored, so it cannot drift from them. A client holding records recomputes
+        // this and compares; a record dropped, edited, or quietly added produces a different root.
+        const all = store.listCredits();
+        send(res, 200, {
+          root: creditLedgerRoot(all, recordRootHash),
+          count: all.length,
+          at: new Date().toISOString(),
+        });
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/v1/work/earnings") {
         const keyId = url.searchParams.get("keyId") ?? "";
 
@@ -1793,12 +1808,21 @@ export function createApp(options: AppOptions = {}): AppServer {
         // a worker can hold a verifiable receipt for its earnings and whoever it is shown to can
         // recompute it from the receipt itself. `jobs` stays for compatibility; its `id` is a
         // display label assembled from three fields, not an identity.
-        const records = store
-          .listCredits()
+        //
+        // Each receipt also carries its INCLUSION proof against the ledger commitment — the worker's
+        // answer to "is my payment in the ledger the node publishes", checkable without trusting
+        // this response beyond the records it names.
+        const all = store.listCredits();
+        const ledgerRoot = creditLedgerRoot(all, recordRootHash);
+        const records = all
           .filter((record) => record.keyId === keyId)
-          .map((record) => ({ ...record, root: creditRoot(record, recordRootHash) }));
+          .map((record) => ({
+            ...record,
+            root: creditRoot(record, recordRootHash),
+            ledger: { root: ledgerRoot, ...creditLedgerProof(all, record, recordRootHash) },
+          }));
 
-        send(res, 200, { ...summarizeEarnings(keyId, store.listCredits()), records });
+        send(res, 200, { ...summarizeEarnings(keyId, store.listCredits()), ledgerRoot, records });
         return;
       }
 

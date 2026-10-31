@@ -138,6 +138,9 @@ export {
 } from "./anchors.ts";
 export {
   creditRoot,
+  creditLeaf,
+  creditLedgerRoot,
+  creditLedgerProof,
   CREDIT_ROOT_DOMAIN,
   CREDIT_ROOT_REQUIRED_FIELDS,
   CREDIT_ROOT_FIELDS,

@@ -4,13 +4,22 @@ import { createHash } from "node:crypto";
 
 import {
   CREDIT_ROOT_DOMAIN,
+  creditLedgerProof,
+  creditLedgerRoot,
+  creditLeaf,
   CREDIT_ROOT_EXCLUDED_FIELDS,
   CREDIT_ROOT_FIELDS,
   creditRoot,
   matchRecordRoot,
+  merkleRoot,
+  verifyProof,
   publicationRoot,
 } from "../src/index.ts";
 import type { CreditRecordFields } from "../src/index.ts";
+
+/** The byte hasher the Merkle rules take — a different contract from the HashFn above, and mixing
+ *  them up is a type error rather than a wrong answer. */
+const bytesSha256 = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
 
 const nodeSha256 = (value: string | Uint8Array) =>
   createHash("sha256").update(typeof value === "string" ? Buffer.from(value, "utf8") : value).digest("hex");
@@ -82,4 +91,53 @@ test("matchRecordRoot names the credit rule, and the rules do not answer for eac
   const asServed = { ...base, root } as never;
   assert.equal(creditRoot(asServed, nodeSha256), root);
   assert.equal(matchRecordRoot(asServed, root, nodeSha256)?.kind, "credit");
+});
+
+test("the ledger commitment is a fact about the SET of payments, not the order a node wrote them down", () => {
+  const paid = [receipt(), { ...receipt(), keyId: "k2", artifactHash: "d".repeat(64) }, { ...receipt(), keyId: "k3", artifactHash: "e".repeat(64) }];
+  const root = creditLedgerRoot(paid, nodeSha256);
+  assert.match(root, /^[0-9a-f]{64}$/);
+
+  // THE determinism property, regression-tested because an order-dependent commitment would change
+  // for no reason — the same lesson the tally's result root taught.
+  const shuffled = [paid[2]!, paid[0]!, paid[1]!];
+  assert.equal(creditLedgerRoot(shuffled, nodeSha256), root);
+
+  // A payment dropped, edited, or added is a DIFFERENT ledger, and the count is bound by the tree.
+  assert.notEqual(creditLedgerRoot(paid.slice(0, 2), nodeSha256), root);
+  assert.notEqual(creditLedgerRoot([...paid, { ...receipt(), keyId: "k4", artifactHash: "f".repeat(64) }], nodeSha256), root);
+
+  // An empty ledger has a defined root: "nobody has been paid yet" is a state worth committing to.
+  assert.match(creditLedgerRoot([], nodeSha256), /^[0-9a-f]{64}$/);
+});
+
+test("a receipt proves its own inclusion, and a tampered one proves nothing", () => {
+  const paid = [receipt(), { ...receipt(), keyId: "k2", artifactHash: "d".repeat(64) }, { ...receipt(), keyId: "k3", artifactHash: "e".repeat(64) }];
+  const root = creditLedgerRoot(paid, nodeSha256);
+
+  const inclusion = creditLedgerProof(paid, paid[1]!, nodeSha256);
+  assert.ok(inclusion !== null);
+  assert.ok(inclusion.proof.length >= 1, "the siblings travel with the index");
+  assert.equal(
+    verifyProof(creditLeaf(paid[1]!, nodeSha256), inclusion.proof, root, inclusion.index, bytesSha256),
+    true,
+    "the worker verifies its payment against the published root",
+  );
+
+  // The same receipt edited after the fact is not in the ledger, and the proof says so honestly.
+  const edited = { ...paid[1]!, bounty: 999 };
+  assert.equal(creditLedgerProof(paid, edited, nodeSha256), null);
+
+  // And a proof from a DIFFERENT ledger does not verify against this root.
+  const other = creditLedgerProof([paid[0]!], paid[0]!, nodeSha256);
+  assert.equal(
+    verifyProof(creditLeaf(paid[0]!, nodeSha256), other!.proof, root, other!.index, bytesSha256),
+    false,
+    "a partial ledger's proof does not pass for the whole one",
+  );
+
+  // The leaf is domain-separated from the record's own root, so the two digest shapes cannot be
+  // substituted for each other.
+  assert.notEqual(creditLeaf(paid[0]!, nodeSha256), creditRoot(paid[0]!, nodeSha256));
+  assert.equal(merkleRoot([creditLeaf(paid[0]!, nodeSha256)], bytesSha256), creditLedgerRoot([paid[0]!], nodeSha256));
 });

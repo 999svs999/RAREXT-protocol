@@ -2411,6 +2411,8 @@ function checkNamingRfc(overrides = {}) {
     "publicationRoot",
     "anchorRoot",
     "creditRoot",
+    "creditLedgerRoot",
+    "creditLedgerProof",
     "matchRecordRoot",
     "bundleShapeProblem",
   ];
@@ -2556,6 +2558,10 @@ function checkRolesRfc(overrides = {}) {
     [
       "a credit carries its own recomputable root",
       "that a worker's receipt is checkable, not just recorded",
+    ],
+    [
+      "a receipt travels with its inclusion proof",
+      "that a worker proves its payment is in the committed ledger rather than asking to be believed",
     ],
   ]) {
     if (!haystack.includes(squash(sentence))) {

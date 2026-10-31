@@ -1,4 +1,6 @@
 import { canonicalize } from "./canonical.ts";
+import { sha256Hex, type Sha256 } from "./digest.ts";
+import { merkleProof, merkleRoot } from "./merkle.ts";
 import type { HashFn } from "./ai.ts";
 
 /** Domain separation: a credit's root can never be mistaken for another rule's output. */
@@ -63,4 +65,77 @@ export function creditRoot(record: CreditRecordFields, hash: HashFn): string {
   }
 
   return hash(`${CREDIT_ROOT_DOMAIN}\n${canonicalize(covered)}`);
+}
+
+/**
+ * One leaf of the credit ledger: the record's identity, domain-separated again so a leaf can never
+ * be mistaken for a root or for another rule's digest. The ledger commits to IDENTITIES rather than
+ * to raw records, which is what lets a proof be checked by a client holding only the receipt.
+ */
+export function creditLeaf(record: CreditRecordFields, hash: HashFn): string {
+  return hash(`rarext.credit.leaf.v1\n${creditRoot(record, hash)}`);
+}
+
+/**
+ * The commitment over the WHOLE ledger, recomputable from the records alone.
+ *
+ * This is what turns "the accounting is a node's word" false: a node publishes this root, and any
+ * client holding records can recompute it — a record dropped from the ledger, edited, or quietly
+ * added produces a different root and is caught.
+ *
+ * The leaves are sorted by the records' own identities rather than taken in arrival order, so the
+ * commitment is a fact about the SET of payments and not about the order a particular node happened
+ * to write them down: the same ledger in a different order recomputes to the same root, which is
+ * the same determinism the tally depends on. A partial copy is honestly a different ledger — the
+ * count is bound by the tree — and an empty ledger has a defined root, because "nobody has been
+ * paid yet" is a state worth committing to, not an error.
+ */
+export function creditLedgerRoot(records: CreditRecordFields[], hash: HashFn): string {
+  const leaves = records
+    .map((record) => creditLeaf(record, hash))
+    .sort();
+  return merkleRoot(leaves, bytesHashOf(hash));
+}
+
+/**
+ * A Merkle inclusion proof for ONE receipt: the worker's answer to "is my payment in the ledger the
+ * node committed to". The index travels with the siblings because verifying needs both
+ * (`verifyProof(leaf, proof, root, index, sha256)`), and a worker holding only its own receipt
+ * cannot recompute where it sits. `null` when the record is not in the ledger — which is the honest
+ * answer to the question, not an error.
+ */
+export function creditLedgerProof(
+  records: CreditRecordFields[],
+  record: CreditRecordFields,
+  hash: HashFn,
+): { index: number; proof: string[] } | null {
+  const leaves = records.map((entry) => creditLeaf(entry, hash)).sort();
+  const leaf = creditLeaf(record, hash);
+  const index = leaves.indexOf(leaf);
+
+  if (index === -1) {
+    return null;
+  }
+
+  return { index, proof: merkleProof(leaves, index, bytesHashOf(hash)) };
+}
+
+/**
+ * The ledger's rules are Merkle rules, which take a BYTE hasher; the credit rules take a HashFn.
+ * This adapts without a second implementation of either: a HashFn that receives a string hashes its
+ * bytes, and one that receives bytes passes them through.
+ */
+function bytesHashOf(hash: HashFn): Sha256 {
+  return (bytes: Uint8Array) => {
+    const digest = hash(bytes);
+    if (!/^[0-9a-f]{64}$/i.test(digest)) {
+      throw new Error("the injected hash must return a 64-hex digest");
+    }
+    // Pure JS, no Node-only helpers: core runs in a browser too.
+    const out = new Uint8Array(32);
+    for (let index = 0; index < 32; index += 1) {
+      out[index] = Number.parseInt(digest.slice(index * 2, index * 2 + 2), 16);
+    }
+    return out;
+  };
 }
