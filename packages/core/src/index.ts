@@ -165,6 +165,7 @@ export { canonicalize } from "./canonical.ts";
 export {
   STATE_ARCHIVE_DOMAIN,
   STATE_ARCHIVE_GENESIS_ROOT,
+  stateArchivePreimage,
   stateArchiveProblems,
   stateArchiveRoot,
 } from "./state-archive.ts";

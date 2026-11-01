@@ -214,6 +214,23 @@ ${canonicalize(covered)}`;
   return preimages;
 }
 
+// packages/core/src/state-archive.ts
+var STATE_ARCHIVE_DOMAIN = "rarext.state-archive.v1";
+var STATE_ARCHIVE_GENESIS_ROOT = "0".repeat(64);
+function stateArchivePreimage(archive) {
+  const covered = {
+    previousStateRoot: archive.previousStateRoot,
+    anchorRoot: archive.anchorRoot,
+    proposals: archive.proposals,
+    votes: archive.votes,
+    credits: archive.credits,
+    admissions: archive.admissions,
+    at: archive.at
+  };
+  return `${STATE_ARCHIVE_DOMAIN}
+${canonicalize(covered)}`;
+}
+
 // packages/core/src/ai.ts
 var MAX_VOCAB = 4096;
 var MAX_GENERATIVE_TOKEN_LENGTH = 256;
@@ -494,6 +511,7 @@ export {
   semanticsCommitmentHolds2 as semanticsCommitmentHolds,
   sha256Bytes,
   sha256Hex,
+  stateArchivePreimage,
   urlForRarextUri,
   verifyPublishedRendition
 };

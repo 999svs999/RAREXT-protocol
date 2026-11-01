@@ -70,6 +70,18 @@ export function stateArchiveProblems(archive: unknown): string[] {
  * disagree names WHERE it happened.
  */
 export function stateArchiveRoot(archive: StateArchiveInput, hash: (value: string) => string): string {
+  return hash(stateArchivePreimage(archive));
+}
+
+/**
+ * The EXACT string `stateArchiveRoot` hashes — the preimage, exported for the one place an
+ * async runtime needs it: a browser's only digest is asynchronous, and the rule whole in core
+ * must not be split in half there. The browser computes the preimage with this function, hashes
+ * it with its ONE await, and compares hex to hex — the same seam `recordRootPreimages` opened
+ * for the record rules, and the test asserting preimage-hashed equals the synchronous root is
+ * the seam's own proof.
+ */
+export function stateArchivePreimage(archive: StateArchiveInput): string {
   const covered = {
     previousStateRoot: archive.previousStateRoot,
     anchorRoot: archive.anchorRoot,
@@ -79,5 +91,5 @@ export function stateArchiveRoot(archive: StateArchiveInput, hash: (value: strin
     admissions: archive.admissions,
     at: archive.at,
   };
-  return hash(`${STATE_ARCHIVE_DOMAIN}\n${canonicalize(covered)}`);
+  return `${STATE_ARCHIVE_DOMAIN}\n${canonicalize(covered)}`;
 }

@@ -22,4 +22,5 @@ export {
   formatRarextUri,
   urlForRarextUri,
   recordRootPreimages,
+  stateArchivePreimage,
 } from "../../../packages/core/src/index.ts";

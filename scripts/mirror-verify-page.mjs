@@ -63,6 +63,7 @@ export function mirrorVerifyPage({ title, heading }) {
         formatRarextUri,
         urlForRarextUri,
         recordRootPreimages,
+        stateArchivePreimage,
       } from "./renditions.js";
       const out = document.getElementById("out");
 
@@ -273,16 +274,17 @@ export function mirrorVerifyPage({ title, heading }) {
                 ),
               );
             }
-            // Each registry's OWN list, grown by the 民主 rail (RFC 0021's admission): a node
-            // that has admitted registries serves them at /v1/registries, seed-shaped, and the
-            // page parses them with the seed's own rule. The probe is best-effort BY DESIGN:
-            // a static site or a node from before admissions serves nothing there, and ABSENCE
-            // is an answer (reported dim), not a refusal. The API sends CORS *, so a browser
-            // can read it.
+            // Each registry's OWN surfaces, probed INDEPENDENTLY so one absence never hides
+            // another: the admissions list (the 民主 rail's output, RFC 0021) and the state
+            // chain (the ledger's history, tamper-evident by construction). Both are
+            // best-effort BY DESIGN — a static site serves neither, and ABSENCE is an answer
+            // (reported dim), not a refusal. The API sends CORS *, so a browser can read both.
             for (const entry of list) {
               if (!entry.url) continue;
+              const base = entry.url.endsWith("/") ? entry.url : entry.url + "/";
+
               try {
-                const probeResponse = await fetch(new URL("v1/registries", entry.url + (entry.url.endsWith("/") ? "" : "/")), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
+                const probeResponse = await fetch(new URL("v1/registries", base), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
                 if (!probeResponse.ok) {
                   sections.push(
                     htmlRow(
@@ -293,26 +295,79 @@ export function mirrorVerifyPage({ title, heading }) {
                       "dim",
                     ),
                   );
-                  continue;
+                } else {
+                  const probeBody = await probeResponse.json();
+                  const admitted = parseRegistrySeedList(probeBody);
+                  const shapeOk = Array.isArray(probeBody && probeBody.registries) && probeBody.registries.length === admitted.length;
+                  if (!shapeOk) {
+                    sections.push(htmlRow("Admissions at " + entry.id, "its /v1/registries does not parse as a seed list", "bad"));
+                  } else {
+                    sections.push(
+                      htmlRow(
+                        "Admissions at " + entry.id,
+                        admitted.length === 0
+                          ? "none yet \u2014 the 民主 rail has admitted no registry through this node"
+                          : admitted.length + " admitted by decision: " + admitted.map((admittedEntry) => admittedEntry.id).join(", "),
+                        "ok",
+                      ),
+                    );
+                  }
                 }
-                const probeBody = await probeResponse.json();
-                const admitted = parseRegistrySeedList(probeBody);
-                const shapeOk = Array.isArray(probeBody && probeBody.registries) && probeBody.registries.length === admitted.length;
-                if (!shapeOk) {
-                  sections.push(htmlRow("Admissions at " + entry.id, "its /v1/registries does not parse as a seed list", "bad"));
-                  continue;
-                }
-                sections.push(
-                  htmlRow(
-                    "Admissions at " + entry.id,
-                    admitted.length === 0
-                      ? "none yet \u2014 the 民主 rail has admitted no registry through this node"
-                      : admitted.length + " admitted by decision: " + admitted.map((admittedEntry) => admittedEntry.id).join(", "),
-                    "ok",
-                  ),
-                );
               } catch (probeError) {
                 sections.push(htmlRow("Admissions at " + entry.id, "not served \u2014 a static site or a node from before admissions", "dim"));
+              }
+
+              // The state chain: the ledger's history, verified IN THIS BROWSER. Each archive's
+              // state root is recomputed from core's preimage (one await, the same seam as the
+              // record readings), every link must name the archive before it, and the head of
+              // the chain anchors to genesis.
+              try {
+                const historyResponse = await fetch(new URL("v1/history", base), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
+                if (!historyResponse.ok) {
+                  sections.push(
+                    htmlRow(
+                      "State chain at " + entry.id,
+                      historyResponse.status === 404
+                        ? "serves no /v1/history \u2014 a static site or a node from before archives existed"
+                        : "the node answered HTTP " + historyResponse.status,
+                      "dim",
+                    ),
+                  );
+                } else {
+                  const historyBody = await historyResponse.json();
+                  const archives = Array.isArray(historyBody && historyBody.archives) ? historyBody.archives : null;
+                  if (!archives) {
+                    sections.push(htmlRow("State chain at " + entry.id, "its /v1/history is not shaped like an archive chain", "bad"));
+                  } else {
+                    const failures = [];
+                    let previous = "0000000000000000000000000000000000000000000000000000000000000000";
+                    for (const archive of archives) {
+                      const name = (archive.anchorRoot || "?").slice(0, 8);
+                      if (archive.previousStateRoot !== previous) {
+                        failures.push("archive " + name + " does not chain to the one before it");
+                      }
+                      const recomputed = await sha256Hex(stateArchivePreimage(archive));
+                      if (recomputed !== archive.stateRoot) {
+                        failures.push("archive " + name + " does not rebuild its served state root");
+                      }
+                      previous = archive.stateRoot;
+                    }
+                    const head = archives.length > 0 ? (archives[archives.length - 1].stateRoot || "").slice(0, 16) + "\u2026" : "none";
+                    sections.push(
+                      htmlRow(
+                        "State chain at " + entry.id,
+                        failures.length > 0
+                          ? "BROKEN: " + failures.join("; ")
+                          : archives.length === 0
+                            ? "no archives yet \u2014 the node has anchored nothing since archives existed"
+                            : "verified: " + archives.length + " archive(s), head " + head,
+                        failures.length > 0 ? "bad" : "ok",
+                      ),
+                    );
+                  }
+                }
+              } catch (historyError) {
+                sections.push(htmlRow("State chain at " + entry.id, "not served \u2014 a static site or a node from before archives existed", "dim"));
               }
             }
           }

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import {
   STATE_ARCHIVE_GENESIS_ROOT,
+  stateArchivePreimage,
   stateArchiveProblems,
   stateArchiveRoot,
 } from "../../../packages/core/src/index.ts";
@@ -139,6 +140,23 @@ test("a re-anchor of the same root never rewrites its archive", async () => {
   } finally {
     await stop(server);
   }
+});
+
+test("the preimage seam: hashing the exported preimage equals the synchronous root, byte for byte", () => {
+  const archive = {
+    anchorRoot: "a".repeat(64),
+    previousStateRoot: "b".repeat(64),
+    proposals: [{ id: "p1" }],
+    votes: [],
+    credits: [{ keyId: "k", bounty: 5 }],
+    admissions: [],
+    at: "2026-11-01T00:00:00.000Z",
+  };
+  const direct = stateArchiveRoot(archive, sha256);
+  const viaPreimage = sha256(stateArchivePreimage(archive));
+  assert.equal(viaPreimage, direct, "the preimage is the rule's whole input: hashing it IS the rule");
+  // And the preimage names its domain: a preimage from another rule can never collide.
+  assert.match(direct && stateArchivePreimage(archive), /^rarext\.state-archive\.v1\n/);
 });
 
 test("a malformed archive is refused by name", () => {

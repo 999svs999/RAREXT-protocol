@@ -3340,6 +3340,11 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`the published verify.html no longer probes registries' admitted lists ("${marker}")`);
     }
   }
+  for (const marker of ["v1/history", "stateArchivePreimage", "does not rebuild its served state root"]) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`the published verify.html no longer verifies the state chain in the browser ("${marker}")`);
+    }
+  }
 
   // docs/RESOLVE-JSON.md publishes the machine contract for a resolve verdict:
   // the schema file must exist and parse, the kinds it enumerates must be
