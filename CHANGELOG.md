@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The statement: the ledger from the earner's side.** The receipts rail leaves records, the
+  treasury sizes the classes a decision can pay, and a budget pays them — but an earner could not
+  ask the one question that ties them together. `GET /v1/work/statement?keyId=<key>` answers it:
+  `holds` (the receipt CLASSES this key is in, each with its roots — the classes a decision can pay
+  it through, which is what "owed to me" means here), `credits` split into earned / spent / net (a
+  worker that pledged a budget has been debited, and one total hides that), `byAction`, the live
+  ledger commitment, and `weight` — the SAME number a work-weighted ballot would weigh, so the
+  earner sees its standing before voting instead of inferring it. No `keyId` is a 400: a statement
+  is about a key. `RarextClient.statement(keyId)` speaks it. WORK.md documents it; claim-check
+  holds the doc, the route, and the SDK method.
 - **A voter's standing, read before acting.** The rail could only tell somebody they could not
   vote by REFUSING their ballot, and the agenda could only describe a decision in general terms.
   `GET /v1/governance/proposals/:root?keyId=<key>` and `GET /v1/governance/open?keyId=<key>` now

@@ -3477,6 +3477,16 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     if (!agentSdkReadme.includes(method)) fail(`the agent SDK README no longer documents ${method}()`);
     if (!agentSdkSource.includes(`${method}(`)) fail(`the SDK no longer implements ${method}() — the README documents a method that does not exist`);
   }
+  for (const statementMarker of ["GET /v1/work/statement", "the ledger from the earner's side"]) {
+    if (!workDoc.includes(statementMarker)) {
+      fail(`WORK.md no longer documents the statement ("${statementMarker}")`);
+    }
+  }
+  if (!agentSdkSource.includes("statement(")) fail("the SDK no longer implements statement()");
+  if (!agentSdkReadme.includes("`statement`")) fail("the agent SDK README no longer documents statement()");
+  if (!readFileSync(new URL("apps/api/src/app.ts", root), "utf8").includes('pathname === "/v1/work/statement"')) {
+    fail("app.ts no longer serves GET /v1/work/statement — WORK.md's statement has no rail");
+  }
   if (!workDoc.includes("GET /v1/work/treasury")) {
     fail("WORK.md no longer documents the treasury view — the class-sizing claim has no surface");
   }

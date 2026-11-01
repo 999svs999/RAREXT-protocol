@@ -160,6 +160,28 @@ commitment covers and are recomputed at read time — a view that could drift fr
 summarizes would be worse than none, because a pledge against it would be a guess wearing a
 number.
 
+## The statement: the ledger from the earner's side
+
+The receipt rails leave records, the treasury sizes the classes a decision can pay, and a budget
+pays them — but an earner could not ask the one question that ties them together: *what do I hold,
+what have I been paid, and what does my standing amount to?*
+
+```
+GET /v1/work/statement?keyId=<key>
+{"keyId":"<key>","ledger":{"root":"<64-hex>","count":N},
+ "credits":{"earned":300,"spent":0,"net":300},
+ "byAction":{…},
+ "holds":[{"act":"anchor","receipts":1,"roots":["<64-hex>"]}],
+ "weight":300, "at":"<now>"}
+```
+
+`holds` names the receipt CLASSES this key is in — the acts a decision can name to pay it, which is
+what "what is owed to me" means at this layer. `credits` separates earned, spent, and net, because
+a worker that pledged a budget has been debited and a single total hides that. `weight` is the
+SAME number a work-weighted ballot would weigh (the ledger total the tally reads), so the earner
+sees its standing before voting rather than inferring it. No `keyId` is a 400: a statement is about
+a key, and there is nothing to state without one.
+
 ## What is deliberately not here
 
 - **No emission.** There is no faucet and no daily login bonus. Work pays; presence

@@ -2445,6 +2445,51 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // A participant's STATEMENT: the same ledger read from the earner's side, in one answer.
+      //
+      // The receipts rail counts work, the treasury sizes the classes a decision can pay, and a
+      // budget pays them — but an earner could not ask the one question that ties those together:
+      // what do I hold, what have I been paid, and what does my standing amount to? This is that
+      // read. `holds` names the receipt CLASSES this key is in (each act, with the roots and how
+      // many receipts) — the classes a decision can pay it through, which is what "what is owed to
+      // me" actually means here. `credits` separates earned from spent from net, because a worker
+      // that pledged a budget has been debited, and a single total hides that. `weight` is the
+      // SAME number a work-policy ballot would weigh (the ledger total the tally reads), computed
+      // here so the earner sees it before voting instead of inferring it from a summary.
+      if (req.method === "GET" && pathname === "/v1/work/statement") {
+        const statementKeyId = url.searchParams.get("keyId") ?? "";
+        if (statementKeyId.length === 0) {
+          send(res, 400, { error: "a statement needs the key it is about: ?keyId=<key>" });
+          return;
+        }
+        const all = store.listCredits();
+        const mine = all.filter((record) => record.keyId === statementKeyId);
+        const summary = summarizeEarnings(statementKeyId, all);
+
+        const earned = mine.filter((record) => record.bounty > 0).reduce((sum, record) => sum + record.bounty, 0);
+        const spent = mine.filter((record) => record.bounty < 0).reduce((sum, record) => sum - record.bounty, 0);
+
+        // The classes this key holds receipts in — the acts a decision can name to pay it.
+        const holds = RECEIPT_ACTIONS.map((act) => {
+          const receipts = mine.filter((record) => record.action === act);
+          if (receipts.length === 0) return null;
+          const roots = [...new Set(receipts.map((record) => record.artifactHash))].sort();
+          return { act, receipts: receipts.length, roots };
+        }).filter((entry) => entry !== null);
+
+        send(res, 200, {
+          keyId: statementKeyId,
+          ledger: { root: creditLedgerRoot(all, recordRootHash), count: all.length },
+          credits: { earned, spent, net: earned - spent },
+          byAction: summary.byAction,
+          holds,
+          // The number a work-policy ballot weighs — the tally reads the ledger the same way.
+          weight: summary.credits,
+          at: new Date().toISOString(),
+        });
+        return;
+      }
+
       if (req.method === "POST" && pathname === "/v1/verifications") {
         const body = asRecord(await readJson(req));
         const submission = body as unknown as VerificationSubmission;

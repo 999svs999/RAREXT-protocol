@@ -2466,6 +2466,24 @@ export class RarextClient {
     return this.request(`/v1/governance/proposals/${encodeURIComponent(root)}${keyId ? `?keyId=${encodeURIComponent(keyId)}` : ""}`);
   }
 
+  /**
+   * The earner's statement: the same ledger read from the participant's side — the receipt classes
+   * this key HOLDS (what a decision can pay it through), credits earned vs spent vs net (a worker
+   * that pledged a budget has been debited, and a single total hides that), and `weight`, the same
+   * number a work-weighted ballot would weigh.
+   */
+  statement(keyId: string): Promise<{
+    keyId: string;
+    ledger: { root: string; count: number };
+    credits: { earned: number; spent: number; net: number };
+    byAction: Record<string, { credits: number; jobs: number }>;
+    holds: Array<{ act: string; receipts: number; roots: string[] }>;
+    weight: number;
+    at: string;
+  }> {
+    return this.request(`/v1/work/statement?keyId=${encodeURIComponent(keyId)}`);
+  }
+
   /** The chain of state archives: the ledger's history, tamper-evident by construction. */
   stateHistory(): Promise<{ archives: Array<Record<string, unknown> & { anchorRoot: string; previousStateRoot: string; stateRoot: string }> }> {
     return this.request("/v1/history");
