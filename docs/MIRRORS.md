@@ -39,6 +39,14 @@ counting streamed bytes when it is not, so a hostile mirror is refused at the ca
 and skipped like any other bad candidate instead of handing every verifier a
 giant allocation.
 
+The proof page is for every reader, whatever they are: the result regions are
+live regions (`aria-live="polite"`), so a screen reader announces the verdict
+when it arrives rather than silencing an async update; the reference input is
+labeled, spellchecks off, and Enter resolves it; focus is visible on the dark
+theme (`:focus-visible`); and below 560px the rows stack for a phone-sized
+screen. The generator owns all of it — the page and its mirror twin are the
+same function — and claim-check holds these markers in the published page.
+
 The whole candidate sequence — fetch the bytes, check the seed's CID pin over
 exactly those bytes, verify the bundle's shape, require the recomputed root to
 equal the pinned root, record each refusal, accept the first copy that passes —

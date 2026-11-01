@@ -3323,6 +3323,15 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`MIRRORS.md says the proof page refuses oversized responses, but the published verify.html has no "${marker}"`);
     }
   }
+  // MIRRORS.md claims the page is for every reader: live regions, a labeled
+  // input, visible focus, a stacked layout on a phone. The published page must
+  // carry all of it — an accessibility claim that silently regresses is worse
+  // than none.
+  for (const marker of ['aria-live="polite"', 'aria-labelledby="ref-heading"', "color-scheme: dark", "max-width: 560px", "focus-visible", 'enterkeyhint="go"']) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`MIRRORS.md says the proof page is accessible and phone-shaped, but the published verify.html has no "${marker}"`);
+    }
+  }
   const seedVerifier = sources.seedVerifier ?? readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
   if (!seedVerifier.includes("cidV1Raw")) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");

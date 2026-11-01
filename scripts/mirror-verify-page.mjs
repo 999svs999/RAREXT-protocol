@@ -18,8 +18,14 @@ export function mirrorVerifyPage({ title, heading }) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title}</title>
     <style>
+      html { color-scheme: dark; }
       body { margin: 0; padding: 40px; background: #080a0e; color: #e3eaf3;
              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      :focus-visible { outline: 2px solid #6ff0c4; outline-offset: 2px; }
+      @media (max-width: 560px) {
+        body { padding: 16px; }
+        .row { flex-direction: column; gap: 2px; }
+      }
       h1 { font-size: 20px; margin: 0 0 18px; }
       h2 { font-size: 14px; margin: 26px 0 8px; color: #9fb0c3; }
       .row { display: flex; justify-content: space-between; gap: 20px;
@@ -33,15 +39,17 @@ export function mirrorVerifyPage({ title, heading }) {
   </head>
   <body>
     <h1>${heading}</h1>
-    <div id="out"></div>
-    <button id="check">Re-verify</button>
-    <h2>Reference \u2014 name and verify an object</h2>
+    <div id="out" role="status" aria-live="polite"></div>
+    <button id="check" type="button">Re-verify</button>
+    <h2 id="ref-heading">Reference \u2014 name and verify an object</h2>
     <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap;">
-      <input id="ref" style="flex:1; min-width:280px; padding:8px; border-radius:7px; border:1px solid #2d3846; background:#0d1117; color:#e3eaf3; font:inherit;"
+      <input id="ref" type="text" spellcheck="false" autocomplete="off" enterkeyhint="go"
+             aria-labelledby="ref-heading"
+             style="flex:1; min-width:280px; padding:8px; border-radius:7px; border:1px solid #2d3846; background:#0d1117; color:#e3eaf3; font:inherit;"
              placeholder="rarext:host/path@64hex-root" />
-      <button id="resolve">Resolve</button>
+      <button id="resolve" type="button">Resolve</button>
     </div>
-    <div id="refout" style="margin-top:10px;"></div>
+    <div id="refout" role="status" aria-live="polite" style="margin-top:10px;"></div>
     <script type="module">
       import { verifyBundle } from "./verify.js";
       import {
@@ -400,6 +408,11 @@ export function mirrorVerifyPage({ title, heading }) {
       }
 
       document.getElementById("resolve").addEventListener("click", resolveReference);
+      // Enter resolves: the keyboard is the input method for switch access, for agents driving
+      // the page, and for anyone whose hands are already on the keys.
+      document.getElementById("ref").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") resolveReference();
+      });
       document.getElementById("check").addEventListener("click", run);
       run();
     </script>
