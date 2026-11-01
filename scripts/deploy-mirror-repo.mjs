@@ -20,7 +20,7 @@
 // the repository does not have it yet (idempotent on subsequent runs).
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -92,6 +92,28 @@ for (const entry of readdirSafe(SOURCE)) {
   cpSync(join(SOURCE, entry), join(WORKTREE, "registry", entry), { recursive: true });
 }
 cpSync(join(SOURCE, "mirror"), join(WORKTREE, "mirror"), { recursive: true });
+
+// The peer states its own binding — same rule as the origin's
+// /.well-known/rarext.json, this origin's URL. Derived from the committed
+// seed (never hand-written), and .nojekyll goes in so Pages serves the
+// dot-path instead of Jekyll-ignoring it.
+const committedSeed = JSON.parse(readFileSync(join(SOURCE, "seed.json"), "utf8"));
+mkdirSync(join(WORKTREE, ".well-known"), { recursive: true });
+writeFileSync(
+  join(WORKTREE, ".well-known", "rarext.json"),
+  `${JSON.stringify(
+    {
+      registry: "rarext",
+      root: committedSeed.bundleRoot,
+      bundle: `${BASE}/registry/bundle.json`,
+      cid: committedSeed.bundleCid ?? undefined,
+      issuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, ".000Z"),
+    },
+    null,
+    2,
+  )}\n`,
+);
+writeFileSync(join(WORKTREE, ".nojekyll"), "");
 
 git(["add", "-A"], { cwd: WORKTREE });
 const status = git(["status", "--porcelain"], { cwd: WORKTREE });

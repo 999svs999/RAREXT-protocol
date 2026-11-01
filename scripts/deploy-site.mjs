@@ -124,6 +124,7 @@ function collectFiles() {
     ["registry/seed.json", "registry/seed.json"],
     ["registry/index.html", "registry/index.html"],
     ["schema/resolve-outcome.schema.json", "schema/resolve-outcome.schema.json"],
+    [".well-known/rarext.json", ".well-known/rarext.json"],
   ];
 
   for (const [source, target] of fixed) {

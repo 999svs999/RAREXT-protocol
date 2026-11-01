@@ -96,6 +96,24 @@ node scripts/site-binding.mjs http://127.0.0.1:8787 --registry rarext --root <64
 # JOINED: this site serves rarext at the pinned root …
 ```
 
+And it is not only the API node. This project's own static origins —
+`https://999svs999.github.io/RAREXT-protocol` and its peer
+`https://999svs999.github.io/RAREXT-mirror` — publish the file carrier at their
+own `/.well-known/rarext.json`, derived from the seed published beside the
+bundle (registry, root, bundle URL, cid, issuedAt — nothing hand-written). A
+stranger verifies either one the ordinary way:
+
+```bash
+node scripts/site-binding.mjs https://999svs999.github.io/RAREXT-protocol \
+  --registry rarext --root <the root the registry pins> [--json]
+```
+
+The claim is held: claim-check fails the build if the binding file disappears,
+names another registry, or names a root the committed bundle no longer rebuilds
+to — a republish that moves the root must regenerate the binding in the same
+commit, because a stale self-binding is exactly the root-mismatch this document
+warns about, served by the project that wrote the warning.
+
 **One limit worth stating plainly.** The file carrier lives at `/.well-known/rarext.json` on the
 **origin**, because a binding binds a host — not a path. A project page served under a shared
 origin (the usual `user.github.io/project` shape) cannot declare for that origin: the origin

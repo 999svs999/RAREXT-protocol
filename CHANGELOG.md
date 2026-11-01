@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The reference deployment eats its own cooking**: the origin publishes its own transition
+  binding at `/.well-known/rarext.json` — derived from the seed published beside the bundle
+  (registry, root, bundle URL, cid, issuedAt; nothing hand-written) — and the peer gets its own,
+  plus a `.nojekyll` so Pages serves the dot-path instead of Jekyll-ignoring it. A stranger
+  verifies either origin the ordinary way: `node scripts/site-binding.mjs <origin> --registry
+  rarext --root <pinned>` → JOINED. The claim is held: claim-check fails if the binding file
+  disappears, answers for another registry, or names a root the committed bundle no longer
+  rebuilds to; a unit test parses the published binding with the same rule any stranger's site
+  goes through and verifies it against the seed's pin.
 - **The resolve verdict is a published machine contract**: `site/schema/resolve-outcome.schema.json`
   (JSON Schema draft 2020-12, served on Pages at `/schema/resolve-outcome.schema.json`) and
   `docs/RESOLVE-JSON.md` — how to invoke, the exit codes (0 verified / 1 nothing verified or

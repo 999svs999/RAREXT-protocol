@@ -3377,6 +3377,33 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       }
     }
   }
+
+  // TRANSITION.md says every server can be a node, and the reference deployment
+  // must be one: the origin's own binding (site/.well-known/rarext.json) must
+  // exist, parse, and name the root the CURRENT bundle rebuilds to. A republish
+  // that moves the root without regenerating the binding fails here — a stale
+  // self-binding is exactly the root-mismatch the transition doc warns about,
+  // served by the project that wrote the warning.
+  const selfBindingPath = new URL("site/.well-known/rarext.json", root);
+  if (!existsSync(selfBindingPath)) {
+    fail("TRANSITION.md says the reference deployment has transited, but site/.well-known/rarext.json does not exist");
+  } else {
+    let selfBinding;
+    try {
+      selfBinding = JSON.parse(readFileSync(selfBindingPath, "utf8"));
+    } catch (error) {
+      fail(`site/.well-known/rarext.json does not parse: ${error.message}`);
+    }
+    if (selfBinding) {
+      const bundle = JSON.parse(readFileSync(new URL("site/registry/bundle.json", root), "utf8"));
+      if (selfBinding.root !== bundle.manifest.root) {
+        fail(`the origin's own binding names root ${String(selfBinding.root).slice(0, 16)}…, but the committed bundle rebuilds ${bundle.manifest.root.slice(0, 16)}… — regenerate the binding`);
+      }
+      if (selfBinding.registry !== "rarext") {
+        fail(`the origin's own binding answers for ${JSON.stringify(selfBinding.registry)}, not rarext`);
+      }
+    }
+  }
   const seedVerifier = sources.seedVerifier ?? readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
   if (!seedVerifier.includes("cidV1Raw")) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");
