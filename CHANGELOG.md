@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A voter's standing, read before acting.** The rail could only tell somebody they could not
+  vote by REFUSING their ballot, and the agenda could only describe a decision in general terms.
+  `GET /v1/governance/proposals/:root?keyId=<key>` and `GET /v1/governance/open?keyId=<key>` now
+  carry that key's own `eligibility`: whether this key may vote, why not when it may not, whether
+  it already voted, what its ballot would weigh (one under a key policy; the key's credit total
+  under a work-weighted one), and how much quorum the decision still needs — the same rules the
+  tally uses, read in advance. Without `keyId` no standing is claimed, because there is no key to
+  compute one for. `RarextClient.decision(root, keyId?)` and `openDecisions(keyId?)` speak it.
+- **A latent CI flake fixed at the root.** `governance-budget-route.test.ts` built its budget
+  pledge payload TWICE — once to post, once to sign — and `pledge()` carries a fresh `createdAt`,
+  so when the millisecond ticked between the two calls the signed payload no longer matched the
+  posted one and the refusal came from the wrong cause ("signature does not match the debited
+  key"). All three sites now build the payload once and sign THAT object. The forged case is
+  thereby a stronger test too: it now models the attack it names (a wrong SIGNER over the same
+  message) rather than a different message. Two consecutive full CI runs confirm stability.
 - **The agenda: what needs deciding.** `GET /v1/governance/open` lists every proposal whose window
   is still OPEN — the question, when it closes, WHAT it would do (its `admission` or `budget`), and
   the tally so far. A bulletin board that only answers by root is a board you must already know the

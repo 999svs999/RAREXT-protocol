@@ -1687,6 +1687,21 @@ export function generateAgentKeypair(
   };
 }
 
+/**
+ * A key's standing on one decision, as the node computes it: whether THIS key may vote, why not
+ * when it may not, whether it already voted, what its ballot would weigh (1 under a key policy,
+ * the key's credit total under a work policy), and how much quorum the decision still needs.
+ */
+export interface VoterStanding {
+  keyId: string;
+  eligible: boolean;
+  reason: string | null;
+  alreadyVoted: boolean;
+  weight: number;
+  quorum: { kind: string; required: number; achieved: number; met: boolean } | null;
+  quorumStillNeeded: number | null;
+}
+
 export class AgentSigner {
   readonly publicKey: JsonWebKey;
   readonly keyId: string;
@@ -2414,7 +2429,7 @@ export class RarextClient {
    * What needs deciding: the proposals whose window is still open, with their attachments and
    * their tally so far. An agent finds work to weigh in on without already knowing a root.
    */
-  openDecisions(): Promise<{
+  openDecisions(keyId?: string): Promise<{
     open: Array<{
       root: string;
       proposal: GovernanceProposal;
@@ -2423,10 +2438,32 @@ export class RarextClient {
       budget: Record<string, unknown> | null;
       votes: number;
       tally: Record<string, unknown>;
+      eligibility?: VoterStanding;
     }>;
     at: string;
   }> {
-    return this.request("/v1/governance/open");
+    return this.request(`/v1/governance/open${keyId ? `?keyId=${encodeURIComponent(keyId)}` : ""}`);
+  }
+
+  /**
+   * One decision, by root. With a keyId, the response carries that key's OWN standing —
+   * `eligibility` — so an agent learns whether it may vote and what its ballot weighs BEFORE
+   * casting rather than from a refusal.
+   */
+  decision(
+    root: string,
+    keyId?: string,
+  ): Promise<{
+    root: string;
+    proposal: GovernanceProposal;
+    votes: unknown[];
+    sponsorships: unknown[];
+    budget: Record<string, unknown> | null;
+    admission: Record<string, unknown> | null;
+    tally: Record<string, unknown>;
+    eligibility?: VoterStanding;
+  }> {
+    return this.request(`/v1/governance/proposals/${encodeURIComponent(root)}${keyId ? `?keyId=${encodeURIComponent(keyId)}` : ""}`);
   }
 
   /** The chain of state archives: the ledger's history, tamper-evident by construction. */

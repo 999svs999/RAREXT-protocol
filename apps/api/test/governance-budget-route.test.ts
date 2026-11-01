@@ -136,9 +136,14 @@ test("a budget: pledged with a signature, persisted, refused twice, executed exa
     // A pledge signed by a key that is NOT the pledger's is refused: the money leaves THAT key or
     // it leaves nothing.
     const stranger = registerIdentity(new RarextStore(), "nobody");
+    // ONE payload, signed by the WRONG key: the attack is a wrong signer, not a different
+    // message. Building the payload twice also made this test flaky — pledge() carries a fresh
+    // createdAt, so a millisecond tick between the two calls changed the payload under the
+    // signature and the refusal could come from the wrong cause.
+    const forgedPayload = pledge(pledger.keyId, root);
     const forged = await post(base, `/v1/governance/proposals/${root}/budget`, {
-      payload: pledge(pledger.keyId, root),
-      signature: stranger.signPayload(pledge(pledger.keyId, root)),
+      payload: forgedPayload,
+      signature: stranger.signPayload(forgedPayload),
     });
     assert.equal(forged.status, 401);
     assert.match(((await forged.json()) as { error: string }).error, /does not match the key that will be debited/);
@@ -197,9 +202,10 @@ test("execution refuses what is not a decision: an open window, a tie, a no, an 
     const openRoot = proposalRoot(open, sha256);
     const openCreated = await post(base, "/v1/governance/proposals", open);
     assert.equal(openCreated.status, 201);
+    const openPledge = pledge(pledger.keyId, openRoot);
     await post(base, `/v1/governance/proposals/${openRoot}/budget`, {
-      payload: pledge(pledger.keyId, openRoot),
-      signature: pledger.signPayload(pledge(pledger.keyId, openRoot)),
+      payload: openPledge,
+      signature: pledger.signPayload(openPledge),
     });
     const tooEarly = await post(base, `/v1/governance/proposals/${openRoot}/execute`, {});
     assert.equal(tooEarly.status, 409);
@@ -211,9 +217,10 @@ test("execution refuses what is not a decision: an open window, a tie, a no, an 
     const refusedCreated = await post(base, "/v1/governance/proposals", refused);
     const refusedCreatedBody = await refusedCreated.text();
     assert.equal(refusedCreated.status, 201, `DEBUG proposal: ${refusedCreatedBody}`);
+    const refusedPledge = pledge(pledger.keyId, refusedRoot);
     const refusedBudget = await post(base, `/v1/governance/proposals/${refusedRoot}/budget`, {
-      payload: pledge(pledger.keyId, refusedRoot),
-      signature: pledger.signPayload(pledge(pledger.keyId, refusedRoot)),
+      payload: refusedPledge,
+      signature: pledger.signPayload(refusedPledge),
     });
     const refusedBudgetBody = await refusedBudget.text();
     assert.equal(refusedBudget.status, 201, `DEBUG budget: ${refusedBudgetBody}`);

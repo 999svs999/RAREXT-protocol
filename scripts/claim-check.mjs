@@ -3450,6 +3450,14 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   const agentSdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
   if (!agentSdkSource.includes("nodes(")) fail("the SDK no longer implements nodes()");
   if (!agentSdkSource.includes("openDecisions(")) fail("the SDK no longer implements openDecisions()");
+  if (!agentSdkSource.includes("decision(")) fail("the SDK no longer implements decision()");
+  if (!agentSdkReadme.includes("`decision`")) fail("the agent SDK README no longer documents decision()");
+  if (!readFileSync(new URL("docs/OPERATOR.md", root), "utf8").includes("eligibility")) {
+    fail("OPERATOR.md no longer documents a voter's eligibility — acting blind has a surface to lose");
+  }
+  if (!readFileSync(new URL("apps/api/src/app.ts", root), "utf8").includes("function voterStanding(")) {
+    fail("app.ts no longer computes voterStanding — the eligibility the doc promises has no rule");
+  }
   if (!agentSdkReadme.includes("openDecisions")) fail("the agent SDK README no longer documents openDecisions()");
   if (!readFileSync(new URL("docs/OPERATOR.md", root), "utf8").includes("GET /v1/governance/open")) {
     fail("OPERATOR.md no longer documents the agenda — findable decisions have no surface");

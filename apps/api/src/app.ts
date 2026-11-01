@@ -844,6 +844,67 @@ function tallyFor(store: RarextStore, proposal: GovernanceProposal): TallyResult
   });
 }
 
+/**
+ * A voter's standing on one decision, BEFORE they act.
+ *
+ * The rail would only ever tell somebody they could not vote by refusing their ballot (401 after
+ * the fact), and the agenda could only describe a decision in general terms. But whether YOUR key
+ * can vote on THIS decision is a question with a computable answer: is the window still open, has
+ * this key already voted, and — under a policy that weights by work — does this key hold any
+ * weight at all. The same rules the tally uses, read in advance, so a stranger arriving at a live
+ * proposal knows what their vote would be worth before spending anything to cast it.
+ */
+function voterStanding(
+  store: RarextStore,
+  proposal: GovernanceProposal,
+  root: string,
+  wantedKeyId: string,
+): {
+  keyId: string;
+  eligible: boolean;
+  reason: string | null;
+  alreadyVoted: boolean;
+  weight: number;
+  quorum: TallyResult["quorum"] | null;
+  quorumStillNeeded: number | null;
+} {
+  const closesAt = Date.parse(String((proposal as { closesAt?: string }).closesAt ?? ""));
+  const open = Number.isFinite(closesAt) && closesAt > Date.now();
+
+  const mine = store.governanceVotesFor(root).filter((vote) => {
+    const key = vote.publicKey;
+    return typeof key === "object" && key !== null && keyId(key as unknown as RarextJsonWebKey) === wantedKeyId;
+  });
+
+  let weight = 1;
+  if (proposal.policy.kind === "work") {
+    const records = store.listCredits().filter((record) => record.keyId === wantedKeyId);
+    weight = records.length === 0 ? 0 : summarizeEarnings(wantedKeyId, records).credits;
+  }
+
+  const alreadyVoted = mine.length > 0;
+  const reason = !open
+    ? "the window has closed: this decision cannot be voted on any more"
+    : alreadyVoted
+      ? "this key has already voted on this decision"
+      : weight === 0
+        ? "this key holds no weight under this decision's work policy"
+        : null;
+
+  const tally = tallyFor(store, proposal);
+  const quorum = "error" in tally ? null : tally.quorum;
+
+  return {
+    keyId: wantedKeyId,
+    eligible: reason === null,
+    reason,
+    alreadyVoted,
+    weight,
+    quorum,
+    quorumStillNeeded: quorum ? Math.max(0, quorum.required - quorum.achieved) : null,
+  };
+}
+
 function nodeSiteBinding(
   store: RarextStore,
   req: IncomingMessage,
@@ -1786,6 +1847,7 @@ export function createApp(options: AppOptions = {}): AppServer {
       // proposal that has closed is absent rather than listed under a stale label.
       if (req.method === "GET" && pathname === "/v1/governance/open") {
         const now = Date.now();
+        const agendaKeyId = url.searchParams.get("keyId");
         const open = store
           .listProposals()
           .map(({ root, proposal }) => ({ root, proposal }))
@@ -1801,6 +1863,7 @@ export function createApp(options: AppOptions = {}): AppServer {
             budget: store.getGovernanceBudget(root),
             votes: store.governanceVotesFor(root).length,
             tally: tallyFor(store, proposal),
+            ...(agendaKeyId ? { eligibility: voterStanding(store, proposal, root, agendaKeyId) } : {}),
           }));
         send(res, 200, { open, at: new Date().toISOString() });
         return;
@@ -1918,6 +1981,13 @@ export function createApp(options: AppOptions = {}): AppServer {
           budget: store.getGovernanceBudget(root),
           admission: store.getGovernanceAdmission(root),
           tally: tallyFor(store, proposal),
+          // With ?keyId=, the voter's OWN standing rides with the decision: eligible or not, why,
+          // whether this key already voted, what its ballot would weigh, and how much quorum is
+          // still missing. A rail that can only say no AFTER a ballot is a rail you learn by
+          // failing; this says it before you spend anything.
+          ...(url.searchParams.get("keyId")
+            ? { eligibility: voterStanding(store, proposal, root, url.searchParams.get("keyId") as string) }
+            : {}),
         });
         return;
       }

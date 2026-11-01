@@ -89,6 +89,12 @@ A bulletin board that only answers by root is a board you must already know the 
 is the list a voter reads to find what their vote is actually for. A closed proposal is absent
 rather than listed under a stale label.
 
+Pass `?keyId=<key>` to the agenda — or to `GET /v1/governance/proposals/:root` — and each decision
+carries that key's own **eligibility**: whether this key may vote, why not when it may not, whether
+it already voted, what its ballot would weigh (one under a key policy; the key's credit total under
+a work-weighted one), and how much quorum the decision still needs. A rail that can only say no
+AFTER a ballot is a rail you learn by failing; this answers before anything is spent.
+
 ## Finding the other nodes
 
 A node can say what it is and which peers it knows — with the provenance of each:
