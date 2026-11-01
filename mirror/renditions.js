@@ -174,6 +174,37 @@ var ANCHOR_ROOT_REQUIRED_FIELDS = [
   "receipts"
 ];
 
+// packages/core/src/digest.ts
+function toHex(bytes) {
+  let output = "";
+  for (const byte of bytes) {
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
+function sha256Hex(sha256, value) {
+  return toHex(sha256(new TextEncoder().encode(value)));
+}
+
+// packages/core/src/merkle.ts
+function nextLevel(level, sha256) {
+  const next = [];
+  for (let index = 0; index < level.length; index += 2) {
+    next.push(sha256Hex(sha256, level[index] + (level[index + 1] ?? level[index])));
+  }
+  return next;
+}
+function merkleRoot(leaves, sha256) {
+  if (leaves.length === 0) {
+    return sha256Hex(sha256, "");
+  }
+  let level = [...leaves];
+  while (level.length > 1) {
+    level = nextLevel(level, sha256);
+  }
+  return level[0];
+}
+
 // packages/core/src/credits.ts
 var CREDIT_ROOT_DOMAIN = "rarext.credit.root.v1";
 var CREDIT_ROOT_FIELDS = {
@@ -186,6 +217,57 @@ var CREDIT_ROOT_FIELDS = {
 };
 var CREDIT_ROOT_EXCLUDED_FIELDS = Object.entries(CREDIT_ROOT_FIELDS).filter(([, isContent]) => !isContent).map(([field]) => field).sort();
 var CREDIT_ROOT_REQUIRED_FIELDS = Object.keys(CREDIT_ROOT_FIELDS).sort();
+function creditRoot(record, hash) {
+  const covered = {};
+  const source = record;
+  for (const [field, isContent] of Object.entries(CREDIT_ROOT_FIELDS)) {
+    if (!isContent) continue;
+    const value = source[field];
+    if (value !== void 0) covered[field] = value;
+  }
+  return hash(`${CREDIT_ROOT_DOMAIN}
+${canonicalize(covered)}`);
+}
+function creditLeaf(record, hash) {
+  return hash(`rarext.credit.leaf.v1
+${creditRoot(record, hash)}`);
+}
+function creditLedgerRoot(records, hash) {
+  const leaves = records.map((record) => creditLeaf(record, hash)).sort();
+  return merkleRoot(leaves, bytesHashOf(hash));
+}
+function bytesHashOf(hash) {
+  return (bytes) => {
+    const digest = hash(bytes);
+    if (!/^[0-9a-f]{64}$/i.test(digest)) {
+      throw new Error("the injected hash must return a 64-hex digest");
+    }
+    const out = new Uint8Array(32);
+    for (let index = 0; index < 32; index += 1) {
+      out[index] = Number.parseInt(digest.slice(index * 2, index * 2 + 2), 16);
+    }
+    return out;
+  };
+}
+var RECEIPT_ACTS = ["participate", "anchor"];
+function creditStatement(keyId, records) {
+  const mine = records.filter((record) => record.keyId === keyId);
+  let earned = 0;
+  let spent = 0;
+  let weight = 0;
+  for (const record of mine) {
+    if (record.bounty > 0) earned += record.bounty;
+    else if (record.bounty < 0) spent -= record.bounty;
+    weight += record.bounty;
+  }
+  const holds = RECEIPT_ACTS.map((act) => {
+    const receipts = mine.filter((record) => record.action === act);
+    if (receipts.length === 0) return null;
+    const roots = [...new Set(receipts.map((record) => record.artifactHash))].sort();
+    return { act, receipts: receipts.length, roots };
+  }).filter((entry) => entry !== null);
+  return { keyId, credits: { earned, spent, net: earned - spent }, holds, weight };
+}
 
 // packages/core/src/records.ts
 function recordRootPreimages(document) {
@@ -430,7 +512,7 @@ function federationFromBundle(bundle) {
   }
   return null;
 }
-async function sha256Hex(text) {
+async function sha256Hex2(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -500,6 +582,8 @@ async function semanticsRecordDigestAsync(record, sha256) {
   return await sha256(canonicalize(record));
 }
 export {
+  creditLedgerRoot,
+  creditStatement,
   federationFromBundle,
   formatRarextUri,
   parseRarextUri,
@@ -510,7 +594,7 @@ export {
   renderProofPicture,
   semanticsCommitmentHolds2 as semanticsCommitmentHolds,
   sha256Bytes,
-  sha256Hex,
+  sha256Hex2 as sha256Hex,
   stateArchivePreimage,
   urlForRarextUri,
   verifyPublishedRendition
