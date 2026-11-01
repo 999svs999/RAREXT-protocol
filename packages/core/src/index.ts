@@ -113,6 +113,12 @@ export {
   voteProblems,
   voteStatement,
 } from "./governance.ts";
+export {
+  GOVERNANCE_ADMISSION_KIND,
+  admissionEntry,
+  admissionProblems,
+} from "./governance-admission.ts";
+export type { RegistryAdmission } from "./governance-admission.ts";
 export type {
   GovernanceProposal,
   GovernanceVote,

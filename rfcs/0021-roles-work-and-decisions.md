@@ -168,6 +168,25 @@ decided choice must be the one the budget named — otherwise the refusal says n
 rules shipped first (#17) because they are the part that must be right; the wiring followed them
 rather than leading them.
 
+### Admitting a registry: the same decision, a different effect
+
+A federation list that only the registry operator can edit is a guest list, not a federation.
+The seed list gains its entries through the same rail that moves money: an operator attaches an
+admission document to a proposal — `POST /v1/governance/proposals/:root/admission`, kind
+`rarext.registry-admission.v1` — whose `registry` field is the seed's own entry shape (id, url,
+operator, chains, note) and whose `payOn` names the choice that applies it. The attach route
+refuses a document that is not an admission, a `payOn` the proposal does not offer, and an id
+already admitted or already pending under another proposal (one open decision per registry —
+two open decisions over one registry is an ambiguity a federation list must never reach a tally
+with).
+
+Execution is the budget route's mirror: the same window, tally, and decided guards; the decided
+choice must be the one the admission named; the decision applies exactly once; and the admitted
+entry is served at `GET /v1/registries` in the seed's own shape — parseable by
+`parseRegistrySeedList`, carrying the proposal root that admitted it. A rejected decision
+changes nothing and says so. The admission proposes a LISTING, never a fact about reachability:
+clients verify copies against roots as with every other registry.
+
 ## The constraint, verified rather than assumed
 
 Keys are free, so **one key is not one person**, and this RFC does not pretend otherwise. An

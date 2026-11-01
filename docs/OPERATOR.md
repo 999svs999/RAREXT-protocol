@@ -17,6 +17,26 @@ coordination, and no production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`
 - Disk for each holder directory and for the API's `.data` directory.
 - Ports are loopback by default. Holders bind `127.0.0.1:9600` unless configured.
 
+## Joining the federation's list
+
+The journey above verifies a node that already joined. To JOIN, an operator attaches an
+admission to a governance proposal on a node that holds the list — the same 民主 rail that moves
+money, with the effect of adding the registry to what the node serves at `/v1/registries`:
+
+```bash
+# the proposal (choices must include the admission's payOn), then:
+curl -X POST "$NODE/v1/governance/proposals/:root/admission" \
+  -H 'content-type: application/json' \
+  -d '{"kind":"rarext.registry-admission.v1",
+       "registry":{"id":"my-node","url":"https://my-node.example.com",
+                   "operator":"me","chains":["rarex"]},
+       "issuedAt":"<now>","payOn":"admit"}'
+```
+
+The community votes; when the window closes and the tally decides, anyone may execute, and the
+entry appears in `/v1/registries` carrying the proposal root that admitted it. A rejected
+decision changes nothing. See [RFC 0021](../rfcs/0021-roles-work-and-decisions.md) for the rule.
+
 ## One command: is this node a full node?
 
 `scripts/node-journey.mjs` asks the question every operator asks after boot: did my node actually

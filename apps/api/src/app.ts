@@ -157,7 +157,10 @@ import {
   type TallyResult,
   type HashFn,
   GOVERNANCE_BUDGET_KIND,
+  GOVERNANCE_ADMISSION_KIND,
   governanceBudgetProblems,
+  admissionEntry,
+  admissionProblems,
   budgetPaymentRecords,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
@@ -1546,6 +1549,67 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // ATTACH an admission request to a proposal: the document a join request carries. The
+      // budget route's mirror — one admission per proposal, attached to a proposal this node
+      // holds, its payOn naming a choice the proposal actually offers. The request proposes;
+      // the execute route decides, and nothing here takes effect until then.
+      if (
+        req.method === "POST" &&
+        pathname.startsWith("/v1/governance/proposals/") &&
+        pathname.endsWith("/admission")
+      ) {
+        const root = pathname.slice("/v1/governance/proposals/".length, -"/admission".length);
+        const proposal = store.getProposal(root);
+        if (!proposal) {
+          send(res, 404, { error: `this node holds no proposal ${root.slice(0, 16)}…` });
+          return;
+        }
+        if (store.getGovernanceAdmission(root)) {
+          send(res, 409, { error: "this proposal already carries an admission: a decision admits once" });
+          return;
+        }
+
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== GOVERNANCE_ADMISSION_KIND) {
+          send(res, 400, { error: `payload must be a ${GOVERNANCE_ADMISSION_KIND} document` });
+          return;
+        }
+        const problems = admissionProblems(payload);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems[0] });
+          return;
+        }
+        const admission = payload as unknown as {
+          registry: { id: string; url: string; operator: string; chains: string[]; note?: string };
+          issuedAt: string;
+          payOn: string;
+        };
+        if (!proposal.choices.includes(admission.payOn)) {
+          send(res, 400, {
+            error: `the admission's payOn ${JSON.stringify(admission.payOn)} is not a choice this proposal offers: ${proposal.choices.map((choice) => JSON.stringify(choice)).join(", ")}`,
+          });
+          return;
+        }
+        const already = store.registryAdmissionForId(admission.registry.id);
+        if (already) {
+          send(res, 409, {
+            error: `a registry with id ${JSON.stringify(admission.registry.id)} is already admitted (proposal ${already.proposalRoot.slice(0, 16)}…): two entries with one id is an ambiguity a federation list must not carry`,
+          });
+          return;
+        }
+        const pending = store.pendingGovernanceAdmissionForId(admission.registry.id);
+        if (pending && pending.proposalRoot !== root) {
+          send(res, 409, {
+            error: `another proposal (${pending.proposalRoot.slice(0, 16)}…) is already deciding whether to admit ${JSON.stringify(admission.registry.id)}: one open decision per registry`,
+          });
+          return;
+        }
+
+        store.setGovernanceAdmission(root, payload);
+        send(res, 201, { root, admission: payload });
+        return;
+      }
+
       // EXECUTE a decided budget: the bridge from the community's decision to the money it steers.
       //
       // The node recomputes the tally itself — the decision is nobody's word — and pays only when
@@ -1567,11 +1631,12 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
         const stored = store.getGovernanceBudget(root);
-        if (!stored) {
-          send(res, 404, { error: "this proposal carries no budget: there is nothing to execute" });
+        const storedAdmission = store.getGovernanceAdmission(root);
+        if (!stored && !storedAdmission) {
+          send(res, 404, { error: "this proposal carries neither a budget nor an admission: there is nothing to execute" });
           return;
         }
-        const budget = stored as unknown as GovernanceBudget;
+        const budget = stored as unknown as GovernanceBudget | null;
         if (Date.parse(proposal.closesAt) > Date.now()) {
           send(res, 409, { error: "the vote window is still open: a tally before the close is not a decision" });
           return;
@@ -1591,24 +1656,78 @@ export function createApp(options: AppOptions = {}): AppServer {
           });
           return;
         }
-        if (tally.outcome.choice !== budget.payOn) {
-          send(res, 409, {
-            error: `the decision was ${JSON.stringify(tally.outcome.choice)}, not the ${JSON.stringify(budget.payOn)} the budget named: nothing is owed`,
+        const decided = tally.outcome.choice;
+        if (stored) {
+          const budgetDocument = stored as unknown as GovernanceBudget;
+          if (decided !== budgetDocument.payOn) {
+            send(res, 409, {
+              error: `the decision was ${JSON.stringify(decided)}, not the ${JSON.stringify(budgetDocument.payOn)} the budget named: nothing is owed`,
+            });
+            return;
+          }
+          if (store.listCredits().some((record) => record.artifactHash === root)) {
+            send(res, 409, { error: "this decision has already been executed: the same decision is never paid twice" });
+            return;
+          }
+
+          const records = budgetPaymentRecords(budgetDocument, new Date().toISOString(), recordRootHash);
+          for (const record of records) store.addCredit(record as unknown as CreditRecord);
+
+          send(res, 201, {
+            executed: true,
+            records,
+            ledgerRoot: creditLedgerRoot(store.listCredits(), recordRootHash),
           });
           return;
         }
-        if (store.listCredits().some((record) => record.artifactHash === root)) {
-          send(res, 409, { error: "this decision has already been executed: the same decision is never paid twice" });
+
+        // The admission path: the same decision machinery, a different effect. The decided
+        // choice must be the one the admission named, the stored document must STILL satisfy
+        // the rule (a document is stored as it was attached, and execute re-reads it), the
+        // registry id must be free, and the decision applies exactly once.
+        const admission = storedAdmission as unknown as ReturnType<typeof admissionEntry> extends never
+          ? never
+          : { registry: { id: string; url: string; operator: string; chains: string[]; note?: string }; issuedAt: string; payOn: string };
+        if (decided !== admission.payOn) {
+          send(res, 409, {
+            error: `the decision was ${JSON.stringify(decided)}, not the ${JSON.stringify(admission.payOn)} the admission named: nothing changes`,
+          });
+          return;
+        }
+        const admissionProblemsNow = admissionProblems(storedAdmission);
+        if (admissionProblemsNow.length > 0) {
+          send(res, 500, { error: `the stored admission no longer satisfies the rule: ${admissionProblemsNow[0]}` });
+          return;
+        }
+        if (store.listRegistryAdmissions().some((applied) => applied.proposalRoot === root)) {
+          send(res, 409, { error: "this decision has already been applied: the same decision is never applied twice" });
+          return;
+        }
+        const alreadyAdmitted = store.registryAdmissionForId(admission.registry.id);
+        if (alreadyAdmitted) {
+          send(res, 409, {
+            error: `a registry with id ${JSON.stringify(admission.registry.id)} was already admitted (proposal ${alreadyAdmitted.proposalRoot.slice(0, 16)}…): this decision admits nothing new`,
+          });
           return;
         }
 
-        const records = budgetPaymentRecords(budget, new Date().toISOString(), recordRootHash);
-        for (const record of records) store.addCredit(record as unknown as CreditRecord);
+        const entry = admissionEntry(storedAdmission as never);
+        store.applyRegistryAdmission(root, new Date().toISOString(), entry);
+        send(res, 201, { executed: true, admitted: entry });
+        return;
+      }
 
-        send(res, 201, {
-          executed: true,
-          records,
-          ledgerRoot: creditLedgerRoot(store.listCredits(), recordRootHash),
+      // The federation list THIS node serves: the seed-shaped entries its own decisions have
+      // admitted, parseable by the same rule that reads the published seed
+      // (parseRegistrySeedList accepts this shape). A client can walk it exactly like the
+      // static list, because it IS a registry list — the 民主 rail's output.
+      if (req.method === "GET" && pathname === "/v1/registries") {
+        send(res, 200, {
+          registries: store.listRegistryAdmissions().map((applied) => ({
+            ...applied.entry,
+            admittedByProposal: applied.proposalRoot,
+            appliedAt: applied.appliedAt,
+          })),
         });
         return;
       }

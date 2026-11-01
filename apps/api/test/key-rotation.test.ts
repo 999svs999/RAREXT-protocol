@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { encodeCapability } from "../src/capabilities.ts";
+import { CURRENT_SNAPSHOT_VERSION } from "../src/migrations.ts";
 import { RarextStore } from "../src/store.ts";
 import type { Circuit, Publication } from "../../../packages/core/src/index.ts";
 import {
@@ -316,7 +317,7 @@ test("rotations and delegations persist across a snapshot version change", async
       rotations: unknown[];
       delegations: unknown[];
     };
-    assert.equal(snapshot.version, 6, "the store writes the version it supports");
+    assert.equal(snapshot.version, CURRENT_SNAPSHOT_VERSION, "the store writes the version it supports");
     assert.equal(snapshot.rotations.length, 1);
     assert.equal(snapshot.delegations.length, 1);
 

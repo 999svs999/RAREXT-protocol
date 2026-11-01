@@ -67,6 +67,8 @@ interface Snapshot {
   governanceVotes?: GovernanceVote[];
   voteSponsorships?: VoteSponsorshipRecord[];
   governanceBudgets?: Array<{ proposalRoot: string; budget: Record<string, unknown> }>;
+  governanceAdmissions?: Array<{ proposalRoot: string; admission: Record<string, unknown> }>;
+  registryAdmissions?: Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }>;
 }
 
 export class RarextStore {
@@ -89,6 +91,8 @@ export class RarextStore {
   private readonly governanceVotes: GovernanceVote[] = [];
   private readonly voteSponsorships: VoteSponsorshipRecord[] = [];
   private readonly governanceBudgets = new Map<string, Record<string, unknown>>();
+  private readonly governanceAdmissions = new Map<string, Record<string, unknown>>();
+  private readonly registryAdmissions: Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }> = [];
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -591,6 +595,54 @@ export class RarextStore {
     return this.governanceBudgets.get(proposalRoot) ?? null;
   }
 
+  /**
+   * A proposal's admission request, stored beside it the way a budget is: the decision
+   * may execute days after the request, and the tally is recomputed from stored votes.
+   * One admission per proposal — a second is refused by the route, never a replacement.
+   */
+  setGovernanceAdmission(proposalRoot: string, admission: Record<string, unknown>): void {
+    this.governanceAdmissions.set(proposalRoot, admission);
+    this.persist();
+  }
+
+  getGovernanceAdmission(proposalRoot: string): Record<string, unknown> | null {
+    return this.governanceAdmissions.get(proposalRoot) ?? null;
+  }
+
+  /**
+   * Apply a decided admission. The registry id is unique in the list the node serves:
+   * a second decision admitting the same id is refused by the route, because two
+   * entries with one id is the ambiguity a federation list must never carry.
+   */
+  applyRegistryAdmission(proposalRoot: string, appliedAt: string, entry: Record<string, unknown>): void {
+    if (this.registryAdmissions.some((applied) => applied.proposalRoot === proposalRoot)) return;
+    this.registryAdmissions.push({ proposalRoot, appliedAt, entry });
+    this.persist();
+  }
+
+  registryAdmissionForId(id: string): { proposalRoot: string; appliedAt: string; entry: Record<string, unknown> } | null {
+    return this.registryAdmissions.find((applied) => (applied.entry as { id?: string }).id === id) ?? null;
+  }
+
+  /**
+   * A PENDING admission naming this id — attached to a proposal that has not executed yet.
+   * The attach route refuses a second request for the same id while the first is still
+   * pending, so the ambiguity (two open decisions over one registry) never reaches a tally.
+   */
+  pendingGovernanceAdmissionForId(id: string): { proposalRoot: string; admission: Record<string, unknown> } | null {
+    for (const [proposalRoot, admission] of this.governanceAdmissions) {
+      const registry = (admission as { registry?: { id?: string } }).registry;
+      if (registry && registry.id === id && !this.registryAdmissions.some((applied) => applied.proposalRoot === proposalRoot)) {
+        return { proposalRoot, admission };
+      }
+    }
+    return null;
+  }
+
+  listRegistryAdmissions(): Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }> {
+    return [...this.registryAdmissions];
+  }
+
   governanceVotesFor(root: string): GovernanceVote[] {
     return this.governanceVotes.filter((vote) => vote.proposalRoot === root);
   }
@@ -764,6 +816,14 @@ export class RarextStore {
       for (const entry of snapshot.governanceBudgets ?? []) {
         this.governanceBudgets.set(entry.proposalRoot, entry.budget);
       }
+      for (const entry of snapshot.governanceAdmissions ?? []) {
+        this.governanceAdmissions.set(entry.proposalRoot, entry.admission);
+      }
+      for (const entry of snapshot.registryAdmissions ?? []) {
+        if (!this.registryAdmissions.some((applied) => applied.proposalRoot === entry.proposalRoot)) {
+          this.registryAdmissions.push(entry);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`could not load ${this.filePath}: ${message}`);
@@ -791,6 +851,8 @@ export class RarextStore {
       governanceVotes: [...this.governanceVotes],
       voteSponsorships: [...this.voteSponsorships],
       governanceBudgets: [...this.governanceBudgets.entries()].map(([proposalRoot, budget]) => ({ proposalRoot, budget })),
+      governanceAdmissions: [...this.governanceAdmissions.entries()].map(([proposalRoot, admission]) => ({ proposalRoot, admission })),
+      registryAdmissions: [...this.registryAdmissions],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

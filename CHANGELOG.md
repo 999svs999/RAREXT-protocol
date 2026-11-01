@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The federation list joins through the 民主 rail** — a registry admission is a decision, not an
+  edit: an operator attaches an admission document (`rarext.registry-admission.v1`, the seed's own
+  entry shape + a `payOn` naming the choice that applies it) to a proposal at
+  `POST /v1/governance/proposals/:root/admission`; the community votes; execute applies it through
+  the SAME window/tally/decided guards the budget path uses — the decided choice must be the one
+  the admission named, the decision applies exactly once, the registry id is unique (a second
+  request while another proposal's is pending is refused: one open decision per registry), and the
+  admitted entry is served at `GET /v1/registries` in the seed's own shape, parseable by
+  `parseRegistrySeedList`, carrying the proposal root that admitted it. A rejected decision changes
+  nothing and says so in the refusal. Snapshot schema v7 (`governanceAdmissions`,
+  `registryAdmissions`; OPERATIONS.md's migration table updated). The attach route validates
+  structurally (`admissionProblems`: kind, seed-shaped id, http(s) URL, operator, chains, payOn)
+  and refuses a `payOn` the proposal does not offer at ATTACH time, not at execute time. RFC 0021
+  documents the rule, OPERATOR.md the operator's curl, claim-check holds both against the wiring.
 - **The operator's one command — `scripts/node-journey.mjs`**: "is THIS node a full node?"
   answered with four rails and evidence per rail, against any origin: `binding` (the node's own
   `/.well-known/rarext.json`, verified against the pinned root the caller owes — without it the

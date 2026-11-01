@@ -3378,6 +3378,23 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The join request is a published rail: the RFC names the kind and the
+  // endpoint, the operator doc names the endpoint, and the API carries both.
+  for (const docPath of ["rfcs/0021-roles-work-and-decisions.md", "docs/OPERATOR.md"]) {
+    const joinDoc = readFileSync(new URL(docPath, root), "utf8");
+    for (const marker of ["/v1/governance/proposals/:root/admission", "rarext.registry-admission.v1"]) {
+      if (!joinDoc.includes(marker)) {
+        fail(`${docPath} no longer documents the join rail's "${marker}"`);
+      }
+    }
+  }
+  const apiSource = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+  for (const marker of ['"/admission"', "GOVERNANCE_ADMISSION_KIND", '"/v1/registries"']) {
+    if (!apiSource.includes(marker)) {
+      fail(`the join rail's ${marker} is missing from apps/api/src/app.ts — the RFC's claim has no wiring`);
+    }
+  }
+
   // OPERATOR.md documents the node journey: the script must exist, name the
   // four rails in its own words, and refuse to blur reachability with
   // verification — the labels in the script are the doc's claims.

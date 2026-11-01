@@ -130,16 +130,19 @@ test("an older snapshot migrates forward, each step adding its own fields", () =
     rotations: [{ handle: "h", fromKeyId: "k", fromPublicKey: "p", fromAlgorithm: "ecdsa-p256", createdAt: "t" }],
   });
 
-  assert.equal(result.snapshot.version, 6);
+  assert.equal(result.snapshot.version, CURRENT_SNAPSHOT_VERSION);
   assert.deepEqual(result.snapshot.challenges, []);
-  assert.deepEqual(result.snapshot.proposals, [], "the newest step adds governance");
+  assert.deepEqual(result.snapshot.proposals, [], "the governance step adds proposals");
   assert.deepEqual(result.snapshot.governanceVotes, []);
+  assert.deepEqual(result.snapshot.governanceAdmissions, [], "the newest step adds admissions");
+  assert.deepEqual(result.snapshot.registryAdmissions, []);
   assert.equal((result.snapshot.rotations as unknown[]).length, 1, "the v2 fields are preserved");
   assert.deepEqual(result.applied, [
     "add durable challenge storage and sponsor nonce tracking",
     "add governance proposals and their votes",
     "add vote sponsorships, so a payer is visible in the record",
     "add governance budgets, so a pledge outlives the request that made it",
+    "add registry admissions, so the 民主 rail can grow the federation",
   ]);
 });
 
