@@ -273,6 +273,40 @@ export function mirrorVerifyPage({ title, heading }) {
                 ),
               );
             }
+            // Each registry's OWN list, grown by the 民主 rail (RFC 0021's admission): a node
+            // that has admitted registries serves them at /v1/registries, seed-shaped, and the
+            // page parses them with the seed's own rule. The probe is best-effort BY DESIGN:
+            // a static site or a node from before admissions serves nothing there, and ABSENCE
+            // is an answer (reported dim), not a refusal. The API sends CORS *, so a browser
+            // can read it.
+            for (const entry of list) {
+              if (!entry.url) continue;
+              try {
+                const probeResponse = await fetch(new URL("v1/registries", entry.url + (entry.url.endsWith("/") ? "" : "/")), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
+                if (!probeResponse.ok) {
+                  sections.push(htmlRow("Admissions at " + entry.id, "the node answered HTTP " + probeResponse.status, "dim"));
+                  continue;
+                }
+                const probeBody = await probeResponse.json();
+                const admitted = parseRegistrySeedList(probeBody);
+                const shapeOk = Array.isArray(probeBody && probeBody.registries) && probeBody.registries.length === admitted.length;
+                if (!shapeOk) {
+                  sections.push(htmlRow("Admissions at " + entry.id, "its /v1/registries does not parse as a seed list", "bad"));
+                  continue;
+                }
+                sections.push(
+                  htmlRow(
+                    "Admissions at " + entry.id,
+                    admitted.length === 0
+                      ? "none yet \u2014 the 民主 rail has admitted no registry through this node"
+                      : admitted.length + " admitted by decision: " + admitted.map((admittedEntry) => admittedEntry.id).join(", "),
+                    "ok",
+                  ),
+                );
+              } catch (probeError) {
+                sections.push(htmlRow("Admissions at " + entry.id, "not served \u2014 a static site or a node from before admissions", "dim"));
+              }
+            }
           }
         }
 

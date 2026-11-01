@@ -3332,6 +3332,14 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`MIRRORS.md says the proof page is accessible and phone-shaped, but the published verify.html has no "${marker}"`);
     }
   }
+  // The federation section probes each registry's OWN admitted list: the
+  // 民主 rail's output is visible in the browser, or its absence is a
+  // reported answer — never hidden.
+  for (const marker of ["v1/registries", "admitted by decision", "not served"]) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`the published verify.html no longer probes registries' admitted lists ("${marker}")`);
+    }
+  }
 
   // docs/RESOLVE-JSON.md publishes the machine contract for a resolve verdict:
   // the schema file must exist and parse, the kinds it enumerates must be
@@ -3403,7 +3411,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("docs/OPERATOR.md is gone, but the node journey claims it");
   } else {
     const operatorDoc = readFileSync(operatorDocPath, "utf8");
-    for (const marker of ["scripts/node-journey.mjs", "binding", "registry", "ledger", "governance"]) {
+    for (const marker of ["scripts/node-journey.mjs", "binding", "registry", "ledger", "governance", "federation", "v1/registries"]) {
       if (!operatorDoc.includes(marker)) {
         fail(`docs/OPERATOR.md no longer documents the node journey's "${marker}"`);
       }
@@ -3414,9 +3422,9 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("docs/OPERATOR.md documents scripts/node-journey.mjs, but the script does not exist");
   } else {
     const journey = readFileSync(journeyScript, "utf8");
-    for (const marker of ['rail: "binding"', 'rail: "registry"', 'rail: "ledger"', 'rail: "governance"', "verifySiteBinding", "verifyBundle"]) {
+    for (const marker of ['rail: "binding"', 'rail: "registry"', 'rail: "ledger"', 'rail: "governance"', 'rail: "federation"', "verifySiteBinding", "verifyBundle", "parseRegistrySeedList"]) {
       if (!journey.includes(marker)) {
-        fail(`the node journey script is missing "${marker}" — the doc's four-rail claim has no implementation`);
+        fail(`the node journey script is missing "${marker}" — the doc's five-rail claim has no implementation`);
       }
     }
   }

@@ -39,6 +39,11 @@ counting streamed bytes when it is not, so a hostile mirror is refused at the ca
 and skipped like any other bad candidate instead of handing every verifier a
 giant allocation.
 
+The proof page also makes the 民主 rail's output visible: in the federation section, each listed
+registry's own `/v1/registries` is probed, and the page shows what that node's decisions have
+admitted (parsed with the seed's own rule) — or reports the absence as an answer ("a static site
+or a node from before admissions"), never as a hidden failure.
+
 The proof page is for every reader, whatever they are: the result regions are
 live regions (`aria-live="polite"`), so a screen reader announces the verdict
 when it arrives rather than silencing an async update; the reference input is

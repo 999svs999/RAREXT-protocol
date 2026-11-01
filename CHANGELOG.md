@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The circle closes: a node that can join must also serve the list it grew.** The node journey
+  gained a fifth rail, `federation`: `GET /v1/registries` must parse through the seed's OWN rule
+  (`parseRegistrySeedList`), not a shape the journey invents — walkable is a machine property, and
+  the journey checks it as one. The mirror's federation section now probes each listed registry's
+  admitted list in the reader's browser (the API sends CORS `*`), showing "N admitted by decision:
+  <ids>" or reporting the absence as an answer ("a static site or a node from before admissions")
+  — the 民主 rail's output is visible, or its absence is named, never hidden. OPERATOR.md,
+  MIRRORS.md and the checker's markers updated with the five-rail claim.
 - **The federation list joins through the 民主 rail** — a registry admission is a decision, not an
   edit: an operator attaches an admission document (`rarext.registry-admission.v1`, the seed's own
   entry shape + a `payOn` naming the choice that applies it) to a proposal at

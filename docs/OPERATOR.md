@@ -59,6 +59,8 @@ The rails, in the journey's own order:
   and shape, labeled as that, because a full recompute of the commitment needs the receipts,
   which are the earner's to pull by key
 - `governance` — the 民主 rail answers and is shaped like a proposal list
+- `federation` — the list the node's own decisions admitted (`GET /v1/registries`), parsed by the
+  seed's own rule: a node that can join must also serve the list it grew, walkable by any client
 
 Exit `0` only when every rail holds; `--json` prints the same journey as a document for a robot.
 The failure output names WHICH rail did not hold and what it answered — a bare "invalid" would

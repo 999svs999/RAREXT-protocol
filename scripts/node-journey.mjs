@@ -12,8 +12,11 @@
 //   ledger      the work rail's commitment (GET /v1/work/ledger) — live, well-shaped,
 //               a 64-hex root over whatever the node has earned
 //   governance  the 民主 rail answers (GET /v1/governance/proposals)
+//   federation  the list the node's own decisions admitted (GET /v1/registries),
+//               parsed by the seed's own rule — a node that can join must also
+//               serve the list it grew, walkable by any client
 //
-// The first two rails VERIFY content; the last two verify the economy's rails are live
+// The first two rails VERIFY content; the later rails verify the economy's rails are live
 // and shaped — labeled as exactly that, because reachability is not verification and
 // this refuses to blur them. Exit 0 only when every rail holds. --json prints the
 // journey document for a robot; the human output says the same thing in words.
@@ -23,7 +26,7 @@
 
 import { verifyBundle } from "../packages/agent-sdk/src/index.ts";
 import { readSiteBinding } from "../packages/agent-sdk/src/index.ts";
-import { verifySiteBinding } from "../packages/core/src/index.ts";
+import { parseRegistrySeedList, verifySiteBinding } from "../packages/core/src/index.ts";
 
 const argv = process.argv.slice(2);
 const positional = [];
@@ -171,6 +174,34 @@ const rails = [];
     }
   } catch (error) {
     rail.evidence.push(`the governance rail could not be read: ${(error && error.message) || error}`);
+  }
+  rails.push(rail);
+}
+
+// ── Rail 5: federation ───────────────────────────────────────────────────────
+// The list the node's own decisions have admitted, served seed-shaped. This
+// closes the circle: a node that can join must also serve the list its 民主
+// rail grew, and "walkable" means a client parses it with the SAME rule that
+// reads the published seed — not a shape this script invents.
+{
+  const rail = { rail: "federation", ok: false, evidence: [] };
+  try {
+    const response = await fetch(`${origin}/v1/registries`, { signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) {
+      rail.evidence.push(`the federation rail answered HTTP ${response.status}`);
+    } else {
+      const body = await response.json();
+      const parsed = parseRegistrySeedList(body);
+      const shapeOk = Array.isArray(body?.registries) && body.registries.length === parsed.length;
+      rail.ok = shapeOk;
+      rail.evidence.push(
+        shapeOk
+          ? `the federation rail is walkable: ${parsed.length} admitted registry entr${parsed.length === 1 ? "y" : "ies"}, parsed by the seed's own rule`
+          : "the federation rail answered but its body does not parse as a seed list",
+      );
+    }
+  } catch (error) {
+    rail.evidence.push(`the federation rail could not be read: ${(error && error.message) || error}`);
   }
   rails.push(rail);
 }

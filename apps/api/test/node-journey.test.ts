@@ -59,7 +59,7 @@ test("a node that binds, serves and earns passes all four rails", { timeout: 60_
 
     const run = await runJourney([base, "--registry", "rarext", "--root", anchorBody.root, "--allow-private"]);
     assert.equal(run.code, 0, `the journey refused a healthy node:\n${run.stdout}\n${run.stderr}`);
-    for (const rail of ["binding", "registry", "ledger", "governance"]) {
+    for (const rail of ["binding", "registry", "ledger", "governance", "federation"]) {
       assert.match(run.stdout, new RegExp(`\\[PASS\\] ${rail}`), `the ${rail} rail must pass`);
     }
     assert.match(run.stdout, /FULL NODE/, "the journey says what a passing journey is");
@@ -71,8 +71,8 @@ test("a node that binds, serves and earns passes all four rails", { timeout: 60_
     assert.equal(parsed.ok, true);
     assert.deepEqual(
       parsed.rails.map((rail) => rail.rail),
-      ["binding", "registry", "ledger", "governance"],
-      "the rails are the journey's own order, and all four are present",
+      ["binding", "registry", "ledger", "governance", "federation"],
+      "the rails are the journey's own order, and all five are present",
     );
   } finally {
     delete process.env.RAREXT_REGISTRY_ID;
