@@ -2272,6 +2272,49 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // The treasury view: the receipt CLASSES a decision can name, and how big each actually is in
+      // this node's own ledger. A budget that pays {"kind":"receipt-holders","act":X} resolves X
+      // against these records at execution time, so a community sizing a pledge should see the same
+      // class the node will; without this, a pledge is a guess against an invisible population.
+      // Counts and distinct holders only — WHO holds a receipt is the ledger's public record, but
+      // this view answers "how many", which is what sizing a decision needs. Recomputed at read
+      // time like every commitment, so it cannot drift from the records it summarizes.
+      if (req.method === "GET" && pathname === "/v1/work/treasury") {
+        const all = store.listCredits();
+        const classes = RECEIPT_ACTIONS.map((act) => {
+          const receipts = all.filter((credit) => credit.action === act);
+          const holders = [...new Set(receipts.map((credit) => credit.keyId))].sort();
+          // Per-ACT detail: a budget names an act (and optionally a root), so the node groups the
+          // same way at execution. Roots are listed with their own counts so a root-scoped decision
+          // can be sized against the root, not the whole act.
+          const byRoot = [...new Set(receipts.map((credit) => credit.artifactHash))]
+            .sort()
+            .map((root) => ({
+              root,
+              receipts: receipts.filter((credit) => credit.artifactHash === root).length,
+              holders: [...new Set(receipts.filter((credit) => credit.artifactHash === root).map((credit) => credit.keyId))].length,
+            }));
+          return { act, receipts: receipts.length, holders: holders.length, byRoot };
+        });
+        // Which proposals have an OPEN budget naming a class: what the community is already
+        // deciding, so a new pledge is not made blind to the ones in flight.
+        const pending = store
+          .listProposals()
+          .map(({ root }) => {
+            const budget = store.getGovernanceBudget(root);
+            if (!budget || typeof budget.to !== "object" || budget.to === null) return null;
+            return { proposalRoot: root, to: budget.to, amount: budget.amount, payOn: budget.payOn };
+          })
+          .filter((entry) => entry !== null);
+        send(res, 200, {
+          ledgerRoot: creditLedgerRoot(all, recordRootHash),
+          classes,
+          pending,
+          at: new Date().toISOString(),
+        });
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/v1/work/earnings") {
         const keyId = url.searchParams.get("keyId") ?? "";
 

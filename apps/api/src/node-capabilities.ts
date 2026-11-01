@@ -88,6 +88,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/work/earnings", note: "a participant's receipts with inclusion proofs" },
     { path: "/v1/work/ledger", note: "the whole-ledger commitment" },
     { path: "/v1/work/participation", note: "the participation receipt rail" },
+    { path: "/v1/work/treasury", note: "the receipt classes a decision can name, and how big each is" },
   ],
   families: [
     "/v1/history/",

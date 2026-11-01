@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The treasury view: a community can size a decision against the real class.** A budget that
+  pays `{"kind":"receipt-holders","act":X}` resolves X against the node's ledger at execution, so
+  a pledge made without seeing that class is a guess against an invisible population.
+  `GET /v1/work/treasury` reports, per receipt act, how many receipts exist and how many DISTINCT
+  holders hold them, with a per-root breakdown (so a root-scoped decision sizes against the root),
+  plus `pending`: the proposals whose budgets already name a class, so a new pledge is not blind to
+  the ones in flight. Counts are recomputed from the same records the commitment covers, never
+  stored — a view that could drift from the ledger would be worse than none. WORK.md documents it;
+  claim-check holds the doc sentence and the route together.
 - **The one command now leaves a work record, not just a join request.** `become-a-node` gained
   two rungs between the archive and the journey: `[identity]` registers the operator's key as a
   real identity on the node, and `[receipt]` claims the operator's FIRST work receipt — the

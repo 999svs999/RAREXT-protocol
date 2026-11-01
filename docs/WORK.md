@@ -140,6 +140,26 @@ name. The two sides of the roles are countable apart: `participate` is what a re
 `anchor` is what an operator did, and both ride the same ledger, the same commitment, and the same
 民主 rail that decides what any of it is worth.
 
+## The treasury view: sizing a decision against the real class
+
+A budget that pays a receipt class — `{"kind":"receipt-holders","act":"anchor"}` — resolves the
+class against this node's own ledger AT EXECUTION time. So a community sizing a pledge should see
+the same class the node will, and a newcomer should be able to see it before deciding:
+
+```
+GET /v1/work/treasury
+{"ledgerRoot":"<64-hex>","classes":[{"act":"anchor","receipts":1,"holders":1,
+  "byRoot":[{"root":"<64-hex>","receipts":1,"holders":1}]}, …],"pending":[…]}
+```
+
+`classes` reports, per receipt act, how many receipts exist and how many DISTINCT holders hold
+them, with a per-root breakdown so a root-scoped decision can be sized against the root rather
+than the whole act. `pending` names the proposals whose budgets already name a class, so a new
+pledge is not made blind to the ones in flight. The counts come from the same records the
+commitment covers and are recomputed at read time — a view that could drift from the ledger it
+summarizes would be worse than none, because a pledge against it would be a guess wearing a
+number.
+
 ## What is deliberately not here
 
 - **No emission.** There is no faucet and no daily login bonus. Work pays; presence

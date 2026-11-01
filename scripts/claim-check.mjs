@@ -3439,6 +3439,12 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   if (!appSource.includes("rarext.anchor-work.v1")) {
     fail("app.ts no longer validates the rarext.anchor-work.v1 claim — WORK.md's shape has no check");
   }
+  if (!workDoc.includes("GET /v1/work/treasury")) {
+    fail("WORK.md no longer documents the treasury view — the class-sizing claim has no surface");
+  }
+  if (!appSource.includes('pathname === "/v1/work/treasury"')) {
+    fail("app.ts no longer serves GET /v1/work/treasury — WORK.md's treasury view has no rail");
+  }
   const workSource = readFileSync(new URL("apps/api/src/work.ts", root), "utf8");
   if (!workSource.includes('| "anchor"')) {
     fail('work.ts no longer knows the "anchor" action — the receipt the doc names cannot be typed');
