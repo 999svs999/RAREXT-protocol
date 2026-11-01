@@ -3332,6 +3332,51 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`MIRRORS.md says the proof page is accessible and phone-shaped, but the published verify.html has no "${marker}"`);
     }
   }
+
+  // docs/RESOLVE-JSON.md publishes the machine contract for a resolve verdict:
+  // the schema file must exist and parse, the kinds it enumerates must be
+  // EXACTLY the union the SDK declares (a dead enum value in a machine contract
+  // is a lie; a missing one is a trap), and the exit codes it documents must be
+  // the ones the CLI exits with.
+  const resolveDocPath = new URL("docs/RESOLVE-JSON.md", root);
+  if (!existsSync(resolveDocPath)) {
+    fail("docs/RESOLVE-JSON.md is gone, but the resolve contract claims it");
+  } else {
+    const resolveDoc = readFileSync(resolveDocPath, "utf8");
+    for (const marker of ["resolve-outcome.schema.json", "`0`", "`1`", "`2`", "unreachable", "unavailable", "malformed", "mismatch"]) {
+      if (!resolveDoc.includes(marker)) {
+        fail(`docs/RESOLVE-JSON.md no longer documents "${marker}"`);
+      }
+    }
+    const schemaPath = new URL("site/schema/resolve-outcome.schema.json", root);
+    if (!existsSync(schemaPath)) {
+      fail("docs/RESOLVE-JSON.md names the schema file, but site/schema/resolve-outcome.schema.json does not exist");
+    } else {
+      let schema;
+      try {
+        schema = JSON.parse(readFileSync(schemaPath, "utf8"));
+      } catch (error) {
+        fail(`site/schema/resolve-outcome.schema.json does not parse: ${error.message}`);
+      }
+      if (schema) {
+        const schemaKinds = schema?.$defs?.attempt?.properties?.kind?.enum;
+        const sdk = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+        const declared = sdk.match(/export type RarextAttemptKind = ([^;]+);/)?.[1];
+        if (!declared) fail("RarextAttemptKind not found in the SDK");
+        const sdkKinds = [...declared.matchAll(/"([a-z]+)"/g)].map((m) => m[1]).sort();
+        const schemaSorted = [...(schemaKinds ?? [])].sort();
+        if (JSON.stringify(sdkKinds) !== JSON.stringify(schemaSorted)) {
+          fail(`the schema's attempt kinds ${JSON.stringify(schemaKinds)} disagree with RarextAttemptKind ${JSON.stringify(sdkKinds)}`);
+        }
+      }
+    }
+    const cli = readFileSync(new URL("scripts/resolve.mjs", root), "utf8");
+    for (const code of ["0", "1", "2"]) {
+      if (!cli.includes(`process.exit(${code})`)) {
+        fail(`docs/RESOLVE-JSON.md documents exit ${code}, but scripts/resolve.mjs never exits with it`);
+      }
+    }
+  }
   const seedVerifier = sources.seedVerifier ?? readFileSync(new URL("scripts/verify-seed-mirrors.mjs", root), "utf8");
   if (!seedVerifier.includes("cidV1Raw")) {
     fail("MIRRORS.md says verify-seed-mirrors checks candidates against the pin, but it hashes nothing");

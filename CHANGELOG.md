@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The resolve verdict is a published machine contract**: `site/schema/resolve-outcome.schema.json`
+  (JSON Schema draft 2020-12, served on Pages at `/schema/resolve-outcome.schema.json`) and
+  `docs/RESOLVE-JSON.md` — how to invoke, the exit codes (0 verified / 1 nothing verified or
+  unparseable / 2 usage), the outcome fields, the refusal kinds, and two UNEDITED examples from
+  live runs against the federation's peer (one verified, one a mirror that answered and lied).
+  A robot branches on the exit code and `attempts[].kind` — never on prose. The dead `bundle`
+  attempt kind was removed from `RarextAttemptKind` (no emitter, no reader — a dead enum value in
+  a machine contract is a lie). The contract is HELD: claim-check compares the schema's attempt
+  kinds against `RarextAttemptKind` in the SDK and the documented exit codes against the CLI's
+  actual exits, and two tests validate live CLI `--json` output against the schema file itself
+  with a dependency-free validator (native independence — no ajv, no installs).
 - **The proof page is for every reader**: its result regions are live regions
   (`aria-live="polite"` / `role="status"`), so a screen reader announces the verdict when it
   arrives instead of an async injection happening in silence; the reference input is labeled,

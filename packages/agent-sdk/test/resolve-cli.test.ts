@@ -231,7 +231,115 @@ test("the CLI names a RECEIPT: what was earned, by whom, for what", async () => 
     assert.equal(parsed.resolved.kind, "credit");
     assert.equal(parsed.resolved.record.bounty, 12);
     assert.ok(parsed.resolved.record.at, "when it was earned travels with the answer");
+    // The machine contract is not prose: whatever the resolver prints must be an
+    // INSTANCE of the published schema, validated against the file itself — not
+    // against a copy of its rules in this test.
+    const schema = readSchema();
+    validateAgainstSchema(JSON.parse(json.stdout), schema, schema);
   } finally {
     await origin.close();
   }
 });
+
+test("a failed resolution is a schema-valid outcome document too", { timeout: 60_000 }, async () => {
+  // The committed bytes themselves — NOT JSON.stringify(committed), which would
+  // serve a quoted string and make the bundle reading malformed instead of the
+  // answered-but-wrong copy this fixture exists to exercise.
+  const origin = await serve(committed, "application/json");
+  try {
+    const wrongRoot = "1".repeat(64);
+    const result = await runCli([`rarext:${origin.host}/bundle.json@${wrongRoot}`, "--scheme", "http", "--json"]);
+    assert.equal(result.code, 1, "nothing verified, so the exit is 1");
+    const parsed = JSON.parse(result.stdout) as { resolved: null; error: string; attempts: Array<{ kind: string }> };
+    assert.equal(parsed.resolved, null);
+    assert.ok(parsed.error, "the failure names itself");
+    assert.ok(parsed.attempts.length >= 1, "the refusal kept its evidence");
+    assert.ok(parsed.attempts.every((a) => a.kind === "mismatch"), "an answered-but-wrong copy is a mismatch");
+    const schema = readSchema();
+    validateAgainstSchema(parsed, schema, schema);
+  } finally {
+    await origin.close();
+  }
+});
+
+/** The published schema, read from the tree it ships in. */
+function readSchema(): Record<string, unknown> {
+  return JSON.parse(readFileSync(new URL("../../../site/schema/resolve-outcome.schema.json", import.meta.url), "utf8"));
+}
+
+/**
+ * A structural validator for the slice of JSON Schema the outcome document uses:
+ * required fields, additionalProperties, type unions, enums, patterns, and the
+ * conditional requirements (blob carries bytes+mediaType; a record kind carries
+ * record). Hand-rolled on purpose — the native path has zero installs, and a
+ * dependency-free validator is the honest size of the schema's own features.
+ */
+function validateAgainstSchema(outcome: unknown, schema: any, root: any = schema, path = "outcome"): void {
+  if (schema.$ref) {
+    const target = schema.$ref.split("/").slice(1).reduce((acc: any, key: string) => acc[key], root);
+    return validateAgainstSchema(outcome, target, root, path);
+  }
+  if (schema.oneOf) {
+    const matches = schema.oneOf.filter((branch: any) => {
+      try {
+        validateAgainstSchema(outcome, branch, root, path);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    assert.equal(matches.length, 1, `${path}: matches ${matches.length} of the oneOf branches, expected exactly 1`);
+    return;
+  }
+  if (schema.allOf) {
+    for (const branch of schema.allOf) validateAgainstSchema(outcome, branch, root, path);
+    const rest = { ...schema, allOf: undefined };
+    return validateAgainstSchema(outcome, rest, root, path);
+  }
+  if (schema.if) {
+    const holds = (() => {
+      try {
+        validateAgainstSchema(outcome, schema.if, root, path);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (holds && schema.then) validateAgainstSchema(outcome, schema.then, root, path);
+    return;
+  }
+  const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
+  if (types.length) {
+    const actual = outcome === null ? "null" : Array.isArray(outcome) ? "array" : typeof outcome;
+    assert.ok(
+      types.includes(actual) || (types.includes("integer") && actual === "number" && Number.isInteger(outcome)),
+      `${path}: ${actual} is not one of ${types.join("|")}`,
+    );
+  }
+  if (schema.pattern && typeof outcome === "string") {
+    assert.match(outcome, new RegExp(schema.pattern), `${path}: pattern ${schema.pattern}`);
+  }
+  if (schema.enum) {
+    assert.ok(schema.enum.includes(outcome), `${path}: ${JSON.stringify(outcome)} is not one of ${JSON.stringify(schema.enum)}`);
+  }
+  if ("const" in schema) {
+    assert.deepEqual(outcome, schema.const, `${path}: ${JSON.stringify(outcome)} is not the const ${JSON.stringify(schema.const)}`);
+  }
+  if (typeof outcome === "object" && outcome !== null && !Array.isArray(outcome)) {
+    const properties = schema.properties ?? {};
+    for (const name of schema.required ?? []) {
+      assert.ok(name in outcome, `${path}: missing required "${name}"`);
+    }
+    if (schema.additionalProperties === false) {
+      for (const name of Object.keys(outcome)) {
+        assert.ok(name in properties, `${path}: "${name}" is not in the schema`);
+      }
+    }
+    for (const [name, value] of Object.entries(outcome)) {
+      if (properties[name]) validateAgainstSchema(value, properties[name], root, `${path}.${name}`);
+    }
+  }
+  if (Array.isArray(outcome) && schema.items) {
+    for (const [index, value] of outcome.entries()) validateAgainstSchema(value, schema.items, root, `${path}[${index}]`);
+  }
+}

@@ -494,7 +494,7 @@ export type RarextResolveResult =
  * does not rebuild the pinned root? A kind, not prose to be matched: the failure mode this closes is
  * exactly the one where a caller greps a message string and misfiles a dead mirror as a liar.
  */
-export type RarextAttemptKind = "unreachable" | "unavailable" | "malformed" | "mismatch" | "bundle";
+export type RarextAttemptKind = "unreachable" | "unavailable" | "malformed" | "mismatch";
 
 export interface RarextAttempt {
   url: string;

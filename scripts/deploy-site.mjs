@@ -123,6 +123,7 @@ function collectFiles() {
     ["registry/bundle.json", "registry/bundle.json"],
     ["registry/seed.json", "registry/seed.json"],
     ["registry/index.html", "registry/index.html"],
+    ["schema/resolve-outcome.schema.json", "schema/resolve-outcome.schema.json"],
   ];
 
   for (const [source, target] of fixed) {
