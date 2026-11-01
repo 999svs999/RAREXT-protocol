@@ -1,0 +1,260 @@
+{
+  "$defs": {
+    "attempt": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "unreachable: the host never answered. unavailable: it answered without the object (an HTTP status). malformed: the bytes were not parseable as the shape a reading needs. mismatch: it answered and the object does not rebuild the pinned root.",
+          "enum": [
+            "unreachable",
+            "unavailable",
+            "malformed",
+            "mismatch"
+          ]
+        },
+        "reason": {
+          "description": "The human-readable refusal reason. For machines, kind is the field to branch on; reason is for the operator reading over the robot's shoulder.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The location that was tried.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "reason",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "resolved": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "blob"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "bytes",
+              "mediaType"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "publication",
+                  "anchor",
+                  "credit"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "record"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "bytes": {
+          "description": "blob only: the length of the verified bytes. The bytes themselves are NOT in the outcome \u2014 a caller that wants the object fetches it.",
+          "type": "integer"
+        },
+        "candidates": {
+          "description": "How many distinct candidate URLs the union held.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "Which reading verified. bundle: a registry bundle by its rebuilt manifest root. publication/anchor/credit: a record by the root the record rebuilds to. blob: raw bytes by the sha256 of their content.",
+          "enum": [
+            "bundle",
+            "publication",
+            "anchor",
+            "credit",
+            "blob"
+          ]
+        },
+        "mediaType": {
+          "description": "blob only: the media type the host served.",
+          "type": "string"
+        },
+        "record": {
+          "description": "publication, anchor and credit only: the fields that say WHICH record answered. Shape depends on kind; see the per-kind schemas.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "author": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "author",
+                "title"
+              ],
+              "title": "publication",
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "adapter": {
+                  "type": "string"
+                },
+                "anchoredRoot": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "leafCount": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "anchoredRoot",
+                "leafCount",
+                "adapter"
+              ],
+              "title": "anchor",
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "bounty": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
+                },
+                "challengeId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "keyId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "keyId",
+                "action",
+                "bounty",
+                "challengeId",
+                "at"
+              ],
+              "title": "credit",
+              "type": "object"
+            }
+          ],
+          "type": "object"
+        },
+        "root": {
+          "description": "The 64-hex root the verified object rebuilt to \u2014 equal to the root the reference carried.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source": {
+          "description": "The location the verified copy was read from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "root",
+        "source",
+        "candidates"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://999svs999.github.io/RAREXT-protocol/schema/resolve-outcome.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The machine-readable verdict of resolving a rarext: reference \u2014 what scripts/resolve.mjs --json prints and what resolveRarextUri in @rarext/sdk returns. Exit code 0 when resolved is non-null (a copy verified); 1 when a reference parsed but nothing verified, or the reference was not parseable; 2 for a usage error (no JSON in that case).",
+  "properties": {
+    "attempts": {
+      "description": "Every location that was tried and refused, in order, with the KIND of refusal \u2014 structural, never prose to be matched. Empty when the first candidate verified.",
+      "items": {
+        "$ref": "#/$defs/attempt"
+      },
+      "type": "array"
+    },
+    "canonical": {
+      "description": "The canonical form of the reference, or null when it did not parse.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "error": {
+      "description": "Why nothing verified, or null when resolved is non-null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parseError": {
+      "description": "Why the reference did not parse, or null when it did.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reference": {
+      "description": "The reference exactly as it was given, before canonicalization.",
+      "type": "string"
+    },
+    "resolved": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/resolved"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "reference",
+    "canonical",
+    "parseError",
+    "resolved",
+    "error",
+    "attempts"
+  ],
+  "title": "RAREXT resolve outcome",
+  "type": "object"
+}
