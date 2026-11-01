@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Proving the past, not just reading it.** Every read so far answered "today", recomputed by the
+  node — fine for acting, useless for proving: a participant handing somebody a receipt could prove
+  the receipt but not the world it sat in. `GET /v1/work/statement?keyId=<key>&at=<anchorRoot>` reads
+  the statement out of a FROZEN state (the whole ledger is chained at every anchor), and the
+  response carries `asOf` naming that archive and the root it commits to — so the past is CHECKED by
+  fetching `/v1/history/:anchorRoot` and recomputing the archive's state root, not taken on this
+  node's word. `ledger.root` is the ARCHIVED commitment, not today's. An unknown anchor is a 404
+  naming it; a malformed `?at` is a 400. `RarextClient.statement(keyId, atAnchorRoot?)` speaks it.
 - **The statement: the ledger from the earner's side.** The receipts rail leaves records, the
   treasury sizes the classes a decision can pay, and a budget pays them — but an earner could not
   ask the one question that ties them together. `GET /v1/work/statement?keyId=<key>` answers it:

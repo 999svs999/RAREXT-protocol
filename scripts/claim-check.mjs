@@ -3477,7 +3477,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     if (!agentSdkReadme.includes(method)) fail(`the agent SDK README no longer documents ${method}()`);
     if (!agentSdkSource.includes(`${method}(`)) fail(`the SDK no longer implements ${method}() — the README documents a method that does not exist`);
   }
-  for (const statementMarker of ["GET /v1/work/statement", "the ledger from the earner's side"]) {
+  for (const statementMarker of ["GET /v1/work/statement", "the ledger from the earner's side", "&at=<anchorRoot>"]) {
     if (!workDoc.includes(statementMarker)) {
       fail(`WORK.md no longer documents the statement ("${statementMarker}")`);
     }

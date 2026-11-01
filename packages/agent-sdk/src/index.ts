@@ -2471,9 +2471,17 @@ export class RarextClient {
    * this key HOLDS (what a decision can pay it through), credits earned vs spent vs net (a worker
    * that pledged a budget has been debited, and a single total hides that), and `weight`, the same
    * number a work-weighted ballot would weigh.
+   *
+   * Pass `atAnchorRoot` to read the statement as of a FROZEN state instead of now: the response
+   * then names the archive (`asOf`) with the root that state commits to, so the past can be checked
+   * by recomputing the archive rather than trusting today's ledger.
    */
-  statement(keyId: string): Promise<{
+  statement(
+    keyId: string,
+    atAnchorRoot?: string,
+  ): Promise<{
     keyId: string;
+    asOf: { anchorRoot: string; stateRoot: string; at: string } | null;
     ledger: { root: string; count: number };
     credits: { earned: number; spent: number; net: number };
     byAction: Record<string, { credits: number; jobs: number }>;
@@ -2481,7 +2489,10 @@ export class RarextClient {
     weight: number;
     at: string;
   }> {
-    return this.request(`/v1/work/statement?keyId=${encodeURIComponent(keyId)}`);
+    const query = atAnchorRoot
+      ? `?keyId=${encodeURIComponent(keyId)}&at=${encodeURIComponent(atAnchorRoot)}`
+      : `?keyId=${encodeURIComponent(keyId)}`;
+    return this.request(`/v1/work/statement${query}`);
   }
 
   /** The chain of state archives: the ledger's history, tamper-evident by construction. */

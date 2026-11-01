@@ -176,7 +176,11 @@ GET /v1/work/statement?keyId=<key>
 ```
 
 `holds` names the receipt CLASSES this key is in — the acts a decision can name to pay it, which is
-what "what is owed to me" means at this layer. `credits` separates earned, spent, and net, because
+what "what is owed to me" means at this layer. Add `&at=<anchorRoot>` and the statement is read
+from a FROZEN state instead of now: the response then carries `asOf` naming that archive and the
+root it commits to, so the past can be CHECKED — fetch `/v1/history/:anchorRoot`, recompute the
+archive's state root, and the ledger the statement counted is the one that state committed. A
+participant can prove not only a receipt but the world it sat in. `credits` separates earned, spent, and net, because
 a worker that pledged a budget has been debited and a single total hides that. `weight` is the
 SAME number a work-weighted ballot would weigh (the ledger total the tally reads), so the earner
 sees its standing before voting rather than inferring it. No `keyId` is a 400: a statement is about

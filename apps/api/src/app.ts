@@ -2462,7 +2462,30 @@ export function createApp(options: AppOptions = {}): AppServer {
           send(res, 400, { error: "a statement needs the key it is about: ?keyId=<key>" });
           return;
         }
-        const all = store.listCredits();
+        // ?at=<anchorRoot> asks for the statement as of a FROZEN state, not now. Every read so far
+        // answers "today", recomputed by this node — which is fine for acting, and useless for
+        // PROVING. A participant handing somebody a receipt can prove the receipt, not the world
+        // it sat in: what the class held then, what its own credits were then. The state archive
+        // chains the whole ledger at every anchor, so the past is already committed; this reads
+        // the statement out of that frozen state, and names the archive it came from so a client
+        // can fetch it and recompute the root rather than take this node's word for the past.
+        const asOfAnchor = (url.searchParams.get("at") ?? "").trim().toLowerCase();
+        let archive: Record<string, unknown> | null = null;
+        if (asOfAnchor.length > 0) {
+          if (!/^[0-9a-f]{64}$/.test(asOfAnchor)) {
+            send(res, 400, { error: "?at must be the 64-hex anchor root whose frozen state to read" });
+            return;
+          }
+          archive =
+            (store
+              .listStateArchives()
+              .find((entry) => (entry as { anchorRoot?: string }).anchorRoot === asOfAnchor) as Record<string, unknown> | undefined) ?? null;
+          if (!archive) {
+            send(res, 404, { error: `this node holds no state archive frozen at ${asOfAnchor.slice(0, 16)}…` });
+            return;
+          }
+        }
+        const all = (archive ? (archive.credits as CreditRecord[]) : store.listCredits()) ?? [];
         const mine = all.filter((record) => record.keyId === statementKeyId);
         const summary = summarizeEarnings(statementKeyId, all);
 
@@ -2479,6 +2502,11 @@ export function createApp(options: AppOptions = {}): AppServer {
 
         send(res, 200, {
           keyId: statementKeyId,
+          // null = this is the ledger NOW. Otherwise: which frozen state was read, and the root
+          // that state commits to — so a client fetches /v1/history/:anchorRoot, recomputes the
+          // archive's stateRoot with core's rule, and checks that the credits counted here are the
+          // ones that state committed. The past is verified, never asserted.
+          asOf: archive ? { anchorRoot: asOfAnchor, stateRoot: archive.stateRoot, at: archive.at } : null,
           ledger: { root: creditLedgerRoot(all, recordRootHash), count: all.length },
           credits: { earned, spent, net: earned - spent },
           byAction: summary.byAction,

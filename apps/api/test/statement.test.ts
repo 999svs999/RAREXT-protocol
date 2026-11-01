@@ -3,7 +3,14 @@ import test from "node:test";
 import { createHash, generateKeyPairSync, sign as signBytes } from "node:crypto";
 import type { JsonWebKey } from "node:crypto";
 
-import { GOVERNANCE_BUDGET_KIND, GOVERNANCE_PROPOSAL_KIND, GOVERNANCE_VOTE_KIND, canonicalize, voteStatement } from "../../../packages/core/src/index.ts";
+import {
+  GOVERNANCE_BUDGET_KIND,
+  GOVERNANCE_PROPOSAL_KIND,
+  GOVERNANCE_VOTE_KIND,
+  canonicalize,
+  stateArchiveRoot,
+  voteStatement,
+} from "../../../packages/core/src/index.ts";
 import { post, start, stop } from "./helpers.ts";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -132,6 +139,81 @@ test("the earner's statement: what I hold, what I was paid, and what my standing
     assert.equal(pledged.credits.spent, 300, "the money it paid is visible as spent");
     assert.equal(pledged.credits.earned, 0);
     assert.equal(pledged.credits.net, -300, "net is negative: it funded a decision");
+  } finally {
+    await stop(server);
+  }
+});
+
+test("a statement as of a frozen state: the past is readable AND checkable, not asserted", async () => {
+  const { server, store, base } = await start();
+  try {
+    const operator = registered(store, "asof-operator");
+
+    // Anchor FIRST: the state archive freezes the whole ledger as it stands right now — before
+    // this operator has done anything at all.
+    const publish = await post(base, "/v1/publications", { author: "asof-alice", title: "the frozen root", taskId: "half-adder", circuit: halfAdder });
+    assert.equal(publish.status, 201, await publish.text());
+    const anchor = await post(base, "/v1/anchors", {});
+    const anchorText = await anchor.text();
+    assert.equal(anchor.status, 201, anchorText);
+    const frozenAt = (JSON.parse(anchorText) as { root: string }).root;
+
+    // THEN the operator claims its anchoring receipt. The live ledger moves; the frozen state
+    // does not — which is exactly the difference a proof needs.
+    const claim = { kind: "rarext.anchor-work.v1", operator: operator.keyId, root: frozenAt, at: new Date().toISOString() };
+    assert.equal((await post(base, "/v1/work/anchor", { ...claim, signature: operator.sign(claim) })).status, 201);
+
+    const now = (await (await fetch(`${base}/v1/work/statement?keyId=${operator.keyId}`)).json()) as Statement & { asOf: unknown };
+    assert.equal(now.asOf, null, "the live statement is not as-of anything");
+    assert.deepEqual(now.holds.map((entry) => entry.act), ["anchor"], "the live ledger has the receipt");
+
+    const then = (await (await fetch(`${base}/v1/work/statement?keyId=${operator.keyId}&at=${frozenAt}`)).json()) as Statement & {
+      asOf: { anchorRoot: string; stateRoot: string; at: string } | null;
+    };
+    assert.deepEqual(then.holds, [], "the frozen state predates the receipt — the past does not move");
+    assert.equal(then.asOf?.anchorRoot, frozenAt, "and the statement names the state it was read from");
+
+    // The claim is CHECKABLE: fetch the archive and recompute its root with core's own rule.
+    const history = (await (await fetch(`${base}/v1/history/${frozenAt}`)).json()) as {
+      anchorRoot: string;
+      previousStateRoot: string;
+      proposals: unknown[];
+      votes: unknown[];
+      credits: unknown[];
+      admissions: unknown[];
+      at: string;
+      stateRoot: string;
+    };
+    const byteHash = (value: string | Uint8Array) =>
+      createHash("sha256").update(typeof value === "string" ? value : Buffer.from(value)).digest("hex");
+    assert.equal(
+      stateArchiveRoot(
+        {
+          anchorRoot: history.anchorRoot,
+          previousStateRoot: history.previousStateRoot,
+          proposals: history.proposals,
+          votes: history.votes,
+          credits: history.credits,
+          admissions: history.admissions,
+          at: history.at,
+        },
+        byteHash,
+      ),
+      history.stateRoot,
+      "the archive a historical statement reads from rebuilds to its committed root",
+    );
+    assert.equal(then.asOf?.stateRoot, history.stateRoot, "and the statement cited THAT root");
+    // The statement's own ledger commitment is the ARCHIVED one, not today's.
+    assert.notEqual(then.ledger.root, now.ledger.root, "the frozen ledger and today's are different states");
+    assert.ok(then.ledger.count <= now.ledger.count, "the past cannot hold more than the present");
+
+    // Refusals by name: an unknown anchor, and a malformed one.
+    const unknown = await fetch(`${base}/v1/work/statement?keyId=${operator.keyId}&at=${"b".repeat(64)}`);
+    assert.equal(unknown.status, 404);
+    assert.match(((await unknown.json()) as { error: string }).error, /no state archive frozen at/);
+    const malformed = await fetch(`${base}/v1/work/statement?keyId=${operator.keyId}&at=not-a-root`);
+    assert.equal(malformed.status, 400);
+    assert.match(((await malformed.json()) as { error: string }).error, /64-hex anchor root/);
   } finally {
     await stop(server);
   }
