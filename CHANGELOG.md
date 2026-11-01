@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **"AI lives on RAREXT" at the client surface: `RarextClient` now speaks the whole lifecycle.**
+  The five-rail journey moved INTO the SDK (`packages/agent-sdk/src/journey.ts`,
+  `runNodeJourney` — the CLI is a thin formatter over it, so a script and an agent cannot drift);
+  and the client gained typed methods for the participation economy: `participate(signer, act,
+  root)` builds and signs the assertion from the agent's key, `journey(root, registry)` asks
+  whether the node is a full node, `propose`/`attachAdmission`/`vote`/`pledgeBudget`/`execute`
+  drive the 民主 rail (the vote and the pledge are signed HERE, from the signer's key, via core's
+  `voteStatement` and the canonical-payload signature), plus `anchor`, `ledger`, `earnings`,
+  `registries`. A new test runs the whole loop through the client only: register → publish →
+  anchor → journey (five rails pass) → participate → propose → pledge to receipt-holders → vote →
+  execute → the holder paid, zero-sum even when the pledger and the holder are the same key. An
+  agent runs the ecosystem without hand-building HTTP.
 - **The seam closes: participation receipts are payable by decision.** A budget's `to` may be a
   receipt-holders spec — `{"kind":"receipt-holders","act":"mirror-verify","root":"<optional>"}` —
   and at execution the node resolves the class from its own ledger and

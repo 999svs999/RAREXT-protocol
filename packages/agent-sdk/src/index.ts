@@ -41,6 +41,11 @@ import {
   semanticsRecordDigest,
   semanticsKey,
   type SemanticsCommitmentStatus,
+  voteStatement,
+  sha256Hex,
+  type GovernanceBudget,
+  type GovernanceProposal,
+  type GovernanceVote,
 
 } from "../../core/src/index.ts";
 import {
@@ -208,6 +213,10 @@ export type {
   PublishedIdentityOptions,
 } from "./published-identity.ts";
 export { DEFAULT_IDENTITY_TIMEOUT_MS } from "./published-identity.ts";
+export { runNodeJourney } from "./journey.ts";
+export type { JourneyDocument, JourneyOptions, JourneyRail } from "./journey.ts";
+import { runNodeJourney as runNodeJourneyForClient } from "./journey.ts";
+import type { JourneyDocument as JourneyDocumentForClient } from "./journey.ts";
 export { readSiteBinding, DEFAULT_SITE_BINDING_TIMEOUT_MS } from "./site-binding.ts";
 export type { CarrierOutcome, SiteBindingRead, SiteBindingReadOptions } from "./site-binding.ts";
 
@@ -2213,6 +2222,121 @@ export class RarextClient {
     }
 
     return result;
+  }
+
+  // ── The participation economy, as typed methods ─────────────────────────────
+  // An AI agent runs the whole operator/participant loop without hand-building
+  // HTTP: verify the node it is joining (journey), leave a participation receipt,
+  // propose, vote, pledge, execute. Every signature is built HERE from the
+  // signer's key, so the client's output is a signed document, not a wish.
+
+  /** The five-rail journey against THIS client's node (see journey.ts). */
+  journey(options: { root?: string; registry?: string; allowPrivate?: boolean } = {}): Promise<JourneyDocumentForClient> {
+    return runNodeJourneyForClient(this.baseUrl, { ...options, fetch: this.requestFetch });
+  }
+
+  /** The work rail's whole-ledger commitment. */
+  ledger(): Promise<{ root: string; count: number; at: string }> {
+    return this.request("/v1/work/ledger");
+  }
+
+  /** A participant's receipts, each with its identity and inclusion proof. */
+  earnings(keyId: string): Promise<{
+    records: Array<CreditRecordFields & { root: string; ledger: { root: string; index: number; proof: string[] } | null }>;
+  }> {
+    return this.request(`/v1/work/earnings?keyId=${encodeURIComponent(keyId)}`);
+  }
+
+  /**
+   * Leave a participation receipt: the signer asserts they verified `root` (a mirror-verify, by
+   * default), the node corroborates what it can know — registered key, signature, root anchored —
+   * and the ledger records a zero-bounty receipt a later budget decision can pay.
+   */
+  async participate(
+    signer: AgentSigner,
+    act: string,
+    root: string,
+  ): Promise<{ receipt: CreditRecordFields & { root: string; ledger: { root: string; index: number; proof: string[] } | null } }> {
+    const assertion = {
+      kind: "rarext.participation.v1",
+      participant: signer.keyId,
+      act,
+      root,
+      at: new Date().toISOString(),
+    };
+    return this.request("/v1/work/participation", {
+      ...assertion,
+      signature: signer.sign(assertion),
+    });
+  }
+
+  /** Propose a decision. */
+  propose(document: GovernanceProposal): Promise<{ root: string; proposal: GovernanceProposal }> {
+    return this.request("/v1/governance/proposals", document);
+  }
+
+  /** Attach a registry admission to a proposal: the join request. */
+  attachAdmission(root: string, admission: Record<string, unknown>): Promise<{ root: string; admission: Record<string, unknown> }> {
+    return this.request(`/v1/governance/proposals/${encodeURIComponent(root)}/admission`, admission);
+  }
+
+  /** Cast a signed ballot, built here from the voter's key via core's voteStatement. */
+  async vote(signer: AgentSigner, proposalRoot: string, choice: string, closesAt: string): Promise<GovernanceVote> {
+    const base = {
+      kind: "rarext.governance-vote.v1",
+      proposalRoot,
+      choice,
+      voter: `anon-${sha256Hex(nodeSha256, canonicalize(signer.publicKey)).slice(0, 8)}`,
+      publicKey: signer.publicKey,
+      issuedAt: new Date(Date.parse(closesAt) - 60_000).toISOString(),
+      suite: signer.suite,
+    };
+    const signed = { ...base, signature: signer.sign(voteStatement(base as unknown as GovernanceVote)) };
+    return this.request(`/v1/governance/proposals/${encodeURIComponent(proposalRoot)}/votes`, signed);
+  }
+
+  /** Pledge a budget toward a proposal: a single key, or a receipt-holders spec. */
+  async pledgeBudget(
+    signer: AgentSigner,
+    input: {
+      proposalRoot: string;
+      to: string | { kind: "receipt-holders"; act: string; root?: string };
+      amount: number;
+      reason: string;
+      payOn: string;
+    },
+  ): Promise<{ root: string; budget: GovernanceBudget }> {
+    const payload = {
+      kind: "rarext.governance-budget.v1",
+      version: 1,
+      from: signer.keyId,
+      to: input.to,
+      amount: input.amount,
+      reason: input.reason,
+      payOn: input.payOn,
+      createdAt: new Date().toISOString(),
+      proposalRoot: input.proposalRoot,
+    };
+    return this.request(`/v1/governance/proposals/${encodeURIComponent(input.proposalRoot)}/budget`, {
+      payload,
+      signature: signer.sign(payload),
+    });
+  }
+
+  /** Execute a decided proposal: pay a budget, apply an admission. Anyone may call this. */
+  execute(proposalRoot: string): Promise<{
+    executed: true;
+    records?: Array<Record<string, unknown>>;
+    admitted?: Record<string, unknown>;
+    holders?: string[];
+    ledgerRoot?: string;
+  }> {
+    return this.request(`/v1/governance/proposals/${encodeURIComponent(proposalRoot)}/execute`, {});
+  }
+
+  /** The federation list THIS node's decisions have admitted, seed-shaped. */
+  registries(): Promise<{ registries: Array<Record<string, unknown>> }> {
+    return this.request("/v1/registries");
   }
 
   private async request<T>(path: string, body?: unknown): Promise<T> {

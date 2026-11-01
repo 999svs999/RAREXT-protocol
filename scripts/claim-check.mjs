@@ -3453,9 +3453,15 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     fail("docs/OPERATOR.md documents scripts/node-journey.mjs, but the script does not exist");
   } else {
     const journey = readFileSync(journeyScript, "utf8");
-    for (const marker of ['rail: "binding"', 'rail: "registry"', 'rail: "ledger"', 'rail: "governance"', 'rail: "federation"', "verifySiteBinding", "verifyBundle", "parseRegistrySeedList"]) {
+    for (const marker of ["runNodeJourney", "FULL NODE", "NOT A FULL NODE"]) {
       if (!journey.includes(marker)) {
-        fail(`the node journey script is missing "${marker}" — the doc's five-rail claim has no implementation`);
+        fail(`the node journey script is missing "${marker}" — the CLI must delegate to the SDK's journey, not re-implement it`);
+      }
+    }
+    const journeyModule = readFileSync(new URL("packages/agent-sdk/src/journey.ts", root), "utf8");
+    for (const marker of ['rail: "binding"', 'rail: "registry"', 'rail: "ledger"', 'rail: "governance"', 'rail: "federation"', "verifySiteBinding", "verifyBundle", "parseRegistrySeedList"]) {
+      if (!journeyModule.includes(marker)) {
+        fail(`the SDK's journey module is missing "${marker}" — the doc's five-rail claim has no implementation`);
       }
     }
   }
