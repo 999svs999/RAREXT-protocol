@@ -284,7 +284,15 @@ export function mirrorVerifyPage({ title, heading }) {
               try {
                 const probeResponse = await fetch(new URL("v1/registries", entry.url + (entry.url.endsWith("/") ? "" : "/")), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
                 if (!probeResponse.ok) {
-                  sections.push(htmlRow("Admissions at " + entry.id, "the node answered HTTP " + probeResponse.status, "dim"));
+                  sections.push(
+                    htmlRow(
+                      "Admissions at " + entry.id,
+                      probeResponse.status === 404
+                        ? "serves no /v1/registries \u2014 a static site or a node with no admitted registries"
+                        : "the node answered HTTP " + probeResponse.status,
+                      "dim",
+                    ),
+                  );
                   continue;
                 }
                 const probeBody = await probeResponse.json();
