@@ -58,6 +58,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/leaderboard" },
     { path: "/v1/market" },
     { path: "/v1/market/aggregate" },
+    { path: "/v1/nodes", note: "discovery: this node, and the peers it knows with their provenance" },
     { path: "/v1/participants" },
     { path: "/v1/placements" },
     { path: "/v1/profiles" },

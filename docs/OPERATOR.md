@@ -59,6 +59,24 @@ the federation you are asking to join, and `--operator <name>` to name the opera
 rather than failing). The script never files the request itself: an admission is a proposal's
 attachment, and a proposal is a decision the community makes — an operator ASKS to join, the tally APPLIES the join.
 
+## Finding the other nodes
+
+A node can say what it is and which peers it knows — with the provenance of each:
+
+```
+GET /v1/nodes
+{"self":{"registry":"rarext","origin":"https://…","binding":"/.well-known/rarext.json",
+         "anchoredRoot":"<64-hex or null>","chain":[…]},
+ "known":[{"id":"rarext-mirror","url":"https://…","operator":"rarext","source":"seed"}, …]}
+```
+
+`self` is who is answering and the root it has committed; `known` is the peers it knows, each
+labelled `source: "seed"` (inherited from the list the operator configured) or
+`source: "admission"` (a decision this node's own 民主 rail applied, carrying the proposal that
+did it). The label is the substance: an inherited peer and an admitted one are different claims,
+and a client that cannot tell them apart is trusting the wrong thing. One id, one entry — a peer
+known twice is still one peer. An agent asks the same question through `RarextClient.nodes()`.
+
 ## One command: is this node a full node?
 
 `scripts/node-journey.mjs` asks the question every operator asks after boot: did my node actually

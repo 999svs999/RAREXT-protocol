@@ -2397,6 +2397,19 @@ export class RarextClient {
     return this.request("/v1/capabilities");
   }
 
+  /**
+   * Discovery: who this node is, and the peers it knows — each carrying HOW it knows them (a seed
+   * the operator configured, or a decision this node's own 民主 rail applied). The provenance is
+   * the substance: an admitted peer and an inherited one are different claims.
+   */
+  nodes(): Promise<{
+    self: { registry: string | null; origin: string; binding: string; anchoredRoot: string | null; chain: string[] };
+    known: Array<Record<string, unknown> & { id: string; source: string }>;
+    at: string;
+  }> {
+    return this.request("/v1/nodes");
+  }
+
   /** The chain of state archives: the ledger's history, tamper-evident by construction. */
   stateHistory(): Promise<{ archives: Array<Record<string, unknown> & { anchorRoot: string; previousStateRoot: string; stateRoot: string }> }> {
     return this.request("/v1/history");

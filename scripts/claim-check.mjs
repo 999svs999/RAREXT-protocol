@@ -3443,6 +3443,15 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // client must carry them (an agent-facing claim with no method is a promise the SDK cannot keep).
   const agentSdkReadme = readFileSync(new URL("packages/agent-sdk/README.md", root), "utf8");
   const agentSdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+  if (!agentSdkSource.includes("nodes(")) fail("the SDK no longer implements nodes()");
+  if (!agentSdkReadme.includes("nodes")) fail("the agent SDK README no longer documents nodes()");
+  const operatorDocForNodes = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
+  if (!operatorDocForNodes.includes("GET /v1/nodes")) {
+    fail("OPERATOR.md no longer documents the discovery view — the findable-network claim has no surface");
+  }
+  if (!readFileSync(new URL("apps/api/src/app.ts", root), "utf8").includes('pathname === "/v1/nodes"')) {
+    fail("app.ts no longer serves GET /v1/nodes — OPERATOR.md's discovery view has no rail");
+  }
   for (const method of ["treasury", "claimAnchoring"]) {
     if (!agentSdkReadme.includes(method)) fail(`the agent SDK README no longer documents ${method}()`);
     if (!agentSdkSource.includes(`${method}(`)) fail(`the SDK no longer implements ${method}() — the README documents a method that does not exist`);

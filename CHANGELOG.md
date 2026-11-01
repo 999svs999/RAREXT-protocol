@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Discovery: a node says who it is and which peers it knows — with provenance.** `GET /v1/nodes`
+  answers a cold agent's first question in one shape: `self` (the registry served, the origin, the
+  binding path, the root committed or null) and `known` — the peers, each labelled `source: "seed"`
+  (inherited from the list the operator configured) or `source: "admission"` (a decision this
+  node's own 民主 rail applied, carrying the proposal that did it). The label is the substance:
+  inherited knowledge and admitted knowledge are different claims. One id, one entry. `RarextClient.nodes()`
+  speaks it. **A real defect fixed on the way**: a SECOND `/v1/registries` handler had been
+  unreachable since the admissions handler took the path — the seed list it walked was dead code.
+  That knowledge now lives here, reachable and labelled, instead of shadowed. OPERATOR.md documents
+  the view; claim-check holds the doc, the route, and the SDK method together.
 - **The agent can earn on the node it runs: `treasury()` and `claimAnchoring()` on the client.**
   The economy had all three legs — work is counted (receipts), a class can be sized (treasury),
   a decision can pay it (budgets) — but the SDK spoke only the first: an AI agent driving a node

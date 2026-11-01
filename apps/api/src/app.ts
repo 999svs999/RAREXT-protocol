@@ -2492,13 +2492,45 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
-      if (req.method === "GET" && pathname === "/v1/registries") {
+      // Discovery: what THIS node is, and which peers it knows — with the provenance of each.
+      //
+      // "Every server can be a node" is only true if a newcomer can FIND the nodes. The federation
+      // list is served at /v1/registries (the entries the node's own decisions admitted), and the
+      // seed list the node carries is what it looks for — but neither, alone, answers the cold
+      // agent's first question. This route answers it in one shape: self (who I am, and the root I
+      // committed) and known (the peers I know), each peer carrying HOW this node knows it — a seed
+      // it was configured with, or a decision its own 民主 rail applied. The provenance is the
+      // point: an entry the community admitted and an entry inherited from a config file are not
+      // the same claim, and a client that cannot tell them apart is trusting the wrong thing.
+      //
+      // NOTE: this route replaces a SECOND /v1/registries handler that had been unreachable since
+      // the admissions handler took the path — the seed list it walked was dead code. The seed
+      // knowledge now lives here, where it is reachable and labelled, rather than shadowed.
+      if (req.method === "GET" && pathname === "/v1/nodes") {
+        const latestAnchor = store.listAnchors()[0];
+        const known: Array<Record<string, unknown>> = [];
+        const seen = new Set<string>();
+        for (const entry of registrySeedList()) {
+          if (seen.has(entry.id)) continue;
+          seen.add(entry.id);
+          known.push({ ...entry, source: "seed" });
+        }
+        for (const applied of store.listRegistryAdmissions()) {
+          const entry = applied.entry as { id: string };
+          if (seen.has(entry.id)) continue;
+          seen.add(entry.id);
+          known.push({ ...applied.entry, source: "admission", admittedByProposal: applied.proposalRoot, appliedAt: applied.appliedAt });
+        }
         send(res, 200, {
           self: {
-            url: `http://${req.headers.host ?? "127.0.0.1:8787"}`,
+            registry: (process.env.RAREXT_REGISTRY_ID ?? "").trim() || null,
+            origin: requestOrigin(req),
+            binding: RAREXT_SITE_BINDING_PATH,
+            anchoredRoot: latestAnchor ? (latestAnchor as { root?: string }).root ?? null : null,
             chain: chainRegistry.list().map((chain) => chain.id),
           },
-          registries: registrySeedList(),
+          known,
+          at: new Date().toISOString(),
         });
         return;
       }
