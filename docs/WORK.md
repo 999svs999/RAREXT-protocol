@@ -117,6 +117,29 @@ participants a decision names, through the same rail that pays any other work. O
 participant, act, and root; a root the node never anchored is refused by name, because a receipt
 for a verification the node cannot vouch for would be a lie in its own ledger.
 
+## Anchor receipts: the operator's side
+
+The participation receipt is the USER's side of the roles. The OPERATOR's side is the standing
+work of running a node — committing publications to a Merkle root and freezing the state archive —
+and it leaves a record the same way:
+
+```
+POST /v1/work/anchor
+{"kind":"rarext.anchor-work.v1","operator":"<keyId>","root":"<64-hex root>","at":"<now>",
+ "signature":"<base64 over the claim>"}
+```
+
+The node corroborates exactly what it can know — the key is registered, the signature is the
+operator's, and the root is one THIS node anchored — and records a receipt with
+`action: "anchor"` and `bounty: 0`. This is the mining analogy with the mint removed: anchoring is
+not a lottery over hashes and nothing is emitted for it, but the work is COUNTED, so a community's
+budget decision can name the operators it wants to pay — `{"kind":"receipt-holders","act":"anchor"}`
+resolves to exactly the operators whose anchoring this node corroborated. One receipt per operator
+and root; the same work is never receipted twice, and a root the node never anchored is refused by
+name. The two sides of the roles are countable apart: `participate` is what a reader did,
+`anchor` is what an operator did, and both ride the same ledger, the same commitment, and the same
+民主 rail that decides what any of it is worth.
+
 ## What is deliberately not here
 
 - **No emission.** There is no faucet and no daily login bonus. Work pays; presence

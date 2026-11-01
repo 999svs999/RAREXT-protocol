@@ -84,6 +84,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/verifiers" },
     { path: "/v1/verify", note: "verification submissions" },
     { path: "/v1/work", note: "the action board and the work queue" },
+    { path: "/v1/work/anchor", note: "the operator's anchoring receipt — the work ledger's mining analog" },
     { path: "/v1/work/earnings", note: "a participant's receipts with inclusion proofs" },
     { path: "/v1/work/ledger", note: "the whole-ledger commitment" },
     { path: "/v1/work/participation", note: "the participation receipt rail" },

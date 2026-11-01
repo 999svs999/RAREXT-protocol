@@ -3424,6 +3424,26 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The anchor receipt: WORK.md names the operator's side of the roles and the endpoint;
+  // the route and the action vocabulary must carry them.
+  const workDoc = readFileSync(new URL("docs/WORK.md", root), "utf8");
+  for (const anchorMarker of ["POST /v1/work/anchor", 'action: "anchor"', "receipt-holders", "mining analogy"]) {
+    if (!workDoc.includes(anchorMarker)) {
+      fail(`WORK.md no longer documents the operator's anchor receipt ("${anchorMarker}")`);
+    }
+  }
+  const appSource = readFileSync(new URL("apps/api/src/app.ts", root), "utf8");
+  if (!appSource.includes('pathname === "/v1/work/anchor"')) {
+    fail("app.ts no longer serves POST /v1/work/anchor — WORK.md's anchor receipt has no rail");
+  }
+  if (!appSource.includes("rarext.anchor-work.v1")) {
+    fail("app.ts no longer validates the rarext.anchor-work.v1 claim — WORK.md's shape has no check");
+  }
+  const workSource = readFileSync(new URL("apps/api/src/work.ts", root), "utf8");
+  if (!workSource.includes('| "anchor"')) {
+    fail('work.ts no longer knows the "anchor" action — the receipt the doc names cannot be typed');
+  }
+
   // The one command: the operator doc composes boot/publish/anchor/archive/journey/join,
   // and the script carries the steps it names.
   const operatorDoc = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");

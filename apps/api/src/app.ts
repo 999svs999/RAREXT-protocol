@@ -115,6 +115,7 @@ import { verifyWorkerSignature } from "./worker.ts";
 import {
   ACTIONS,
   actionFor,
+  RECEIPT_ACTIONS,
   summarizeEarnings,
   workOrders,
   type VerificationSubmission,
@@ -1686,7 +1687,7 @@ export function createApp(options: AppOptions = {}): AppServer {
                   .listCredits()
                   .filter(
                     (credit) =>
-                      credit.action === "participate" &&
+                      RECEIPT_ACTIONS.includes(credit.action) &&
                       credit.challengeId === spec.act &&
                       (spec.root === undefined || credit.artifactHash === spec.root),
                   )
@@ -2148,6 +2149,81 @@ export function createApp(options: AppOptions = {}): AppServer {
             ...record,
             root: creditRoot(record, recordRootHash),
             ledger: { root: creditLedgerRoot(all, recordRootHash), ...creditLedgerProof(all, record, recordRootHash) },
+          },
+        });
+        return;
+      }
+
+      // An ANCHOR receipt: the OPERATOR's side of the roles. Running a node — committing
+      // publications to a Merkle root and freezing the state archive — is standing work, and the
+      // economy's answer to "how does the operator get paid" is the same as every other rail's:
+      // the work leaves a record (zero bounty, nothing minted) and a community's budget decision
+      // can pay the operators it names. The node corroborates exactly what it can know: the key
+      // is registered, the signature is the operator's, and the root is one THIS node anchored.
+      // One receipt per operator and root — the ledger is a record of work, not a faucet.
+      if (req.method === "POST" && pathname === "/v1/work/anchor") {
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== "rarext.anchor-work.v1") {
+          send(res, 400, { error: "payload must be a rarext.anchor-work.v1 claim" });
+          return;
+        }
+        const operator = payload.operator;
+        if (typeof operator !== "string" || operator.length === 0) {
+          send(res, 400, { error: "an anchor claim needs the key that will hold the receipt" });
+          return;
+        }
+        const anchoredRoot = payload.root;
+        if (typeof anchoredRoot !== "string" || !/^[0-9a-f]{64}$/.test(anchoredRoot)) {
+          send(res, 400, { error: "an anchor claim's root must be the 64-hex root the operator anchored" });
+          return;
+        }
+        const registeredOperator = store.resolveKey(operator);
+        if (!registeredOperator) {
+          send(res, 403, { error: "the operator key is not registered: a receipt binds a real identity" });
+          return;
+        }
+        if (typeof payload.signature !== "string" || payload.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        const { signature: claimSignature, ...claim } = payload;
+        if (!verifyPayload(registeredOperator.publicKey as unknown as RarextJsonWebKey, claim, claimSignature)) {
+          send(res, 401, { error: "the claim's signature does not match the operator key" });
+          return;
+        }
+        // Corroboration: this node anchored this root. A root it never committed is work it
+        // cannot vouch for, from a node that is not this one.
+        const didAnchor = store.listAnchors().some((anchor) => anchor.root === anchoredRoot);
+        if (!didAnchor) {
+          send(res, 404, { error: `this node has never anchored ${anchoredRoot.slice(0, 16)}…: it cannot corroborate that anchoring` });
+          return;
+        }
+        const alreadyAnchored = store
+          .listCredits()
+          .some((credit) => credit.keyId === operator && credit.action === "anchor" && credit.artifactHash === anchoredRoot);
+        if (alreadyAnchored) {
+          send(res, 409, { error: "this anchoring has already been receipted for this operator" });
+          return;
+        }
+
+        const anchorRecord: CreditRecord = {
+          keyId: operator,
+          action: "anchor",
+          bounty: 0,
+          challengeId: "anchor",
+          artifactHash: anchoredRoot,
+          at: new Date().toISOString(),
+        };
+        store.addCredit(anchorRecord);
+        const anchorLedger = store.listCredits();
+        send(res, 201, {
+          receipt: {
+            ...anchorRecord,
+            root: creditRoot(anchorRecord, recordRootHash),
+            ledger: {
+              root: creditLedgerRoot(anchorLedger, recordRootHash),
+              ...creditLedgerProof(anchorLedger, anchorRecord, recordRootHash),
+            },
           },
         });
         return;

@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Anchor receipts: the operator's side of the roles — the mining analogy with the mint
+  removed.** The participation receipt is what a READER did; running a node is what an OPERATOR
+  does, and it now leaves a record the same way. `POST /v1/work/anchor` takes a signed
+  `rarext.anchor-work.v1` claim naming the root the operator anchored; the node corroborates
+  exactly what it can know (the key is registered, the signature is the operator's, and the root
+  is one THIS node anchored) and records a receipt with `action: "anchor"` and `bounty: 0`. Zero
+  is the design: nothing is emitted for anchoring — it is not a lottery over hashes — but the work
+  is COUNTED, so a 民主 budget decision can pay the operators it names with
+  `{"kind":"receipt-holders","act":"anchor"}`, which resolves to exactly the operators whose
+  anchoring this node corroborated. One receipt per operator and root; an unregistered key, a
+  forged signature, and a root the node never anchored are each refused by name. The receipt-act
+  vocabulary is one place (`RECEIPT_ACTIONS` in the node's work module) so the budget rail and the
+  docs cannot disagree about which actions are receipt classes. WORK.md documents the rail;
+  claim-check holds the doc, the route, the claim shape, and the action vocabulary together.
 - **One command: become a node.** `npm run become-a-node` composes the whole operator path —
   boot (on a free port, or an `--origin` already running), publish a seeded half-adder, anchor,
   confirm the state archive froze, the four-rail journey check, and PRINT the admission document

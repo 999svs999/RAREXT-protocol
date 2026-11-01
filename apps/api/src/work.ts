@@ -33,7 +33,18 @@ export type ActionId =
    * honest. Zero bounty by design: nothing is minted for it, the record EXISTS so a community's
    * later budget decision can pay the participants it names. Same ledger, same commitment.
    */
-  | "participate";
+  | "participate"
+  /**
+   * An ANCHOR receipt: the OPERATOR's side of the roles — the standing work of running a node,
+   * committing publications to a Merkle root and freezing the state archive. This is the mining
+   * analogy the economy wanted, with the mint REMOVED: anchoring is not a lottery over hashes and
+   * nothing is emitted for it, but the work leaves a record the community can see and a budget
+   * decision can pay — the operator is paid for the work it actually did, by the community that
+   * decided the work mattered. Zero bounty, one receipt per operator and root, same ledger and
+   * same commitment as every other receipt. The board does not offer it as a job for the same
+   * reason participate is not offered: nobody is hired to run their own node, they just run it.
+   */
+  | "anchor";
 
 export interface ActionDefinition {
   id: ActionId;
@@ -108,6 +119,15 @@ export const ACTIONS: ActionDefinition[] = [
       "Submit a signed revocation for a leaked capability or a compromised verifier.",
   },
 ];
+
+/**
+ * The RECEIPT actions: the acts that leave a zero-bounty record in the ledger for work the node
+ * can corroborate but the board does not price — a reader's participation, an operator's
+ * anchoring. A budget that names a receipt-holders class resolves against exactly these, because
+ * they are the records that exist to be paid LATER by decision rather than at the door. Any other
+ * action in the ledger is already paid and is not a receipt class.
+ */
+export const RECEIPT_ACTIONS: readonly ActionId[] = ["participate", "anchor"];
 
 export function actionFor(id: ActionId): ActionDefinition {
   const action = ACTIONS.find((candidate) => candidate.id === id);
