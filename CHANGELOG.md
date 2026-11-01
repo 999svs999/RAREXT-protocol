@@ -11,6 +11,18 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The state chain, verified in the reader's browser.** The verify page's federation section now
+  probes each listed registry's `/v1/history` alongside its admissions list — the two probes
+  independent, so one absence never hides another — and verifies the chain IN THE READER'S
+  BROWSER: every archive's state root recomputed from core's `stateArchivePreimage` (the rule
+  whole in core, one await at the page's boundary — the same seam `recordRootPreimages` opened),
+  every link naming the archive before it, the head anchoring to genesis. "verified: N archive(s),
+  head …", the failure named per archive, or the absence reported as an answer. The seam is
+  core's: `stateArchivePreimage` exports the exact string the root hashes, and the test asserting
+  preimage-hashed equals the synchronous root is the seam's own proof. renditions.ts re-exports
+  it; the mirror bundle rebuilt (the drift-checker caught the staleness); claim-check holds the
+  history markers in the published page; live-checked on the deployed origin (both static
+  registries report their 404 absence correctly).
 - **The state archive: the ledger's history is tamper-evident, not merely recorded.** Publications
   were always verifiable backwards; the rest of the node's state was present-tense only. Every
   anchor now freezes a state archive — the durable state (proposals, votes, credits, admissions)
