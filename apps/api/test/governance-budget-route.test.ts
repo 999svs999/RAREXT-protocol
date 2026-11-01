@@ -208,11 +208,15 @@ test("execution refuses what is not a decision: an open window, a tie, a no, an 
     // A CLOSED window and a "no": the budget named "yes", so nothing is owed.
     const refused = proposalFixture(new Date(Date.now() - 5_000).toISOString());
     const refusedRoot = proposalRoot(refused, sha256);
-    await post(base, "/v1/governance/proposals", refused);
-    await post(base, `/v1/governance/proposals/${refusedRoot}/budget`, {
+    const refusedCreated = await post(base, "/v1/governance/proposals", refused);
+    const refusedCreatedBody = await refusedCreated.text();
+    assert.equal(refusedCreated.status, 201, `DEBUG proposal: ${refusedCreatedBody}`);
+    const refusedBudget = await post(base, `/v1/governance/proposals/${refusedRoot}/budget`, {
       payload: pledge(pledger.keyId, refusedRoot),
       signature: pledger.signPayload(pledge(pledger.keyId, refusedRoot)),
     });
+    const refusedBudgetBody = await refusedBudget.text();
+    assert.equal(refusedBudget.status, 201, `DEBUG budget: ${refusedBudgetBody}`);
     const voted = await post(
       base,
       `/v1/governance/proposals/${refusedRoot}/votes`,
@@ -220,8 +224,9 @@ test("execution refuses what is not a decision: an open window, a tie, a no, an 
     );
     assert.equal(voted.status, 201);
     const decidedNo = await post(base, `/v1/governance/proposals/${refusedRoot}/execute`, {});
-    assert.equal(decidedNo.status, 409);
-    assert.match(((await decidedNo.json()) as { error: string }).error, /nothing is owed/);
+    const decidedNoBody = await decidedNo.text();
+    assert.equal(decidedNo.status, 409, decidedNoBody);
+    assert.match((JSON.parse(decidedNoBody) as { error: string }).error, /nothing is owed/);
 
     // And the ledger shows no payment for either: refusing to execute leaves nothing behind.
     assert.equal(store.listCredits().length, 0);

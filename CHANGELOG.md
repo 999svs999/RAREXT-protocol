@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The capabilities document — an agent lands cold and bootstraps from one answer.**
+  `GET /v1/capabilities` returns `rarext.capabilities.v1`: the node's exact-path routes, its
+  parameterized families, and the transition binding path — as data, listing itself so an agent
+  that finds the node once can find the surface again. The document is held against the route
+  table in BOTH directions by a test that extracts every route literal from the API's source: a
+  route missing from the document fails CI with the path named, and a document entry matching no
+  real route fails too — the machine contract and the node cannot silently disagree. (The file is
+  `node-capabilities.ts` because `capabilities.ts` is the storage system's capability tokens — a
+  different idea that owns its name.) `RarextClient.capabilities()` types it for the agent-sdk;
+  APP-PROTOCOL.md documents the surface and claim-check holds the kind and the both-direction
+  rule.
 - **"AI lives on RAREXT" at the client surface: `RarextClient` now speaks the whole lifecycle.**
   The five-rail journey moved INTO the SDK (`packages/agent-sdk/src/journey.ts`,
   `runNodeJourney` — the CLI is a thin formatter over it, so a script and an agent cannot drift);

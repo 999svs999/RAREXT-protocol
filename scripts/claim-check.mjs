@@ -3419,6 +3419,21 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The capabilities document is a published surface: the protocol doc names
+  // it, and the API wires the constant.
+  const protocolDoc = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
+  for (const capMarker of ["/v1/capabilities", "rarext.capabilities.v1", "BOTH directions"]) {
+    if (!protocolDoc.includes(capMarker)) {
+      fail(`APP-PROTOCOL.md no longer documents the capabilities rail's "${capMarker}"`);
+    }
+  }
+  const capSource = readFileSync(new URL("apps/api/src/node-capabilities.ts", root), "utf8");
+  for (const capConst of ['NODE_CAPABILITIES_KIND = "rarext.capabilities.v1"', 'binding: "/.well-known/rarext.json"']) {
+    if (!capSource.includes(capConst)) {
+      fail(`the capabilities constant is missing "${capConst}"`);
+    }
+  }
+
   // The distribution rail: RFC 0021 names the spec and the zero-sum law; core
   // carries the function.
   const distributionDoc = readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8");

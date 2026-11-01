@@ -70,6 +70,7 @@ import {
   type SponsorRegistry,
 } from "./sponsorship.ts";
 import { publicationFromSignedInput, type PublishInput } from "./publications.ts";
+import { NODE_CAPABILITIES } from "./node-capabilities.ts";
 import { RarextStore } from "./store.ts";
 import { tapeOutIndex, tapeOutStatus } from "./tapeout.ts";
 import {
@@ -2146,6 +2147,14 @@ export function createApp(options: AppOptions = {}): AppServer {
             ledger: { root: creditLedgerRoot(all, recordRootHash), ...creditLedgerProof(all, record, recordRootHash) },
           },
         });
+        return;
+      }
+
+      // The capabilities document: an agent landing cold bootstraps from this one answer —
+      // the paths this node serves, as data, held by the test suite against the route table
+      // so it cannot silently drift from what the node actually answers.
+      if (req.method === "GET" && pathname === "/v1/capabilities") {
+        send(res, 200, NODE_CAPABILITIES);
         return;
       }
 

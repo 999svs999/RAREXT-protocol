@@ -476,3 +476,16 @@ Complete Python verifiers:
 - [`examples/python-verifier`](../examples/python-verifier) — minimal echo app.
 - [`examples/board-games`](../examples/board-games) — chess, xiangqi (象棋), and Go (圍棋)
   puzzle apps with challenge formats, move notation, and tests.
+
+## The capabilities document
+
+An agent landing cold on a node asks one question first: what does this node serve? The answer
+is data, not docs — `GET /v1/capabilities` returns `rarext.capabilities.v1`: the node's exact-path
+routes, its parameterized families, and the transition binding path. The document lists itself,
+so an agent that finds the node once can find the surface again.
+
+The document is held the way every surface here is held: a test extracts every route literal from
+the API's source and compares in BOTH directions — a route missing from the document fails CI
+with the path named, and a document entry matching no real route fails too, so the machine
+contract and the node cannot silently disagree. `RarextClient.capabilities()` types it for the
+agent-sdk.
