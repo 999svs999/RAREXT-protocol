@@ -356,6 +356,50 @@
               } catch (historyError) {
                 sections.push(htmlRow("State chain at " + entry.id, "not served — a static site or a node from before archives existed", "dim"));
               }
+
+              // Discovery: what this peer IS, and the peers IT knows — with provenance. A registry
+              // that answers /v1/nodes tells the reader who it is (the registry it serves and the
+              // root it committed) and which peers it knows, each labelled seed or admission. The
+              // label is what matters on a page for readers: inherited knowledge and a decision the
+              // community made are different claims, and the browser shows which is which. Absence
+              // is an answer, as with every other probe.
+              try {
+                const nodesResponse = await fetch(new URL("v1/nodes", base), { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
+                if (!nodesResponse.ok) {
+                  sections.push(
+                    htmlRow(
+                      "Nodes at " + entry.id,
+                      nodesResponse.status === 404
+                        ? "serves no /v1/nodes — a static site or a node from before discovery"
+                        : "the node answered HTTP " + nodesResponse.status,
+                      "dim",
+                    ),
+                  );
+                } else {
+                  const nodesBody = await nodesResponse.json();
+                  const itself = nodesBody && nodesBody.self;
+                  const known = nodesBody && Array.isArray(nodesBody.known) ? nodesBody.known : null;
+                  if (!itself || !known) {
+                    sections.push(htmlRow("Nodes at " + entry.id, "its /v1/nodes is not shaped like a discovery view", "bad"));
+                  } else {
+                    const rootNote = itself.anchoredRoot
+                      ? "root " + String(itself.anchoredRoot).slice(0, 16) + "…"
+                      : "nothing committed";
+                    sections.push(
+                      htmlRow("Nodes at " + entry.id, "says it serves " + (itself.registry || "(unnamed)") + " · " + rootNote, "ok"),
+                    );
+                    for (const peer of known) {
+                      const provenance =
+                        peer.source === "admission"
+                          ? "admitted by decision" + (peer.admittedByProposal ? " " + String(peer.admittedByProposal).slice(0, 8) + "…" : "")
+                          : "from the seed it carries";
+                      sections.push(htmlRow("knows " + peer.id, peer.url + " · " + provenance, "ok"));
+                    }
+                  }
+                }
+              } catch (nodesError) {
+                sections.push(htmlRow("Nodes at " + entry.id, "not served — a static site or a node from before discovery", "dim"));
+              }
             }
           }
         }
