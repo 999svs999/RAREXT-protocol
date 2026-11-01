@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The operator's one command — `scripts/node-journey.mjs`**: "is THIS node a full node?"
+  answered with four rails and evidence per rail, against any origin: `binding` (the node's own
+  `/.well-known/rarext.json`, verified against the pinned root the caller owes — without it the
+  rail is INDETERMINATE, never passed), `registry` (the bundle the node serves at
+  `/v1/bundles/latest`, recomputed through `verifyBundle` — its manifest root must equal the pin),
+  `ledger` (the work rail's commitment, live and shaped — labeled reachability-and-shape, because
+  a full recompute needs the receipts, which are the earner's to pull by key), and `governance`
+  (the 民主 rail answers, shaped like a proposal list). Exit 0 only when every rail holds;
+  `--json` prints the same journey as a document. The failure names WHICH rail did not hold and
+  what it answered — on a wrong root the evidence names the root the node actually serves, which
+  is what the operator needs to see. OPERATOR.md documents the journey, claim-check holds the
+  four rails in both doc and script, and four tests run the journey against a real in-process
+  node (all four pass; an empty node fails naming the binding rail; a wrong root fails naming the
+  root the node actually serves; no `--root` marks the binding rail indeterminate). Verified live:
+  a real node process, publish + anchor through its API, journey exit 0 with evidence per rail.
 - **The transition handshake works on shared hosts** — and the reference deployment proved it the
   hard way: the site-binding reader resolved `/.well-known/rarext.json` against the HOST ROOT,
   which dropped GitHub Pages' base path and 404'd against the project's own published binding.

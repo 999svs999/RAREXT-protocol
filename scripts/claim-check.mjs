@@ -3378,6 +3378,32 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // OPERATOR.md documents the node journey: the script must exist, name the
+  // four rails in its own words, and refuse to blur reachability with
+  // verification — the labels in the script are the doc's claims.
+  const operatorDocPath = new URL("docs/OPERATOR.md", root);
+  if (!existsSync(operatorDocPath)) {
+    fail("docs/OPERATOR.md is gone, but the node journey claims it");
+  } else {
+    const operatorDoc = readFileSync(operatorDocPath, "utf8");
+    for (const marker of ["scripts/node-journey.mjs", "binding", "registry", "ledger", "governance"]) {
+      if (!operatorDoc.includes(marker)) {
+        fail(`docs/OPERATOR.md no longer documents the node journey's "${marker}"`);
+      }
+    }
+  }
+  const journeyScript = new URL("scripts/node-journey.mjs", root);
+  if (!existsSync(journeyScript)) {
+    fail("docs/OPERATOR.md documents scripts/node-journey.mjs, but the script does not exist");
+  } else {
+    const journey = readFileSync(journeyScript, "utf8");
+    for (const marker of ['rail: "binding"', 'rail: "registry"', 'rail: "ledger"', 'rail: "governance"', "verifySiteBinding", "verifyBundle"]) {
+      if (!journey.includes(marker)) {
+        fail(`the node journey script is missing "${marker}" — the doc's four-rail claim has no implementation`);
+      }
+    }
+  }
+
   // TRANSITION.md says every server can be a node, and the reference deployment
   // must be one: the origin's own binding (site/.well-known/rarext.json) must
   // exist, parse, and name the root the CURRENT bundle rebuilds to. A republish

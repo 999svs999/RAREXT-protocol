@@ -17,6 +17,33 @@ coordination, and no production-scale (100 GiB) run. Read [`STORAGE-SECURITY.md`
 - Disk for each holder directory and for the API's `.data` directory.
 - Ports are loopback by default. Holders bind `127.0.0.1:9600` unless configured.
 
+## One command: is this node a full node?
+
+`scripts/node-journey.mjs` asks the question every operator asks after boot: did my node actually
+become one? Four rails, one command, evidence per rail:
+
+```bash
+RAREXT_REGISTRY_ID=rarext node apps/api/src/server.ts        # the node, in another terminal
+node scripts/node-journey.mjs http://127.0.0.1:8787 \
+  --registry rarext --root <the root the node anchored> --allow-private
+```
+
+The rails, in the journey's own order:
+
+- `binding` — the node's `/.well-known/rarext.json`, verified against the pinned root you pass
+  (`verifySiteBinding`; a statement about itself is not evidence about itself, so `--root` is
+  owed — without it the rail is INDETERMINATE, not passed)
+- `registry` — the bundle the node serves at `/v1/bundles/latest`, recomputed through
+  `verifyBundle`; its manifest root must equal the pinned root
+- `ledger` — the work rail's commitment (`GET /v1/work/ledger`), live and shaped: reachability
+  and shape, labeled as that, because a full recompute of the commitment needs the receipts,
+  which are the earner's to pull by key
+- `governance` — the 民主 rail answers and is shaped like a proposal list
+
+Exit `0` only when every rail holds; `--json` prints the same journey as a document for a robot.
+The failure output names WHICH rail did not hold and what it answered — a bare "invalid" would
+hide whether the operator has a binding problem, a stale copy, or a dead rail.
+
 ## One command: `npm run net`
 
 This runs three scenarios against holders and a pin service on ephemeral loopback
