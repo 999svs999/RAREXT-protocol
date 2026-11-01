@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The transition handshake works on shared hosts** — and the reference deployment proved it the
+  hard way: the site-binding reader resolved `/.well-known/rarext.json` against the HOST ROOT,
+  which dropped GitHub Pages' base path and 404'd against the project's own published binding.
+  RFC 8615 registers well-known paths against the origin, but a site on a shared host cannot
+  serve there — the host root belongs to someone else. Core gained `siteBindingUrlCandidates`
+  (root first, then the site's own base path, deduped), the SDK reader asks both in order with
+  every miss noted by location, and the fetch carries `cache: "no-cache"` — a discovery check
+  that reads a CDN-cached absence reports a confident lie until the TTL expires. The project's
+  own origins now publish their bindings (derived from the seed, nothing hand-written; the peer
+  gets one plus `.nojekyll` so Pages serves the dot-path), and both verify LIVE:
+  `site-binding.mjs https://999svs999.github.io/RAREXT-{protocol,mirror} --registry rarext --root
+  46ef40bd…` → **JOINED**. Held: claim-check fails if the binding vanishes, answers for another
+  registry, or names a root the committed bundle no longer rebuilds to; a unit test exercises the
+  shared-host case (root 404s, base path answers) end-to-end against the registry's pin.
 - **The reference deployment eats its own cooking**: the origin publishes its own transition
   binding at `/.well-known/rarext.json` — derived from the seed published beside the bundle
   (registry, root, bundle URL, cid, issuedAt; nothing hand-written) — and the peer gets its own,

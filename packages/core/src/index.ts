@@ -85,6 +85,7 @@ export {
   parseSiteBindingTxt,
   siteBindingTxtName,
   siteBindingUrl,
+  siteBindingUrlCandidates,
   verifySiteBinding,
 } from "./site-binding.ts";
 export type { SiteBinding, SiteBindingParse, SiteBindingVerdict } from "./site-binding.ts";

@@ -21,7 +21,7 @@ import {
   fetchWithUrlPolicy,
   parseSiteBinding,
   siteBindingTxtName,
-  siteBindingUrl,
+  siteBindingUrlCandidates,
 } from "../../core/src/index.ts";
 import type { SiteBindingParse } from "../../core/src/index.ts";
 
@@ -76,29 +76,43 @@ export async function readSiteBinding(origin: string, options: SiteBindingReadOp
 
   let fileText: string | undefined;
   let file: CarrierOutcome = "absent";
-  try {
-    const response = await fetchWithUrlPolicy(
-      siteBindingUrl(url.href),
-      { signal: AbortSignal.timeout(timeoutMs) },
-      { fetch: request, allowPrivate },
-    );
-    if (response.status === 404) {
-      notes.push(`${RAREXT_SITE_BINDING_PATH} was not served (404)`);
-    } else if (!response.ok) {
-      file = "unreachable";
-      notes.push(`${RAREXT_SITE_BINDING_PATH} answered HTTP ${response.status}`);
-    } else {
+  // Both locations the file carrier can live at (see core's
+  // siteBindingUrlCandidates): the origin root, and the site's own base path
+  // for a site on a shared host. The first that SERVES answers; every miss is
+  // noted by location, so an operator can see which paths were asked.
+  for (const candidate of siteBindingUrlCandidates(url.href)) {
+    try {
+      const response = await fetchWithUrlPolicy(
+        candidate,
+        // cache: no-cache, because the question is "does this site declare itself
+        // NOW" — a CDN that cached the 404 from before a site joined would report
+        // a confident lie until the TTL expired, and a discovery check that reads
+        // a cached absence is worse than one that fails loudly.
+        { signal: AbortSignal.timeout(timeoutMs), cache: "no-cache" },
+        { fetch: request, allowPrivate },
+      );
+      if (response.status === 404) {
+        notes.push(`${candidate} was not served (404)`);
+        continue;
+      }
+      if (!response.ok) {
+        file = "unreachable";
+        notes.push(`${candidate} answered HTTP ${response.status}`);
+        break;
+      }
       fileText = await response.text();
       file = "served";
+      break;
+    } catch (error) {
+      // A refusal by the policy is a decision, not a network failure: reporting it as
+      // "unreachable" would send an operator to debug a site that was never contacted. The code
+      // is compared, never the wording — prose matching broke the first time the policy's
+      // sentence changed, and the failure was silent (a refusal read as a transport error).
+      const refusal = (error as { code?: string }).code === URL_POLICY_REFUSAL_CODE;
+      file = refusal ? "refused" : "unreachable";
+      notes.push(`${candidate}: ${(error as Error).message}`);
+      break;
     }
-  } catch (error) {
-    // A refusal by the policy is a decision, not a network failure: reporting it as
-    // "unreachable" would send an operator to debug a site that was never contacted. The code
-    // is compared, never the wording — prose matching broke the first time the policy's
-    // sentence changed, and the failure was silent (a refusal read as a transport error).
-    const refusal = (error as { code?: string }).code === URL_POLICY_REFUSAL_CODE;
-    file = refusal ? "refused" : "unreachable";
-    notes.push(`${RAREXT_SITE_BINDING_PATH}: ${(error as Error).message}`);
   }
 
   const resolveTxt =

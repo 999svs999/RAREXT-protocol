@@ -61,6 +61,25 @@ export function siteBindingUrl(origin: string): string {
   return new URL(RAREXT_SITE_BINDING_PATH, origin).href;
 }
 
+/**
+ * The locations the file carrier is asked for, in order. The standard path is
+ * resolved against the ORIGIN ROOT (RFC 8615 registers well-known URIs against
+ * the origin, not a path prefix), and the second candidate is resolved against
+ * the URL's own base path — because a site on a SHARED host, a GitHub Pages
+ * project site above all, cannot serve at the host root: `/.well-known/...`
+ * there belongs to whoever controls the host. Excluding those sites from the
+ * transition would exclude most of the web's static hosting, so the reader
+ * asks both and the first that serves answers; the two locations are deduped
+ * when the base path is empty.
+ */
+export function siteBindingUrlCandidates(url: string): string[] {
+  const base = new URL(url);
+  const rootPath = new URL(RAREXT_SITE_BINDING_PATH, base.origin).href;
+  const prefix = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
+  const basePath = new URL(`.well-known/rarext.json`, `${base.origin}${prefix}`).href;
+  return rootPath === basePath ? [rootPath] : [rootPath, basePath];
+}
+
 /** The name a DNS-carrying site is asked about, resolved against its own hostname. */
 export function siteBindingTxtName(host: string): string {
   return `${RAREXT_SITE_BINDING_TXT_PREFIX}.${host}`;

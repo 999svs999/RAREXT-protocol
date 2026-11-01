@@ -17,6 +17,14 @@ keeps its name, its TLS, and its deployment. It publishes one small statement.
 | A file | `/.well-known/rarext.json` on the site's own origin | any site that can serve bytes |
 | A name record | `_rarext.<host>` `TXT` | any site that controls its name, not its tree |
 
+One location detail a shared host dictates: the well-known convention registers paths against
+the ORIGIN root (RFC 8615), but a site on a shared host — a GitHub Pages project site above all —
+cannot serve there, because `/.well-known/...` at the host root belongs to whoever controls the
+host. A site like that publishes beside its own base path instead
+(`/<base>/.well-known/rarext.json`), and the reader asks both locations in order: root first,
+then the base path. Excluding shared-host sites from the transition would exclude most of the
+web's static hosting, and the reference deployment itself is one.
+
 Both carry the same statement, and they parse into one shape:
 
 ```

@@ -53,6 +53,29 @@ test("the fixture is the real pinned root, and it is a root", () => {
   assert.match(ROOT, /^[0-9a-f]{64}$/);
 });
 
+test("a site on a SHARED host serves beside its base path, and the reader asks there too", async () => {
+  // A GitHub Pages project site cannot serve /.well-known at the host root —
+  // the host is shared — so its binding lives under /proto/.well-known/. The
+  // reader must ask both locations, and the base-relative one must answer.
+  const body = JSON.stringify({ registry: "rarext", root: ROOT });
+  const server = await site({
+    [RAREXT_SITE_BINDING_PATH]: { status: 404, body: "not found" },
+    "/proto/.well-known/rarext.json": { status: 200, body },
+  });
+  try {
+    const read = await readSiteBinding(`${server.origin}/proto`, { resolveTxt: noRecord, allowPrivate: true });
+    assert.equal(read.file, "served", `the base-relative carrier was not read: ${read.notes.join(" | ")}`);
+    assert.ok(read.parse.ok, `the served binding does not parse: ${read.parse.ok ? "" : read.parse.reason}`);
+    const verdict = verifySiteBinding((read.parse as { binding: Parameters<typeof verifySiteBinding>[0] }).binding, {
+      pinnedRoot: ROOT,
+      expectedRegistry: "rarext",
+    });
+    assert.equal(verdict.ok, true, `the shared-host site must join: ${verdict.ok ? "" : verdict.reason}`);
+  } finally {
+    await server.close();
+  }
+});
+
 test("a site that serves the file is read, and its statement becomes a binding", async () => {
   const server = await site({
     [RAREXT_SITE_BINDING_PATH]: { status: 200, body: JSON.stringify({ registry: "rarext", root: ROOT }) },
