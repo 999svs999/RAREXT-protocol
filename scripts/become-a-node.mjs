@@ -19,6 +19,9 @@
  *   [journey]   the four-rail full-node check (binding, registry, ledger, governance)
  *   [join]      the admission document, ready to attach to a proposal on a registry
  *               that is ALREADY in the federation — the 民主 rail does the rest
+ *   [announce]  (--announce <target-origin>) the join request FILED as a real proposal on a
+ *               federation node's 民主 rail — a live decision with a window and a tally. The
+ *               script proposes and attaches; it never votes or decides.
  *
  * The script never files the join request itself: an admission is a proposal's attachment,
  * and a proposal is a decision the community makes — an operator ASKS to join, the tally
@@ -28,6 +31,7 @@
  *   node --experimental-strip-types scripts/become-a-node.mjs   # boots its own node, free port
  *   … --origin <url>                                            # verifies an ALREADY-running node
  *   both: [--registry <id>] [--operator <name>] [--url <public-url>] [--json]
+ *         [--announce <federation-origin>]   # file the join request as a live proposal
  *
  * --registry names the federation registry whose seed this node wants to JOIN (default
  * "rarext"). --url is the node's PUBLIC origin (what the admission proposes; defaults to
@@ -54,6 +58,7 @@ let origin = "";
 let registryId = "rarext";
 let operator = "";
 let publicUrl = "";
+let announceTarget = "";
 let asJson = false;
 
 for (let index = 0; index < argv.length; index += 1) {
@@ -62,9 +67,10 @@ for (let index = 0; index < argv.length; index += 1) {
   else if (arg === "--registry") registryId = (argv[++index] ?? "").trim();
   else if (arg === "--operator") operator = (argv[++index] ?? "").trim();
   else if (arg === "--url") publicUrl = (argv[++index] ?? "").trim();
+  else if (arg === "--announce") announceTarget = (argv[++index] ?? "").trim();
   else if (arg === "--json") asJson = true;
   else if (arg === "--help" || arg === "-h") {
-    console.log("usage: node scripts/become-a-node.mjs [--origin <url>] [--registry <id>] [--operator <name>] [--url <public-url>] [--json]");
+    console.log("usage: node scripts/become-a-node.mjs [--origin <url>] [--registry <id>] [--operator <name>] [--url <public-url>] [--announce <target-origin>] [--json]");
     process.exit(0);
   } else {
     console.error(`unknown argument: ${arg}`);
@@ -97,10 +103,16 @@ function operatorHandle(name, keyIdValue) {
  * (GET /v1/identities/<handle>) rather than guessed — a name that collided with a seeded identity
  * would fail as a 401/409 the operator cannot act on. Suffixes are tried; null when all are taken.
  */
-async function freeHandle(originValue, base) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt}`;
-    if (candidate.length > 32) break;
+async function freeHandle(originValue, base, unique) {
+  // The bare name first (the operator's own, when it is free), then names salted with the key's
+  // own bytes. Numeric suffixes are NOT enough: a seeded node registers operator-alice AND
+  // operator-alice-1..N, so counting up walks into a wall of demo identities. A keyId-derived
+  // suffix is unique per run, which is what makes "ask, then salt" terminate.
+  const salt = String(unique).slice(0, 6);
+  const candidates = [base, `${base}-${salt}`];
+  for (let attempt = 1; attempt <= 4; attempt += 1) candidates.push(`${base}-${salt}-${attempt}`);
+  for (const candidate of candidates) {
+    if (candidate.length > 32) continue;
     const probe = await fetchJson(`${originValue}/v1/identities/${candidate}`);
     if (probe.status === 404) return candidate;
   }
@@ -218,12 +230,12 @@ async function run() {
   const operatorKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const operatorJwk = operatorKey.publicKey.export({ format: "jwk" });
   const operatorKeyId = sha256(canonicalize(operatorJwk));
-  const handle = await freeHandle(origin, operatorHandle(operator || "operator", operatorKeyId));
+  const handle = await freeHandle(origin, operatorHandle(operator || "operator", operatorKeyId), operatorKeyId);
   if (!handle) {
     emit("identity", "fail", "could not find a free operator handle on this node — every candidate is already registered");
     return finish(1);
   }
-  const author = await freeHandle(origin, `node-${operatorKeyId.slice(0, 8)}`);
+  const author = await freeHandle(origin, `node-${operatorKeyId.slice(0, 8)}`, operatorKeyId);
   if (!author) {
     emit("publish", "fail", "could not find a free author handle on this node — every candidate is a registered identity, which would demand a signed publication");
     return finish(1);
@@ -352,6 +364,52 @@ async function run() {
     emit("join", "note", `the document proposes THIS machine (${origin}) — pass --url <public-origin> when the node is reachable from the network`);
   }
 
+  // ANNOUNCE: file the join request as a real PROPOSAL on a federation node's 民主 rail. The
+  // document above is what an operator would otherwise paste somewhere by hand; filing it turns
+  // the ask into a live decision with a window and a tally. The script still does not DECIDE
+  // anything — it proposes and attaches, exactly as any participant may; the votes apply it.
+  let announcement = null;
+  if (announceTarget) {
+    const closesAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const document = {
+      kind: "rarext.governance-proposal.v1",
+      id: `admit-${admission.registry.id}`,
+      title: `Admit ${admission.registry.id} to the federation`,
+      question: `Should ${handle}'s node (${admission.registry.url}) join the federation's list?`,
+      choices: ["admit", "reject"],
+      closesAt,
+      quorum: { kind: "keys", value: 1 },
+      policy: { kind: "key" },
+    };
+    const created = await fetchJson(`${announceTarget}/v1/governance/proposals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(document),
+    });
+    if (created.status === 201 && typeof created.body?.root === "string") {
+      const proposalRootValue = created.body.root;
+      const attached = await fetchJson(`${announceTarget}/v1/governance/proposals/${proposalRootValue}/admission`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(admission),
+      });
+      if (attached.status === 201) {
+        announcement = { target: announceTarget, proposalRoot: proposalRootValue, closesAt, votes: `${announceTarget}/v1/governance/proposals/${proposalRootValue}/votes` };
+        emit("announce", "ok", `filed as proposal ${proposalRootValue.slice(0, 16)}… on ${announceTarget} — it closes ${closesAt}; the community votes, the tally applies`);
+      } else if (attached.status === 409) {
+        emit("announce", "note", `a decision for this registry is already open on ${announceTarget} — one decision at a time (the rail's own rule)`);
+      } else {
+        emit("announce", "fail", `the target refused the attach (HTTP ${attached.status}): ${JSON.stringify(attached.body).slice(0, 160)}`);
+        return finish(1);
+      }
+    } else if (created.status === 409) {
+      emit("announce", "note", `a proposal with this id already exists on ${announceTarget} — the join request is already filed`);
+    } else {
+      emit("announce", "fail", `the target refused the proposal (HTTP ${created.status}): ${JSON.stringify(created.body).slice(0, 160)}`);
+      return finish(1);
+    }
+  }
+
   const anchorReceipt = receipt.body?.receipt ?? null;
   if (asJson) {
     console.log(
@@ -363,6 +421,7 @@ async function run() {
           stateRoot: archive.body?.stateRoot,
           operator: { handle, keyId: operatorKeyId },
           anchorReceipt,
+          announcement,
           admission,
           events,
         },

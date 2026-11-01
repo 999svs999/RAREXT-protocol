@@ -59,6 +59,28 @@ the federation you are asking to join, and `--operator <name>` to name the opera
 rather than failing). The script never files the request itself: an admission is a proposal's
 attachment, and a proposal is a decision the community makes — an operator ASKS to join, the tally APPLIES the join.
 
+## Filing the join request
+
+The one command prints the admission document; `--announce <federation-origin>` FILES it, as a real
+proposal on that node's 民主 rail:
+
+```
+npm run become-a-node -- --announce https://federation-node.example.com
+```
+
+The script creates a proposal ("Should <operator>'s node (<url>) join the federation's list?"),
+attaches the admission, and prints the proposal root and its vote URL. It proposes and attaches
+only — exactly what any participant may do; it never votes, and the tally applies the join. A node
+that already has a decision open for that registry answers 409 and the script says so rather than
+duplicating it.
+
+## Inspecting a decision
+
+`GET /v1/governance/proposals/:root` serves the proposal AND its attachments — the `admission` it
+would admit and the `budget` it would move, each `null` when the decision carries none. A voter
+reads the exact url, operator, and chains before voting; deciding on a question whose substance you
+cannot read is not deciding.
+
 ## Finding the other nodes
 
 A node can say what it is and which peers it knows — with the provenance of each:

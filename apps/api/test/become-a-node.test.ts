@@ -84,3 +84,48 @@ test("become-a-node: a dead origin fails at health, naming the step", async () =
     "the health failure names what happened — an answer, or the lack of one",
   );
 });
+
+test("become-a-node --announce files the join request as a live proposal on the federation's rail", async () => {
+  // The federation node whose 民主 rail decides: a real node, in-process.
+  const { start, stop } = await import("./helpers.ts");
+  const { server, base } = await start();
+  try {
+    const { code, out } = await runScript([
+      "--json",
+      "--operator",
+      "announcing-operator",
+      "--url",
+      "https://announcing.example.com",
+      "--announce",
+      base,
+    ]);
+    assert.equal(code, 0, `the announcing run failed: ${out.slice(0, 400)}`);
+    const report = JSON.parse(out.slice(out.indexOf("{"))) as {
+      events: Array<{ step: string; verdict: string; detail: string }>;
+      announcement: { target: string; proposalRoot: string; closesAt: string } | null;
+    };
+    const announced = report.events.find((event) => event.step === "announce");
+    assert.equal(announced?.verdict, "ok", `announce did not succeed: ${announced?.detail}`);
+    assert.ok(report.announcement, "the run reports where the request was filed");
+    assert.match(report.announcement!.proposalRoot, /^[0-9a-f]{64}$/);
+
+    // The proposal exists on the target AND the voter can see WHAT it would admit.
+    const view = (await (await fetch(`${base}/v1/governance/proposals/${report.announcement!.proposalRoot}`)).json()) as {
+      proposal: { choices: string[] };
+      admission: { registry: { url: string; operator: string } } | null;
+      budget: unknown | null;
+    };
+    assert.deepEqual(view.proposal.choices, ["admit", "reject"]);
+    assert.ok(view.admission, "the attached admission is visible — a voter decides on what they can read");
+    assert.equal(view.admission?.registry.url, "https://announcing.example.com");
+    // The handle is the operator's own name when free, salted with the key when the node already
+    // holds that name — the script asks and salts rather than failing, so assert the identity the
+    // run actually reported, not the name it was asked for.
+    const reported = JSON.parse(out.slice(out.indexOf("{"))) as { operator: { handle: string } };
+    assert.ok(reported.operator.handle.startsWith("announcing-operator"), reported.operator.handle);
+    assert.equal(view.admission?.registry.operator, reported.operator.handle);
+    assert.equal(view.budget, null, "no money is attached to a join request");
+  } finally {
+    await stop(server);
+  }
+});

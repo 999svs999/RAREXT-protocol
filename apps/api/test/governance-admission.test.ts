@@ -221,3 +221,41 @@ test("a malformed admission is refused by name, and nothing is stored", async ()
     await stop(server);
   }
 });
+
+test("a decision's attachments are VISIBLE: a voter can read what would be admitted", async () => {
+  const closesAt = new Date(Date.now() - 5_000).toISOString();
+  const document = proposalFixture(closesAt);
+  const { server, base } = await start();
+  try {
+    const created = await post(base, "/v1/governance/proposals", document);
+    const createdBody = await created.text();
+    assert.equal(created.status, 201, createdBody);
+    const { root } = JSON.parse(createdBody) as { root: string };
+
+    // Before an attachment: nothing to see, and the view says so rather than omitting the field.
+    const bare = (await (await fetch(`${base}/v1/governance/proposals/${root}`)).json()) as {
+      admission: unknown | null;
+      budget: unknown | null;
+    };
+    assert.equal(bare.admission, null);
+    assert.equal(bare.budget, null);
+
+    const admission = admissionFixture();
+    assert.equal((await post(base, `/v1/governance/proposals/${root}/admission`, admission)).status, 201);
+
+    // After: the voter reads the exact document the decision would apply — url, operator, chains.
+    const view = (await (await fetch(`${base}/v1/governance/proposals/${root}`)).json()) as {
+      admission: { kind: string; registry: { id: string; url: string; operator: string; chains: string[] }; payOn: string } | null;
+      budget: unknown | null;
+    };
+    assert.ok(view.admission, "the attached admission is served — deciding blind is not deciding");
+    assert.equal(view.admission?.kind, GOVERNANCE_ADMISSION_KIND);
+    assert.equal(view.admission?.registry.id, admission.registry.id);
+    assert.equal(view.admission?.registry.url, admission.registry.url);
+    assert.equal(view.admission?.registry.operator, admission.registry.operator);
+    assert.deepEqual(view.admission?.registry.chains, admission.registry.chains);
+    assert.equal(view.admission?.payOn, admission.payOn);
+  } finally {
+    await stop(server);
+  }
+});

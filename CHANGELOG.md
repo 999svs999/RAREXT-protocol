@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Filing the join request, and a hole in deciding.** `become-a-node --announce <federation-origin>`
+  now FILES the admission as a real proposal on that node's 民主 rail — a live decision with a
+  window and a tally — creating the proposal, attaching the admission, and printing the proposal
+  root and its vote URL. It proposes and attaches only (exactly what any participant may do): it
+  never votes; the tally applies the join; a registry with a decision already open answers 409 and
+  the script says so.
+- **A real hole fell out of testing it.** `GET /v1/governance/proposals/:root` served the proposal,
+  its votes, its sponsorships, and its tally — but NOT its attachments. A voter was asked to decide
+  on "Admit node-x" with no way to read node-x's url, operator, or chains before voting, and no way
+  to see the budget a funded decision would move. The view now serves `admission` and `budget`
+  (each `null` when the decision carries none). Deciding on a question whose substance you cannot
+  read is not deciding.
+- **Handle salting hardened.** `become-a-node`'s free-handle probe counted up numerically, which
+  walked into a wall of seeded demo identities (`operator-alice`, `operator-alice-1`, …). Candidates
+  are now salted with the operator key's own bytes, so the probe terminates on any node.
 - **The reader can see the network: discovery on the verify page.** The mirror's proof page now
   probes each listed registry's `/v1/nodes` alongside its admissions list and its state chain —
   three independent probes, so one absence never hides another — and shows what each registry IS

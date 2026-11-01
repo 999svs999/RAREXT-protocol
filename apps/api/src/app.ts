@@ -1882,6 +1882,13 @@ export function createApp(options: AppOptions = {}): AppServer {
           // Who paid, when somebody did: beside the votes, so the cost of free participation is
           // visible in the record instead of being implied by nobody mentioning it.
           sponsorships: store.voteSponsorshipsFor(root),
+          // WHAT THE DECISION WOULD DO, when it carries something: the attached budget (the money
+          // it would move) and the attached admission (the registry it would admit). These were
+          // stored but never served, which made a voter decide on a question whose substance they
+          // could not read — a proposal titled "Admit node-x" with no way to see node-x's url,
+          // operator, or chains before voting. A decision you cannot inspect is not a decision.
+          budget: store.getGovernanceBudget(root),
+          admission: store.getGovernanceAdmission(root),
           tally: tallyFor(store, proposal),
         });
         return;
