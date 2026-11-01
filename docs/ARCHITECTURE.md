@@ -162,6 +162,12 @@ score      = correct ? round(efficiency * 1000) : 0
 
 Base URL: `http://127.0.0.1:8787`
 
+This table is also published in machine-readable form at `/schema/routes.json` (kind
+`rarext.routes.v1`), generated from this table by `scripts/build-route-index.mjs` — a consumer that
+just wants the surface fetches one file instead of parsing these docs, and the checker holds the
+published file, this table, and the route guards in `apps/api/src/app.ts` in agreement so the three
+cannot drift.
+
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/health` | — | `{ ok, publications, identities, anchors, identityLinks, adapters }` |

@@ -65,7 +65,8 @@
     "demo:ai": "node scripts/demo-ai-on-rarext.mjs",
     "demo:resident": "node scripts/demo-resident.mjs",
     "demo:self-publish": "node scripts/demo-self-publish.mjs",
-    "claim:self-test": "node scripts/claim-check.mjs --self-test"
+    "claim:self-test": "node scripts/claim-check.mjs --self-test",
+    "build:routes": "node scripts/build-route-index.mjs"
   },
   "engines": {
     "node": ">=22.18"

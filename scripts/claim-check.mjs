@@ -4783,6 +4783,45 @@ function checkRouteSurface(docOverride) {
     fail(`the table publishes ${key}, but app.ts no longer handles it`);
   }
   console.log(`  every published route is handled: ${unhandled === 0 ? "yes" : `NO (${unhandled})`}`);
+
+  // The PUBLISHED surface: site/schema/routes.json is what a stranger can fetch without cloning
+  // the repo, so it has to be the same table this check just compared to the code. Asserting it
+  // here rather than in a kind of its own is deliberate — this check's self-test injection doctors
+  // the doc's table, so appending the artifact to the SAME assertion means the injection proves
+  // both halves can fail (a guard that only ever reads the real tree is green forever).
+  let index = null;
+  try {
+    index = JSON.parse(readFileSync(new URL("site/schema/routes.json", root), "utf8"));
+  } catch (error) {
+    fail(`site/schema/routes.json is unreadable: ${error instanceof Error ? error.message : error} — run: node scripts/build-route-index.mjs`);
+  }
+  if (index) {
+    if (index.kind !== "rarext.routes.v1") fail(`site/schema/routes.json is not a route index (kind: ${index.kind})`);
+    // Route IDENTITY is method + path. The index carries the query string too (an agent wants the
+    // parameters), which the doc's table folds into the same cell — so compare with the query
+    // stripped on both sides, and let the index be the more detailed of the two.
+    const bare = (entry) => entry.split("?")[0];
+    const artifact = (Array.isArray(index.routes) ? index.routes : []).map((route) => `${route.method} ${route.path}`);
+    const expected = published.map((route) => `${route.method} ${route.path}`);
+    if (artifact.length !== expected.length) {
+      fail(`site/schema/routes.json lists ${artifact.length} route(s) but the table publishes ${expected.length} — run: node scripts/build-route-index.mjs`);
+    } else {
+      for (let i = 0; i < expected.length; i += 1) {
+        if (bare(artifact[i]) !== bare(expected[i])) {
+          fail(`site/schema/routes.json is stale at position ${i + 1}: it says ${artifact[i]}, the table says ${expected[i]} — run: node scripts/build-route-index.mjs`);
+          break;
+        }
+      }
+    }
+    if (index.count !== artifact.length) fail(`site/schema/routes.json says count ${index.count} but lists ${artifact.length}`);
+    console.log(`  published route index: ${artifact.length} route(s)${index.count === artifact.length && artifact.map(bare).join() === expected.map(bare).join() ? ", in step with the table" : ""}`);
+    const architecture = readFileSync(new URL("docs/ARCHITECTURE.md", root), "utf8");
+    for (const needle of ["/schema/routes.json", "rarext.routes.v1", "build-route-index.mjs"]) {
+      if (!architecture.includes(needle)) {
+        fail(`docs/ARCHITECTURE.md no longer tells a reader where the machine-readable surface is ("${needle}")`);
+      }
+    }
+  }
 }
 
 /** The measured claim: the repair bench records its own arithmetic in RESULTS.json. */

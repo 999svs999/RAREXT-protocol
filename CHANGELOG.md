@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The surface is published, not just described.** `GET`-able at `/schema/routes.json`
+  (kind `rarext.routes.v1`), generated from `docs/ARCHITECTURE.md`'s route table by
+  `scripts/build-route-index.mjs`: every route with its method, path (query string included — an
+  agent wants the parameters), request body and response shape, in the documentation's own words.
+  A consumer that just wants the surface fetches one file instead of cloning the repo and parsing
+  docs. The checker holds the published file, the table, and the route guards in
+  `apps/api/src/app.ts` in agreement, so the three cannot drift in either direction; a test proves
+  the committed bytes came from the committed generator (regeneration is a no-op), and the doc
+  gains its own pointer to the artifact that the checker also holds. `npm run build:routes`
+  regenerates; `--check` fails if the file is stale.
 - **Anyone with a browser can check what a key was owed.** The mirror's proof page gained a
   statement panel: enter a key, and for each registry it recomputes the FROZEN state root in the
   browser and derives that key's statement — earned / spent / net / weight and the receipt classes
