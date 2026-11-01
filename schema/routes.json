@@ -1,0 +1,256 @@
+{
+  "kind": "rarext.routes.v1",
+  "note": "The API surface, generated from docs/ARCHITECTURE.md's route table. Held in agreement with the documentation and with the route guards in apps/api/src/app.ts by scripts/claim-check.mjs, so it cannot drift from what the node serves. Cells are the documentation's own words.",
+  "schemas": {
+    "resolve outcome": "/schema/resolve-outcome.schema.json"
+  },
+  "count": 41,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "body": "none",
+      "response": "`{ ok, publications, identities, anchors, identityLinks, adapters }`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tasks",
+      "body": "none",
+      "response": "`Task[]` (logic alias)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/challenges",
+      "body": "none",
+      "response": "`Challenge[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/challenges/:id",
+      "body": "none",
+      "response": "`Challenge`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/challenges/sponsored",
+      "body": "`{ payload, signature }`",
+      "response": "`Challenge` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/apps",
+      "body": "none",
+      "response": "`AppInfo[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/adapters",
+      "body": "none",
+      "response": "`AdapterInfo[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/adapters/:id",
+      "body": "none",
+      "response": "`AdapterStatus`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/simulate",
+      "body": "`{ circuit, inputs, initial? }`",
+      "response": "`SimulationResult`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/score",
+      "body": "`{ circuit, taskId }`",
+      "response": "`DesignScore`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/feed?taskId=&author=&parentId=&limit=&offset=",
+      "body": "none",
+      "response": "`Publication[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/builds?taskId=&challengeId=&app=&author=&parentId=&root=&source=&minScore=&maxGates=&sort=&limit=&offset=",
+      "body": "none",
+      "response": "`BuildSummary[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/artifacts",
+      "body": "none",
+      "response": "`BuildSummary[]` alias"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/artifacts/:id",
+      "body": "none",
+      "response": "`BuildSummary` alias"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/leaderboard?app=&challengeId=&limit=&offset=",
+      "body": "none",
+      "response": "`LeaderboardEntry[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/builds/:id",
+      "body": "none",
+      "response": "`BuildSummary`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/builds/:id/lineage",
+      "body": "none",
+      "response": "`{ build, ancestors, descendants }`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/publications",
+      "body": "`{ author, title, body?, taskId, circuit, parentId?, source? }` or `{ payload, signature }`",
+      "response": "`Publication` (201)"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/artifacts",
+      "body": "`{ author, title, body?, challengeId, artifact, parentId?, source? }` or `{ payload, signature }`",
+      "response": "`Publication` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/publications/:id",
+      "body": "none",
+      "response": "`Publication`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/profiles",
+      "body": "none",
+      "response": "`Profile[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/profiles/:handle",
+      "body": "none",
+      "response": "`Profile`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identities",
+      "body": "`{ handle, publicKey }`",
+      "response": "`Identity` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identities/:handle",
+      "body": "none",
+      "response": "`Identity`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identities/:handle/rotate",
+      "body": "rotation record signed by the retiring key",
+      "response": "`{ identity, rotation }` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identities/:handle/rotations",
+      "body": "none",
+      "response": "`KeyRotation[]`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identities/:handle/delegations",
+      "body": "delegation record signed by the root key",
+      "response": "`Delegation` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identities/:handle/delegations",
+      "body": "none",
+      "response": "`Delegation[]`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/identity-links",
+      "body": "`{ payload, signature }`",
+      "response": "`IdentityLink` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identity-links?handle=",
+      "body": "none",
+      "response": "`IdentityLink[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/identity-links/:handle",
+      "body": "none",
+      "response": "`IdentityLink[]`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sources/github/resolve",
+      "body": "`{ repo, ref?, path?, taskId? }`",
+      "response": "`SourceResolution`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/anchors",
+      "body": "none",
+      "response": "`Anchor` (201)"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/anchors",
+      "body": "none",
+      "response": "`Anchor[]`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/anchors/:id",
+      "body": "none",
+      "response": "`Anchor`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/anchors/:id/proof",
+      "body": "`{ publicationId }`",
+      "response": "`{ leaf, proof, root, index, valid }`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/consensus/state",
+      "body": "none",
+      "response": "`ConsensusState`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/consensus/validate",
+      "body": "`{ proof, publicKey, signature }`",
+      "response": "`ConsensusValidation`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tapeout/status?address=",
+      "body": "none",
+      "response": "`TapeOutStatus`"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/tapeout/circuits?fromBlock=&toBlock=",
+      "body": "none",
+      "response": "`TapeOutIndex`"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/verify",
+      "body": "`{ publicationId }`",
+      "response": "`{ valid, attestation, recomputed }`"
+    }
+  ]
+}
