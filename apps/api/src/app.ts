@@ -1778,6 +1778,34 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // What needs deciding: the proposals whose window is still OPEN, with everything a voter
+      // needs to weigh in without already knowing a root — the question, the window, WHAT the
+      // decision would do (its attachments), and the tally so far. A bulletin board that only
+      // answers by root is a board you must already know the address of; an assembly has an
+      // agenda. Recomputed at read time like every verdict, so "open" means open NOW, and a
+      // proposal that has closed is absent rather than listed under a stale label.
+      if (req.method === "GET" && pathname === "/v1/governance/open") {
+        const now = Date.now();
+        const open = store
+          .listProposals()
+          .map(({ root, proposal }) => ({ root, proposal }))
+          .filter(({ proposal }) => {
+            const closesAt = Date.parse(String((proposal as { closesAt?: string }).closesAt ?? ""));
+            return Number.isFinite(closesAt) && closesAt > now;
+          })
+          .map(({ root, proposal }) => ({
+            root,
+            proposal,
+            closesAt: (proposal as { closesAt: string }).closesAt,
+            admission: store.getGovernanceAdmission(root),
+            budget: store.getGovernanceBudget(root),
+            votes: store.governanceVotesFor(root).length,
+            tally: tallyFor(store, proposal),
+          }));
+        send(res, 200, { open, at: new Date().toISOString() });
+        return;
+      }
+
       // A SPONSORED ballot: somebody else pays for the storage, and the voter still signs.
       //
       // Participation is free and unpaid (RFC 0021), so a participant with no credits must still be

@@ -52,6 +52,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/durability/challenge" },
     { path: "/v1/durability/gc" },
     { path: "/v1/feed", note: "the publication feed" },
+    { path: "/v1/governance/open", note: "the decisions a community can weigh in on right now" },
     { path: "/v1/governance/proposals", note: "the 民主 rail: propose and list" },
     { path: "/v1/identities" },
     { path: "/v1/identity-links" },

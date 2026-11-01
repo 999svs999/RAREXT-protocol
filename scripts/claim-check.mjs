@@ -3449,6 +3449,14 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   const agentSdkReadme = readFileSync(new URL("packages/agent-sdk/README.md", root), "utf8");
   const agentSdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
   if (!agentSdkSource.includes("nodes(")) fail("the SDK no longer implements nodes()");
+  if (!agentSdkSource.includes("openDecisions(")) fail("the SDK no longer implements openDecisions()");
+  if (!agentSdkReadme.includes("openDecisions")) fail("the agent SDK README no longer documents openDecisions()");
+  if (!readFileSync(new URL("docs/OPERATOR.md", root), "utf8").includes("GET /v1/governance/open")) {
+    fail("OPERATOR.md no longer documents the agenda — findable decisions have no surface");
+  }
+  if (!readFileSync(new URL("apps/api/src/app.ts", root), "utf8").includes('pathname === "/v1/governance/open"')) {
+    fail("app.ts no longer serves GET /v1/governance/open — the agenda has no rail");
+  }
   if (!agentSdkReadme.includes("nodes")) fail("the agent SDK README no longer documents nodes()");
   const operatorDocForNodes = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
   if (!operatorDocForNodes.includes("GET /v1/nodes")) {

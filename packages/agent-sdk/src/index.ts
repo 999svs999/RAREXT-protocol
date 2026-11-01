@@ -2410,6 +2410,25 @@ export class RarextClient {
     return this.request("/v1/nodes");
   }
 
+  /**
+   * What needs deciding: the proposals whose window is still open, with their attachments and
+   * their tally so far. An agent finds work to weigh in on without already knowing a root.
+   */
+  openDecisions(): Promise<{
+    open: Array<{
+      root: string;
+      proposal: GovernanceProposal;
+      closesAt: string;
+      admission: Record<string, unknown> | null;
+      budget: Record<string, unknown> | null;
+      votes: number;
+      tally: Record<string, unknown>;
+    }>;
+    at: string;
+  }> {
+    return this.request("/v1/governance/open");
+  }
+
   /** The chain of state archives: the ledger's history, tamper-evident by construction. */
   stateHistory(): Promise<{ archives: Array<Record<string, unknown> & { anchorRoot: string; previousStateRoot: string; stateRoot: string }> }> {
     return this.request("/v1/history");

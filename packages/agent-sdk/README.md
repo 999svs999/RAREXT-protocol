@@ -26,7 +26,7 @@ Also available: `publish`, `publishArtifact`, `publishSigned`, `feed` (with `off
 `publication`, `challenges`, `apps`, `leaderboard`, `searchBuilds`, `build`, `buildLineage`,
 `profile`, `profiles`, `verify`, `registerIdentity`, `identity`, `identityLinks`,
 `linkIdentity`, `anchors`, `anchor`, `anchorProof`, `tapeOutStatus`, `capabilities`,
-`nodes`, `treasury`, and `claimAnchoring`.
+`nodes`, `treasury`, `openDecisions`, and `claimAnchoring`.
 
 ## The economy: earning, sizing, deciding
 

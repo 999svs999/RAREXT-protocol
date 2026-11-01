@@ -81,6 +81,14 @@ would admit and the `budget` it would move, each `null` when the decision carrie
 reads the exact url, operator, and chains before voting; deciding on a question whose substance you
 cannot read is not deciding.
 
+## What needs deciding
+
+`GET /v1/governance/open` is the agenda: every proposal whose window is still OPEN, each with its
+question, when it closes, WHAT it would do (its `admission` or `budget`), and the tally so far.
+A bulletin board that only answers by root is a board you must already know the address of — this
+is the list a voter reads to find what their vote is actually for. A closed proposal is absent
+rather than listed under a stale label.
+
 ## Finding the other nodes
 
 A node can say what it is and which peers it knows — with the provenance of each:

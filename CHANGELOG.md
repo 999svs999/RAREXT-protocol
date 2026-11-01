@@ -11,6 +11,12 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The agenda: what needs deciding.** `GET /v1/governance/open` lists every proposal whose window
+  is still OPEN — the question, when it closes, WHAT it would do (its `admission` or `budget`), and
+  the tally so far. A bulletin board that only answers by root is a board you must already know the
+  address of; an assembly has an agenda. "Open" is recomputed at read time, so a closed proposal is
+  absent rather than listed under a stale label. `RarextClient.openDecisions()` speaks it.
+  OPERATOR.md documents it; claim-check holds the doc, the route, and the SDK method together.
 - **Filing the join request, and a hole in deciding.** `become-a-node --announce <federation-origin>`
   now FILES the admission as a real proposal on that node's 民主 rail — a live decision with a
   window and a tally — creating the proposal, attaching the admission, and printing the proposal
