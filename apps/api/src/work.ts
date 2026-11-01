@@ -26,7 +26,14 @@ export type ActionId =
    * ledger and covered by the same commitment as work, but the board does not offer it as a job —
    * nobody earns it by doing work, and it exists because a community can fund what it decides.
    */
-  | "governance";
+  | "governance"
+  /**
+   * A PARTICIPATION receipt: the ledger record of an everyday act the network can corroborate —
+   * verifying a mirror against a pinned root, the reader-side work that keeps the federation
+   * honest. Zero bounty by design: nothing is minted for it, the record EXISTS so a community's
+   * later budget decision can pay the participants it names. Same ledger, same commitment.
+   */
+  | "participate";
 
 export interface ActionDefinition {
   id: ActionId;

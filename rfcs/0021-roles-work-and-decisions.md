@@ -168,6 +168,14 @@ decided choice must be the one the budget named — otherwise the refusal says n
 rules shipped first (#17) because they are the part that must be right; the wiring followed them
 rather than leading them.
 
+### Participation recorded, paid by decision
+
+The user's side of the roles: a reader who verifies a mirror against a pinned root has done
+work the network can corroborate. `POST /v1/work/participation` records it — a receipt with
+kind `rarext.participation.v1` in the same ledger, same commitment, `bounty: 0` — and the
+receipt's VALUE arrives, if it does, when a community budget decides to pay the participants a
+decision names. Nothing is minted; the record is what makes participation countable.
+
 ### Admitting a registry: the same decision, a different effect
 
 A federation list that only the registry operator can edit is a guest list, not a federation.

@@ -97,6 +97,26 @@ Credits are not money yet. They are a unit of account for work delivered, redeem
 for services the platform provides — storage, verification, mirrors. The chain settles
 them.
 
+## Participation receipts
+
+The actions above pay for work. One more act happens every day and is worth recording even
+though nothing pays for it yet: a reader verifying a mirror's copy against a pinned root. That
+act is the reader-side labor that keeps a federation honest, and the ledger can record it:
+
+```
+POST /v1/work/participation
+{"kind":"rarext.participation.v1","participant":"<keyId>","act":"mirror-verify",
+ "root":"<64-hex root>","at":"<now>","signature":"<base64 over the assertion>"}
+```
+
+The node corroborates what it can actually know — the key is registered, the signature is the
+participant's, and the root is one THIS node anchored — and records a receipt with
+`action: "participate"` and `bounty: 0`. Zero is the point, not a placeholder: nothing is minted
+for participation, the receipt EXISTS so a community's later budget decision can pay the
+participants a decision names, through the same rail that pays any other work. One receipt per
+participant, act, and root; a root the node never anchored is refused by name, because a receipt
+for a verification the node cannot vouch for would be a lie in its own ledger.
+
 ## What is deliberately not here
 
 - **No emission.** There is no faucet and no daily login bonus. Work pays; presence

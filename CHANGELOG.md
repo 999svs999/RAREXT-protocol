@@ -11,6 +11,21 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Participation receipts — the user's side of the roles, countable in the ledger.** The loop's
+  "user who is contributing by just participating" now leaves a record: a reader who verifies a
+  mirror against a pinned root submits a signed assertion to `POST /v1/work/participation`
+  (`rarext.participation.v1`), and the node corroborates what it can actually know — the key is
+  registered, the signature is the participant's, and the root is one THIS node anchored — then
+  records a receipt with `action: "participate"` and `bounty: 0`. ZERO is the design, not a
+  placeholder: nothing is minted for participation (the protocol never mints), the receipt exists
+  so a community's later budget decision can pay the participants a decision names through the
+  same rail that pays any other work. One receipt per participant, act, and root; a root the node
+  never anchored is refused by name ("it cannot corroborate a verification of it"); a forged
+  signature earns nothing and leaves nothing. The receipt carries its `creditRoot` and its
+  inclusion proof against the ledger commitment, and `/v1/work/earnings` serves it like any other
+  receipt. WORK.md and RFC 0021 document the rail; claim-check holds kind, endpoint, and
+  zero-bounty in both docs against the wiring. The action board gained `participate` in the
+  `governance` style — recorded in the ledger, never offered as a job.
 - **The circle closes: a node that can join must also serve the list it grew.** The node journey
   gained a fifth rail, `federation`: `GET /v1/registries` must parse through the seed's OWN rule
   (`parseRegistrySeedList`), not a shape the journey invents — walkable is a machine property, and

@@ -3403,6 +3403,22 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The participation receipt is a published rail: WORK.md and RFC 0021 name
+  // the endpoint and the kind, and the API carries both.
+  for (const docPath of ["docs/WORK.md", "rfcs/0021-roles-work-and-decisions.md"]) {
+    const participationDoc = readFileSync(new URL(docPath, root), "utf8");
+    for (const participationMarker of ["/v1/work/participation", "rarext.participation.v1", "bounty: 0"]) {
+      if (!participationDoc.includes(participationMarker)) {
+        fail(`${docPath} no longer documents the participation rail's "${participationMarker}"`);
+      }
+    }
+  }
+  for (const apiMarker of ['"/v1/work/participation"', '"participate"', "rarext.participation.v1"]) {
+    if (!apiSource.includes(apiMarker)) {
+      fail(`the participation rail's ${apiMarker} is missing from apps/api/src/app.ts — the doc's claim has no wiring`);
+    }
+  }
+
   // OPERATOR.md documents the node journey: the script must exist, name the
   // four rails in its own words, and refuse to blur reachability with
   // verification — the labels in the script are the doc's claims.

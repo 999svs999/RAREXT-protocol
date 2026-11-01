@@ -2034,6 +2034,85 @@ export function createApp(options: AppOptions = {}): AppServer {
         return;
       }
 
+      // A PARTICIPATION receipt: the ledger record of an everyday act the node can corroborate —
+      // a client that verified a mirror's copy against a root this node has anchored. The node
+      // checks three things it can actually know: the key is registered, the signature is the
+      // participant's, and the root is one THIS node anchored. It cannot know the client really
+      // ran a verifier, and it says so in the record's bounty: ZERO. Nothing is minted for
+      // participation; the receipt exists so a community's later budget decision can pay the
+      // participants a decision names. One receipt per participant, act, and root — the ledger
+      // is a record of participation, not a faucet.
+      if (req.method === "POST" && pathname === "/v1/work/participation") {
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== "rarext.participation.v1") {
+          send(res, 400, { error: "payload must be a rarext.participation.v1 assertion" });
+          return;
+        }
+        const act = payload.act;
+        if (typeof act !== "string" || act.length === 0 || act.length > 64) {
+          send(res, 400, { error: "an assertion's act must be a short non-empty string" });
+          return;
+        }
+        const participant = payload.participant;
+        if (typeof participant !== "string" || participant.length === 0) {
+          send(res, 400, { error: "an assertion needs the key that will hold the receipt" });
+          return;
+        }
+        const verifiedRoot = payload.root;
+        if (typeof verifiedRoot !== "string" || !/^[0-9a-f]{64}$/.test(verifiedRoot)) {
+          send(res, 400, { error: "an assertion's root must be the 64-hex root the participant verified" });
+          return;
+        }
+        const registered = store.resolveKey(participant);
+        if (!registered) {
+          send(res, 403, { error: "the participating key is not registered: a receipt binds a real identity" });
+          return;
+        }
+        if (typeof payload.signature !== "string" || payload.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        const { signature: signatureValue, ...assertion } = payload;
+        if (!verifyPayload(registered.publicKey as unknown as RarextJsonWebKey, assertion, signatureValue)) {
+          send(res, 401, { error: "the assertion's signature does not match the participating key" });
+          return;
+        }
+        // Corroboration: the node anchored this root. A root the node never held is a claim
+        // about a registry this node cannot vouch for.
+        const anchored = store.listAnchors().some((anchor) => anchor.root === verifiedRoot);
+        if (!anchored) {
+          send(res, 404, { error: `this node has never anchored ${verifiedRoot.slice(0, 16)}…: it cannot corroborate a verification of it` });
+          return;
+        }
+        const artifactHash = verifiedRoot;
+        const already = store
+          .listCredits()
+          .some((credit) => credit.keyId === participant && credit.action === "participate" && credit.artifactHash === artifactHash && credit.challengeId === act);
+        if (already) {
+          send(res, 409, { error: "this participation has already been receipted for this participant" });
+          return;
+        }
+
+        const record: CreditRecord = {
+          keyId: participant,
+          action: "participate",
+          bounty: 0,
+          challengeId: act,
+          artifactHash,
+          at: new Date().toISOString(),
+        };
+        store.addCredit(record);
+        const all = store.listCredits();
+        send(res, 201, {
+          receipt: {
+            ...record,
+            root: creditRoot(record, recordRootHash),
+            ledger: { root: creditLedgerRoot(all, recordRootHash), ...creditLedgerProof(all, record, recordRootHash) },
+          },
+        });
+        return;
+      }
+
       if (req.method === "GET" && pathname === "/v1/work") {
         const keyId = url.searchParams.get("keyId");
         send(res, 200, {
