@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The seam closes: participation receipts are payable by decision.** A budget's `to` may be a
+  receipt-holders spec — `{"kind":"receipt-holders","act":"mirror-verify","root":"<optional>"}` —
+  and at execution the node resolves the class from its own ledger and
+  `budgetDistributionRecords` (new, in core) derives the records: the pledger's single debit
+  equals the SUM of the holder credits (zero-sum, never minted), the amount splits evenly with
+  the remainder to the first holder in sorted order (deterministic — two nodes executing the same
+  decision produce byte-identical records), and every record carries the proposal's root as its
+  artifact reference, so a decision is payable once. A class that resolves to nobody pays nothing
+  and the refusal says the class was empty; a spec naming a root pays only that root's holders;
+  the receipt-holder loop prompt's "user contributing by just participating" now runs from verify
+  to receipt to paid-by-decision end to end. RFC 0021 documents the rule.
 - **Participation receipts — the user's side of the roles, countable in the ledger.** The loop's
   "user who is contributing by just participating" now leaves a record: a reader who verifies a
   mirror against a pinned root submits a signed assertion to `POST /v1/work/participation`

@@ -176,6 +176,17 @@ kind `rarext.participation.v1` in the same ledger, same commitment, `bounty: 0` 
 receipt's VALUE arrives, if it does, when a community budget decides to pay the participants a
 decision names. Nothing is minted; the record is what makes participation countable.
 
+The connection from receipt to payout is a budget whose recipient is a CLASS, not a key: `to`
+can be `{"kind":"receipt-holders","act":"mirror-verify","root":"<optional 64-hex>"}`. At
+execution the node resolves the class from its own ledger — the only thing that can say who
+holds a receipt with the named act — and `budgetDistributionRecords` derives the records:
+the pledger's single debit equals the SUM of the holder credits (zero-sum is the law; the
+ledger never mints), the amount splits evenly with the remainder to the first holder in
+sorted order (deterministic, so two nodes executing the same decision produce byte-identical
+records), and every record carries the proposal's root as its artifact reference — a decision,
+like a job, is payable once. A class that resolves to nobody pays nothing, and the refusal
+says the class was empty.
+
 ### Admitting a registry: the same decision, a different effect
 
 A federation list that only the registry operator can edit is a guest list, not a federation.

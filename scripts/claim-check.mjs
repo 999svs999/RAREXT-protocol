@@ -3419,6 +3419,21 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The distribution rail: RFC 0021 names the spec and the zero-sum law; core
+  // carries the function.
+  const distributionDoc = readFileSync(new URL("rfcs/0021-roles-work-and-decisions.md", root), "utf8");
+  for (const distMarker of ['"kind":"receipt-holders"', "budgetDistributionRecords", "zero-sum"]) {
+    if (!distributionDoc.includes(distMarker)) {
+      fail(`RFC 0021 no longer documents the distribution rail's "${distMarker}"`);
+    }
+  }
+  const coreGovernance = readFileSync(new URL("packages/core/src/governance.ts", root), "utf8");
+  for (const coreMarker of ["budgetDistributionRecords", '"receipt-holders"']) {
+    if (!coreGovernance.includes(coreMarker)) {
+      fail(`the distribution rail's ${coreMarker} is missing from core — the RFC's claim has no implementation`);
+    }
+  }
+
   // OPERATOR.md documents the node journey: the script must exist, name the
   // four rails in its own words, and refuse to blur reachability with
   // verification — the labels in the script are the doc's claims.

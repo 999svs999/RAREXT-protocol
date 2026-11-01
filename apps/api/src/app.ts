@@ -158,6 +158,7 @@ import {
   type HashFn,
   GOVERNANCE_BUDGET_KIND,
   GOVERNANCE_ADMISSION_KIND,
+  budgetDistributionRecords,
   governanceBudgetProblems,
   admissionEntry,
   admissionProblems,
@@ -1531,7 +1532,7 @@ export function createApp(options: AppOptions = {}): AppServer {
           kind: GOVERNANCE_BUDGET_KIND,
           version: 1,
           from,
-          to: payload.to as string,
+          to: payload.to as GovernanceBudget["to"],
           amount: payload.amount as number,
           reason: payload.reason as string,
           payOn: payload.payOn as string,
@@ -1667,6 +1668,41 @@ export function createApp(options: AppOptions = {}): AppServer {
           }
           if (store.listCredits().some((record) => record.artifactHash === root)) {
             send(res, 409, { error: "this decision has already been executed: the same decision is never paid twice" });
+            return;
+          }
+
+          if (typeof budgetDocument.to === "object" && budgetDocument.to !== null) {
+            // The receipt-holders spec: resolve the CLASS from this node's own ledger — the only
+            // thing that can say who holds a receipt with the named act (and root). No holders,
+            // no distribution: a decision that pays an empty class pays nothing, and says why.
+            const spec = budgetDocument.to;
+            const holders = [
+              ...new Set(
+                store
+                  .listCredits()
+                  .filter(
+                    (credit) =>
+                      credit.action === "participate" &&
+                      credit.challengeId === spec.act &&
+                      (spec.root === undefined || credit.artifactHash === spec.root),
+                  )
+                  .map((credit) => credit.keyId),
+              ),
+            ].sort();
+            if (holders.length === 0) {
+              send(res, 409, {
+                error: `the decision pays holders of ${JSON.stringify(spec.act)} receipts${spec.root ? ` for ${spec.root.slice(0, 16)}…` : ""}, and none exist in this ledger: nothing to distribute`,
+              });
+              return;
+            }
+            const records = budgetDistributionRecords(budgetDocument, holders, new Date().toISOString(), recordRootHash);
+            for (const record of records) store.addCredit(record as unknown as CreditRecord);
+            send(res, 201, {
+              executed: true,
+              records,
+              holders,
+              ledgerRoot: creditLedgerRoot(store.listCredits(), recordRootHash),
+            });
             return;
           }
 

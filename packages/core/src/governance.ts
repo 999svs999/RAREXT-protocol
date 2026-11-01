@@ -395,8 +395,14 @@ export interface GovernanceBudget {
   version: 1;
   /** The key that will be DEBITED — the pledger, and the signer of this payload. */
   from: string;
-  /** The key that will be CREDITED. */
-  to: string;
+  /**
+   * Who the decision pays: a single key, or a RECEIPT-HOLDERS spec — every participant holding a
+   * receipt with the named `act` (and, when a root is given, for that root) splits the amount
+   * evenly at execution time. The spec names a CLASS the node resolves from its own ledger; the
+   * ledger is the only thing that can say who the class contains, which is why execution — not
+   * the pledge — expands it.
+   */
+  to: string | { kind: "receipt-holders"; act: string; root?: string };
   /** A positive integer: credits are indivisible, and a zero or negative pledge is not a pledge. */
   amount: number;
   /** Why the money is being pledged — the line a voter reads. */
@@ -423,8 +429,22 @@ export function governanceBudgetProblems(budget: GovernanceBudget): string[] {
   if (typeof budget.from !== "string" || budget.from.length === 0) {
     problems.push("a budget needs the key that will be debited");
   }
-  if (typeof budget.to !== "string" || budget.to.length === 0) {
-    problems.push("a budget needs the key that will be credited");
+  if (typeof budget.to === "string") {
+    if (budget.to.length === 0) {
+      problems.push("a budget needs the key that will be credited");
+    }
+  } else if (typeof budget.to === "object" && budget.to !== null) {
+    if (budget.to.kind !== "receipt-holders") {
+      problems.push(`a budget's receipt spec must be kind "receipt-holders", not ${JSON.stringify((budget.to as { kind?: unknown }).kind)}`);
+    }
+    if (typeof budget.to.act !== "string" || budget.to.act.length === 0 || budget.to.act.length > 64) {
+      problems.push("a budget's receipt spec needs the act whose holders it pays");
+    }
+    if (budget.to.root !== undefined && (typeof budget.to.root !== "string" || !/^[0-9a-f]{64}$/.test(budget.to.root))) {
+      problems.push("a budget's receipt spec's root, when present, must be a 64-hex digest");
+    }
+  } else {
+    problems.push("a budget needs the key that will be credited, or a receipt-holders spec");
   }
   if (budget.from === budget.to) {
     problems.push("a budget's payer and payee must be different keys: a pledge to yourself is not a commitment");
@@ -471,6 +491,9 @@ export function budgetPaymentRecords(
   at: string,
   sha256: (value: string) => string,
 ): Array<{ keyId: string; action: string; bounty: number; challengeId: string; artifactHash: string; at: string }> {
+  if (typeof budget.to !== "string") {
+    throw new Error("a receipt-holders budget becomes distribution records: call budgetDistributionRecords with the holders");
+  }
   // The reference is the proposal's ROOT — a real digest, the same identity a reference names — and
   // it is what makes the payment once-only: both entries carry it as their artifact reference, the
   // field the board already uses to keep the same work from being paid twice.
@@ -486,4 +509,44 @@ export function budgetPaymentRecords(
     { keyId: budget.from, bounty: -budget.amount, ...shared },
     { keyId: budget.to, bounty: budget.amount, ...shared },
   ];
+}
+
+/**
+ * The records a RECEIPT-HOLDERS budget becomes, once the node has resolved the class to actual
+ * keys. Zero-sum is the law: the pledger's single debit equals the SUM of the holder credits, so
+ * the ledger never mints. Credits are indivisible, so the amount splits evenly and the REMAINDER
+ * goes to the first holder in sorted order — deterministic, so two nodes executing the same
+ * decision produce byte-identical records. Every entry carries the proposal's root as its
+ * artifact reference: a decision, like a job, is payable once, and a replay finds the reference
+ * already in the ledger.
+ */
+export function budgetDistributionRecords(
+  budget: GovernanceBudget,
+  holders: string[],
+  at: string,
+  sha256: (value: string) => string,
+): Array<{ keyId: string; action: string; bounty: number; challengeId: string; artifactHash: string; at: string }> {
+  if (typeof budget.to === "string") {
+    throw new Error("a single-recipient budget becomes two records: call budgetPaymentRecords");
+  }
+  const unique = [...new Set(holders)].sort();
+  if (unique.length === 0) {
+    throw new Error("the decision pays receipt-holders, and none exist: nothing to distribute");
+  }
+  const reference = proposalRoot(budget.proposal, sha256);
+  const shared = {
+    action: "governance",
+    challengeId: budget.proposal.id,
+    artifactHash: reference,
+    at,
+  };
+
+  const per = Math.floor(budget.amount / unique.length);
+  const remainder = budget.amount - per * unique.length;
+  const records = unique.map((keyId, index) => ({
+    keyId,
+    bounty: index === 0 ? per + remainder : per,
+    ...shared,
+  }));
+  return [{ keyId: budget.from, bounty: -budget.amount, ...shared }, ...records];
 }

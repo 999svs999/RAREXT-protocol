@@ -108,6 +108,7 @@ export {
   proposalProblems,
   GOVERNANCE_BUDGET_KIND,
   governanceBudgetProblems,
+  budgetDistributionRecords,
   budgetPaymentRecords,
   tallyVotes,
   voteProblems,
