@@ -3419,6 +3419,22 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     }
   }
 
+  // The state archive: the protocol doc names the chain rule and the endpoints;
+  // core carries the rule. (The protocol doc is read here under its own name — the
+  // capabilities block below declares its own.)
+  const archiveProtocolDoc = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");
+  for (const historyMarker of ["/v1/history", "stateArchiveRoot", "tamper-evident", "genesis root of"]) {
+    if (!archiveProtocolDoc.includes(historyMarker)) {
+      fail(`APP-PROTOCOL.md no longer documents the state archive's "${historyMarker}"`);
+    }
+  }
+  const archiveSource = readFileSync(new URL("packages/core/src/state-archive.ts", root), "utf8");
+  for (const archiveMarker of ["STATE_ARCHIVE_GENESIS_ROOT", "previousStateRoot", "STATE_ARCHIVE_DOMAIN"]) {
+    if (!archiveSource.includes(archiveMarker)) {
+      fail(`the state archive rule is missing "${archiveMarker}" in core — the doc's claim has no implementation`);
+    }
+  }
+
   // The capabilities document is a published surface: the protocol doc names
   // it, and the API wires the constant.
   const protocolDoc = readFileSync(new URL("docs/APP-PROTOCOL.md", root), "utf8");

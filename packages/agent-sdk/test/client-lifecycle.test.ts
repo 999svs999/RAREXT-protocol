@@ -104,6 +104,11 @@ test("an AI agent runs the whole lifecycle through typed client methods", { time
     assert.equal(after.records.length, 3, "participation + the distribution's debit and credit");
     const bountySum = after.records.reduce((sum, record) => sum + record.bounty, 0);
     assert.equal(bountySum, 0, "zero-sum, even when the pledger and the holder are the same key");
+
+    // 8. The history: the state chain the anchors froze, verified by the client's OWN recompute.
+    const chain = await client.verifyStateChain();
+    assert.equal(chain.ok, true, `the state chain does not verify: ${chain.failures.join("; ")}`);
+    assert.equal(chain.count, 1, "one anchor, one archive");
   } finally {
     delete process.env.RAREXT_REGISTRY_ID;
     await stop(server);

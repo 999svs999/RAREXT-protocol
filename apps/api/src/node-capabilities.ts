@@ -33,6 +33,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
   rails: [
     { path: "/" },
     { path: "/health", note: "liveness and counts" },
+    { path: "/v1/history", note: "the state-archive chain: the ledger's history, tamper-evident" },
     { path: "/v1/adapters" },
     { path: "/v1/anchors" },
     { path: "/v1/apps" },
@@ -88,6 +89,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/work/participation", note: "the participation receipt rail" },
   ],
   families: [
+    "/v1/history/",
     "/v1/adapters/",
     "/v1/anchors/",
     "/v1/artifacts/",

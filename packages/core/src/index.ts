@@ -162,6 +162,13 @@ export {
 export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";
+export {
+  STATE_ARCHIVE_DOMAIN,
+  STATE_ARCHIVE_GENESIS_ROOT,
+  stateArchiveProblems,
+  stateArchiveRoot,
+} from "./state-archive.ts";
+export type { StateArchiveInput } from "./state-archive.ts";
 export * from "./ai.ts";
 export {
   FEDERATION_APP,

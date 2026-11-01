@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The state archive: the ledger's history is tamper-evident, not merely recorded.** Publications
+  were always verifiable backwards; the rest of the node's state was present-tense only. Every
+  anchor now freezes a state archive — the durable state (proposals, votes, credits, admissions)
+  hashed together with the PREVIOUS archive's state root (`stateArchiveRoot` in core; the first
+  chains to a genesis root of 64 zeros) — so rewriting any past archive breaks the next one's
+  chain. Served at `GET /v1/history` and `/v1/history/:anchorRoot`;
+  `RarextClient.verifyStateChain()` recomputes every root with core's rule and checks every link
+  (the head must anchor to genesis, so a reordered history fails at its head before anything else
+  is trusted). Snapshot schema v8 (`stateArchives`; OPERATIONS.md's migration table updated).
+  APP-PROTOCOL.md documents the rule and claim-check holds it against core's implementation.
 - **The capabilities document — an agent lands cold and bootstraps from one answer.**
   `GET /v1/capabilities` returns `rarext.capabilities.v1`: the node's exact-path routes, its
   parameterized families, and the transition binding path — as data, listing itself so an agent

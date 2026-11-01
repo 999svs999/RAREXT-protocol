@@ -157,6 +157,9 @@ import {
   type StorageInclusionProof,
   type TallyResult,
   type HashFn,
+  STATE_ARCHIVE_DOMAIN,
+  STATE_ARCHIVE_GENESIS_ROOT,
+  stateArchiveRoot,
   GOVERNANCE_BUDGET_KIND,
   GOVERNANCE_ADMISSION_KIND,
   budgetDistributionRecords,
@@ -3710,7 +3713,47 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
 
+        // The state archive, frozen at the anchor: the durable state hashed together with the
+        // previous archive's root, so the ledger's history is a tamper-evident chain. This
+        // happens in the SAME breath as the anchor — an archive of "the state at the anchor"
+        // that could be added later would be an archive of nothing.
+        const at = new Date().toISOString();
+        const archiveInput = {
+          anchorRoot: anchor.root,
+          previousStateRoot: store.latestStateRoot() ?? STATE_ARCHIVE_GENESIS_ROOT,
+          proposals: store.listProposals(),
+          votes: store.listGovernanceVotes(),
+          credits: store.listCredits(),
+          admissions: store.listRegistryAdmissions(),
+          at,
+        };
+        store.addStateArchive({
+          ...archiveInput,
+          stateRoot: stateArchiveRoot(archiveInput, recordRootHash),
+        });
+
         send(res, 201, withAnchorRoot(anchor));
+        return;
+      }
+
+      // The history: the chain of archives, or one archive by the anchor root it was frozen at.
+      // The client recomputes each state root with core's rule and checks the chain — the node's
+      // word is not the verdict.
+      if (req.method === "GET" && pathname === "/v1/history") {
+        send(res, 200, { archives: store.listStateArchives() });
+        return;
+      }
+
+      if (req.method === "GET" && pathname.startsWith("/v1/history/")) {
+        const wanted = pathname.slice("/v1/history/".length).toLowerCase();
+        const archive = store
+          .listStateArchives()
+          .find((entry) => (entry as { anchorRoot?: string }).anchorRoot === wanted);
+        if (!archive) {
+          send(res, 404, { error: `no state archive frozen at ${wanted.slice(0, 16)}…` });
+          return;
+        }
+        send(res, 200, archive);
         return;
       }
 

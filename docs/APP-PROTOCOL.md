@@ -489,3 +489,17 @@ the API's source and compares in BOTH directions — a route missing from the do
 with the path named, and a document entry matching no real route fails too, so the machine
 contract and the node cannot silently disagree. `RarextClient.capabilities()` types it for the
 agent-sdk.
+
+## The state archive: history as a chain
+
+Publications were always verifiable backwards — each anchor is a Merkle root over publication
+leaves. The rest of the node's state was not: proposals, votes, credits, admissions lived only
+in the present tense, and a node could rewrite its ledger's history with the current commitment
+silently agreeing.
+
+Every anchor now freezes a STATE ARCHIVE: the durable state hashed together with the previous
+archive's state root (`stateArchiveRoot` in core; the first archive chains to a genesis root of
+64 zeros). Rewriting any past archive changes its state root, which breaks the next archive's
+chain — history is tamper-evident, not merely recorded. The archives are served at
+`GET /v1/history` and `/v1/history/:anchorRoot`, and `RarextClient.verifyStateChain()` recomputes
+every root with core's rule and checks every link: the node's word is not the verdict.

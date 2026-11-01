@@ -69,6 +69,7 @@ interface Snapshot {
   governanceBudgets?: Array<{ proposalRoot: string; budget: Record<string, unknown> }>;
   governanceAdmissions?: Array<{ proposalRoot: string; admission: Record<string, unknown> }>;
   registryAdmissions?: Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }>;
+  stateArchives?: Array<Record<string, unknown>>;
 }
 
 export class RarextStore {
@@ -93,6 +94,7 @@ export class RarextStore {
   private readonly governanceBudgets = new Map<string, Record<string, unknown>>();
   private readonly governanceAdmissions = new Map<string, Record<string, unknown>>();
   private readonly registryAdmissions: Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }> = [];
+  private readonly stateArchives: Array<Record<string, unknown>> = [];
   private readonly filePath: string | null;
 
   constructor(filePath?: string) {
@@ -643,6 +645,29 @@ export class RarextStore {
     return [...this.registryAdmissions];
   }
 
+  /**
+   * The state archive frozen at an anchor: the durable state, hashed with the previous
+   * archive's root, so the ledger's history is a tamper-evident chain. One archive per
+   * anchor — a re-anchor of the same root never rewrites it.
+   */
+  addStateArchive(archive: Record<string, unknown>): void {
+    const anchorRoot = (archive as { anchorRoot?: string }).anchorRoot;
+    if (typeof anchorRoot === "string" && this.stateArchives.some((existing) => (existing as { anchorRoot?: string }).anchorRoot === anchorRoot)) {
+      return;
+    }
+    this.stateArchives.push(archive);
+    this.persist();
+  }
+
+  listStateArchives(): Array<Record<string, unknown>> {
+    return [...this.stateArchives];
+  }
+
+  latestStateRoot(): string | null {
+    const last = this.stateArchives[this.stateArchives.length - 1] as { stateRoot?: string } | undefined;
+    return typeof last?.stateRoot === "string" ? last.stateRoot : null;
+  }
+
   governanceVotesFor(root: string): GovernanceVote[] {
     return this.governanceVotes.filter((vote) => vote.proposalRoot === root);
   }
@@ -824,6 +849,12 @@ export class RarextStore {
           this.registryAdmissions.push(entry);
         }
       }
+      for (const entry of snapshot.stateArchives ?? []) {
+        const anchorRoot = (entry as { anchorRoot?: string }).anchorRoot;
+        if (typeof anchorRoot === "string" && !this.stateArchives.some((existing) => (existing as { anchorRoot?: string }).anchorRoot === anchorRoot)) {
+          this.stateArchives.push(entry);
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`could not load ${this.filePath}: ${message}`);
@@ -853,6 +884,7 @@ export class RarextStore {
       governanceBudgets: [...this.governanceBudgets.entries()].map(([proposalRoot, budget]) => ({ proposalRoot, budget })),
       governanceAdmissions: [...this.governanceAdmissions.entries()].map(([proposalRoot, admission]) => ({ proposalRoot, admission })),
       registryAdmissions: [...this.registryAdmissions],
+      stateArchives: [...this.stateArchives],
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });

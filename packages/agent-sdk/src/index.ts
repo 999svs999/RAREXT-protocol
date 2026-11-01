@@ -43,6 +43,7 @@ import {
   type SemanticsCommitmentStatus,
   voteStatement,
   sha256Hex,
+  stateArchiveRoot,
   type GovernanceBudget,
   type GovernanceProposal,
   type GovernanceVote,
@@ -2337,6 +2338,53 @@ export class RarextClient {
   /** The federation list THIS node's decisions have admitted, seed-shaped. */
   registries(): Promise<{ registries: Array<Record<string, unknown>> }> {
     return this.request("/v1/registries");
+  }
+
+  /**
+   * The node's capabilities document: an agent landing cold bootstraps from this one answer —
+   * the paths the node serves, as data, held against the route table so it cannot drift.
+   */
+  capabilities(): Promise<{
+    kind: string;
+    version: 1;
+    binding: string;
+    rails: Array<{ path: string; note?: string }>;
+    families: string[];
+  }> {
+    return this.request("/v1/capabilities");
+  }
+
+  /** The chain of state archives: the ledger's history, tamper-evident by construction. */
+  stateHistory(): Promise<{ archives: Array<Record<string, unknown> & { anchorRoot: string; previousStateRoot: string; stateRoot: string }> }> {
+    return this.request("/v1/history");
+  }
+
+  /** One state archive, by the anchor root it was frozen at. */
+  stateArchive(anchorRoot: string): Promise<Record<string, unknown>> {
+    return this.request(`/v1/history/${encodeURIComponent(anchorRoot)}`);
+  }
+
+  /**
+   * Verify the state chain the node serves: every archive's root recomputes with core's rule,
+   * and every link names the archive before it (the head anchoring to genesis). The node's word
+   * is not the verdict — this recomputes it.
+   */
+  async verifyStateChain(): Promise<{ ok: boolean; failures: string[]; count: number }> {
+    const { archives } = await this.stateHistory();
+    const failures: string[] = [];
+    let previous = "0".repeat(64);
+    for (const [index, archive] of archives.entries()) {
+      const record = archive as unknown as Parameters<typeof stateArchiveRoot>[0];
+      if (archive.previousStateRoot !== previous) {
+        failures.push(`archive ${index} (${archive.anchorRoot.slice(0, 8)}…) does not chain to the archive before it`);
+      }
+      const { stateRoot: _served, ...rest } = archive;
+      if (stateArchiveRoot(rest as never, (value: string) => sha256Hex(nodeSha256, value)) !== archive.stateRoot) {
+        failures.push(`archive ${index} (${archive.anchorRoot.slice(0, 8)}…) does not rebuild its served state root`);
+      }
+      previous = archive.stateRoot;
+    }
+    return { ok: failures.length === 0, failures, count: archives.length };
   }
 
   private async request<T>(path: string, body?: unknown): Promise<T> {

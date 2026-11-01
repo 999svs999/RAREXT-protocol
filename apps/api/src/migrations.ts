@@ -7,7 +7,7 @@
  * empty store and then overwriting the file is how a registry loses its history.
  */
 
-export const CURRENT_SNAPSHOT_VERSION = 7;
+export const CURRENT_SNAPSHOT_VERSION = 8;
 
 export interface SnapshotMigration {
   from: number;
@@ -84,6 +84,17 @@ export const snapshotMigrations: SnapshotMigration[] = [
         ...snapshot,
         governanceAdmissions: Array.isArray(snapshot.governanceAdmissions) ? snapshot.governanceAdmissions : [],
         registryAdmissions: Array.isArray(snapshot.registryAdmissions) ? snapshot.registryAdmissions : [],
+      };
+    },
+  },
+  {
+    from: 7,
+    to: 8,
+    description: "add state archives, so the ledger's history is tamper-evident",
+    migrate(snapshot) {
+      return {
+        ...snapshot,
+        stateArchives: Array.isArray(snapshot.stateArchives) ? snapshot.stateArchives : [],
       };
     },
   },
