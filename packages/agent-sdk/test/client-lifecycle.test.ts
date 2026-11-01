@@ -109,6 +109,27 @@ test("an AI agent runs the whole lifecycle through typed client methods", { time
     const chain = await client.verifyStateChain();
     assert.equal(chain.ok, true, `the state chain does not verify: ${chain.failures.join("; ")}`);
     assert.equal(chain.count, 1, "one anchor, one archive");
+
+    // 9. The OPERATOR's side: the agent ran the node that anchored this root, so it claims the
+    //    anchoring — a zero-bounty receipt, the mining analogy with the mint removed.
+    const anchoring = await client.claimAnchoring(agent, anchor.root);
+    assert.equal(anchoring.receipt.action, "anchor");
+    assert.equal(anchoring.receipt.bounty, 0, "nothing is minted for anchoring");
+    assert.equal(anchoring.receipt.artifactHash, anchor.root, "the receipt is FOR the anchored root");
+
+    // 10. The treasury view: the agent reads the classes a decision can name, sized from the same
+    //     ledger it just wrote to — receipts and DISTINCT holders, not a guess.
+    const treasury = await client.treasury();
+    assert.match(treasury.ledgerRoot, /^[0-9a-f]{64}$/, "the view carries the live commitment");
+    const anchorClass = treasury.classes.find((entry) => entry.act === "anchor");
+    const participateClass = treasury.classes.find((entry) => entry.act === "participate");
+    assert.equal(anchorClass?.receipts, 1, "the agent's anchoring is the class's one receipt");
+    assert.equal(anchorClass?.holders, 1);
+    assert.equal(participateClass?.receipts, 1, "and its participation is the other class's");
+    assert.ok(
+      (anchorClass?.byRoot ?? []).some((entry) => entry.root === anchor.root),
+      "the class is sized per root, so a root-scoped decision can use it",
+    );
   } finally {
     delete process.env.RAREXT_REGISTRY_ID;
     await stop(server);

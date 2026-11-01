@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The agent can earn on the node it runs: `treasury()` and `claimAnchoring()` on the client.**
+  The economy had all three legs — work is counted (receipts), a class can be sized (treasury),
+  a decision can pay it (budgets) — but the SDK spoke only the first: an AI agent driving a node
+  could not ask what a class is worth, nor claim its own operator's work, through the typed
+  surface. `RarextClient.claimAnchoring(signer, root)` signs and files the operator's anchoring
+  claim (zero-bounty, the mining analogy with the mint removed); `RarextClient.treasury()` reads
+  the receipt classes with their real size and the budgets in flight. The lifecycle test now runs
+  the whole loop through typed methods: register → publish → anchor → journey → participate →
+  propose → pledge → vote → execute → verifyStateChain → claimAnchoring → treasury. The SDK README
+  documents the surface; claim-check holds both method names against the README AND the source, so
+  an agent-facing promise cannot outlive the method that keeps it.
 - **The treasury view: a community can size a decision against the real class.** A budget that
   pays `{"kind":"receipt-holders","act":X}` resolves X against the node's ledger at execution, so
   a pledge made without seeing that class is a guess against an invisible population.

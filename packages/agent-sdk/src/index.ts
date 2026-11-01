@@ -2271,6 +2271,49 @@ export class RarextClient {
     });
   }
 
+  /**
+   * The treasury view: the receipt classes a decision can name, sized from this node's own ledger.
+   * An agent sizing a pledge reads the class it will actually resolve against — receipts and
+   * DISTINCT holders per act, with a per-root breakdown — instead of guessing at a population it
+   * cannot see. `pending` names the budgets already in flight so a new pledge is not made blind.
+   */
+  treasury(): Promise<{
+    ledgerRoot: string;
+    classes: Array<{
+      act: string;
+      receipts: number;
+      holders: number;
+      byRoot: Array<{ root: string; receipts: number; holders: number }>;
+    }>;
+    pending: Array<Record<string, unknown>>;
+    at: string;
+  }> {
+    return this.request("/v1/work/treasury");
+  }
+
+  /**
+   * Claim the operator's anchoring: the signer asserts it ran the node that committed `root`, the
+   * node corroborates what it can know — registered key, signature, root THIS node anchored — and
+   * the ledger records a zero-bounty receipt (the mining analogy with the mint removed). A later
+   * budget decision can pay the operators it names; this is the operator's side of the roles, and
+   * an agent that runs a node earns its standing through this call.
+   */
+  async claimAnchoring(
+    signer: AgentSigner,
+    root: string,
+  ): Promise<{ receipt: CreditRecordFields & { root: string; ledger: { root: string; index: number; proof: string[] } | null } }> {
+    const claim = {
+      kind: "rarext.anchor-work.v1",
+      operator: signer.keyId,
+      root,
+      at: new Date().toISOString(),
+    };
+    return this.request("/v1/work/anchor", {
+      ...claim,
+      signature: signer.sign(claim),
+    });
+  }
+
   /** Propose a decision. */
   propose(document: GovernanceProposal): Promise<{ root: string; proposal: GovernanceProposal }> {
     return this.request("/v1/governance/proposals", document);

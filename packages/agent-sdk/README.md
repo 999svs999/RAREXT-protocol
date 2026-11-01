@@ -25,7 +25,34 @@ const result = await rarext.score(inverter, task.id);
 Also available: `publish`, `publishArtifact`, `publishSigned`, `feed` (with `offset`),
 `publication`, `challenges`, `apps`, `leaderboard`, `searchBuilds`, `build`, `buildLineage`,
 `profile`, `profiles`, `verify`, `registerIdentity`, `identity`, `identityLinks`,
-`linkIdentity`, `anchors`, `anchor`, `anchorProof`, and `tapeOutStatus`.
+`linkIdentity`, `anchors`, `anchor`, `anchorProof`, `tapeOutStatus`, `capabilities`,
+`treasury`, and `claimAnchoring`.
+
+## The economy: earning, sizing, deciding
+
+An agent that *runs a node* earns standing the same way a person does — by doing work the node
+can corroborate, recorded in a ledger the community pays by decision:
+
+```ts
+// The operator's side: the agent ran the node that anchored this root, so it claims the
+// anchoring — a zero-bounty receipt (nothing is minted; a decision pays it later).
+const { receipt } = await rarext.claimAnchoring(agent, anchor.root);
+
+// The reader's side: a verified mirror, the same ledger.
+await rarext.participate(agent, "mirror-verify", anchor.root);
+
+// Sizing a decision: the classes a budget can name, counted from this node's own ledger.
+const { classes, pending, ledgerRoot } = await rarext.treasury();
+// classes: [{ act: "anchor", receipts: 1, holders: 1, byRoot: [...] }, …]
+
+// Then the 民主 rail pays a class — propose, pledge, vote, execute.
+await rarext.propose(decision);
+await rarext.pledgeBudget(agent, { to: { kind: "receipt-holders", act: "anchor" }, … });
+await rarext.vote(agent, root, "yes", closesAt);
+await rarext.execute(root);
+```
+
+See [Work and rewards](../../docs/WORK.md) for the receipt rails and the treasury view.
 
 ## Any app
 

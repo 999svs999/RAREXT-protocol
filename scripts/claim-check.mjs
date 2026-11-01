@@ -3439,6 +3439,14 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   if (!appSource.includes("rarext.anchor-work.v1")) {
     fail("app.ts no longer validates the rarext.anchor-work.v1 claim — WORK.md's shape has no check");
   }
+  // The SDK's economic surface: the README publishes the methods an agent earns through, and the
+  // client must carry them (an agent-facing claim with no method is a promise the SDK cannot keep).
+  const agentSdkReadme = readFileSync(new URL("packages/agent-sdk/README.md", root), "utf8");
+  const agentSdkSource = readFileSync(new URL("packages/agent-sdk/src/index.ts", root), "utf8");
+  for (const method of ["treasury", "claimAnchoring"]) {
+    if (!agentSdkReadme.includes(method)) fail(`the agent SDK README no longer documents ${method}()`);
+    if (!agentSdkSource.includes(`${method}(`)) fail(`the SDK no longer implements ${method}() — the README documents a method that does not exist`);
+  }
   if (!workDoc.includes("GET /v1/work/treasury")) {
     fail("WORK.md no longer documents the treasury view — the class-sizing claim has no surface");
   }
