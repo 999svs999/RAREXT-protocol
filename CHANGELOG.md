@@ -11,6 +11,14 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The reader can see the network: discovery on the verify page.** The mirror's proof page now
+  probes each listed registry's `/v1/nodes` alongside its admissions list and its state chain —
+  three independent probes, so one absence never hides another — and shows what each registry IS
+  (the registry it serves and the root it committed) and which peers it KNOWS, each labelled
+  "from the seed it carries" or "admitted by decision". The label is the substance for a reader:
+  inherited knowledge and a decision the community made are different claims, and the page says
+  which is which. A static registry serves no `/v1/nodes` and the page reports that dimly, as an
+  answer rather than a failure.
 - **Discovery: a node says who it is and which peers it knows — with provenance.** `GET /v1/nodes`
   answers a cold agent's first question in one shape: `self` (the registry served, the origin, the
   binding path, the root committed or null) and `known` — the peers, each labelled `source: "seed"`

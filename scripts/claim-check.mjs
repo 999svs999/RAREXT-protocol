@@ -3345,6 +3345,11 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`the published verify.html no longer verifies the state chain in the browser ("${marker}")`);
     }
   }
+  for (const marker of ["v1/nodes", "from the seed it carries", "admitted by decision"]) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`the published verify.html no longer shows the peers a registry knows ("${marker}")`);
+    }
+  }
 
   // docs/RESOLVE-JSON.md publishes the machine contract for a resolve verdict:
   // the schema file must exist and parse, the kinds it enumerates must be
