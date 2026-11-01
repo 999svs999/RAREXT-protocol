@@ -139,3 +139,59 @@ function bytesHashOf(hash: HashFn): Sha256 {
     return out;
   };
 }
+
+/**
+ * The RECEIPT acts: the ledger actions that leave a ZERO-bounty record for work the node can
+ * corroborate but the board does not price — a reader's participation, an operator's anchoring.
+ * A budget that names a receipt-holders class resolves against exactly these, because they are
+ * the records that exist to be paid LATER by a decision rather than at the door.
+ *
+ * The vocabulary lives here, beside the credit rules, because it is a protocol-level fact about
+ * the ledger rather than one app's board policy: the node's action union, the budget resolution,
+ * the treasury view, and a browser recomputing a statement all have to agree about which actions
+ * are receipts. Stated once, so they cannot disagree.
+ */
+export const RECEIPT_ACTS: readonly string[] = ["participate", "anchor"];
+
+/**
+ * A participant's statement: the ledger read from the earner's side.
+ *
+ * This is a DERIVATION, not a record: every number is a function of the credit records alone, with
+ * no hashing and no node state, which is what lets the SAME function answer at the node (from the
+ * live ledger, or from a frozen state's archived records) and in a reader's browser (from the
+ * records inside an archive it just fetched). A second implementation of this arithmetic is how
+ * two clients come to disagree about what somebody was owed.
+ *
+ * `holds` names the receipt CLASSES the key is in — the acts a decision can name to pay it, which
+ * is what "owed" means at this layer. `credits` separates earned, spent, and net, because a worker
+ * that pledged a budget has been debited and one total hides that. `weight` is the ledger total a
+ * work-weighted ballot reads.
+ */
+export interface CreditStatement {
+  keyId: string;
+  credits: { earned: number; spent: number; net: number };
+  holds: Array<{ act: string; receipts: number; roots: string[] }>;
+  weight: number;
+}
+
+export function creditStatement(keyId: string, records: readonly CreditRecordFields[]): CreditStatement {
+  const mine = records.filter((record) => record.keyId === keyId);
+
+  let earned = 0;
+  let spent = 0;
+  let weight = 0;
+  for (const record of mine) {
+    if (record.bounty > 0) earned += record.bounty;
+    else if (record.bounty < 0) spent -= record.bounty;
+    weight += record.bounty;
+  }
+
+  const holds = RECEIPT_ACTS.map((act) => {
+    const receipts = mine.filter((record) => record.action === act);
+    if (receipts.length === 0) return null;
+    const roots = [...new Set(receipts.map((record) => record.artifactHash))].sort();
+    return { act, receipts: receipts.length, roots };
+  }).filter((entry): entry is { act: string; receipts: number; roots: string[] } => entry !== null);
+
+  return { keyId, credits: { earned, spent, net: earned - spent }, holds, weight };
+}

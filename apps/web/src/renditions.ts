@@ -23,4 +23,6 @@ export {
   urlForRarextUri,
   recordRootPreimages,
   stateArchivePreimage,
+  creditStatement,
+  creditLedgerRoot,
 } from "../../../packages/core/src/index.ts";

@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Anyone with a browser can check what a key was owed.** The mirror's proof page gained a
+  statement panel: enter a key, and for each registry it recomputes the FROZEN state root in the
+  browser and derives that key's statement — earned / spent / net / weight and the receipt classes
+  it holds — from the archived credits. To make that honest rather than a second implementation,
+  the derivation MOVED INTO CORE (`creditStatement` in `packages/core/src/credits.ts`): the node's
+  statement route now calls it, and so does the page, so the two cannot disagree about what
+  somebody was owed. The receipt-act vocabulary moved with it (`RECEIPT_ACTS`), and the node's
+  `RECEIPT_ACTIONS` is now a typing of that one list rather than a second copy. A core test holds
+  the derivation's purity and separation (earned vs spent vs net, sorted deduped roots, an empty
+  statement for a key with nothing).
 - **Proving the past, not just reading it.** Every read so far answered "today", recomputed by the
   node — fine for acting, useless for proving: a participant handing somebody a receipt could prove
   the receipt but not the world it sat in. `GET /v1/work/statement?keyId=<key>&at=<anchorRoot>` reads

@@ -180,7 +180,10 @@ what "what is owed to me" means at this layer. Add `&at=<anchorRoot>` and the st
 from a FROZEN state instead of now: the response then carries `asOf` naming that archive and the
 root it commits to, so the past can be CHECKED — fetch `/v1/history/:anchorRoot`, recompute the
 archive's state root, and the ledger the statement counted is the one that state committed. A
-participant can prove not only a receipt but the world it sat in. `credits` separates earned, spent, and net, because
+participant can prove not only a receipt but the world it sat in — and so can a reader: the mirror's
+proof page takes a key, recomputes each registry's frozen state root **in the browser**, and derives
+that key's statement from the archived credits with the SAME core function the node answers with
+(`creditStatement`). No CLI, no repo, no trust in the node's version of now. `credits` separates earned, spent, and net, because
 a worker that pledged a budget has been debited and a single total hides that. `weight` is the
 SAME number a work-weighted ballot would weigh (the ledger total the tally reads), so the earner
 sees its standing before voting rather than inferring it. No `keyId` is a 400: a statement is about

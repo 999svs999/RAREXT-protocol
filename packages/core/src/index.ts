@@ -153,11 +153,14 @@ export {
   creditLeaf,
   creditLedgerRoot,
   creditLedgerProof,
+  creditStatement,
+  RECEIPT_ACTS,
   CREDIT_ROOT_DOMAIN,
   CREDIT_ROOT_REQUIRED_FIELDS,
   CREDIT_ROOT_FIELDS,
   CREDIT_ROOT_EXCLUDED_FIELDS,
   type CreditRecordFields,
+  type CreditStatement,
 } from "./credits.ts";
 export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";

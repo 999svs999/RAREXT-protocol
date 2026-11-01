@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { canonicalize } from "../../../packages/core/src/index.ts";
+import { canonicalize, RECEIPT_ACTS } from "../../../packages/core/src/index.ts";
 import type { Challenge } from "../../../packages/core/src/index.ts";
 
 /**
@@ -121,13 +121,13 @@ export const ACTIONS: ActionDefinition[] = [
 ];
 
 /**
- * The RECEIPT actions: the acts that leave a zero-bounty record in the ledger for work the node
- * can corroborate but the board does not price — a reader's participation, an operator's
- * anchoring. A budget that names a receipt-holders class resolves against exactly these, because
- * they are the records that exist to be paid LATER by decision rather than at the door. Any other
- * action in the ledger is already paid and is not a receipt class.
+ * The receipt acts, as this app's action union sees them.
+ *
+ * The VOCABULARY is core's (RECEIPT_ACTS, beside the credit rules) because the node, a browser
+ * recomputing a statement, and the budget resolution all have to agree about which actions are
+ * receipts. This is only the typing of that same list into ActionId — one source, no second list.
  */
-export const RECEIPT_ACTIONS: readonly ActionId[] = ["participate", "anchor"];
+export const RECEIPT_ACTIONS: readonly ActionId[] = RECEIPT_ACTS as readonly ActionId[];
 
 export function actionFor(id: ActionId): ActionDefinition {
   const action = ACTIONS.find((candidate) => candidate.id === id);

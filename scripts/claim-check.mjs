@@ -3350,6 +3350,14 @@ function checkMirrorsDoc(docOverride, sources = {}) {
       fail(`the published verify.html no longer shows the peers a registry knows ("${marker}")`);
     }
   }
+  for (const marker of ["statement-key", "creditStatement", "Statement at "]) {
+    if (!mirrorPage.includes(marker)) {
+      fail(`the published verify.html no longer derives a statement in the browser ("${marker}")`);
+    }
+  }
+  if (!readFileSync(new URL("packages/core/src/credits.ts", root), "utf8").includes("export function creditStatement(")) {
+    fail("core no longer exports creditStatement — the page and the node would derive statements differently");
+  }
 
   // docs/RESOLVE-JSON.md publishes the machine contract for a resolve verdict:
   // the schema file must exist and parse, the kinds it enumerates must be
@@ -3477,7 +3485,7 @@ function checkMirrorsDoc(docOverride, sources = {}) {
     if (!agentSdkReadme.includes(method)) fail(`the agent SDK README no longer documents ${method}()`);
     if (!agentSdkSource.includes(`${method}(`)) fail(`the SDK no longer implements ${method}() — the README documents a method that does not exist`);
   }
-  for (const statementMarker of ["GET /v1/work/statement", "the ledger from the earner's side", "&at=<anchorRoot>"]) {
+  for (const statementMarker of ["GET /v1/work/statement", "the ledger from the earner's side", "&at=<anchorRoot>", "creditStatement"]) {
     if (!workDoc.includes(statementMarker)) {
       fail(`WORK.md no longer documents the statement ("${statementMarker}")`);
     }

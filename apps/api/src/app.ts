@@ -144,6 +144,7 @@ import {
   anchorRoot,
   creditLedgerProof,
   creditLedgerRoot,
+  creditStatement,
   creditRoot,
   publicationRoot,
   sha256Hex,
@@ -2486,19 +2487,12 @@ export function createApp(options: AppOptions = {}): AppServer {
           }
         }
         const all = (archive ? (archive.credits as CreditRecord[]) : store.listCredits()) ?? [];
-        const mine = all.filter((record) => record.keyId === statementKeyId);
         const summary = summarizeEarnings(statementKeyId, all);
-
-        const earned = mine.filter((record) => record.bounty > 0).reduce((sum, record) => sum + record.bounty, 0);
-        const spent = mine.filter((record) => record.bounty < 0).reduce((sum, record) => sum - record.bounty, 0);
-
-        // The classes this key holds receipts in — the acts a decision can name to pay it.
-        const holds = RECEIPT_ACTIONS.map((act) => {
-          const receipts = mine.filter((record) => record.action === act);
-          if (receipts.length === 0) return null;
-          const roots = [...new Set(receipts.map((record) => record.artifactHash))].sort();
-          return { act, receipts: receipts.length, roots };
-        }).filter((entry) => entry !== null);
+        // The DERIVATION is core's, not this route's: the same function answers here, from a
+        // frozen state's archived records, and in a reader's browser from the records inside the
+        // archive it fetched. A second copy of this arithmetic is how two clients come to disagree
+        // about what somebody was owed.
+        const derived = creditStatement(statementKeyId, all);
 
         send(res, 200, {
           keyId: statementKeyId,
@@ -2508,11 +2502,11 @@ export function createApp(options: AppOptions = {}): AppServer {
           // ones that state committed. The past is verified, never asserted.
           asOf: archive ? { anchorRoot: asOfAnchor, stateRoot: archive.stateRoot, at: archive.at } : null,
           ledger: { root: creditLedgerRoot(all, recordRootHash), count: all.length },
-          credits: { earned, spent, net: earned - spent },
+          credits: derived.credits,
           byAction: summary.byAction,
-          holds,
+          holds: derived.holds,
           // The number a work-policy ballot weighs — the tally reads the ledger the same way.
-          weight: summary.credits,
+          weight: derived.weight,
           at: new Date().toISOString(),
         });
         return;

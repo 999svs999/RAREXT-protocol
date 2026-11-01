@@ -50,6 +50,13 @@ export function mirrorVerifyPage({ title, heading }) {
       <button id="resolve" type="button">Resolve</button>
     </div>
     <div id="refout" role="status" aria-live="polite" style="margin-top:10px;"></div>
+    <h2 id="statement-heading">Statement \u2014 what a key was owed, as of a frozen state</h2>
+    <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <input id="statement-key" type="text" spellcheck="false" autocomplete="off"
+             aria-labelledby="statement-heading"
+             style="flex:1; min-width:280px; padding:8px; border-radius:7px; border:1px solid #2d3846; background:#0d1117; color:#e3eaf3; font:inherit;"
+             placeholder="a key (64-hex keyId) \u2014 read from each registry's newest frozen state" />
+    </div>
     <script type="module">
       import { verifyBundle } from "./verify.js";
       import {
@@ -64,6 +71,7 @@ export function mirrorVerifyPage({ title, heading }) {
         urlForRarextUri,
         recordRootPreimages,
         stateArchivePreimage,
+        creditStatement,
       } from "./renditions.js";
       const out = document.getElementById("out");
 
@@ -364,6 +372,33 @@ export function mirrorVerifyPage({ title, heading }) {
                         failures.length > 0 ? "bad" : "ok",
                       ),
                     );
+                    // The statement, derived IN THIS BROWSER from the FROZEN credits: the same
+                    // core function the node answers with, run over the archived records we just
+                    // fetched and checked. A reader can see what a key was owed at a state whose
+                    // root it recomputed itself \u2014 no CLI, no repo, no trust in the node's now.
+                    const statementKey = (document.getElementById("statement-key") || {}).value || "";
+                    const wantedKey = String(statementKey).trim();
+                    if (wantedKey !== "" && archives.length > 0) {
+                      const frozen = archives[archives.length - 1];
+                      const derived = creditStatement(wantedKey, Array.isArray(frozen.credits) ? frozen.credits : []);
+                      const anchored = frozen.anchorRoot ? String(frozen.anchorRoot).slice(0, 16) + "\u2026" : "?";
+                      sections.push(
+                        htmlRow(
+                          "Statement at " + entry.id + " (as of " + anchored + ")",
+                          "earned " + derived.credits.earned + " \u00b7 spent " + derived.credits.spent + " \u00b7 net " + derived.credits.net + " \u00b7 weight " + derived.weight,
+                          failures.length > 0 ? "bad" : "ok",
+                        ),
+                      );
+                      for (const held of derived.holds) {
+                        sections.push(
+                          htmlRow(
+                            "  holds at " + entry.id,
+                            held.act + " \u00b7 " + held.receipts + " receipt(s) \u00b7 " + held.roots.length + " root(s)",
+                            failures.length > 0 ? "bad" : "ok",
+                          ),
+                        );
+                      }
+                    }
                   }
                 }
               } catch (historyError) {
