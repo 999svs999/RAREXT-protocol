@@ -37,6 +37,26 @@ The community votes; when the window closes and the tally decides, anyone may ex
 entry appears in `/v1/registries` carrying the proposal root that admitted it. A rejected
 decision changes nothing. See [RFC 0021](../rfcs/0021-roles-work-and-decisions.md) for the rule.
 
+## One command: become a node
+
+Everything above composes into one command:
+
+```
+npm run become-a-node
+```
+
+The script boots a fresh node on a free port (or verifies an already-running one with
+`--origin <url>`), publishes a seeded half-adder, anchors it, confirms the state archive
+froze, runs the four-rail journey check below, and PRINTS the admission document — the join
+request, ready to attach to a governance proposal on a registry already in the federation.
+Every step's evidence is printed; a failed step names itself and the run stops. Pass
+`--url <public-origin>` when the node is reachable from the network (the document proposes
+that origin; a loopback URL is right for a demo and wrong for a real deployment, and the
+script says so), `--registry <id>` to name the federation you are asking to join, and
+`--operator <name>` to sign the request with your operator name. The script never files the
+request itself: an admission is a proposal's attachment, and a proposal is a decision the
+community makes — an operator ASKS to join, the tally APPLIES the join.
+
 ## One command: is this node a full node?
 
 `scripts/node-journey.mjs` asks the question every operator asks after boot: did my node actually

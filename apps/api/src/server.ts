@@ -105,7 +105,12 @@ const server = createApp({
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`RAREXT API listening on ${tls ? "https" : "http"}://${HOST}:${PORT}`);
+  // The BOUND port, not the configured one: PORT=0 asks the OS for a free port, and a tool
+  // that boots this server must learn the port it actually got — printing the constant would
+  // name a port nobody is listening on.
+  const address = server.address();
+  const bound = address !== null && typeof address === "object" ? address.port : PORT;
+  console.log(`RAREXT API listening on ${tls ? "https" : "http"}://${HOST}:${bound}`);
 
   if (holders.length > 0) {
     scheduler.start();

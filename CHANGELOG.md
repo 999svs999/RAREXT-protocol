@@ -11,6 +11,15 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **One command: become a node.** `npm run become-a-node` composes the whole operator path —
+  boot (on a free port, or an `--origin` already running), publish a seeded half-adder, anchor,
+  confirm the state archive froze, the four-rail journey check, and PRINT the admission document
+  (the join request, ready to attach to a governance proposal on a registry already in the
+  federation). Every step's evidence is printed; a failed step names itself and the run stops;
+  the script never files the request itself — an operator ASKS to join, the tally APPLIES the
+  join. server.ts now prints the BOUND port (PORT=0 asks the OS for one; printing the constant
+  named a port nobody was listening on). OPERATOR.md documents the command; claim-check holds
+  the steps the doc names against the script's emitters.
 - **The state chain, verified in the reader's browser.** The verify page's federation section now
   probes each listed registry's `/v1/history` alongside its admissions list — the two probes
   independent, so one absence never hides another — and verifies the chain IN THE READER'S
