@@ -11,6 +11,16 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The proof page is for every reader**: its result regions are live regions
+  (`aria-live="polite"` / `role="status"`), so a screen reader announces the verdict when it
+  arrives instead of an async injection happening in silence; the reference input is labeled,
+  spellchecks off (a hex root is not a typo), takes Enter to resolve, and carries
+  `enterkeyhint="go"` on a phone's keyboard; focus is visible on the dark theme
+  (`:focus-visible`); `color-scheme: dark` keeps native controls and the mobile keyboard from
+  flashing white; below 560px the rows stack. MIRRORS.md publishes the claim and claim-check
+  holds all six markers in the published page — an accessibility claim that silently regresses
+  is worse than none. Verified at a 375px viewport in a real browser, including the keyboard-only
+  resolve of the peer's reference.
 - **Attempt evidence is structural: every refusal an attempt records now carries a KIND** —
   `unreachable` (the host never answered), `unavailable` (it answered without the object), `malformed`
   (not parseable as the shape a reading needs), `mismatch` (it answered and does not rebuild the
