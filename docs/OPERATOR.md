@@ -47,15 +47,17 @@ npm run become-a-node
 
 The script boots a fresh node on a free port (or verifies an already-running one with
 `--origin <url>`), publishes a seeded half-adder, anchors it, confirms the state archive
-froze, runs the four-rail journey check below, and PRINTS the admission document — the join
-request, ready to attach to a governance proposal on a registry already in the federation.
-Every step's evidence is printed; a failed step names itself and the run stops. Pass
-`--url <public-origin>` when the node is reachable from the network (the document proposes
-that origin; a loopback URL is right for a demo and wrong for a real deployment, and the
-script says so), `--registry <id>` to name the federation you are asking to join, and
-`--operator <name>` to sign the request with your operator name. The script never files the
-request itself: an admission is a proposal's attachment, and a proposal is a decision the
-community makes — an operator ASKS to join, the tally APPLIES the join.
+froze, registers the operator's key as a real identity, and records the operator's FIRST work receipt
+— the anchoring is COUNTED, at zero bounty, so a 民主 decision can pay it later. It then runs
+the four-rail journey check below and PRINTS the admission document: the join request, ready to
+attach to a governance proposal on a registry already in the federation. Every step's evidence
+is printed; a failed step names itself and the run stops. Pass `--url <public-origin>` when the
+node is reachable from the network (the document proposes that origin; a loopback URL is right
+for a demo and wrong for a real deployment, and the script says so), `--registry <id>` to name
+the federation you are asking to join, and `--operator <name>` to name the operator identity
+(the handle the join request rides; if the name is taken on the node, the script suffixes it
+rather than failing). The script never files the request itself: an admission is a proposal's
+attachment, and a proposal is a decision the community makes — an operator ASKS to join, the tally APPLIES the join.
 
 ## One command: is this node a full node?
 

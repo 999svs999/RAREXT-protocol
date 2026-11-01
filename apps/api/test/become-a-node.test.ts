@@ -8,7 +8,7 @@ const script = join(repoRoot, "scripts", "become-a-node.mjs");
 
 function runScript(args: string[], timeoutMs = 120_000): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, ["--experimental-strip-types", script, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", (chunk) => {
       out += String(chunk);
@@ -34,13 +34,25 @@ test("become-a-node: one command from boot to a join request, every step evidenc
     ok: boolean;
     events: Array<{ step: string; verdict: string; detail: string }>;
     anchorRoot: string;
-    admission: { kind: string; registry: { id: string } };
+    operator: { handle: string; keyId: string };
+    anchorReceipt: { action: string; bounty: number; artifactHash: string; root: string } | null;
+    admission: { kind: string; registry: { id: string; operator: string } };
   };
   assert.equal(report.ok, true);
   const steps = report.events.map((event) => event.step);
-  for (const step of ["boot", "health", "publish", "anchor", "archive", "journey", "join"]) {
+  for (const step of ["boot", "health", "publish", "anchor", "archive", "identity", "receipt", "journey", "join"]) {
     assert.ok(steps.includes(step), `the report never names the ${step} step`);
   }
+  // The operator's side of the roles is real from the first run: a registered identity and a
+  // zero-bounty anchor receipt for the root this node just anchored.
+  assert.match(report.operator.keyId, /^[0-9a-f]{64}$/, "the operator key is a real identity");
+  assert.ok(report.operator.handle.length >= 1 && report.operator.handle.length <= 32);
+  assert.ok(report.anchorReceipt, "the one command produced the operator's first work receipt");
+  assert.equal(report.anchorReceipt?.action, "anchor");
+  assert.equal(report.anchorReceipt?.bounty, 0, "ZERO is the design: the protocol never mints");
+  assert.equal(report.anchorReceipt?.artifactHash, report.anchorRoot, "the receipt is FOR the anchored root");
+  assert.match(report.anchorReceipt?.root ?? "", /^[0-9a-f]{64}$/);
+  assert.equal(report.admission.registry.operator, report.operator.handle, "the join request rides the operator's real handle");
   assert.match(report.admission.kind, /rarext\.registry-admission\.v1/);
   assert.match(report.admission.registry.id, /^node-[0-9a-f]{8}$/);
   assert.ok(/^[0-9a-f]{64}$/.test(report.anchorRoot), "the anchor root is a 64-hex commitment");

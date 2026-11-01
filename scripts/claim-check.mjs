@@ -3447,13 +3447,13 @@ function checkMirrorsDoc(docOverride, sources = {}) {
   // The one command: the operator doc composes boot/publish/anchor/archive/journey/join,
   // and the script carries the steps it names.
   const operatorDoc = readFileSync(new URL("docs/OPERATOR.md", root), "utf8");
-  for (const composeMarker of ["npm run become-a-node", "the admission document", "ASKS to join, the tally APPLIES the join"]) {
+  for (const composeMarker of ["npm run become-a-node", "the admission document", "ASKS to join, the tally APPLIES the join", "FIRST work receipt"]) {
     if (!operatorDoc.includes(composeMarker)) {
       fail(`OPERATOR.md no longer documents the one command ("${composeMarker}")`);
     }
   }
   const becomeSource = readFileSync(new URL("scripts/become-a-node.mjs", root), "utf8");
-  for (const stepName of ['"health"', '"publish"', '"anchor"', '"archive"', '"journey"', '"join"']) {
+  for (const stepName of ['"health"', '"publish"', '"anchor"', '"archive"', '"identity"', '"receipt"', '"journey"', '"join"']) {
     if (!becomeSource.includes(`emit(${stepName}`)) {
       fail(`become-a-node.mjs no longer emits the ${stepName} step — the doc's one command is missing a rung`);
     }

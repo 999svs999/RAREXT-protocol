@@ -11,6 +11,17 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The one command now leaves a work record, not just a join request.** `become-a-node` gained
+  two rungs between the archive and the journey: `[identity]` registers the operator's key as a
+  real identity on the node, and `[receipt]` claims the operator's FIRST work receipt — the
+  anchoring it just did, counted at zero bounty, so a 民主 decision can pay it later. The role is
+  therefore real from the first run: before this, the operator's very first contribution went
+  unrecorded, and a role without a record can never be paid. The join request now rides the
+  operator's real handle (probed free on the node, suffixing rather than failing when a seeded
+  identity holds the name), and the script asks the node which author handle is unregistered
+  instead of assuming — a registered handle demands a signed build, which made the unsigned first
+  publication flaky. Documented in OPERATOR.md; claim-check holds the two new rungs and the
+  "FIRST work receipt" sentence against the script's emitters.
 - **Anchor receipts: the operator's side of the roles — the mining analogy with the mint
   removed.** The participation receipt is what a READER did; running a node is what an OPERATOR
   does, and it now leaves a record the same way. `POST /v1/work/anchor` takes a signed

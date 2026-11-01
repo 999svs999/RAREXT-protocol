@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --experimental-strip-types
 /**
  * become-a-node: the ONE command from "I have a server" to "I am a full node with a join
  * request in hand".
@@ -13,6 +13,9 @@
  *   [publish]   a publication lands (a seeded challenge's half-adder, composed of NANDs)
  *   [anchor]    the anchor root — the node's first Merkle commitment
  *   [archive]   the state archive frozen at that anchor — the ledger's history begins
+ *   [identity]  the operator's key, registered as a real identity on the node
+ *   [receipt]   the operator's FIRST work receipt — the anchoring is COUNTED (bounty 0;
+ *               a 民主 decision can pay it later), so the role is real from the first run
  *   [journey]   the four-rail full-node check (binding, registry, ledger, governance)
  *   [join]      the admission document, ready to attach to a proposal on a registry
  *               that is ALREADY in the federation — the 民主 rail does the rest
@@ -21,9 +24,9 @@
  * and a proposal is a decision the community makes — an operator ASKS to join, the tally
  * APPLIES the join. Exit 0 only when every step held; a failed step names itself and stops.
  *
- * Usage:
- *   node scripts/become-a-node.mjs                    # boots its own node on a free port
- *   node scripts/become-a-node.mjs --origin <url>     # verifies an ALREADY-running node
+ * Usage (run with --experimental-strip-types, as package.json's script does):
+ *   node --experimental-strip-types scripts/become-a-node.mjs   # boots its own node, free port
+ *   … --origin <url>                                            # verifies an ALREADY-running node
  *   both: [--registry <id>] [--operator <name>] [--url <public-url>] [--json]
  *
  * --registry names the federation registry whose seed this node wants to JOIN (default
@@ -32,11 +35,16 @@
  */
 
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as signBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Core's canonicalization is the ONE rule a signature's bytes are made from — the script signs
+// the operator's anchor claim with the same canonical form the node verifies it against, so the
+// two cannot disagree about what was signed. Run with --experimental-strip-types (see package.json).
+import { canonicalize } from "../packages/core/src/index.ts";
 
 const scriptRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const serverEntry = join(scriptRoot, "apps", "api", "src", "server.ts");
@@ -66,6 +74,38 @@ for (let index = 0; index < argv.length; index += 1) {
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const GENESIS = "0".repeat(64);
+
+/**
+ * A handle the node will accept: lowercase [a-z0-9-], 1..32 chars. The operator's own name when it
+ * already fits; otherwise a slug, with the key's first bytes appended so two operators who typed
+ * the same un-sluggable name do not collide on one identity.
+ */
+function operatorHandle(name, keyIdValue) {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  if (/^[a-z0-9][a-z0-9-]{0,31}$/.test(slug) && slug.length >= 1) return slug;
+  return `operator-${keyIdValue.slice(0, 8)}`;
+}
+
+/**
+ * A handle the node has NOT registered. Two callers need one: the operator's ROLE identity (a
+ * handle may be registered once) and the first publication's AUTHOR (a registered handle must
+ * sign its builds, and the operator's first build has no reason to). The node is ASKED
+ * (GET /v1/identities/<handle>) rather than guessed — a name that collided with a seeded identity
+ * would fail as a 401/409 the operator cannot act on. Suffixes are tried; null when all are taken.
+ */
+async function freeHandle(originValue, base) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const candidate = attempt === 0 ? base : `${base}-${attempt}`;
+    if (candidate.length > 32) break;
+    const probe = await fetchJson(`${originValue}/v1/identities/${candidate}`);
+    if (probe.status === 404) return candidate;
+  }
+  return null;
+}
 
 const events = [];
 const emit = (step, verdict, detail) => {
@@ -171,11 +211,29 @@ async function run() {
   }
   emit("health", "ok", `registry ${health.body?.registry ?? "(unnamed)"}, ${health.body?.publications ?? 0} publication(s) on file`);
 
+  // The operator's key and role identity are decided UP FRONT: the publication below is authored
+  // by a node-scoped handle derived from this key, and a registered handle may not publish
+  // unsigned — so the author must be a handle this node has not registered. The node is asked
+  // rather than guessed: an identity that already exists would refuse the unsigned build.
+  const operatorKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const operatorJwk = operatorKey.publicKey.export({ format: "jwk" });
+  const operatorKeyId = sha256(canonicalize(operatorJwk));
+  const handle = await freeHandle(origin, operatorHandle(operator || "operator", operatorKeyId));
+  if (!handle) {
+    emit("identity", "fail", "could not find a free operator handle on this node — every candidate is already registered");
+    return finish(1);
+  }
+  const author = await freeHandle(origin, `node-${operatorKeyId.slice(0, 8)}`);
+  if (!author) {
+    emit("publish", "fail", "could not find a free author handle on this node — every candidate is a registered identity, which would demand a signed publication");
+    return finish(1);
+  }
+
   const publish = await fetchJson(`${origin}/v1/publications`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      author: operator || "operator",
+      author,
       title: "the operator's first publication",
       taskId: "half-adder",
       circuit: halfAdder,
@@ -201,6 +259,43 @@ async function run() {
     return finish(1);
   }
   emit("archive", "ok", `state root ${String(archive.body?.stateRoot ?? "").slice(0, 16)}… — the ledger's history has begun`);
+
+  // THE OPERATOR'S SIDE: the node just did its first real work (it committed publications and
+  // froze the archive). Register the operator's key and claim the anchoring — a zero-bounty
+  // receipt that says the work happened, so a community's budget decision can pay it later. The
+  // script does not price the work; it only makes the operator's contribution COUNTABLE from the
+  // first run, which is what a role without a record can never be.
+  const registration = await fetchJson(`${origin}/v1/identities`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ handle, publicKey: operatorJwk }),
+  });
+  if (registration.status !== 201) {
+    emit("identity", "fail", `the node refused the operator identity (HTTP ${registration.status}): ${JSON.stringify(registration.body).slice(0, 160)}`);
+    return finish(1);
+  }
+  emit("identity", "ok", `operator ${handle} registered — key ${operatorKeyId.slice(0, 16)}… is a real identity`);
+
+  const claimBase = {
+    kind: "rarext.anchor-work.v1",
+    operator: operatorKeyId,
+    root: anchorRoot,
+    at: new Date().toISOString(),
+  };
+  const claimSignature = signBytes("sha256", Buffer.from(canonicalize(claimBase)), {
+    key: operatorKey.privateKey,
+    dsaEncoding: "ieee-p1363",
+  }).toString("base64");
+  const receipt = await fetchJson(`${origin}/v1/work/anchor`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...claimBase, signature: claimSignature }),
+  });
+  if (receipt.status !== 201) {
+    emit("receipt", "fail", `the node refused the anchor receipt (HTTP ${receipt.status}): ${JSON.stringify(receipt.body).slice(0, 160)}`);
+    return finish(1);
+  }
+  emit("receipt", "ok", `anchor receipt ${String(receipt.body?.receipt?.root ?? "").slice(0, 16)}… — the operator's work is COUNTED (bounty 0; a 民主 decision can pay it)`);
 
   const journey = spawn(process.execPath, [
     "--experimental-strip-types",
@@ -245,7 +340,7 @@ async function run() {
     registry: {
       id: `node-${sha256(joinUrl).slice(0, 8)}`,
       url: joinUrl,
-      operator: operator || "operator",
+      operator: handle,
       chains: ["rarex"],
       note: `a full node (anchor ${anchorRoot.slice(0, 16)}…) asking to join ${registryId}`,
     },
@@ -257,11 +352,29 @@ async function run() {
     emit("join", "note", `the document proposes THIS machine (${origin}) — pass --url <public-origin> when the node is reachable from the network`);
   }
 
+  const anchorReceipt = receipt.body?.receipt ?? null;
   if (asJson) {
-    console.log(JSON.stringify({ ok: true, origin, anchorRoot, stateRoot: archive.body?.stateRoot, admission, events }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          origin,
+          anchorRoot,
+          stateRoot: archive.body?.stateRoot,
+          operator: { handle, keyId: operatorKeyId },
+          anchorReceipt,
+          admission,
+          events,
+        },
+        null,
+        2,
+      ),
+    );
   } else {
     console.log("\n--- join request (attach to a governance proposal) ---");
     console.log(JSON.stringify(admission, null, 2));
+    console.log("\n--- the operator's first work receipt (bounty 0; a decision can pay it) ---");
+    console.log(JSON.stringify(anchorReceipt, null, 2));
   }
   return finish(0);
 }
