@@ -16,6 +16,7 @@ import type {
 import { attest } from "./attest.ts";
 import { boundedVerifier } from "./bounded.ts";
 import { generativeVerifier } from "./generative.ts";
+import { futuristicVideoVerifier } from "./futuristic.ts";
 import {
   bindClaim,
   hashValue,
@@ -339,6 +340,9 @@ export function createVerifierRegistry(
 
   const bounded = boundedVerifier(semantics);
   verifiers.set(bounded.id, bounded);
+
+  const futuristic = futuristicVideoVerifier();
+  verifiers.set(futuristic.id, futuristic);
 
   for (const config of options.configs ?? configuredVerifiers()) {
     const verifier = externalVerifier(config, requestFetch, timeoutMs);
