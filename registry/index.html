@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RAREXT registry bundle</title>
-    <meta name="description" content="A static copy of the latest anchored RAREXT registry bundle, with its seed list, mirror, and Merkle root." />
+    <title>RAREXT registry bundle — FUTURISTIC</title>
+    <meta name="description" content="A static copy of the latest anchored RAREXT registry bundle carrying FUTURISTIC's published record, with its seed list, mirror, and Merkle root." />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="../styles.css" />
   </head>
@@ -12,7 +12,7 @@
     <main>
       <section class="band">
         <p class="eyebrow">Public artifact</p>
-        <h2>Registry bundle</h2>
+        <h2>Registry bundle — FUTURISTIC</h2>
         <p class="section-lede">
           This is a static copy of the latest anchored registry bundle. It is not a live
           API. A reader can fetch the JSON, recompute the publication leaves, and check
@@ -21,15 +21,11 @@
         <div class="facts">
           <div>
             <strong>Root</strong>
-            <span><code>46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73</code></span>
+            <span><code>29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af</code></span>
           </div>
           <div>
             <strong>Contents</strong>
-            <span>4 anchored publications · 5 challenges · 5 semantics · 1 anchor</span>
-          </div>
-          <div>
-            <strong>AI representations</strong>
-            <span>generative, bounded</span>
+            <span>13 anchored publications · FUTURISTIC published record</span>
           </div>
           <div>
             <strong>Bundle</strong>
@@ -41,19 +37,13 @@
           </div>
           <div>
             <strong>Mirror</strong>
-            <span><a href="../mirror/">workbench</a> · <a href="../mirror/gallery.html">gallery</a></span>
+            <span><a href="../mirror/">workbench</a> · <a href="../mirror/futuristic.html">FUTURISTIC gallery</a></span>
           </div>
           <div>
             <strong>Verify</strong>
-            <span><a href="../mirror/verify.html?root=46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73">run the pinned verifier</a></span>
+            <span><a href="../mirror/verify.html?root=29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af">run the pinned verifier</a></span>
           </div>
         </div>
-        <p class="small">
-          The verifier is the same one used by the registry and the mirror page. It
-          re-derives AI renditions from the committed model and seed, checks the embedded
-          blob bytes, and compares the recomputed root with the pinned root above:
-          <code>node --test apps/api/test/published-bundle.test.ts apps/web/test/published-mirror.test.ts</code>.
-        </p>
         <p class="small">
           <a href="../">Back to RAREXT</a>
         </p>

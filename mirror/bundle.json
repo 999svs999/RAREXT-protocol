@@ -1,41 +1,844 @@
 {
   "manifest": {
     "version": 1,
-    "root": "46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73",
+    "root": "29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af",
     "leafVersion": 4,
-    "anchorId": "b41eabb9-4027-4990-b8d9-f5a2c5169076",
-    "anchorRoot": "46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73",
-    "createdAt": "2026-10-31T22:46:24.729Z",
+    "anchorId": "965601a6-ee22-4ba2-ada1-426e189dae7e",
+    "anchorRoot": "29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af",
+    "createdAt": "2026-11-02T11:14:24.414Z",
     "publications": [
       {
-        "id": "71633394-36a4-4d7b-a99c-032805019940",
-        "leaf": "b8d4517ce6e173de0bdf70f553686e38d4ae3ee6d8afd8c6330ff672e0dd0ea9"
+        "id": "01f06df1-94e0-4e86-9e46-34bec651b238",
+        "leaf": "257ef945be4c7c392a14c16aa486e560ba530fb627ac646fbc66ae71148645d4"
       },
       {
-        "id": "618b8409-d409-4688-a690-2027d46324bb",
-        "leaf": "2aaebe777bbc3016a00221d73b0d619351c981abbcd97aee57c8e237433e9b94"
+        "id": "2e0407e2-a8c0-4ad8-999d-fc438e62b6d5",
+        "leaf": "811f918f32626c901dc28b8abb959bbe25ef015aa883ed4d478921ce9f059e41"
+      },
+      {
+        "id": "0a048f5b-ab3a-463a-8b93-24a4bbc81c58",
+        "leaf": "455bd6e2515b6802a25b4351712a61b0ff9e8adb4c0e52aa809d95ffb851948b"
+      },
+      {
+        "id": "2cefb882-250f-4f30-bf37-037ca49de5a3",
+        "leaf": "526c488049f0b21d45fd26394ba2f76dfc15d715ed687197eabd20b087327bb8"
+      },
+      {
+        "id": "b9ffb134-d74f-45da-8f3f-924af79d64f8",
+        "leaf": "37cdae184ce795025f79cd8b47de0e07dc841775a3bdfd742681dc3ca12b2afa"
+      },
+      {
+        "id": "099deab7-d593-420a-b11f-96346d04fb69",
+        "leaf": "024e705a4ba7dde831ddc0d1002c02dddb4fe13edfb83c6294e6b1b5beffd6de"
+      },
+      {
+        "id": "b77580b2-d5a2-42cd-8140-7addc0f9a8c0",
+        "leaf": "4691a1daed72b8afd29d7dad460ce0b0150d6b94d0a241f196df271134288211"
+      },
+      {
+        "id": "8e98b46d-6537-4378-860b-a1291a54ee7c",
+        "leaf": "5f6b92a36d8c8358097fb843b540c9ace7adb1d104b2a8484bdfa3bec4cbd9b5"
+      },
+      {
+        "id": "669db8ae-0b9e-4521-bb75-4591f903d443",
+        "leaf": "c2a9102c0e4efd0e8bb35eebd46984bb01ac6820a89c4469469cc87aab2a9edd"
+      },
+      {
+        "id": "4806012d-6dfb-40d5-ac70-50e1a5f28607",
+        "leaf": "7d379fdb331efe572d8216875130da951c9586a522a122bebfa98c541b131885"
+      },
+      {
+        "id": "9de0ac34-16ee-44bd-b2d4-3dbf2b187fe0",
+        "leaf": "6d7648c6af79e3dc39e37afe709cbc69c10937b9e481868e78d688662b67771a"
       },
       {
         "id": "pub-federation-commitment",
-        "leaf": "4411d75495b49cbd2af6adaf0b331d2326eadfd66d8bb776a1a0a7481d84a6b6"
+        "leaf": "08ebf76d62030e2ebebf7a3c72d35defa9deff2e5b7188a386e187b62fef7967"
       },
       {
         "id": "pub-semantics-commitment",
-        "leaf": "e86eae76fd435bdecf668c8ba8cde0e8191a2c19151a8e68764a9b3190549c9a"
+        "leaf": "d026678b3b17bd163fc8cf16a3569028096358268f18e5a537edba6efebe7a6d"
       }
     ],
     "counts": {
-      "publications": 4,
+      "publications": 13,
       "anchors": 1,
-      "challenges": 5,
+      "challenges": 6,
       "semantics": 5
     }
   },
   "publications": [
     {
-      "id": "71633394-36a4-4d7b-a99c-032805019940",
-      "author": "ai-proof",
-      "authorKey": "b6fc6032ef6d09a690ab95b049e4afe2603418c0abb5d2de36ba95d05bfe330a",
+      "id": "01f06df1-94e0-4e86-9e46-34bec651b238",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "FUTURISTIC 20260821T133842-3ea13d",
+      "body": "Published youtube, instagram, facebook, threads — run 20260821T133842-3ea13d from the one-line prompt \"Visiting a futuristic art gallery\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260821T133842-3ea13d",
+          "theme": "future-gallery",
+          "prompt": "Visiting a futuristic art gallery",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/fdaaa443d971451193a4281a9a6ad519.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "L9qPNpsztvY",
+              "url": "https://youtu.be/L9qPNpsztvY"
+            },
+            {
+              "platform": "instagram",
+              "id": "18404055982090343"
+            },
+            {
+              "platform": "facebook",
+              "id": "837457626023743"
+            },
+            {
+              "platform": "threads",
+              "id": "18121730833890828"
+            }
+          ]
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.362Z",
+      "attestedAt": "2026-11-02T11:14:24.367Z",
+      "verified": true,
+      "signature": "ucgHWnWIqE7USWtF9OK/Fao/guny/IfUqFygnGSa48LVRU7P3ujzHi/1gONKmDCUxkZvHHRXDyISjB4iNWh/9A==",
+      "nonce": "131d2938-3dd9-40aa-8bc7-8a8f65673b6e",
+      "attestation": {
+        "id": "e14cd6a6-79fa-484f-890d-f1dcf2697263",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "94565b66844075ded36cffc5bdbae65508474ec4562a202c1a4afafbbc468189",
+        "traceHash": "ff440330910d8f8091399e74b5b5470f6563d98c8eb90b4c5745288f675d897d",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.367Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "2e0407e2-a8c0-4ad8-999d-fc438e62b6d5",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "What would you do if you could time travel #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260824T102037-1c0008 from the one-line prompt \"What would you do if you could time travel\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260824T102037-1c0008",
+          "theme": "time-travel-what-if",
+          "prompt": "What would you do if you could time travel",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/8163fc6c641943ffa232cf772dd2546c.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "cx43ZizzMmM",
+              "url": "https://youtu.be/cx43ZizzMmM"
+            },
+            {
+              "platform": "instagram",
+              "id": "18083417057662500"
+            },
+            {
+              "platform": "facebook",
+              "id": "1324068229563750"
+            },
+            {
+              "platform": "threads",
+              "id": "18051617786797330"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1CE8VCBjGtLjvHPZAiC9VUHR6ivkKsW16",
+            "meta.json": "1jZ9ZxzyBCucO7aWzyNKMXD4ODtbgSbwK"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.369Z",
+      "attestedAt": "2026-11-02T11:14:24.371Z",
+      "verified": true,
+      "signature": "ceABKbL725IrZPxfF2QVCEnHzcAR/vbQlqoeR3GALDCYPDHWKBFXx8hDG/CZztJcrtgi2N636TCtkQl0nul2Pw==",
+      "nonce": "05ea9e7e-70b5-4322-a1d4-865fe1f511fc",
+      "attestation": {
+        "id": "911fe468-2c38-4e6e-acd2-f6f1fe69ebf1",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "e3a3b2ca914556d539bb1e541cfc16cca4840694135fc43bdd2f61777b9d2c34",
+        "traceHash": "8bf7d1c2d3835f5ff00889b12b037f4e93df447ed46058d0a6cd03e653ebaece",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.371Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "0a048f5b-ab3a-463a-8b93-24a4bbc81c58",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "Future tech ideas transforming everyday life #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260825T060919-e9d6f2 from the one-line prompt \"Future tech ideas transforming everyday life\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260825T060919-e9d6f2",
+          "theme": "future-tech-profit",
+          "prompt": "Future tech ideas transforming everyday life",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/81c3164a7af44fd18630a74830ba2cfe.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "i8AYjFzklIw",
+              "url": "https://youtu.be/i8AYjFzklIw"
+            },
+            {
+              "platform": "instagram",
+              "id": "18154263784507882"
+            },
+            {
+              "platform": "facebook",
+              "id": "1042056661943828"
+            },
+            {
+              "platform": "threads",
+              "id": "18106305086109229"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1o9E0jz70GYGRww7HcL8vnurU2KUm7Qa_",
+            "meta.json": "1tllj-r7bAq92eLQUEYFNKzV8IR7pOb0S"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.373Z",
+      "attestedAt": "2026-11-02T11:14:24.374Z",
+      "verified": true,
+      "signature": "lbL7/wzX+DISxLPw7FafXglNNuuN9Z11A+2G4LFW/Bjutm8SMl9j6BUxTm+lrLucZZTpQCNW6G7GajWqgSgdvw==",
+      "nonce": "5c605d57-2789-4759-92b6-c7959b45ae02",
+      "attestation": {
+        "id": "4142c662-6868-4195-8f6d-0677c71d9f20",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "c2e804d7223ac4bb974b2800de5e36c33f55443a45b8728bd8e6959737ed0da3",
+        "traceHash": "77caf5adfef70bfcbc67268fb9ea06e9ed5918f45803aa549bbb4a06e226c026",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.374Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "2cefb882-250f-4f30-bf37-037ca49de5a3",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "AI agents in everyday life, 2040 #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260825T193715-f1f3ab from the one-line prompt \"What would you do if you could time travel\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260825T193715-f1f3ab",
+          "theme": "time-travel-what-if",
+          "prompt": "What would you do if you could time travel",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/3507fc92efbd422dbb4b9295d1cb9b2b.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "-ALbO6-VLFw",
+              "url": "https://youtu.be/-ALbO6-VLFw"
+            },
+            {
+              "platform": "instagram",
+              "id": "17861502789676331"
+            },
+            {
+              "platform": "facebook",
+              "id": "3143674265837343"
+            },
+            {
+              "platform": "threads",
+              "id": "18111049970119403"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1wmA30LBt_1JabA9Vv01LmlhwT9ep4sxo",
+            "meta.json": "1igvJyZOSK4cjb3zL9S4QZqIs03I1b3us"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.376Z",
+      "attestedAt": "2026-11-02T11:14:24.377Z",
+      "verified": true,
+      "signature": "m4hSxJj9fC8VU9wSxvkr8NP5LiQL3nFQNYtyuiXiC/1rwP2AcQrsRSPReyIYd4aH0b2uh3GOO99PKK2izEkkuQ==",
+      "nonce": "564b0031-e889-4ce2-9aa8-75cace2419d5",
+      "attestation": {
+        "id": "74ce7ce1-e897-473c-bb17-96431842e651",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "e3a76045f7330418796107b3750482348eabcf4ffa6323408fdcf26302c12af7",
+        "traceHash": "eacfaa804e7f84785cec2fe8683c8d23478014aa56deaa9da1935e5cea66e1b1",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.377Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "b9ffb134-d74f-45da-8f3f-924af79d64f8",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "Robots and AI working alongside people #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260826T103014-9b9729 from the one-line prompt \"Robots and AI working alongside people\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260826T103014-9b9729",
+          "theme": "human-robot-teams",
+          "prompt": "Robots and AI working alongside people",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/9c91e85079b241c398e284043bf2c6c4.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "vNobO5TBjkE",
+              "url": "https://youtu.be/vNobO5TBjkE"
+            },
+            {
+              "platform": "instagram",
+              "id": "18111884933080782"
+            },
+            {
+              "platform": "facebook",
+              "id": "1064306912914788"
+            },
+            {
+              "platform": "threads",
+              "id": "17949835296035993"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1sgOKZtTD0L1ddFYohVj0p06HG18ZDfus",
+            "meta.json": "1KQkyWUk-nVk1pVxZtXgu9YwO2M4DR35C"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.379Z",
+      "attestedAt": "2026-11-02T11:14:24.380Z",
+      "verified": true,
+      "signature": "cIYKjU3uDtyAJeU8kedUNzD5UwosKQ57lGKnAEHzdcaC6DNd4WjnXTdNiePiyn7RTLOpcJlYVD7yI5TIBnOqTg==",
+      "nonce": "504ce4be-6cbf-47b8-9c5f-665dd0f02541",
+      "attestation": {
+        "id": "869bfa73-3236-4e16-9b7f-9c270d0a1eac",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "2aa2dd053fc9766679ca7dd64282c99e63f1083364faa33ab230f2ba23c75ff1",
+        "traceHash": "f252ea4b102cc1bcb5a79b1cae4b01ccd61cd238b219453fa375bd6e06a3dea3",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.380Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "099deab7-d593-420a-b11f-96346d04fb69",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "Future tech ideas transforming everyday life #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260826T225118-24ce01 from the one-line prompt \"Future tech ideas transforming everyday life\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260826T225118-24ce01",
+          "theme": "future-tech-profit",
+          "prompt": "Future tech ideas transforming everyday life",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/96023054a81d432f90823f8d09835747.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "ZhuclfvAAE8",
+              "url": "https://youtu.be/ZhuclfvAAE8"
+            },
+            {
+              "platform": "instagram",
+              "id": "18389646832163842"
+            },
+            {
+              "platform": "facebook",
+              "id": "2140006659917559"
+            },
+            {
+              "platform": "threads",
+              "id": "18622315441022434"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1qBrAzQCY0DxgVgRN0KFsGQZIH21QhJi0",
+            "meta.json": "1XIHBHb8jkXcd54xpquiqrfTP2ycQ1WoS"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.381Z",
+      "attestedAt": "2026-11-02T11:14:24.383Z",
+      "verified": true,
+      "signature": "wi1B8mX+UYr9G5XQy1wbSrCM1krnLh7aimaUl0wsgXqn25I2qhuRgwfduqm9bXrueKLBr47i48jawTYe10jxjQ==",
+      "nonce": "b5201efd-1adb-4d27-9b80-cd17819f562d",
+      "attestation": {
+        "id": "d68de537-0a8f-4b3a-9424-bc939cc7b819",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "ec13da27ada0fc376ef62e4e4ba1ba437b8dc7473578f49fb8b3b2840635ce42",
+        "traceHash": "e30d93729790fbd10c4ad473fd6c881e018c8d0047dca8ac2736c620a4efe250",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.383Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "b77580b2-d5a2-42cd-8140-7addc0f9a8c0",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "What a dreamland looks like #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260827T134550-dc8e7b from the one-line prompt \"What a dreamland looks like\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260827T134550-dc8e7b",
+          "theme": "dreamland",
+          "prompt": "What a dreamland looks like",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/7bdec30f8cb640399abb40ddf15a7492.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "z6K_-KcMs2c",
+              "url": "https://youtu.be/z6K_-KcMs2c"
+            },
+            {
+              "platform": "instagram",
+              "id": "18110903618092462"
+            },
+            {
+              "platform": "facebook",
+              "id": "2123162941941556"
+            },
+            {
+              "platform": "threads",
+              "id": "18102575096205241"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1sw5JFrnXkZRxqFnZtuvYVmaOyGI2CiRF",
+            "meta.json": "1QQF3N2wMRfPBs5Wkwt9fglqCAZEtxL_K"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.384Z",
+      "attestedAt": "2026-11-02T11:14:24.385Z",
+      "verified": true,
+      "signature": "KGBSzQpBN+LEj9bzYvic+rIjeAMILLCEaGPu/+ERwESJZ2WYeF6fj0Dv/Cqo4zSYTWMybaE/D7X/S8YVpvhXeA==",
+      "nonce": "1b08c4e9-fa38-4d3e-8f1b-8b3c201ace31",
+      "attestation": {
+        "id": "63133b44-c8aa-4888-aa68-5be819112a66",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "c4343bf3c29b3191137f16aa8d3a757d42abbe7d3c64cdfbbf5528c487765ff7",
+        "traceHash": "80a8796c392c11bf60a5378b7ba96dd27731e3aa03eee0aa4729e1d80b0cc155",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.385Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "8e98b46d-6537-4378-860b-a1291a54ee7c",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "What we should learn from our ancestors #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260828T032417-84f8f2 from the one-line prompt \"What we should learn from our ancestors\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260828T032417-84f8f2",
+          "theme": "ancestor-questions",
+          "prompt": "What we should learn from our ancestors",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {
+            "r2_url": "https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/093dbeb000344c03b90f003979ae9b12.mp4"
+          },
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "gqW6uuxtc14",
+              "url": "https://youtu.be/gqW6uuxtc14"
+            },
+            {
+              "platform": "instagram",
+              "id": "18181140478417485"
+            },
+            {
+              "platform": "facebook",
+              "id": "1493795342514768"
+            },
+            {
+              "platform": "threads",
+              "id": "18134604451619368"
+            }
+          ],
+          "drive": {
+            "video.mp4": "1XOIa7Y2b2TGsxKL7TzwJ898fzTPtnLvk",
+            "meta.json": "1GuSTAIfZbbSKu2cIEIbu-WBjfhZf9CWc"
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.386Z",
+      "attestedAt": "2026-11-02T11:14:24.388Z",
+      "verified": true,
+      "signature": "x3JZBDjYdPdlpreHae1m2RsABItqrnMzz5Zyc4VyOK0FbboI9G8AmXS+MiTMuDsJ0X6U7jNoexjHH2OTeus81A==",
+      "nonce": "05895402-7825-4496-b540-773f0479f5f6",
+      "attestation": {
+        "id": "30d4e589-562e-4212-970b-d9d591e93ff3",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "2acc93b7eb18e4cb058f04ea323d07d95150fc2b79e8b3b5704b1d68c6b5cde5",
+        "traceHash": "3437a764472f0563632ee7996b474d4bfcebe21533d2957bef5ef6313a4ddb65",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.388Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "669db8ae-0b9e-4521-bb75-4591f903d443",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "What a dreamland looks like #Shorts",
+      "body": "Published youtube, instagram, facebook, threads — run 20260830T225726-142343 from the one-line prompt \"What a dreamland looks like\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
+      "artifact": {
+        "app": "futuristic-video",
+        "kind": "futuristic.video.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "run_id": "20260830T225726-142343",
+          "theme": "dreamland",
+          "prompt": "What a dreamland looks like",
+          "model": "agnes-video-v2.0",
+          "duration_s": 5.041666666666667,
+          "video": {},
+          "platforms": [
+            {
+              "platform": "youtube",
+              "id": "WnGwkZCmIrc",
+              "url": "https://youtu.be/WnGwkZCmIrc"
+            },
+            {
+              "platform": "instagram",
+              "id": "18082955276320472"
+            },
+            {
+              "platform": "facebook",
+              "id": "1130498850153987_122132111187357192"
+            },
+            {
+              "platform": "threads",
+              "id": "18120631960896649"
+            }
+          ],
+          "drive": {
+            "error": "invalid_grant: Token has been expired or revoked."
+          }
+        }
+      },
+      "taskId": "futuristic-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-02T11:14:24.389Z",
+      "attestedAt": "2026-11-02T11:14:24.391Z",
+      "verified": true,
+      "signature": "Pjv27WQX0WK0nc5wwbNV/RTS3/xy8VeuBFk1zT5Jro3csXqMjut7EUf4ZogYV/pQKPtqFUf+EgX8Bns3Vn+swA==",
+      "nonce": "39d49c65-d71e-44f3-9f12-92e0624f0686",
+      "attestation": {
+        "id": "c47fa66d-bd92-4129-85f8-811fcbdca6cb",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "94d8aa2fd0aea434061de692a21f0be00f2e846908ec5dd024ecb19e6058c96a",
+        "traceHash": "98df5268edee6b306f536d912280ff988844d7fdc6fae355a2dd371be377752b",
+        "correct": true,
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-02T11:14:24.391Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "4806012d-6dfb-40d5-ac70-50e1a5f28607",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Replay of the committed starter model (32 steps)",
@@ -79,13 +882,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T22:46:24.715Z",
-      "attestedAt": "2026-10-31T22:46:24.719Z",
+      "createdAt": "2026-11-02T11:14:24.406Z",
+      "attestedAt": "2026-11-02T11:14:24.408Z",
       "verified": true,
-      "signature": "tzZ4/diY+7r4el6Sg7WNhm0oKJFbyvZE3XX2iDZUqTrJkMdo6TIu9NQ0GWCsjvShCptH4raDsZgLjJnOstYIFw==",
-      "nonce": "1c2b47e9-973b-45f2-8c8d-9befa8e1c5e8",
+      "signature": "e2B7RDOqtLXEPyptZ/eNjU8MKnsPPTbaEehGmLoJpjMSE/V/6AypolVUzcUcJRqtk/wdJkDb6aTXmOlkDp8n2A==",
+      "nonce": "14b11d4e-83a9-4b12-8f69-482c78000dfe",
       "attestation": {
-        "id": "74fb2a5d-3dc9-4f8a-a020-246a0a54b4c6",
+        "id": "fe0ff2bf-254f-46e3-8b89-0e809b1291a7",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -105,16 +908,16 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T22:46:24.719Z"
+        "createdAt": "2026-11-02T11:14:24.408Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "618b8409-d409-4688-a690-2027d46324bb",
-      "author": "ai-proof",
-      "authorKey": "b6fc6032ef6d09a690ab95b049e4afe2603418c0abb5d2de36ba95d05bfe330a",
+      "id": "9de0ac34-16ee-44bd-b2d4-3dbf2b187fe0",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
@@ -153,13 +956,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T22:46:24.721Z",
-      "attestedAt": "2026-10-31T22:46:24.723Z",
+      "createdAt": "2026-11-02T11:14:24.409Z",
+      "attestedAt": "2026-11-02T11:14:24.410Z",
       "verified": true,
-      "signature": "X187A/HZEs2YiahU94J+dmeYeA/Q/h4nu68x2c1Qxkd+TzIC2CpavSEZG106pSFaP1H+SG18t90q4JOGv5Y/ZQ==",
-      "nonce": "49dbf9df-a9c3-485f-bed2-3148a4360f83",
+      "signature": "PRG77knaNc+kJfMAO6DdFRbXAi4hXgCcu2TsoRC0Q8zdJNBBfL444bxw94RTD/bembTHAr8N4fkf1cVT6nph2w==",
+      "nonce": "32ab7efa-69ac-4895-b749-e8848061087c",
       "attestation": {
-        "id": "d1c70aef-358b-464d-98ce-6707cf7e85a9",
+        "id": "6206c929-e563-401a-9ddb-cc8f2e12bdfc",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -181,7 +984,7 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-10-31T22:46:24.723Z"
+        "createdAt": "2026-11-02T11:14:24.410Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -189,52 +992,52 @@
     },
     {
       "id": "pub-federation-commitment",
-      "author": "ai-proof",
-      "authorKey": "b6fc6032ef6d09a690ab95b049e4afe2603418c0abb5d2de36ba95d05bfe330a",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "The federation seed list this bundle commits to",
-      "body": "Generated on this node by the digest-bound xorshift32 starter model from seed 42; replay it yourself.",
-      "app": "ai-generative",
-      "challengeId": "gen-starter",
+      "body": "Published youtube, instagram, facebook, threads — run 20260821T133842-3ea13d from the one-line prompt \"Visiting a futuristic art gallery\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
       "artifact": {
         "app": "federation",
         "kind": "registry-list-commitment",
         "version": 1,
         "mediaType": "application/json",
-        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-10-31T23:26:22.394Z\"}"
+        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-11-02T11:34:48.699Z\"}"
       },
-      "taskId": "gen-starter",
+      "taskId": "futuristic-published",
       "visibility": "public",
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T22:46:24.715Z",
-      "attestedAt": "2026-10-31T22:46:24.719Z",
+      "createdAt": "2026-11-02T11:14:24.362Z",
+      "attestedAt": "2026-11-02T11:14:24.367Z",
       "verified": true,
-      "signature": "tzZ4/diY+7r4el6Sg7WNhm0oKJFbyvZE3XX2iDZUqTrJkMdo6TIu9NQ0GWCsjvShCptH4raDsZgLjJnOstYIFw==",
-      "nonce": "1c2b47e9-973b-45f2-8c8d-9befa8e1c5e8",
+      "signature": "ucgHWnWIqE7USWtF9OK/Fao/guny/IfUqFygnGSa48LVRU7P3ujzHi/1gONKmDCUxkZvHHRXDyISjB4iNWh/9A==",
+      "nonce": "131d2938-3dd9-40aa-8bc7-8a8f65673b6e",
       "attestation": {
-        "id": "74fb2a5d-3dc9-4f8a-a020-246a0a54b4c6",
-        "verifier": "xorshift32-replay",
-        "app": "ai-generative",
-        "challengeId": "gen-starter",
-        "taskId": "gen-starter",
-        "circuitHash": "7dce90a5dfbec33634b60ab651251dd3b4f4556c7b29c3f66a4126d1d6f3e7f8",
-        "traceHash": "ee29cd38c1586b0ceb280712a25aaa451b45f36c25619c0d9fa267034ed36ba5",
+        "id": "e14cd6a6-79fa-484f-890d-f1dcf2697263",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "94565b66844075ded36cffc5bdbae65508474ec4562a202c1a4afafbbc468189",
+        "traceHash": "ff440330910d8f8091399e74b5b5470f6563d98c8eb90b4c5745288f675d897d",
         "correct": true,
-        "score": 100,
-        "gateCount": 32,
-        "semanticsId": "ai-generative/gen-starter",
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "a7e0a656caba5a3aee85e281d37591f96f994f1e3a561d6390aeef9d1eefa8af",
-        "claimKind": "generative",
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
         "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T22:46:24.719Z"
+        "createdAt": "2026-11-02T11:14:24.367Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -242,14 +1045,14 @@
     },
     {
       "id": "pub-semantics-commitment",
-      "author": "ai-proof",
-      "authorKey": "b6fc6032ef6d09a690ab95b049e4afe2603418c0abb5d2de36ba95d05bfe330a",
+      "author": "futuristic",
+      "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
       "signatureAlgorithm": "ecdsa-p256",
       "title": "The 5 semantics records this bundle commits to",
-      "body": "Generated on this node by the digest-bound xorshift32 starter model from seed 42; replay it yourself.",
-      "app": "ai-generative",
-      "challengeId": "gen-starter",
+      "body": "Published youtube, instagram, facebook, threads — run 20260821T133842-3ea13d from the one-line prompt \"Visiting a futuristic art gallery\".",
+      "app": "futuristic-video",
+      "challengeId": "futuristic-published",
       "artifact": {
         "app": "rarext-semantics",
         "kind": "semantics-commitment",
@@ -257,37 +1060,37 @@
         "mediaType": "application/json",
         "body": "{\"digests\":{\"logic/half-adder@1\":\"a72965e003a14d75d477dce8b7f54c71408dc4e9f8df02faf7e0964cdf71854e\",\"logic/majority@1\":\"bf7edb5c509fafc4bd18515e3dcc8d530d5f221e0510f228c9c77fbc42ae68fe\",\"logic/mux2@1\":\"d4f40e5092368af88bfb7055ea05b0a0aee7db2596c05495a086b554254912ba\",\"ai-generative/gen-starter@1\":\"a7e0a656caba5a3aee85e281d37591f96f994f1e3a561d6390aeef9d1eefa8af\",\"ai-bounded/bounded-starter@1\":\"c7e17067abac1bc8581bf8842a3003308d811d215c202a16453aeffa96f3e43e\"}}"
       },
-      "taskId": "gen-starter",
+      "taskId": "futuristic-published",
       "visibility": "public",
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-10-31T22:46:24.715Z",
-      "attestedAt": "2026-10-31T22:46:24.719Z",
+      "createdAt": "2026-11-02T11:14:24.362Z",
+      "attestedAt": "2026-11-02T11:14:24.367Z",
       "verified": true,
-      "signature": "tzZ4/diY+7r4el6Sg7WNhm0oKJFbyvZE3XX2iDZUqTrJkMdo6TIu9NQ0GWCsjvShCptH4raDsZgLjJnOstYIFw==",
-      "nonce": "1c2b47e9-973b-45f2-8c8d-9befa8e1c5e8",
+      "signature": "ucgHWnWIqE7USWtF9OK/Fao/guny/IfUqFygnGSa48LVRU7P3ujzHi/1gONKmDCUxkZvHHRXDyISjB4iNWh/9A==",
+      "nonce": "131d2938-3dd9-40aa-8bc7-8a8f65673b6e",
       "attestation": {
-        "id": "74fb2a5d-3dc9-4f8a-a020-246a0a54b4c6",
-        "verifier": "xorshift32-replay",
-        "app": "ai-generative",
-        "challengeId": "gen-starter",
-        "taskId": "gen-starter",
-        "circuitHash": "7dce90a5dfbec33634b60ab651251dd3b4f4556c7b29c3f66a4126d1d6f3e7f8",
-        "traceHash": "ee29cd38c1586b0ceb280712a25aaa451b45f36c25619c0d9fa267034ed36ba5",
+        "id": "e14cd6a6-79fa-484f-890d-f1dcf2697263",
+        "verifier": "structural-record-check",
+        "app": "futuristic-video",
+        "challengeId": "futuristic-published",
+        "taskId": "futuristic-published",
+        "circuitHash": "94565b66844075ded36cffc5bdbae65508474ec4562a202c1a4afafbbc468189",
+        "traceHash": "ff440330910d8f8091399e74b5b5470f6563d98c8eb90b4c5745288f675d897d",
         "correct": true,
-        "score": 100,
-        "gateCount": 32,
-        "semanticsId": "ai-generative/gen-starter",
+        "score": 1,
+        "gateCount": 4,
+        "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "a7e0a656caba5a3aee85e281d37591f96f994f1e3a561d6390aeef9d1eefa8af",
-        "claimKind": "generative",
+        "semanticsHash": "cf1e4a08ab52c6c5f4a7ce7b3d02bcbc8adf6217392d7ee4895da0ca9044544c",
+        "claimKind": "satisfies",
         "scope": null,
+        "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-10-31T22:46:24.719Z"
+        "createdAt": "2026-11-02T11:14:24.367Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -296,24 +1099,33 @@
   ],
   "anchors": [
     {
-      "id": "b41eabb9-4027-4990-b8d9-f5a2c5169076",
-      "root": "46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73",
+      "id": "965601a6-ee22-4ba2-ada1-426e189dae7e",
+      "root": "29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af",
       "publicationIds": [
-        "71633394-36a4-4d7b-a99c-032805019940",
-        "618b8409-d409-4688-a690-2027d46324bb",
+        "01f06df1-94e0-4e86-9e46-34bec651b238",
+        "2e0407e2-a8c0-4ad8-999d-fc438e62b6d5",
+        "0a048f5b-ab3a-463a-8b93-24a4bbc81c58",
+        "2cefb882-250f-4f30-bf37-037ca49de5a3",
+        "b9ffb134-d74f-45da-8f3f-924af79d64f8",
+        "099deab7-d593-420a-b11f-96346d04fb69",
+        "b77580b2-d5a2-42cd-8140-7addc0f9a8c0",
+        "8e98b46d-6537-4378-860b-a1291a54ee7c",
+        "669db8ae-0b9e-4521-bb75-4591f903d443",
+        "4806012d-6dfb-40d5-ac70-50e1a5f28607",
+        "9de0ac34-16ee-44bd-b2d4-3dbf2b187fe0",
         "pub-federation-commitment",
         "pub-semantics-commitment"
       ],
-      "leafCount": 4,
+      "leafCount": 13,
       "leafVersion": 4,
-      "createdAt": "2026-10-31T23:26:22.411Z",
+      "createdAt": "2026-11-02T11:34:48.711Z",
       "adapter": "local",
-      "reference": "local:46ef40bd237d320d",
+      "reference": "local:29ef02c7a4ec9109",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:46ef40bd237d320d"
+          "reference": "local:29ef02c7a4ec9109"
         },
         {
           "adapter": "trac",
@@ -324,7 +1136,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreigvppgndmpqc263d25pibtdkbt7noe63ivfeerlg24t7x6vlnx4ri"
+          "reference": "cid:bafkreiaequm6fzjo7tuwdbo5c4wy7tapi54utf6vr7nzd2mhfneyyar3jq"
         }
       ]
     }
@@ -767,6 +1579,21 @@
       "semanticsVersion": 1,
       "createdAt": "2026-01-01T00:00:00.000Z",
       "status": "seed",
+      "sponsor": null
+    },
+    {
+      "id": "futuristic-published",
+      "app": "futuristic-video",
+      "title": "FUTURISTIC published-video record",
+      "description": "The brand's structural record of one published pipeline run: run id, one-line prompt, Agnes model, media commitment, per-platform publication ids. Verified by structural-record-check.",
+      "version": 1,
+      "spec": {
+        "kind": "futuristic.video.record"
+      },
+      "semanticsId": "futuristic-video/futuristic-published",
+      "semanticsVersion": 1,
+      "createdAt": "2026-11-02T11:14:24.302Z",
+      "status": "open",
       "sponsor": null
     }
   ],
