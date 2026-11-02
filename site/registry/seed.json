@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-31T23:26:22.413Z",
+  "updatedAt": "2026-11-02T11:34:48.734Z",
   "bundle": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
-  "bundleRoot": "46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73",
+  "bundleRoot": "29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af",
   "registries": [
     {
       "id": "rarext",
@@ -28,11 +28,11 @@
       "id": "github-pages-mirror",
       "url": "https://999svs999.github.io/RAREXT-protocol/mirror/",
       "bundle": "https://999svs999.github.io/RAREXT-protocol/mirror/bundle.json",
-      "root": "46ef40bd237d320d71290e83788a175cfc88f699e378ab3a779fb73d28060d73",
+      "root": "29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af",
       "operator": "999svs999",
       "note": "The static mirror, published on its own path so a client can fail over between this copy and the registry's; both must rebuild the pinned root."
     }
   ],
-  "bundleCid": "bafkreic2k5cqkziqjg7vcecnmbwr73sp7dwevlahupdbfsrizpenot434u",
+  "bundleCid": "bafkreidp5b5gu46m6w4ahbb5mexlep3n4z4tmsqdtkbxvnjoencjviuwym",
   "pins": []
 }

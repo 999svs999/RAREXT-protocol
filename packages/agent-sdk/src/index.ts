@@ -1330,6 +1330,11 @@ export function replayBundleAi(bundle: Bundle): BundleAiReplay {
 
     const verdict = verifyAiArtifact(publication.artifact, challenge);
     if ("error" in verdict) {
+      // "not a locally verifiable AI claim" is core's answer for artifacts that
+      // are not AI-model outputs at all (e.g. a brand's structural-exact
+      // record) — they are attested by their own verifier, not replayed here.
+      // A malformed genuine AI claim errors differently and stays a loud false.
+      if (verdict.error.includes("not a locally verifiable AI claim")) continue;
       claims.push({ ...claim, correct: false, error: verdict.error });
       continue;
     }

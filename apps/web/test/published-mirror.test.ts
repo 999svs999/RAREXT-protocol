@@ -70,7 +70,12 @@ test("the published mirror verifies against its pinned root and media", async ()
 
   assert.equal(result.valid, true, result.reason ?? undefined);
 
-  const ai = result.aiClaims.filter((claim) => claim.representation);
+  // The two genuine AI replay claims must be present with matching renditions.
+  // The brand's own records (attested exact) also ride the aiClaims surface —
+  // their verification already folded into result.valid above.
+  const ai = result.aiClaims.filter(
+    (claim) => claim.representation === "generative" || claim.representation === "bounded",
+  );
   assert.equal(ai.length, 2);
 
   const renditions = new Map(

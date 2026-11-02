@@ -61,7 +61,12 @@ test("a bundle built offline replays the AI claims inside it", () => {
 
   const replay = replayBundleAi(bundle);
   assert.equal(replay.root, bundle.manifest.root, "the replay ties its verdicts to the bundle's root");
-  assert.equal(replay.claims.length, 2, `the two AI representations replay: ${JSON.stringify(replay.claims.map((c) => c.title))}`);
+  // The two genuine AI replay claims (the brand's attested-exact records also
+  // ride the surface; their verdicts are checked by the every() below).
+  const seeded = replay.claims.filter(
+    (claim) => claim.representation === "generative" || claim.representation === "bounded",
+  );
+  assert.equal(seeded.length, 2, `the two AI representations replay: ${JSON.stringify(replay.claims.map((c) => c.title))}`);
   assert.ok(
     replay.claims.every((claim) => claim.correct === true),
     "and every claim is correct by recomputation, not by assertion",

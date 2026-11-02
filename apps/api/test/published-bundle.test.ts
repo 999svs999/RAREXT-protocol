@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   REGISTRY_LIST_COMMITMENT_KIND,
+  SEMANTICS_COMMITMENT_KIND,
   parseRegistrySeedList,
 } from "../../../packages/core/src/index.ts";
 import { federationCommitment, registryListDigestOf } from "../../../packages/agent-sdk/src/index.ts";
@@ -141,9 +142,35 @@ test("the published bundle commits to the published seed list, anchored at its o
   );
 
   // The commitment is NOT an AI claim: the surface that proves AI results must
-  // not be padded by a publication that proves nothing about a model.
+  // not be padded by a publication that proves nothing about a model. The
+  // brand's own records (futuristic-video, attested exact) are legitimate
+  // representation carriers beside the two seeded AI proofs.
+  const commitmentPublications = bundle.publications.filter(
+    (publication) =>
+      publication.artifact?.kind === REGISTRY_LIST_COMMITMENT_KIND ||
+      publication.artifact?.kind === SEMANTICS_COMMITMENT_KIND,
+  );
+  for (const publication of commitmentPublications) {
+    assert.equal(
+      (publication.attestation as { representation?: unknown } | undefined)?.representation,
+      undefined,
+      `the commitment ${publication.id} must not pose as an AI claim`,
+    );
+  }
   const ai = bundle.publications.filter(
     (publication) => (publication.attestation as { representation?: unknown } | undefined)?.representation,
   );
-  assert.equal(ai.length, 2, "two AI representations, and the commitment is not one of them");
+  const representations = new Set(
+    ai.map((publication) => (publication.attestation as { representation?: string }).representation),
+  );
+  assert.ok(representations.has("generative"), "the generative AI representation is present");
+  assert.ok(representations.has("bounded"), "the bounded AI representation is present");
+  assert.ok(
+    ai.every((publication) =>
+      ["generative", "bounded", "exact"].includes(
+        (publication.attestation as { representation?: string }).representation ?? "",
+      ),
+    ),
+    "no other representation kind sneaks in",
+  );
 });

@@ -15,7 +15,7 @@
 // (chmod 600) so every future publication keeps the same authorKey: the brand
 // has ONE identity, not a new one per run.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -34,6 +34,7 @@ const core = await import(root + "packages/core/src/index.ts");
 const { canonicalize } = core;
 const sdk = await import(root + "packages/agent-sdk/src/index.ts");
 const { AgentSigner, RarextClient, generateAgentKeypair, createAgentKeyfile, parseAgentKeyfile } = sdk;
+const { encodePngRaster } = await import(root + "scripts/png-raster.mjs");
 const apiApp = await import(root + "apps/api/src/app.ts");
 const { createApp } = apiApp;
 const storeMod = await import(root + "apps/api/src/store.ts");
@@ -186,6 +187,75 @@ for (const run of runs) {
   if (!asJson) console.log(`  ✓ ${run.record.run_id} -> ${publication.id.slice(0, 8)}… [${publication.attestation.representation ?? "exact"}]`);
 }
 
+// ---- AI seed representations -----------------------------------------------
+// The brand's record AND the protocol's AI proof in one registry: the verify
+// page replays AI claims, and the self-publish tests read the published bundle
+// for them. Same identity, same anchor — the seeds are correct by construction.
+const seedChallenges = await client.challenges();
+const genChallenge = seedChallenges.find((c) => c.id === "gen-starter");
+const boundedChallenge = seedChallenges.find((c) => c.id === "bounded-starter");
+if (!genChallenge || !boundedChallenge) throw new Error("AI seeds missing");
+
+const genBody = genChallenge.sampleArtifact.body;
+const RASTER_SIZE = 64;
+const raster = core.renderRaster(genBody.model, genBody.seed, RASTER_SIZE);
+const rasterDigest = createHash("sha256").update(raster).digest("hex");
+const png = encodePngRaster(raster, RASTER_SIZE);
+const renditionResponse = await fetch(`${base}/v1/blobs`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ content: png.toString("base64"), encoding: "base64", mediaType: "image/png" }),
+});
+if (!renditionResponse.ok) throw new Error(`rendition store failed: ${renditionResponse.status}`);
+const renditionBlob = await renditionResponse.json();
+genBody.media = {
+  mediaType: "image/png",
+  rule: core.RASTER_RULE,
+  blob: renditionBlob.hash,
+  raster: rasterDigest,
+  size: RASTER_SIZE,
+  bytes: png.length,
+};
+
+const boundedBody = boundedChallenge.sampleArtifact.body;
+const boundedPngWidth = boundedChallenge.spec.reference.length * core.BOUNDED_RASTER_SCALE;
+const boundedPngHeight = core.BOUNDED_RASTER_HEIGHT;
+const boundedRaster = core.renderBoundedRaster(boundedChallenge.spec.reference, boundedBody.values);
+const boundedRasterDigest = createHash("sha256").update(boundedRaster).digest("hex");
+const boundedPng = encodePngRaster(boundedRaster, boundedPngWidth, boundedPngHeight);
+const boundedStoreResponse = await fetch(`${base}/v1/blobs`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ content: boundedPng.toString("base64"), encoding: "base64", mediaType: "image/png" }),
+});
+if (!boundedStoreResponse.ok) throw new Error(`bounded rendition store failed: ${boundedStoreResponse.status}`);
+const boundedBlob = await boundedStoreResponse.json();
+boundedBody.media = core.boundedRenditionFor(boundedChallenge.spec.reference, boundedBody.values, {
+  encodePng: (r, width, height) => new Uint8Array(encodePngRaster(r, width, height)),
+  sha256: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+});
+if (boundedBody.media.blob !== boundedBlob.hash) {
+  throw new Error(`bounded rendition blob digest mismatch: store ${boundedBlob.hash.slice(0, 16)}… vs computed ${boundedBody.media.blob.slice(0, 16)}…`);
+}
+
+const genPublication = await client.publishArtifactAs(signer, {
+  author: "futuristic",
+  title: "Replay of the committed starter model (32 steps)",
+  body: "Generated on this node by the digest-bound xorshift32 starter model from seed 42; replay it yourself.",
+  challengeId: "gen-starter",
+  artifact: { app: "ai-generative", kind: "ai.generative", version: 1, mediaType: "application/json", body: genBody },
+});
+if (genPublication.attestation.representation !== "generative") throw new Error("generative representation missing");
+const boundedPublication = await client.publishArtifactAs(signer, {
+  author: "futuristic",
+  title: "Bounded reconstruction of the committed reference (maxAbsError 2)",
+  body: "An int8-quantized reconstruction within the committed bound; recompute the metric yourself.",
+  challengeId: "bounded-starter",
+  artifact: { app: "ai-bounded", kind: "ai.bounded", version: 1, mediaType: "application/json", body: boundedBody },
+});
+if (boundedPublication.attestation.representation !== "bounded") throw new Error("bounded representation missing");
+if (!asJson) console.log(`  ✓ ai seeds -> gen ${genPublication.id.slice(0, 8)}… bounded ${boundedPublication.id.slice(0, 8)}…`);
+
 // ---- anchor + bundle -------------------------------------------------------
 await client.anchor();
 const bundleResponse = await fetch(`${base}/v1/bundles/latest`);
@@ -200,9 +270,6 @@ const { verifyBundle } = await import(join(root, "apps/api/src/bundle.ts"));
 const verification = verifyBundle(bundle);
 if (!verification.valid) throw new Error(`bundle does not verify: ${verification.reason}`);
 
-server.closeAllConnections();
-server.close();
-
 const summary = {
   identity: { handle: keyfile.handle, keyId: keyfile.keyId },
   publications: published.length,
@@ -211,6 +278,70 @@ const summary = {
   bundle: join(OUT, "bundle.json"),
   verified: true,
 };
+
+// ---- mirror -----------------------------------------------------------------
+// The brand's static face: bundle pair + workbench assets + the pinned verify
+// page + the FUTURISTIC gallery. FUTURISTIC publications carry no media blobs
+// (the videos live on the platforms and R2), so the mirror is light. Runs
+// BEFORE the API shuts down — writeMirrorBlobs fetches from it.
+const { writeBundleFiles, injectBundleScript } = await import(join(root, "scripts/mirror-artifacts.mjs"));
+const { mirrorVerifyPage } = await import(join(root, "scripts/mirror-verify-page.mjs"));
+const { writeMirrorBlobs } = await import(join(root, "scripts/mirror-blobs.mjs"));
+const { futuristicGalleryPage } = await import(join(root, "scripts/futuristic-page.mjs"));
+
+const mirrorDir = join(OUT, "mirror");
+mkdirSync(mirrorDir, { recursive: true });
+writeBundleFiles(mirrorDir, bundle);
+// Blobs: the AI seed publications carry PNG renditions the verify page replays,
+// so they are embedded (the same mediaClaims extraction build-mirror.mjs uses).
+const mediaClaims = (publications) =>
+  (Array.isArray(publications) ? publications : []).flatMap((publication) => {
+    const media = publication?.artifact?.body?.media;
+    if (!media || typeof media !== "object") return [];
+    return [
+      {
+        blob: media.blob,
+        raster: media.raster,
+        size: media.size,
+        app: publication.app,
+        representation: publication.attestation?.representation ?? null,
+        publicationId: publication.id,
+        challengeId: publication.challengeId,
+        title: publication.title,
+      },
+    ];
+  });
+const blobsWritten = await writeMirrorBlobs({ base, mirrorDir, aiClaims: mediaClaims(bundle.publications) });
+cpSync(join(root, "apps/web/public"), mirrorDir, { recursive: true });
+// cpSync above re-copied generated bundle files; rewrite to be sure they are
+// the anchored bundle's bytes (single source, same rule as publish-proof.mjs).
+writeBundleFiles(mirrorDir, bundle);
+
+const mirrorIndex = join(mirrorDir, "index.html");
+writeFileSync(mirrorIndex, injectBundleScript(readFileSync(mirrorIndex, "utf8"), { appSrc: "/app.js", newAppSrc: "./app.js" }));
+
+writeFileSync(join(mirrorDir, "verify.html"), mirrorVerifyPage({
+  title: "Mirror verification — FUTURISTIC included",
+  heading: "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURISTIC's published record holds.",
+}));
+writeFileSync(join(mirrorDir, "futuristic.html"), futuristicGalleryPage(bundle));
+
+// Portability under a subpath (GitHub Pages serves /RAREXT-protocol/).
+for (const name of readdirSync(mirrorDir)) {
+  if (!name.endsWith(".html")) continue;
+  const path = join(mirrorDir, name);
+  const html = readFileSync(path, "utf8");
+  const fixed = html
+    .replace(/(src|href)="\/(bundle|app|verify)\.(js|json)"/g, '$1="./$2.$3"')
+    .replace(/href="\/(styles\.css|favicon\.svg)"/g, 'href="./$1"');
+  if (fixed !== html) writeFileSync(path, fixed);
+}
+summary.mirror = mirrorDir;
+summary.blobs = blobsWritten.count;
+
+server.closeAllConnections();
+server.close();
+
 if (asJson) {
   console.log(JSON.stringify(summary, null, 1));
 } else {
