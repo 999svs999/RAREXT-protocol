@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af</div>
+        <div class="address"><b>rarext:futuristic@</b>94b2319e37264b9a3f735e72ebb982826c8ffde0c48f16d4e2fccf894251cb4a</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -171,7 +171,7 @@
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=29ef02c7a4ec9109da69d3c5e7d9d0543020b78252c2dffb4be9c5505b69d5af">run the pinned verifier</a> ·
+        <a href="./verify.html?root=94b2319e37264b9a3f735e72ebb982826c8ffde0c48f16d4e2fccf894251cb4a">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -183,7 +183,7 @@
         const res = await fetch("./bundle.json");
         if (!res.ok) throw new Error("bundle fetch " + res.status);
         const verdict = verifyBundle(await res.json());
-        status.textContent = verdict.valid ? "ROOT VERIFIED · 29ef02c7a4ec…" : "ROOT MISMATCH";
+        status.textContent = verdict.valid ? "ROOT VERIFIED · 94b2319e3726…" : "ROOT MISMATCH";
         status.classList.toggle("bad", !verdict.valid);
       } catch (error) {
         status.textContent = "VERIFY FAILED: " + (error?.message ?? error);
