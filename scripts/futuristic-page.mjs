@@ -94,16 +94,28 @@ ${cards}
     <script type="module">
       import { verifyBundle } from "./verify.js";
       const status = document.getElementById("status");
-      try {
-        const res = await fetch("./bundle.json");
-        if (!res.ok) throw new Error("bundle fetch " + res.status);
-        const verdict = verifyBundle(await res.json());
-        status.textContent = verdict.valid ? "ROOT VERIFIED · ${root.slice(0, 12)}…" : "ROOT MISMATCH";
-        status.classList.toggle("bad", !verdict.valid);
-      } catch (error) {
-        status.textContent = "VERIFY FAILED: " + (error?.message ?? error);
-        status.classList.add("bad");
+      async function check(attempt) {
+        try {
+          const res = await fetch("./bundle.json", { cache: "no-store" });
+          if (!res.ok) throw new Error("bundle fetch " + res.status);
+          const verdict = await verifyBundle(await res.json());
+          if (verdict.valid) {
+            status.textContent = "ROOT VERIFIED · ${root.slice(0, 12)}…";
+            status.classList.remove("bad");
+          } else if (attempt < 2) {
+            // A fresh deploy can serve a stale cached bundle for a moment;
+            // retry before declaring anything.
+            setTimeout(() => check(attempt + 1), 3000);
+          } else {
+            status.textContent = "ROOT MISMATCH — " + (verdict.reason ?? "no reason given");
+            status.classList.add("bad");
+          }
+        } catch (error) {
+          status.textContent = "VERIFY FAILED: " + (error?.message ?? error);
+          status.classList.add("bad");
+        }
       }
+      check(0);
     </script>
   </body>
 </html>
