@@ -54,9 +54,25 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>ca63e7cf0b41cc971c3f3c7d11ba98dbc2002720e46f228ab3026fca552e36ba</div>
+        <div class="address"><b>rarext:futuristic@</b>d3678fdc0c805d8bd6de07c8ae70e19727d8a1cd040c52a9d80810e4efb85f48</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
+
+      <h2>Brand site — anchored</h2>
+      <section id="site">
+    <article class="card site">
+      <h3><a href="https://futuristiclive.pages.dev/" rel="noopener">FUTURISTIC — we film the tomorrows we want to visit</a></h3>
+      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 38628 bytes anchored · rev fd71493ecd3d</p>
+      <div class="chips">
+        <span>/ · 14758b</span>
+        <span>/styles.css · 16342b</span>
+        <span>/app.js · 5462b</span>
+        <span>/favicon.svg · 476b</span>
+        <span>/og.svg · 1590b</span>
+        <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/site/hero.mp4" rel="noopener">film ▸ 3812775b</a>
+      </div>
+    </article>
+      </section>
 
       <h2>Published record — 9 runs</h2>
       <section id="gallery">
@@ -171,7 +187,7 @@
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=ca63e7cf0b41cc971c3f3c7d11ba98dbc2002720e46f228ab3026fca552e36ba">run the pinned verifier</a> ·
+        <a href="./verify.html?root=d3678fdc0c805d8bd6de07c8ae70e19727d8a1cd040c52a9d80810e4efb85f48">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -185,7 +201,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · ca63e7cf0b41…";
+            status.textContent = "ROOT VERIFIED · d3678fdc0c80…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;

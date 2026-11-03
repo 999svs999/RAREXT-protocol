@@ -18,6 +18,10 @@ export function futuristicGalleryPage(bundle) {
   const cards = publications
     .map((p) => futuristicCard(p))
     .join("\n");
+  const siteRecords = (bundle.publications ?? []).filter(
+    (p) => p.artifact?.app === "futuristic-site",
+  );
+  const siteCards = siteRecords.map((p) => siteCard(p)).join("\n");
 
   return `<!doctype html>
 <html lang="en">
@@ -79,6 +83,11 @@ export function futuristicGalleryPage(bundle) {
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
+      ${siteRecords.length ? `<h2>Brand site — anchored</h2>
+      <section id="site">
+${siteCards}
+      </section>` : ""}
+
       <h2>Published record — ${count} run${count === 1 ? "" : "s"}</h2>
       <section id="gallery">
 ${cards}
@@ -120,6 +129,32 @@ ${cards}
   </body>
 </html>
 `;
+}
+
+function siteCard(publication) {
+  // The brand's public web presence, anchored byte-for-byte: every page digest
+  // is in the bundle, so a reader can hash the live origin and compare.
+  const body = publication.artifact?.body ?? {};
+  const pages = Array.isArray(body.pages) ? body.pages : [];
+  const media = Array.isArray(body.media) ? body.media : [];
+  const bytes = pages.reduce((a, p) => a + (p.bytes || 0), 0);
+  const rows = pages
+    .map((p) => `<span>${escapeHtml(p.path)} · ${p.bytes}b</span>`)
+    .join("\n        ");
+  const mediaChips = media
+    .map((m) => `<a href="${m.url}" rel="noopener">film ▸ ${m.bytes}b</a>`)
+    .join("\n        ");
+  const rev = body.revision
+    ? ` · rev ${escapeHtml(String(body.revision).slice(0, 12))}`
+    : "";
+  return `    <article class="card site">
+      <h3><a href="${escapeHtml(body.site ?? "#")}" rel="noopener">${escapeHtml(body.title ?? body.site ?? "site")}</a></h3>
+      <p class="meta">${escapeHtml(body.site ?? "?")} · ${pages.length} page${pages.length === 1 ? "" : "s"} · ${bytes} bytes anchored${rev}</p>
+      <div class="chips">
+        ${rows}
+        ${mediaChips}
+      </div>
+    </article>`;
 }
 
 function futuristicCard(publication) {
