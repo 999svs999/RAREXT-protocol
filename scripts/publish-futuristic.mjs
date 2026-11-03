@@ -160,6 +160,20 @@ challengeMap.set("futuristic-site-published", {
   status: "open",
   sponsor: null,
 });
+challengeMap.set("rarext-name-published", {
+  id: "rarext-name-published",
+  app: "rarext-name",
+  title: "RAREXT name binding",
+  description:
+    "A human name claimed by an identity key, with the https targets it resolves to. Verified by structural-name-record-check.",
+  version: 1,
+  spec: { kind: "rarext.name.record" },
+  semanticsId: "rarext-name/rarext-name-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
 
 const challengeRegistry = {
   list: () => [...challengeMap.values()],
@@ -280,6 +294,42 @@ if (siteRecord) {
   });
   if (!asJson) console.log(`  ✓ site (${siteRecord.pages.length} pages, ${siteBytes}b) -> ${sitePublication.id.slice(0, 8)}… [${sitePublication.attestation.representation ?? "exact"}]`);
 }
+
+// ---- name binding ----------------------------------------------------------
+// The human address: `rar.futuristic` resolves to the identity that signs these
+// publications. The name binds to an IDENTITY KEY, never to a root — anchoring
+// a name->root binding would change the root it names, so there is no fixed
+// point. A client resolves by identity: find the latest anchored bundle whose
+// publications are authored by this key, then verify what it fetched.
+const RAREXT_NAME = "futuristic";
+const NAME_TARGETS = [
+  { kind: "site", url: SITE_ORIGIN },
+  { kind: "registry", url: "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json" },
+  { kind: "mirror", url: "https://999svs999.github.io/RAREXT-protocol/mirror/futuristic.html" },
+  { kind: "gallery", url: "https://futuristiclive.pages.dev/#films" },
+];
+const namePublication = await client.publishArtifactAs(signer, {
+  author: "futuristic",
+  title: `rarext name: ${RAREXT_NAME}`,
+  body: `The name "${RAREXT_NAME}" is claimed by identity ${signer.keyId.slice(0, 16)}… — the same key that signs every publication in this bundle. Forms: rar.${RAREXT_NAME}, ${RAREXT_NAME}.rar, rr.${RAREXT_NAME}.`,
+  challengeId: "rarext-name-published",
+  artifact: {
+    app: "rarext-name",
+    kind: "rarext.name.v1",
+    version: 1,
+    mediaType: "application/json",
+    body: {
+      name: RAREXT_NAME,
+      identityKey: signer.keyId,
+      targets: NAME_TARGETS,
+      note: "Resolves by identity: the latest anchored bundle authored by this key.",
+    },
+  },
+});
+if (!namePublication.attestation?.correct) {
+  throw new Error("the name binding did not attest correct");
+}
+if (!asJson) console.log(`  ✓ name ${RAREXT_NAME} -> ${namePublication.id.slice(0, 8)}… [${namePublication.attestation.representation ?? "exact"}]`);
 
 // ---- AI seed representations -----------------------------------------------
 // The brand's record AND the protocol's AI proof in one registry: the verify

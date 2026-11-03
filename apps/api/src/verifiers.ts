@@ -18,6 +18,7 @@ import { boundedVerifier } from "./bounded.ts";
 import { generativeVerifier } from "./generative.ts";
 import { futuristicVideoVerifier } from "./futuristic.ts";
 import { futuristicSiteVerifier } from "./futuristic-site.ts";
+import { rarextNameVerifier } from "./rarext-name.ts";
 import {
   bindClaim,
   hashValue,
@@ -347,6 +348,9 @@ export function createVerifierRegistry(
 
   const futuristicSite = futuristicSiteVerifier();
   verifiers.set(futuristicSite.id, futuristicSite);
+
+  const nameBinding = rarextNameVerifier();
+  verifiers.set(nameBinding.id, nameBinding);
 
   for (const config of options.configs ?? configuredVerifiers()) {
     const verifier = externalVerifier(config, requestFetch, timeoutMs);
