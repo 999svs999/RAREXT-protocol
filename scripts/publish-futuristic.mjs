@@ -16,6 +16,7 @@
 // has ONE identity, not a new one per run.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -145,6 +146,20 @@ challengeMap.set("futuristic-published", {
   status: "open",
   sponsor: null,
 });
+challengeMap.set("futuristic-site-published", {
+  id: "futuristic-site-published",
+  app: "futuristic-site",
+  title: "FUTURISTIC brand-site record",
+  description:
+    "The brand's structural record of its public web presence: canonical origin, the SHA-256 of every deployed page, and the film it serves. Verified by structural-site-record-check.",
+  version: 1,
+  spec: { kind: "futuristic.site.record" },
+  semanticsId: "futuristic-site/futuristic-site-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
 
 const challengeRegistry = {
   list: () => [...challengeMap.values()],
@@ -185,6 +200,85 @@ for (const run of runs) {
     platforms: run.record.platforms.map((p) => p.platform),
   });
   if (!asJson) console.log(`  ✓ ${run.record.run_id} -> ${publication.id.slice(0, 8)}… [${publication.attestation.representation ?? "exact"}]`);
+}
+
+// ---- brand site record ------------------------------------------------------
+// The public web presence is part of the brand's published work, so it is
+// anchored too: the SHA-256 of every deployed page plus the film it serves.
+// This is what makes the live origin checkable against the anchored root.
+// Fail-soft: if the origin cannot be read IN FULL, anchor nothing — a partial
+// site record would be exactly the lie the verifier claims to disprove.
+const SITE_ORIGIN = "https://futuristiclive.pages.dev/";
+const SITE_PATHS = ["/", "/styles.css", "/app.js", "/favicon.svg", "/og.svg"];
+const SITE_MEDIA = ["https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/site/hero.mp4"];
+
+async function sha256OfUrl(url) {
+  const res = await fetch(url, { redirect: "follow" });
+  if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  return { sha256: createHash("sha256").update(buf).digest("hex"), bytes: buf.length };
+}
+
+function siteRevision() {
+  try {
+    return execSync("git rev-parse HEAD", { cwd: "/Users/r/FUTURISTIC" }).toString().trim();
+  } catch {
+    return undefined;
+  }
+}
+
+let siteRecord = null;
+try {
+  const pages = [];
+  for (const path of SITE_PATHS) {
+    const { sha256, bytes } = await sha256OfUrl(SITE_ORIGIN + path.slice(1));
+    pages.push({ path, sha256, bytes });
+  }
+  const media = [];
+  for (const url of SITE_MEDIA) {
+    const { sha256, bytes } = await sha256OfUrl(url);
+    media.push({ url, sha256, bytes });
+  }
+  const indexHtml = await (await fetch(SITE_ORIGIN)).text();
+  const title = (indexHtml.match(/<title>([^<]*)<\/title>/) ?? [])[1] ?? "FUTURISTIC";
+  siteRecord = {
+    site: SITE_ORIGIN,
+    title,
+    published_at: new Date().toISOString(),
+    generator: "FUTURISTIC scripts/build_site.py",
+    ...(siteRevision() ? { revision: siteRevision() } : {}),
+    pages,
+    media,
+  };
+} catch (err) {
+  if (!asJson) console.log(`  – site record skipped: ${err.message}`);
+}
+
+if (siteRecord) {
+  const siteBytes = siteRecord.pages.reduce((a, p) => a + p.bytes, 0);
+  const sitePublication = await client.publishArtifactAs(signer, {
+    author: "futuristic",
+    title: `FUTURISTIC brand site — ${siteRecord.site}`,
+    body: `The brand's public web presence pinned byte-for-byte: ${siteRecord.pages.length} page(s), ${siteBytes} bytes, ${siteRecord.media.length} film(s).`,
+    challengeId: "futuristic-site-published",
+    artifact: {
+      app: "futuristic-site",
+      kind: "futuristic.site.v1",
+      version: 1,
+      mediaType: "application/json",
+      body: siteRecord,
+    },
+  });
+  if (!sitePublication.attestation?.correct) {
+    throw new Error("the brand-site record did not attest correct");
+  }
+  published.push({
+    id: sitePublication.id,
+    run_id: "site",
+    attestation: sitePublication.attestation.correct,
+    platforms: ["web"],
+  });
+  if (!asJson) console.log(`  ✓ site (${siteRecord.pages.length} pages, ${siteBytes}b) -> ${sitePublication.id.slice(0, 8)}… [${sitePublication.attestation.representation ?? "exact"}]`);
 }
 
 // ---- AI seed representations -----------------------------------------------

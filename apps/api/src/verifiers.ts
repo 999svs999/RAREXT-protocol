@@ -17,6 +17,7 @@ import { attest } from "./attest.ts";
 import { boundedVerifier } from "./bounded.ts";
 import { generativeVerifier } from "./generative.ts";
 import { futuristicVideoVerifier } from "./futuristic.ts";
+import { futuristicSiteVerifier } from "./futuristic-site.ts";
 import {
   bindClaim,
   hashValue,
@@ -343,6 +344,9 @@ export function createVerifierRegistry(
 
   const futuristic = futuristicVideoVerifier();
   verifiers.set(futuristic.id, futuristic);
+
+  const futuristicSite = futuristicSiteVerifier();
+  verifiers.set(futuristicSite.id, futuristicSite);
 
   for (const config of options.configs ?? configuredVerifiers()) {
     const verifier = externalVerifier(config, requestFetch, timeoutMs);
