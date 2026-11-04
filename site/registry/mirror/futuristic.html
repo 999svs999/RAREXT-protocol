@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>cded527af75a8d1c7e5c05f762a8dbbf5f0979cdac692540e25d2b5aad58c1ef</div>
+        <div class="address"><b>rarext:futuristic@</b>bb9af98c505e07a46a868258110ea87d73ce2d3dcb6ea07ac9bd0332394a26f8</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -62,7 +62,7 @@
       <section id="site">
     <article class="card site">
       <h3><a href="https://futuristiclive.pages.dev/" rel="noopener">FUTURISTIC — we film the tomorrows we want to visit</a></h3>
-      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 38628 bytes anchored · rev c943c657142c</p>
+      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 38628 bytes anchored · rev bf96cc91613e</p>
       <div class="chips">
         <span>/ · 14758b</span>
         <span>/styles.css · 16342b</span>
@@ -74,7 +74,7 @@
     </article>
       </section>
 
-      <h2>Published record — 9 runs</h2>
+      <h2>Published record — 10 runs</h2>
       <section id="gallery">
     <article class="card">
       <h3>FUTURISTIC 20260821T133842-3ea13d</h3>
@@ -183,11 +183,20 @@
         <span>threads: 18120631960896649</span>
       </div>
     </article>
+    <article class="card">
+      <h3>Day in a life in an orbital habitat, future #Shorts</h3>
+      <p class="prompt">Day in a life in an orbital habitat, future</p>
+      <p class="meta">run 20261104T173852-29e021 · agnes-video-2.5-flash · 5.04s · 1 platform</p>
+      <div class="chips">
+        <a class="yt" href="https://youtu.be/tx3e9TL0sZw" rel="noopener">YouTube ▸</a>
+        <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/r/7d64c6b16d124968a97055ffe1b41839.mp4" rel="noopener">R2 ▸</a>
+      </div>
+    </article>
       </section>
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=cded527af75a8d1c7e5c05f762a8dbbf5f0979cdac692540e25d2b5aad58c1ef">run the pinned verifier</a> ·
+        <a href="./verify.html?root=bb9af98c505e07a46a868258110ea87d73ce2d3dcb6ea07ac9bd0332394a26f8">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -201,7 +210,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · cded527af75a…";
+            status.textContent = "ROOT VERIFIED · bb9af98c505e…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
