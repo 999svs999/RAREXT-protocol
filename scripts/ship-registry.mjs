@@ -58,6 +58,13 @@ function ledgerRunIds() {
     const any = has(pub.youtube, "video_id") || has(pub.instagram, "instagram")
       || has(pub.facebook, "facebook") || has(pub.threads, "threads");
     if (!any || !d.run_id) continue;
+    // Mirror the registry verifier's model rule (the LTX watch item): a run from
+    // a non-agnes fallback model is structurally unanchorable — the publisher
+    // skips it, so it must NOT count as ledger drift, or the watchdog churns
+    // forever on a record it can never anchor. (Absent model = publisher's
+    // agnes-video-v2.0 default = anchorable.)
+    const model = d.media?.model;
+    if (typeof model === "string" && !model.startsWith("agnes-video-")) continue;
     ids.push(d.run_id);
   }
   return ids;

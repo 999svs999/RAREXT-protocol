@@ -189,21 +189,35 @@ await client.registerAgent(signer, "futuristic");
 if (!asJson) console.log("agent registered:", signer.keyId.slice(0, 16) + "…");
 
 // ---- publish every run -----------------------------------------------------
+// Best-effort by contract: a record the registry's verifier REJECTS structurally
+// (e.g. a fallback-provider model that is not agnes-video-*) is ledger-true but
+// unanchorable — skip it and keep the pass alive. One rejected record must never
+// jam the whole anchor: it would block every other record AND the site record.
+// Any other failure (network, signing, attestation integrity) still aborts.
 const published = [];
+const skipped = [];
 for (const run of runs) {
-  const publication = await client.publishArtifactAs(signer, {
-    author: "futuristic",
-    title: run.title,
-    body: `Published ${run.record.platforms.map((p) => p.platform).join(", ")} — run ${run.record.run_id} from the one-line prompt "${run.record.prompt}".`,
-    challengeId: "futuristic-published",
-    artifact: {
-      app: "futuristic-video",
-      kind: "futuristic.video.v1",
-      version: 1,
-      mediaType: "application/json",
-      body: run.record,
-    },
-  });
+  let publication;
+  try {
+    publication = await client.publishArtifactAs(signer, {
+      author: "futuristic",
+      title: run.title,
+      body: `Published ${run.record.platforms.map((p) => p.platform).join(", ")} — run ${run.record.run_id} from the one-line prompt "${run.record.prompt}".`,
+      challengeId: "futuristic-published",
+      artifact: {
+        app: "futuristic-video",
+        kind: "futuristic.video.v1",
+        version: 1,
+        mediaType: "application/json",
+        body: run.record,
+      },
+    });
+  } catch (err) {
+    if (!String(err?.message ?? err).includes("failed structural checks")) throw err;
+    skipped.push({ run_id: run.record.run_id, reason: String(err?.message ?? err) });
+    if (!asJson) console.log(`  – skipped ${run.record.run_id}: ${err.message}`);
+    continue;
+  }
   if (!publication.attestation?.correct) {
     throw new Error(`publication ${run.record.run_id} did not attest correct`);
   }
@@ -417,6 +431,7 @@ if (!verification.valid) throw new Error(`bundle does not verify: ${verification
 const summary = {
   identity: { handle: keyfile.handle, keyId: keyfile.keyId },
   publications: published.length,
+  skipped,
   root: bundle.manifest.root,
   leafVersion: bundle.manifest.leafVersion,
   bundle: join(OUT, "bundle.json"),
