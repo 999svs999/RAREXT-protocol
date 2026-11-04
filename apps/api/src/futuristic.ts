@@ -7,6 +7,10 @@ import type {
   Challenge,
 } from "../../../packages/core/src/index.ts";
 import type { AppVerifier } from "./verifiers.ts";
+// Single source of truth for which generators may back a FUTURISTIC
+// record — shared with the ship watchdog so the registry's rule and the
+// watchdog's assumption cannot drift apart.
+import vettedModels from "./vetted-models.json" with { type: "json" };
 
 /**
  * The FUTURISTIC verifier: structural verification of the brand's published
@@ -36,6 +40,31 @@ export const RUN_ID_PATTERN = /^\d{8}T\d{6}-[0-9a-f]{6}$/;
 export const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const PLATFORMS = new Set(["youtube", "instagram", "facebook", "threads"]);
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * Vetted generators, from the shared list. A record may only commit media from a
+ * generator the operator has approved, and the model id must match that
+ * generator: an open-ended rule ("any model id") would make the registry's claim
+ * about a record meaningless.
+ *
+ * WIDENING this list only ADDS acceptable records, so it cannot invalidate an
+ * already-anchored attestation — and it is deliberately NOT part of
+ * FUTURISTIC_VERIFIER_MANIFEST, so the verifier hash does not move.
+ * 2026-11-04 (operator go-ahead): added LTX, the pipeline's second free
+ * generator, so FUTURISTIC content is no longer anchorable from one vendor only.
+ */
+export const VETTED_MODELS: Array<{ provider: string; re: RegExp }> = (
+  vettedModels as { providers: Array<{ provider: string; pattern: string }> }
+).providers.map(({ provider, pattern }) => ({ provider, re: new RegExp(pattern) }));
+
+/** The vetted provider a model id belongs to, or null when it is not vetted. */
+export function vettedProviderFor(model: unknown): string | null {
+  if (typeof model !== "string") return null;
+  for (const { provider, re } of VETTED_MODELS) {
+    if (re.test(model)) return provider;
+  }
+  return null;
+}
 
 export interface FuturisticVideoBody {
   run_id: string;
@@ -83,8 +112,10 @@ export function verifyFuturisticRecord(
     errors.push("prompt must be ONE line (operator doctrine)");
   }
 
-  if (typeof b.model !== "string" || !b.model.startsWith("agnes-video-")) {
-    errors.push("model must be an agnes-video-* model id");
+  if (vettedProviderFor(b.model) === null) {
+    errors.push(
+      `model must be the id of a vetted generator (${VETTED_MODELS.map((m) => m.re.source).join(" | ")})`,
+    );
   }
 
   if (typeof b.duration_s !== "number" || !Number.isFinite(b.duration_s) || b.duration_s < 2 || b.duration_s > 120) {
@@ -160,7 +191,7 @@ export function futuristicVideoVerifier(): AppVerifier {
     name: "FUTURISTIC video record",
     version: "1",
     description:
-      "Structural verification of FUTURISTIC pipeline records: run id, one-line prompt doctrine, Agnes model, media commitment, and per-platform publication ids — all recomputable locally from the artifact.",
+      "Structural verification of FUTURISTIC pipeline records: run id, one-line prompt doctrine, vetted-generator model, media commitment, and per-platform publication ids — all recomputable locally from the artifact.",
     artifactKinds: [FUTURISTIC_KIND],
     challengeCount: 0,
     verifier: "builtin",

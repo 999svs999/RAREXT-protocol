@@ -23,6 +23,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+// The registry's vetted-generator rule, read from the SAME file the verifier
+// reads (apps/api/src/futuristic.ts) so drift detection can never disagree with
+// what the registry will actually accept.
+const VETTED_MODEL_RES = JSON.parse(
+  readFileSync(join(ROOT, "apps/api/src/vetted-models.json"), "utf8"),
+).providers.map((p) => new RegExp(p.pattern));
 const LEDGER = "/Users/r/FUTURISTIC/state/ledger.jsonl";
 const MEDIA_ROOT = "/Users/r/FUTURISTIC/state/media";
 const SITE_ORIGIN = "https://futuristiclive.pages.dev/";
@@ -48,6 +55,16 @@ function fail(error, extra = {}) {
 // ---- reality 1: the producer's ledger (same filter as the publisher) --------
 function ledgerRunIds() {
   const ids = [];
+  // Retracted runs (takedowns) are never drift, for the same reason the
+  // publisher never anchors them — see scripts/publish-futuristic.mjs.
+  const retracted = new Set();
+  for (const line of readFileSync(LEDGER, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const d = JSON.parse(line);
+      if (d.stage === "retracted" && d.run_id) retracted.add(d.run_id);
+    } catch { /* malformed line */ }
+  }
   for (const line of readFileSync(LEDGER, "utf8").split("\n")) {
     if (!line.trim()) continue;
     let d;
@@ -58,13 +75,14 @@ function ledgerRunIds() {
     const any = has(pub.youtube, "video_id") || has(pub.instagram, "instagram")
       || has(pub.facebook, "facebook") || has(pub.threads, "threads");
     if (!any || !d.run_id) continue;
-    // Mirror the registry verifier's model rule (the LTX watch item): a run from
-    // a non-agnes fallback model is structurally unanchorable — the publisher
-    // skips it, so it must NOT count as ledger drift, or the watchdog churns
-    // forever on a record it can never anchor. (Absent model = publisher's
-    // agnes-video-v2.0 default = anchorable.)
+    if (retracted.has(d.run_id)) continue;
+    // Mirror the registry verifier's model rule: a run whose model is not on the
+    // vetted list is structurally unanchorable — the publisher skips it, so it
+    // must NOT count as ledger drift, or the watchdog churns forever on a record
+    // it can never anchor. (Absent model = publisher's agnes-video-v2.0 default
+    // = anchorable.) Keep this identical to apps/api/src/futuristic.ts.
     const model = d.media?.model;
-    if (typeof model === "string" && !model.startsWith("agnes-video-")) continue;
+    if (typeof model === "string" && !VETTED_MODEL_RES.some((re) => re.test(model))) continue;
     ids.push(d.run_id);
   }
   return ids;

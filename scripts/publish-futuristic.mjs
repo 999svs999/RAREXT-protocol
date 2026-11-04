@@ -59,6 +59,21 @@ if (existsSync(IDENTITY_PATH)) {
 const signer = new AgentSigner(keyfile.privateKey);
 
 // ---- ledger -> records ----------------------------------------------------
+// A RETRACTED run (a takedown) must never be anchored. The registry's records
+// are permanent and signed: anchoring a post that has been removed everywhere
+// would leave the brand asserting, forever, that a dead post exists — and it is
+// exactly what the vetted-generator widening would otherwise have started doing
+// for the run whose clip was taken down on 2026-11-04. A retraction is a ledger
+// FACT (stage: "retracted"), never a deleted line: the ledger stays append-only.
+const RETRACTED = new Set();
+for (const line of readFileSync(LEDGER, "utf8").split("\n")) {
+  if (!line.trim()) continue;
+  try {
+    const d = JSON.parse(line);
+    if (d.stage === "retracted" && d.run_id) RETRACTED.add(d.run_id);
+  } catch { /* malformed line: not a retraction */ }
+}
+
 const runs = [];
 for (const line of readFileSync(LEDGER, "utf8").split("\n")) {
   if (!line.trim()) continue;
@@ -66,6 +81,7 @@ for (const line of readFileSync(LEDGER, "utf8").split("\n")) {
   try { d = JSON.parse(line); } catch { continue; }
   const pub = d.publish;
   if (!pub || typeof pub !== "object") continue;
+  if (d.run_id && RETRACTED.has(d.run_id)) continue;
 
   const platforms = [];
   if (pub.youtube && typeof pub.youtube === "object" && pub.youtube.video_id) {

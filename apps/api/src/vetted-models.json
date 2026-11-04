@@ -1,0 +1,7 @@
+{
+  "_comment": "Generators whose media a FUTURISTIC record may commit to the registry. This list IS the registry's claim about the brand's media provenance, so extending it is a governance decision, not a refactor. Single source of truth: apps/api/src/futuristic.ts (verifier) and scripts/ship-registry.mjs (drift watchdog) both read this file, so the rule the registry enforces and the rule the watchdog assumes can never disagree.",
+  "providers": [
+    { "provider": "agnes", "pattern": "^agnes-video-" },
+    { "provider": "ltx", "pattern": "^Lightricks/LTX-2\\.5$" }
+  ]
+}
