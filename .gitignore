@@ -32,3 +32,10 @@ bench/storage/.corpus/
 .futuristic-identity/
 .futuristic-proof/
 .pins/
+
+# signing identities — NEVER commit (a leaked key cannot be un-leaked)
+.rarext-identity/
+agent-key.json
+*agent-key*.json
+.apesdaily-identity/
+.bapeclub-identity/
