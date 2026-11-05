@@ -38,6 +38,11 @@ const ORIGIN_BUNDLE = "https://999svs999.github.io/RAREXT-protocol/registry/bund
 const NAME_TARGET_SITE = "https://futuristiclive.pages.dev/";
 
 const FORCE = process.argv.includes("--force");
+// --check-only answers "has reality drifted?" without the ability to act on the
+// answer. Testing drift detection by provoking the real ship mixes "did it
+// notice?" with "what did it then do?" — and the second question has consequences
+// in a public registry.
+const CHECK_ONLY = process.argv.includes("--check-only");
 const AS_JSON = process.argv.includes("--json");
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -105,6 +110,44 @@ async function liveSiteDigests() {
   return { html, pages: out };
 }
 
+// ---- ecosystem drift --------------------------------------------------------
+// The registry carries the whole ecosystem, so drift must be measured across it.
+// Without this the check could only ever see FUTURISTIC: the ecosystem's records
+// were absent from the anchored bundle and the ship reported "in sync", because
+// an unanchored brand simply was not something it looked for.
+const { ECOSYSTEM_BRANDS, fetchBrandPages, sha256Hex } = await import(
+  new URL("./ecosystem-records.mjs", import.meta.url).href
+);
+
+async function ecosystemDrift(pubs) {
+  const out = [];
+  for (const brand of ECOSYSTEM_BRANDS) {
+    const rec = pubs.find((p) => p.artifact?.app === brand.app);
+    if (!rec) {
+      out.push(`${brand.app}: not anchored`);
+    } else {
+      const pinned = rec.artifact?.body?.pages ?? [];
+      try {
+        for (const live of await fetchBrandPages(brand)) {
+          const digest = sha256Hex(live.body);
+          const was = pinned.find((x) => x.path === live.path);
+          if (!was) out.push(`${brand.app}${live.path}: not anchored`);
+          else if (was.sha256 !== digest || was.bytes !== live.body.length) {
+            out.push(`${brand.app}${live.path}: bytes differ from the pinned record`);
+          }
+        }
+      } catch (err) {
+        out.push(`${brand.app}: live site unreadable (${err?.message ?? err})`);
+      }
+    }
+    // A brand's name binding is part of it being ON the protocol, not a detail.
+    if (!pubs.some((p) => p.artifact?.app === "rarext-name" && p.artifact?.body?.name === brand.name)) {
+      out.push(`name ${brand.name}: not anchored`);
+    }
+  }
+  return out;
+}
+
 // ---- anchored state ---------------------------------------------------------
 async function anchored() {
   const res = await fetchWithRetry(ORIGIN_BUNDLE, { cache: "no-store" });
@@ -144,15 +187,26 @@ try {
     }
   }
 
-  outcome.drifted = { missing_ledger_runs: missing, site: siteDrift };
-  const drifted = missing.length > 0 || siteDrift.length > 0;
+  const ecosystem = await ecosystemDrift(pubs).catch((e) => [`ecosystem check failed: ${e?.message ?? e}`]);
+
+  outcome.drifted = { missing_ledger_runs: missing, site: siteDrift, ecosystem };
+  // Reported even when in sync: "in sync" must be a measured claim, and a check
+  // that never says what it examined cannot be distinguished from one that ran on
+  // nothing.
+  outcome.ecosystem_checked = ECOSYSTEM_BRANDS.map((b) => b.app);
+  const drifted = missing.length > 0 || siteDrift.length > 0 || ecosystem.length > 0;
+  if (CHECK_ONLY) {
+    // Measure only. Exit 1 on drift so a monitor can tell, and never ship.
+    console.log(JSON.stringify({ ...outcome, check_only: true }, null, 2));
+    process.exit(drifted ? 1 : 0);
+  }
   if (!drifted && !FORCE) {
     if (AS_JSON) console.log(JSON.stringify({ ...outcome, note: "in sync" }, null, 2));
     process.exit(0); // healthy: print NOTHING, the watchdog stays silent
   }
   outcome.reason = FORCE
     ? "forced"
-    : `${missing.length} new run(s), ${siteDrift.length} site drift item(s)`;
+    : `${missing.length} new run(s), ${siteDrift.length} futuristic site item(s), ${ecosystem.length} ecosystem item(s)`;
 } catch (error) {
   fail(`drift check failed: ${error?.message ?? error}`);
 }
