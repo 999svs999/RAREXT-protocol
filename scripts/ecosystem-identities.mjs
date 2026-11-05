@@ -46,6 +46,21 @@ export function ensureIdentity(handle, dir) {
   return { handle, dir, keyId: keyfile.keyId, created: !existed, note: "secret never printed" };
 }
 
+/**
+ * Load a brand's signing identity. Separate from ensureIdentity on purpose:
+ * that one returns PUBLIC fields only, so it can be printed safely. This one
+ * hands back a signer, and the same 0600 + handle guards apply — a wrong or
+ * world-readable key must fail loudly rather than sign as the wrong brand.
+ */
+export function signerFor(handle, dir) {
+  const path = identityPath(dir);
+  const mode = statSync(path).mode & 0o777;
+  if (mode !== 0o600) throw new Error(`${path} has mode ${mode.toString(8)} — refusing to sign with it`);
+  const keyfile = parseAgentKeyfile(JSON.parse(readFileSync(path, "utf8")));
+  if (keyfile.handle !== handle) throw new Error(`identity at ${path} is "${keyfile.handle}", not "${handle}"`);
+  return new sdk.AgentSigner(keyfile.privateKey);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const b of BRAND_IDENTITIES) {
     const r = ensureIdentity(b.handle, b.dir);

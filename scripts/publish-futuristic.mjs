@@ -58,6 +58,26 @@ if (existsSync(IDENTITY_PATH)) {
 }
 const signer = new AgentSigner(keyfile.privateKey);
 
+// An author must be registered before it can publish. FUTURISTIC's identity was
+// registered in an earlier session and the store persists, which hid the
+// dependency: on a fresh store every publish would 401. Register idempotently —
+// check first, and refuse if the store's key differs from ours, because signing
+// as a handle whose key is not ours is exactly the confusion this prevents.
+async function ensureRegistered(client, brandSigner, handle) {
+  try {
+    await client.registerAgent(brandSigner, handle);
+    return "registered";
+  } catch (err) {
+    // 409 means the store already holds this handle. There is no GET-by-handle to
+    // compare keys against, but none is needed: publishing is signed, and the API
+    // verifies the signature against the key it stored for the author — so a key
+    // that is not this handle's key cannot publish. The registration call is only
+    // about existence; the signature is the guarantee.
+    if (/already registered|already in use/.test(String(err?.message))) return "known";
+    throw err;
+  }
+}
+
 // ---- ledger -> records ----------------------------------------------------
 // A RETRACTED run (a takedown) must never be anchored. The registry's records
 // are permanent and signed: anchoring a post that has been removed everywhere
@@ -176,6 +196,51 @@ challengeMap.set("futuristic-site-published", {
   status: "open",
   sponsor: null,
 });
+challengeMap.set("apesdaily-site-published", {
+  id: "apesdaily-site-published",
+  app: "apesdaily-site",
+  title: "APESDAILY site record",
+  description:
+    "A brand's public site pinned structurally — origin, page digests, media — by apesdaily's own identity. The whole ecosystem publishes on the protocol, not just FUTURISTIC.",
+  version: 1,
+  spec: { kind: "apesdaily.site.record" },
+  semanticsId: "apesdaily-site/apesdaily-site-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
+
+challengeMap.set("bapeclub-site-published", {
+  id: "bapeclub-site-published",
+  app: "bapeclub-site",
+  title: "BAPECLUB site record",
+  description:
+    "A brand's public site pinned structurally — origin, page digests, media — by bapeclub's own identity. The whole ecosystem publishes on the protocol, not just FUTURISTIC.",
+  version: 1,
+  spec: { kind: "bapeclub.site.record" },
+  semanticsId: "bapeclub-site/bapeclub-site-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
+
+challengeMap.set("rarext-site-published", {
+  id: "rarext-site-published",
+  app: "rarext-site",
+  title: "RAREXT site record",
+  description:
+    "A brand's public site pinned structurally — origin, page digests, media — by rarext's own identity. The whole ecosystem publishes on the protocol, not just FUTURISTIC.",
+  version: 1,
+  spec: { kind: "rarext.site.record" },
+  semanticsId: "rarext-site/rarext-site-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
+
 challengeMap.set("rarext-name-published", {
   id: "rarext-name-published",
   app: "rarext-name",
@@ -201,8 +266,9 @@ server.listen(8792, "127.0.0.1");
 await once(server, "listening");
 const base = "http://127.0.0.1:8792";
 const client = new RarextClient({ baseUrl: base });
-await client.registerAgent(signer, "futuristic");
-if (!asJson) console.log("agent registered:", signer.keyId.slice(0, 16) + "…");
+
+const futuristicRegistration = await ensureRegistered(client, signer, "futuristic");
+if (!asJson) console.log(`agent ${futuristicRegistration}:`, signer.keyId.slice(0, 16) + "…");
 
 // ---- publish every run -----------------------------------------------------
 // Best-effort by contract: a record the registry's verifier REJECTS structurally
@@ -429,6 +495,50 @@ const boundedPublication = await client.publishArtifactAs(signer, {
 });
 if (boundedPublication.attestation.representation !== "bounded") throw new Error("bounded representation missing");
 if (!asJson) console.log(`  ✓ ai seeds -> gen ${genPublication.id.slice(0, 8)}… bounded ${boundedPublication.id.slice(0, 8)}…`);
+
+// ---- the rest of the ecosystem ---------------------------------------------
+// Every project lives on the protocol. FUTURISTIC publishes its runs above; the
+// other brands publish what they are and where they live — a structural site
+// record and a name binding each — signed by THEIR OWN identity, so no brand is
+// vouched for by another's key. Publishing happens before the bundle is
+// assembled because the API builds the bundle from what the store holds.
+const { ensureIdentity, signerFor, BRAND_IDENTITIES } = await import(root + "scripts/ecosystem-identities.mjs");
+const { buildEcosystemRecords } = await import(root + "scripts/ecosystem-records.mjs");
+
+const ecosystemIds = {};
+const ecosystemSigners = {};
+for (const b of BRAND_IDENTITIES) {
+  if (b.handle === "futuristic") continue; // already published above, with its own identity
+  ecosystemIds[b.handle] = ensureIdentity(b.handle, b.dir).keyId;
+  ecosystemSigners[b.handle] = signerFor(b.handle, b.dir);
+  await ensureRegistered(client, ecosystemSigners[b.handle], b.handle);
+}
+
+const ecosystemRecords = await buildEcosystemRecords({ identities: ecosystemIds });
+for (const rec of ecosystemRecords) {
+  const brandSigner = ecosystemSigners[rec.brand];
+  const sitePub = await client.publishArtifactAs(brandSigner, {
+    author: rec.brand,
+    title: `${rec.brand} brand site — ${rec.site.site}`,
+    body: `${rec.brand}'s public presence pinned structurally: ${rec.site.pages.length} page(s) by digest, signed by ${rec.brand}'s own key.`,
+    challengeId: `${rec.app}-published`,
+    artifact: { app: rec.app, kind: rec.kind, version: 1, mediaType: "application/json", body: rec.site },
+  });
+  if (!sitePub.attestation?.correct) throw new Error(`${rec.brand} site record did not attest`);
+  published.push({ id: sitePub.id, run_id: `${rec.brand}-site`, attestation: true, platforms: ["web"] });
+
+  const namePub = await client.publishArtifactAs(brandSigner, {
+    author: rec.brand,
+    title: `rarext name: ${rec.name.name}`,
+    body: `The name "${rec.name.name}" is claimed by identity ${brandSigner.keyId.slice(0, 16)}… — ${rec.brand}'s own key. Forms: rar.${rec.name.name}, ${rec.name.name}.rar.`,
+    challengeId: "rarext-name-published",
+    artifact: { app: "rarext-name", kind: "rarext.name.v1", version: 1, mediaType: "application/json", body: rec.name },
+  });
+  if (!namePub.attestation?.correct) throw new Error(`${rec.brand} name binding did not attest`);
+  published.push({ id: namePub.id, run_id: `${rec.brand}-name`, attestation: true, platforms: ["web"] });
+
+  if (!asJson) console.log(`  + ${rec.brand}: site ${rec.site.pages.length}p + name "${rec.name.name}" [signed by its own key]`);
+}
 
 // ---- anchor + bundle -------------------------------------------------------
 await client.anchor();
