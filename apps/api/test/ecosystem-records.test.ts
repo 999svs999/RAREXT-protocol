@@ -63,7 +63,8 @@ test("digests come from the bytes, so the same input reproduces the record", asy
   const b = await buildEcosystemRecords({ identities: IDS, fetchImpl: fakeFetch as never, publishedAt: "2026-11-05T00:00:00.000Z" });
   assert.deepEqual(a, b, "building twice from the same bytes must be identical");
   // the digest is of the bytes that origin actually served for "/"
-  assert.equal(a[0].site.pages[0].sha256, sha256Hex(Buffer.from("body of https://apesdaily.com/")));
+  const home = a[0].site as { pages: { path: string; sha256: string }[] };
+  assert.equal(home.pages[0].sha256, sha256Hex(Buffer.from("body of https://apesdaily.com/")));
 });
 
 test("the builders refuse input that would not verify", () => {
