@@ -20,6 +20,8 @@ export interface EcosystemBrand {
   identityDir: string;
   /** Paths the origin SERVES. A record may never list a 404. */
   pages: string[];
+  /** Optional extra target the name resolves to — must be a page that EXISTS. */
+  gallery?: string;
   note?: string;
 }
 

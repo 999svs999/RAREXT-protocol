@@ -38,6 +38,7 @@ export const ECOSYSTEM_BRANDS = [
     title: "APESDAILY — AI crypto trading technology",
     generator: "apesdaily-site-record",
     identityDir: ".apesdaily-identity",
+    gallery: "https://apesdaily.com/launchpad",   // verified live (200)
     // Stable, meaningful surfaces — not asset filenames, which change per deploy.
     // /.well-known/agent.json is written but not yet deployed; a record may only
     // list paths the origin SERVES, so it joins this list on the first deploy.
@@ -53,6 +54,7 @@ export const ECOSYSTEM_BRANDS = [
     title: "BAPECLUB — private members club",
     generator: "bapeclub-site-record",
     identityDir: ".bapeclub-identity",
+    gallery: "https://bapeclub.app/",   // verified live (200)
     pages: ["/", "/robots.txt"],
     note: "bapeclub — the private members club. This record covers the club surface only; the Shopify storefront is a separate property and is not claimed.",
   },
@@ -139,19 +141,22 @@ export function nameRecordBody({ name, identityKey, targets, note }) {
   return body;
 }
 
-/** The targets a brand's name resolves to: where it lives and what it publishes. */
+/**
+ * The targets a brand's name resolves to: where it lives and what it publishes.
+ *
+ * Each brand declares its own gallery. The previous version defaulted to
+ * `origin + "/launchpad"` for every brand that wasn't bapeclub or rarext — which
+ * is APESDAILY's shape, inherited by SaiKou_Goods, and anchored a 404 into a
+ * public name record. A target must be a page that EXISTS: a name binding is a
+ * claim, and a claim that resolves to nothing is worse than no claim.
+ */
 export function targetsFor(brand) {
   const targets = [
     { kind: "site", url: brand.origin },
     { kind: "registry", url: REGISTRY_URL },
   ];
-  if (brand.handle === "bapeclub") {
-    targets.push({ kind: "gallery", url: "https://bapeclub.app/" });
-  } else if (brand.handle === "rarext") {
-    targets.push({ kind: "mirror", url: MIRROR_URL });
-  } else {
-    targets.push({ kind: "gallery", url: brand.origin.replace(/\/$/, "") + "/launchpad" });
-  }
+  if (brand.gallery) targets.push({ kind: "gallery", url: brand.gallery });
+  if (brand.handle === "rarext") targets.push({ kind: "mirror", url: MIRROR_URL });
   return targets;
 }
 
