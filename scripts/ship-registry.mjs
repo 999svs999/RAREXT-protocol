@@ -115,7 +115,7 @@ async function liveSiteDigests() {
 // Without this the check could only ever see FUTURISTIC: the ecosystem's records
 // were absent from the anchored bundle and the ship reported "in sync", because
 // an unanchored brand simply was not something it looked for.
-const { ECOSYSTEM_BRANDS, fetchBrandPages, sha256Hex } = await import(
+const { ECOSYSTEM_BRANDS, fetchBrandPages, sha256Hex, targetsFor } = await import(
   new URL("./ecosystem-records.mjs", import.meta.url).href
 );
 
@@ -140,9 +140,23 @@ async function ecosystemDrift(pubs) {
         out.push(`${brand.app}: live site unreadable (${err?.message ?? err})`);
       }
     }
-    // A brand's name binding is part of it being ON the protocol, not a detail.
-    if (!pubs.some((p) => p.artifact?.app === "rarext-name" && p.artifact?.body?.name === brand.name)) {
+    // A brand's name binding is part of it being ON the protocol, not a detail —
+    // and so are its TARGETS. Existence alone is not enough: a binding that still
+    // resolves to a page which no longer exists passes an existence check while
+    // asserting something false. That shipped once (SaiKou_Goods inherited
+    // APESDAILY's /launchpad and anchored a 404); this is what would have caught
+    // it. Compared as a set, so ordering is not meaning.
+    const nameRec = pubs.find(
+      (p) => p.artifact?.app === "rarext-name" && p.artifact?.body?.name === brand.name,
+    );
+    if (!nameRec) {
       out.push(`name ${brand.name}: not anchored`);
+    } else {
+      const key = (t) => `${t.kind} ${t.url}`;
+      const have = new Set((nameRec.artifact?.body?.targets ?? []).map(key));
+      const want = new Set(targetsFor(brand).map(key));
+      for (const w of want) if (!have.has(w)) out.push(`name ${brand.name}: missing target ${w}`);
+      for (const h of have) if (!want.has(h)) out.push(`name ${brand.name}: stale target ${h}`);
     }
   }
   return out;
