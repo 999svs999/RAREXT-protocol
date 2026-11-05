@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fetchWithRetry } from "./lib/fetch-retry.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -90,13 +91,13 @@ function ledgerRunIds() {
 
 // ---- reality 2: the live brand site ----------------------------------------
 async function liveSiteDigests() {
-  const res = await fetch(SITE_ORIGIN, { redirect: "follow" });
+  const res = await fetchWithRetry(SITE_ORIGIN, { redirect: "follow" });
   if (!res.ok) throw new Error(`site origin HTTP ${res.status}`);
   const html = await res.text();
   const paths = ["/", "/styles.css", "/app.js", "/favicon.svg", "/og.svg"];
   const out = {};
   for (const path of paths) {
-    const r = await fetch(SITE_ORIGIN.replace(/\/$/, "") + path, { redirect: "follow" });
+    const r = await fetchWithRetry(SITE_ORIGIN.replace(/\/$/, "") + path, { redirect: "follow" });
     if (!r.ok) throw new Error(`site ${path} HTTP ${r.status}`);
     const buf = new Uint8Array(await r.arrayBuffer());
     out[path] = { sha256: sha256(buf), bytes: buf.length };
@@ -106,7 +107,7 @@ async function liveSiteDigests() {
 
 // ---- anchored state ---------------------------------------------------------
 async function anchored() {
-  const res = await fetch(ORIGIN_BUNDLE, { cache: "no-store" });
+  const res = await fetchWithRetry(ORIGIN_BUNDLE, { cache: "no-store" });
   if (!res.ok) throw new Error(`deployed bundle HTTP ${res.status}`);
   return await res.json();
 }
