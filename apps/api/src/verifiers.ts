@@ -18,6 +18,7 @@ import { boundedVerifier } from "./bounded.ts";
 import { generativeVerifier } from "./generative.ts";
 import { futuristicVideoVerifier } from "./futuristic.ts";
 import { futuristicSiteVerifier } from "./futuristic-site.ts";
+import { ecosystemSiteVerifiers, ECOSYSTEM_SITE_CONFIGS } from "./site-records.ts";
 import { rarextNameVerifier } from "./rarext-name.ts";
 import {
   bindClaim,
@@ -348,6 +349,12 @@ export function createVerifierRegistry(
 
   const futuristicSite = futuristicSiteVerifier();
   verifiers.set(futuristicSite.id, futuristicSite);
+
+  // Every brand in the ecosystem anchors its public presence on the protocol,
+  // not just FUTURISTIC — one shared structural check, one identity each.
+  for (const site of ecosystemSiteVerifiers()) {
+    verifiers.set(site.id, site);
+  }
 
   const nameBinding = rarextNameVerifier();
   verifiers.set(nameBinding.id, nameBinding);

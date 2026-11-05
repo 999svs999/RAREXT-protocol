@@ -32,6 +32,25 @@ const FUTURISTIC_SITE_VERIFIER_MANIFEST = {
   representation: "exact",
 } as const;
 
+/** Everything brand-specific about a site-record verifier. All four manifest
+ *  fields are committed to by verifierHash, so they are part of the record. */
+export interface SiteRecordConfig {
+  app: string;
+  kind: string;
+  name: string;
+  description: string;
+  manifest: { app: string; version: number; algorithm: string; representation: "exact" };
+}
+
+export const FUTURISTIC_SITE_CONFIG: SiteRecordConfig = {
+  app: FUTURISTIC_SITE_APP,
+  kind: FUTURISTIC_SITE_KIND,
+  name: "FUTURISTIC site record",
+  description:
+    "Structural verification of the FUTURISTIC brand site record: canonical origin, page digests as deployed, and the media (film) it serves — recomputable locally from the artifact. Live-byte checking against the origin is an explicit external step, not part of this verdict.",
+  manifest: FUTURISTIC_SITE_VERIFIER_MANIFEST,
+};
+
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const REVISION_PATTERN = /^[0-9a-f]{7,64}$/;
 const MAX_PAGES = 32;
@@ -60,7 +79,7 @@ function isIsoDate(value: unknown): boolean {
 }
 
 /** Pure structural check — returns the list of violations (empty = holds). */
-export function verifyFuturisticSiteRecord(
+export function verifySiteRecord(
   body: unknown,
 ): { ok: true; checks: string[] } | { ok: false; errors: string[] } {
   const errors: string[] = [];
@@ -156,24 +175,36 @@ export function verifyFuturisticSiteRecord(
   };
 }
 
-export function futuristicSiteVerifier(): AppVerifier {
+/** The old name, kept as an alias so the generic rename breaks nothing. */
+export const verifyFuturisticSiteRecord = verifySiteRecord;
+
+/**
+ * Build a site-record verifier for a brand.
+ *
+ * The check itself is structural and brand-agnostic — origin, page digests,
+ * media — so every brand on the protocol shares one implementation and only the
+ * app/kind/manifest differ. Anchored records commit to the manifest via
+ * verifierHash, which is why the parameterisation is exact rather than
+ * approximate: FUTURISTIC's config is value-identical to the hard-coded
+ * constants it replaced.
+ */
+export function siteRecordVerifier(cfg: SiteRecordConfig = FUTURISTIC_SITE_CONFIG): AppVerifier {
   return {
-    id: FUTURISTIC_SITE_APP,
-    name: "FUTURISTIC site record",
+    id: cfg.app,
+    name: cfg.name,
     version: "1",
-    description:
-      "Structural verification of the FUTURISTIC brand site record: canonical origin, page digests as deployed, and the media (film) it serves — recomputable locally from the artifact. Live-byte checking against the origin is an explicit external step, not part of this verdict.",
-    artifactKinds: [FUTURISTIC_SITE_KIND],
+    description: cfg.description,
+    artifactKinds: [cfg.kind],
     challengeCount: 0,
     verifier: "builtin",
     configured: true,
     url: null,
     supports: (artifact) =>
-      artifact.app === FUTURISTIC_SITE_APP && artifact.kind === FUTURISTIC_SITE_KIND,
+      artifact.app === cfg.app && artifact.kind === cfg.kind,
     verify: async (artifact: Artifact, challenge: Challenge): Promise<Attestation> => {
-      const verdict = verifyFuturisticSiteRecord(artifact.body);
+      const verdict = verifySiteRecord(artifact.body);
       if (!verdict.ok) {
-        throw new Error(`futuristic.site.v1 record failed structural checks: ${verdict.errors.join("; ")}`);
+        throw new Error(`${cfg.kind} record failed structural checks: ${verdict.errors.join("; ")}`);
       }
 
       const body = artifact.body as FuturisticSiteBody;
@@ -198,8 +229,8 @@ export function futuristicSiteVerifier(): AppVerifier {
 
       return {
         id: randomUUID(),
-        verifier: FUTURISTIC_SITE_VERIFIER_MANIFEST.algorithm,
-        app: FUTURISTIC_SITE_APP,
+        verifier: cfg.manifest.algorithm,
+        app: cfg.app,
         challengeId: challenge.id,
         taskId: challenge.id,
         circuitHash: sha256(canonicalize(artifact)),
@@ -207,13 +238,13 @@ export function futuristicSiteVerifier(): AppVerifier {
         correct,
         score: correct ? 1 : 0,
         gateCount: body.pages.length,
-        semanticsId: `${FUTURISTIC_SITE_APP}/${challenge.id}`,
+        semanticsId: `${cfg.app}/${challenge.id}`,
         semanticsVersion: 1,
         semanticsHash: "",
         claimKind: "attests",
         representation: "exact",
         scope: null,
-        verifierHash: sha256(canonicalize(FUTURISTIC_SITE_VERIFIER_MANIFEST)),
+        verifierHash: sha256(canonicalize(cfg.manifest)),
         proofKind: "recomputable",
         signatureAlgorithm: "ecdsa-p256",
         cryptoProfile: "classical",
@@ -225,3 +256,7 @@ export function futuristicSiteVerifier(): AppVerifier {
 
 export const FUTURISTIC_SITE_KIND_EXPORT = FUTURISTIC_SITE_KIND;
 export const FUTURISTIC_SITE_APP_EXPORT = FUTURISTIC_SITE_APP;
+
+export function futuristicSiteVerifier(): AppVerifier {
+  return siteRecordVerifier(FUTURISTIC_SITE_CONFIG);
+}
