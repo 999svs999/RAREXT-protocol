@@ -155,27 +155,49 @@ export async function fetchBrandPages(brand, fetchImpl = fetch) {
   return fetched;
 }
 
+/**
+ * Classify an ecosystem publish failure: skippable means THAT BRAND's records are
+ * left out this pass — a structural rejection, or its live site being unreadable —
+ * while the rest of the ecosystem and FUTURISTIC still anchor. Everything else
+ * (signing, attestation integrity, the API refusing a valid record) aborts, the
+ * same rule the FUTURISTIC loop follows. One brand's blip must never jam the
+ * whole pass: that failure mode already cost the registry a night of failed ships.
+ */
+export function isSkippableEcosystemError(err) {
+  const msg = String(err?.message ?? err);
+  return (
+    msg.includes("failed structural checks") ||
+    msg.includes("live site unreadable") ||
+    /HTTP \d+/.test(msg) ||
+    msg.includes("fetch failed")
+  );
+}
+
+/** Build ONE brand's records: its site record and its name binding. */
+export async function buildBrandRecords(brand, keyId, { fetchImpl = fetch, publishedAt = null } = {}) {
+  if (!keyId) throw new Error(`no identity for ${brand.handle}`);
+  const site = siteRecordBody({
+    origin: brand.origin,
+    title: brand.title,
+    generator: brand.generator,
+    pages: pagesFrom(await fetchBrandPages(brand, fetchImpl)),
+    publishedAt,
+  });
+  const name = nameRecordBody({
+    name: brand.name,
+    identityKey: keyId,
+    targets: targetsFor(brand),
+    note: brand.note,
+  });
+  return { brand: brand.handle, app: brand.app, kind: brand.kind, site, name };
+}
+
 /** Build every ecosystem record. Returns bodies only — signing happens later. */
 export async function buildEcosystemRecords({ identities, fetchImpl = fetch, publishedAt = null, only = null } = {}) {
   const out = [];
   for (const brand of ECOSYSTEM_BRANDS) {
     if (only && brand.handle !== only) continue;
-    const keyId = identities?.[brand.handle];
-    if (!keyId) throw new Error(`no identity for ${brand.handle}`);
-    const site = siteRecordBody({
-      origin: brand.origin,
-      title: brand.title,
-      generator: brand.generator,
-      pages: pagesFrom(await fetchBrandPages(brand, fetchImpl)),
-      publishedAt,
-    });
-    const name = nameRecordBody({
-      name: brand.name,
-      identityKey: keyId,
-      targets: targetsFor(brand),
-      note: brand.note,
-    });
-    out.push({ brand: brand.handle, app: brand.app, kind: brand.kind, site, name });
+    out.push(await buildBrandRecords(brand, identities?.[brand.handle], { fetchImpl, publishedAt }));
   }
   return out;
 }

@@ -96,3 +96,43 @@ test("BAPECLUB's record claims the club, never the frozen storefront", () => {
   const cfg = ECOSYSTEM_SITE_CONFIGS.find((c) => c.app === "bapeclub-site")!;
   assert.match(cfg.description, /NOT covered/);
 });
+
+// The jam failure mode: on 2026-11-04 22:45 one ledger record whose model was not
+// anchorable threw inside the publish loop and blocked the ENTIRE ship — every
+// record, the site record, the name binding. The fix was to skip structurally
+// rejected records. The ecosystem block was written without that lesson and would
+// have repeated it: one brand's site blip (a 5xx, a changed page) would have
+// thrown and blocked FUTURISTIC's records too. These tests pin the classification
+// so "one brand's blip" stays skippable and "the machinery is wrong" stays fatal.
+import { isSkippableEcosystemError, buildBrandRecords } from "../../../scripts/ecosystem-records.mjs";
+
+test("structural rejections are skippable — the exact message that jammed the 22:45 ship", () => {
+  assert.equal(
+    isSkippableEcosystemError(
+      new Error("futuristic.video.v1 record failed structural checks: model must be an agnes-video-* model id"),
+    ),
+    true,
+  );
+});
+
+test("a brand's unreadable live site is skippable", () => {
+  assert.equal(isSkippableEcosystemError(new Error("apesdaily-site: live site unreadable (HTTP 404)")), true);
+  assert.equal(isSkippableEcosystemError(new Error("https://apesdaily.com/ -> HTTP 503")), true);
+  assert.equal(isSkippableEcosystemError(new Error("fetch failed")), true);
+});
+
+test("machinery failures are NOT skippable — they must abort the pass", () => {
+  assert.equal(isSkippableEcosystemError(new Error("signature must be a base64 string")), false);
+  assert.equal(isSkippableEcosystemError(new Error("apesdaily site record did not attest")), false);
+  assert.equal(isSkippableEcosystemError(new Error("no identity for apesdaily")), false);
+});
+
+test("buildBrandRecords surfaces a dead origin as a skippable error, never a partial record", async () => {
+  const brand = ECOSYSTEM_BRANDS.find((b) => b.handle === "apesdaily")!;
+  const dead = async () => ({ ok: false, status: 503, arrayBuffer: async () => new ArrayBuffer(0) });
+  await assert.rejects(
+    buildBrandRecords(brand, IDS.apesdaily, { fetchImpl: dead as never }),
+    (e: unknown) => isSkippableEcosystemError(e),
+    "a 503 origin must classify as skippable",
+  );
+});

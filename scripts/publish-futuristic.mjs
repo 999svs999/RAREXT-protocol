@@ -503,7 +503,7 @@ if (!asJson) console.log(`  ✓ ai seeds -> gen ${genPublication.id.slice(0, 8)}
 // vouched for by another's key. Publishing happens before the bundle is
 // assembled because the API builds the bundle from what the store holds.
 const { ensureIdentity, signerFor, BRAND_IDENTITIES } = await import(root + "scripts/ecosystem-identities.mjs");
-const { buildEcosystemRecords } = await import(root + "scripts/ecosystem-records.mjs");
+const { buildBrandRecords, isSkippableEcosystemError, ECOSYSTEM_BRANDS } = await import(root + "scripts/ecosystem-records.mjs");
 
 const ecosystemIds = {};
 const ecosystemSigners = {};
@@ -514,30 +514,45 @@ for (const b of BRAND_IDENTITIES) {
   await ensureRegistered(client, ecosystemSigners[b.handle], b.handle);
 }
 
-const ecosystemRecords = await buildEcosystemRecords({ identities: ecosystemIds });
-for (const rec of ecosystemRecords) {
-  const brandSigner = ecosystemSigners[rec.brand];
-  const sitePub = await client.publishArtifactAs(brandSigner, {
-    author: rec.brand,
-    title: `${rec.brand} brand site — ${rec.site.site}`,
-    body: `${rec.brand}'s public presence pinned structurally: ${rec.site.pages.length} page(s) by digest, signed by ${rec.brand}'s own key.`,
-    challengeId: `${rec.app}-published`,
-    artifact: { app: rec.app, kind: rec.kind, version: 1, mediaType: "application/json", body: rec.site },
-  });
-  if (!sitePub.attestation?.correct) throw new Error(`${rec.brand} site record did not attest`);
-  published.push({ id: sitePub.id, run_id: `${rec.brand}-site`, attestation: true, platforms: ["web"] });
+// Fail-soft PER BRAND, the same rule the FUTURISTIC loop already learned the hard
+// way (one LTX record jammed every anchor pass for a night): a structural
+// rejection, or one brand's site being unreadable, leaves THAT brand out of this
+// pass and lets everything else anchor. The drift check will flag the gap next
+// run, so a skip is visible, not silent. Signing or attestation failures still
+// abort — those mean the machinery is wrong, not the site.
+const ecosystemSkipped = [];
+for (const brand of ECOSYSTEM_BRANDS) {
+  if (brand.handle === "futuristic") continue; // published above, with its own identity
+  const brandSigner = ecosystemSigners[brand.handle];
+  try {
+    const rec = await buildBrandRecords(brand, ecosystemIds[brand.handle]);
 
-  const namePub = await client.publishArtifactAs(brandSigner, {
-    author: rec.brand,
-    title: `rarext name: ${rec.name.name}`,
-    body: `The name "${rec.name.name}" is claimed by identity ${brandSigner.keyId.slice(0, 16)}… — ${rec.brand}'s own key. Forms: rar.${rec.name.name}, ${rec.name.name}.rar.`,
-    challengeId: "rarext-name-published",
-    artifact: { app: "rarext-name", kind: "rarext.name.v1", version: 1, mediaType: "application/json", body: rec.name },
-  });
-  if (!namePub.attestation?.correct) throw new Error(`${rec.brand} name binding did not attest`);
-  published.push({ id: namePub.id, run_id: `${rec.brand}-name`, attestation: true, platforms: ["web"] });
+    const sitePub = await client.publishArtifactAs(brandSigner, {
+      author: rec.brand,
+      title: `${rec.brand} brand site — ${rec.site.site}`,
+      body: `${rec.brand}'s public presence pinned structurally: ${rec.site.pages.length} page(s) by digest, signed by ${rec.brand}'s own key.`,
+      challengeId: `${rec.app}-published`,
+      artifact: { app: rec.app, kind: rec.kind, version: 1, mediaType: "application/json", body: rec.site },
+    });
+    if (!sitePub.attestation?.correct) throw new Error(`${rec.brand} site record did not attest`);
+    published.push({ id: sitePub.id, run_id: `${rec.brand}-site`, attestation: true, platforms: ["web"] });
 
-  if (!asJson) console.log(`  + ${rec.brand}: site ${rec.site.pages.length}p + name "${rec.name.name}" [signed by its own key]`);
+    const namePub = await client.publishArtifactAs(brandSigner, {
+      author: rec.brand,
+      title: `rarext name: ${rec.name.name}`,
+      body: `The name "${rec.name.name}" is claimed by identity ${brandSigner.keyId.slice(0, 16)}… — ${rec.brand}'s own key. Forms: rar.${rec.name.name}, ${rec.name.name}.rar.`,
+      challengeId: "rarext-name-published",
+      artifact: { app: "rarext-name", kind: "rarext.name.v1", version: 1, mediaType: "application/json", body: rec.name },
+    });
+    if (!namePub.attestation?.correct) throw new Error(`${rec.brand} name binding did not attest`);
+    published.push({ id: namePub.id, run_id: `${rec.brand}-name`, attestation: true, platforms: ["web"] });
+
+    if (!asJson) console.log(`  + ${rec.brand}: site ${rec.site.pages.length}p + name "${rec.name.name}" [signed by its own key]`);
+  } catch (err) {
+    if (!isSkippableEcosystemError(err)) throw err;
+    ecosystemSkipped.push({ brand: brand.handle, reason: String(err?.message ?? err) });
+    if (!asJson) console.log(`  – ${brand.handle} skipped this pass: ${err.message}`);
+  }
 }
 
 // ---- anchor + bundle -------------------------------------------------------

@@ -77,3 +77,11 @@ export declare function buildEcosystemRecords(options?: {
   publishedAt?: string | null;
   only?: string | null;
 }): Promise<BuiltRecord[]>;
+
+export declare function isSkippableEcosystemError(err: unknown): boolean;
+
+export declare function buildBrandRecords(
+  brand: EcosystemBrand,
+  keyId: string | undefined,
+  options?: { fetchImpl?: typeof fetch; publishedAt?: string | null },
+): Promise<BuiltRecord>;
