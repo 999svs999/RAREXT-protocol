@@ -47,6 +47,9 @@ export const ECOSYSTEM_SITE_CONFIGS: SiteRecordConfig[] = [
   brandSite("bapeclub-site", "bapeclub.site.v1", "BAPECLUB",
     "the private members club surface (bapeclub.app). The Shopify storefront is a separate, " +
     "independently-operated property and is NOT covered by this record"),
+  brandSite("saikougoods-site", "saikougoods.site.v1", "SAIKOUGOODS",
+    "the curated consignment storefront (saikougoods.pages.dev): the operator's own " +
+    "Grailed wardrobe, synced through Grailed's public search endpoint"),
   brandSite("rarext-site", "rarext.site.v1", "RAREXT",
     "the protocol's own public presence, alongside the registry bundle it publishes"),
 ];

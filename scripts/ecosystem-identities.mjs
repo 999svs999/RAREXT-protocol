@@ -21,6 +21,7 @@ export const BRAND_IDENTITIES = [
   { handle: "apesdaily", dir: ".apesdaily-identity" },
   { handle: "bapeclub", dir: ".bapeclub-identity" },
   { handle: "rarext", dir: ".rarext-identity" },
+  { handle: "saikougoods", dir: ".saikougoods-identity" },
 ];
 
 export function identityPath(dir) {

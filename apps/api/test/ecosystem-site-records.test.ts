@@ -23,7 +23,7 @@ function body(site: string) {
 
 test("every ecosystem brand has a site verifier", () => {
   const apps = ecosystemSiteVerifiers().map((v) => v.id).sort();
-  assert.deepEqual(apps, ["apesdaily-site", "bapeclub-site", "rarext-site"]);
+  assert.deepEqual(apps, ["apesdaily-site", "bapeclub-site", "rarext-site", "saikougoods-site"]);
 });
 
 test("each brand's verifier supports its own app and kind only", () => {

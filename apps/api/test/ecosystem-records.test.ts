@@ -17,7 +17,7 @@ import {
 import { ecosystemSiteVerifiers, ECOSYSTEM_SITE_CONFIGS } from "../src/site-records.ts";
 import { rarextNameVerifier } from "../src/rarext-name.ts";
 
-const IDS = { apesdaily: "a".repeat(64), bapeclub: "b".repeat(64), rarext: "c".repeat(64) };
+const IDS = { apesdaily: "a".repeat(64), bapeclub: "b".repeat(64), rarext: "c".repeat(64), saikougoods: "d".repeat(64) };
 const fakeFetch = async (url: string) => ({
   ok: true,
   status: 200,

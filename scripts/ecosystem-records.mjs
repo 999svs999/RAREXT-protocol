@@ -57,6 +57,18 @@ export const ECOSYSTEM_BRANDS = [
     note: "bapeclub — the private members club. This record covers the club surface only; the Shopify storefront is a separate property and is not claimed.",
   },
   {
+    handle: "saikougoods",
+    app: "saikougoods-site",
+    kind: "saikougoods.site.v1",
+    name: "saikougoods",
+    origin: "https://saikougoods.pages.dev/",
+    title: "最高選物 — Saikou_Goods · curated consignment",
+    generator: "saikougoods-site-record",
+    identityDir: ".saikougoods-identity",
+    pages: ["/"],
+    note: "saikougoods — 最高選物, curated streetwear/luxury/jewelry consignment. The catalogue is the operator's own Grailed wardrobe; this record pins the storefront, not the marketplace.",
+  },
+  {
     handle: "rarext",
     app: "rarext-site",
     kind: "rarext.site.v1",

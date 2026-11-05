@@ -241,6 +241,21 @@ challengeMap.set("rarext-site-published", {
   sponsor: null,
 });
 
+challengeMap.set("saikougoods-site-published", {
+  id: "saikougoods-site-published",
+  app: "saikougoods-site",
+  title: "SAIKOUGOODS site record",
+  description:
+    "The curated consignment storefront pinned structurally — origin, page digests — by saikougoods's own identity.",
+  version: 1,
+  spec: { kind: "saikougoods.site.record" },
+  semanticsId: "saikougoods-site/saikougoods-site-published",
+  semanticsVersion: 1,
+  createdAt: new Date().toISOString(),
+  status: "open",
+  sponsor: null,
+});
+
 challengeMap.set("rarext-name-published", {
   id: "rarext-name-published",
   app: "rarext-name",
