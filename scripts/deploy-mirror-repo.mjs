@@ -141,12 +141,15 @@ try {
 // The deployment is not done until the LIVE bytes verify to the same root the
 // origin serves — both the bundle and the seed, which is the document that
 // names the peer in the federation list.
-const deadline = Date.now() + 180_000;
+// GitHub Pages builds queue under load and routinely take longer than three
+// minutes; a short window turns a healthy deploy into a red cron. Ten minutes,
+// with a per-attempt cache-buster so the CDN cannot serve the old bytes.
+const deadline = Date.now() + 600_000;
 let liveBundle = null;
 while (Date.now() < deadline) {
   await new Promise((resolve) => setTimeout(resolve, 10_000));
   try {
-    const response = await fetch(`${BASE}/registry/bundle.json`, { signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`${BASE}/registry/bundle.json?deploy=${Date.now()}`, { signal: AbortSignal.timeout(15_000) });
     if (response.ok) {
       liveBundle = new Uint8Array(await response.arrayBuffer());
       if (sha256(liveBundle) === sha256(originBytes)) break;
@@ -155,7 +158,7 @@ while (Date.now() < deadline) {
   } catch {}
 }
 if (!liveBundle) {
-  console.error(`the peer did not serve matching bundle bytes within 3 minutes — check ${BASE}`);
+  console.error(`the peer did not serve matching bundle bytes within 10 minutes — check ${BASE}`);
   process.exit(1);
 }
 console.log(`peer bundle verified: ${BASE}/registry/bundle.json rebuilds ${originRoot}`);
