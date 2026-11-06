@@ -1,9 +1,14 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { verifyRunBody } from "./transcript.ts";
+import { verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
 import type { ModelRunSpec } from "./types.ts";
-import { MODEL_RUN_APP, MODEL_RUN_ARTIFACT_KIND, RUNTIME_VERSION } from "./types.ts";
+import {
+  MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_RUN_APP,
+  MODEL_RUN_ARTIFACT_KIND,
+  RUNTIME_VERSION,
+} from "./types.ts";
 
 export const RUNTIME_VERIFIER_NAME = "rarext-model-run-exact";
 export const RUNTIME_VERIFIER_VERSION = "1";
@@ -94,18 +99,21 @@ export function verifyModelRunArtifact(artifact: unknown, challenge: unknown): V
   }
 
   const record = artifact as Record<string, unknown>;
-  if (record.app !== MODEL_RUN_APP || record.kind !== MODEL_RUN_ARTIFACT_KIND) {
+  if (
+    record.app !== MODEL_RUN_APP ||
+    (record.kind !== MODEL_RUN_ARTIFACT_KIND && record.kind !== MODEL_DEPLOYMENT_ARTIFACT_KIND)
+  ) {
+    const message =
+      `expected app ${MODEL_RUN_APP} and kind ${MODEL_RUN_ARTIFACT_KIND} or ${MODEL_DEPLOYMENT_ARTIFACT_KIND}`;
     return {
       correct: false,
       score: 0,
       gateCount,
       proof: null,
-      details: {
-        error: `expected app ${MODEL_RUN_APP} and kind ${MODEL_RUN_ARTIFACT_KIND}`,
-      },
+      details: { error: message },
       representation: "exact",
       manifest: RUNTIME_VERIFIER_MANIFEST,
-      error: `expected app ${MODEL_RUN_APP} and kind ${MODEL_RUN_ARTIFACT_KIND}`,
+      error: message,
     };
   }
 
@@ -126,7 +134,10 @@ export function verifyModelRunArtifact(artifact: unknown, challenge: unknown): V
     };
   }
 
-  const verification = verifyRunBody(record.body, spec);
+  const verification =
+    record.kind === MODEL_DEPLOYMENT_ARTIFACT_KIND
+      ? verifyDeploymentBody(record.body, spec)
+      : verifyRunBody(record.body, spec);
 
   return {
     correct: verification.correct,
@@ -209,9 +220,9 @@ export function verifierConfig(url: string) {
         name: "RAREXT model-run transcript",
         version: RUNTIME_VERIFIER_VERSION,
         description:
-          "Recomputes every digest in a model-run transcript and checks it against the deployment the challenge committed.",
+          "Recomputes a deployment manifest's digest or every digest in a model-run transcript, and checks it against the deployment the challenge committed.",
         url,
-        artifactKinds: [MODEL_RUN_ARTIFACT_KIND],
+        artifactKinds: [MODEL_RUN_ARTIFACT_KIND, MODEL_DEPLOYMENT_ARTIFACT_KIND],
         manifest: RUNTIME_VERIFIER_MANIFEST,
       },
     ],

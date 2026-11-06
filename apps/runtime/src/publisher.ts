@@ -9,7 +9,11 @@ import { join } from "node:path";
 
 import { writeJsonFile } from "./ledger.ts";
 import type { DeploymentCommitment, ModelRunBody } from "./types.ts";
-import { MODEL_RUN_APP, MODEL_RUN_ARTIFACT_KIND } from "./types.ts";
+import {
+  MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_RUN_APP,
+  MODEL_RUN_ARTIFACT_KIND,
+} from "./types.ts";
 
 interface StoredIdentity {
   kind: "rarext.runtime-identity.v1";
@@ -116,6 +120,30 @@ export class RuntimePublisher {
       signer,
       handle: options.handle,
       challengeId: options.challengeId,
+    });
+  }
+
+  /**
+   * Publish the deployment commitment itself, under the same challenge as its
+   * runs. The manifest is the model card: engine, model, quantization, weight
+   * digest, hardware, and the digest every run cites.
+   */
+  async publishDeployment(manifest: DeploymentCommitment): Promise<Publication> {
+    return this.client.publishArtifactAs(this.signer, {
+      author: this.handle,
+      title: `Deployment ${manifest.id} — ${manifest.model.id}`,
+      body:
+        `${manifest.engine.name}${manifest.engine.version ? ` ${manifest.engine.version}` : ""} serving ` +
+        `${manifest.model.id}${manifest.model.quantization ? ` ${manifest.model.quantization}` : ""} on ` +
+        `${manifest.hardware.backend}; deployment digest ${manifest.digest}.`,
+      challengeId: this.challengeId,
+      artifact: {
+        app: MODEL_RUN_APP,
+        kind: MODEL_DEPLOYMENT_ARTIFACT_KIND,
+        version: 1,
+        mediaType: "application/json",
+        body: manifest,
+      },
     });
   }
 

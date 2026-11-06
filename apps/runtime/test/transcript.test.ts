@@ -15,6 +15,7 @@ import {
 } from "../src/manifest.ts";
 import { challengeFor } from "../src/publisher.ts";
 import {
+  auditLedger,
   createRunBody,
   runArtifact,
   runRecordFor,
@@ -125,6 +126,10 @@ test("a transcript verifies against the challenge that committed the deployment"
   assert.equal(result.details.transcriptDigest, canonicalDigest(body));
   assert.equal(result.details.replayable, true);
   assert.ok(result.details.checks.includes("response.textDigest"));
+  // startedAt/completedAt are one second apart and the run reports four
+  // completion tokens, so the derived rate is 4 tokens/s.
+  assert.equal(result.details.durationMs, 1000);
+  assert.equal(result.details.tokensPerSecond, 4);
 
   const artifact = runArtifact(body);
   const verdict = verifyModelRunArtifact(artifact, challenge);
@@ -157,6 +162,10 @@ test("every part of the transcript is load-bearing", () => {
   const tamperedBytes = structuredClone(body);
   tamperedBytes.request.bytes += 1;
   assert.equal(verifyRunBody(tamperedBytes, spec).correct, false);
+
+  const tamperedUsage = structuredClone(body);
+  tamperedUsage.usage!.completionTokens = -1;
+  assert.equal(verifyRunBody(tamperedUsage, spec).correct, false);
 });
 
 test("a transcript produced for one deployment is refused by another challenge", () => {
@@ -206,6 +215,40 @@ test("the append-only ledger recomputes and detects an edited or removed record"
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("auditLedger verifies every run against the deployment, not just the chain", () => {
+  const manifest = deployment();
+  const spec = runSpecFromChallenge(challengeFor(manifest));
+
+  const first = runBody(manifest);
+  const firstRecord = runRecordFor(first);
+  const second = { ...runBody(manifest), previous: firstRecord.digest };
+  const records = [firstRecord, runRecordFor(second)];
+
+  const audit = auditLedger(records, spec);
+  assert.equal(audit.ok, true);
+  assert.equal(audit.count, 2);
+  assert.equal(audit.chain.ok, true);
+  assert.deepEqual(audit.runs.map((run) => run.correct), [true, true]);
+
+  const tampered = structuredClone(records);
+  tampered[1]!.body.response.text = "a different answer";
+  const rejected = auditLedger(tampered, spec);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.chain.ok, false);
+  assert.deepEqual(rejected.runs.map((run) => run.correct), [true, false]);
+
+  const other = commitDeployment(
+    buildDeployment({
+      probe: { ...probe, model: { ...probe.model, id: "other:1b" } },
+      hardware: hardwareFromHost("cpu", "test host"),
+      createdAt: "2026-11-06T00:00:00.000Z",
+    }),
+  );
+  const wrongDeployment = auditLedger(records, runSpecFromChallenge(challengeFor(other)));
+  assert.equal(wrongDeployment.ok, false);
+  assert.equal(wrongDeployment.runs.every((run) => !run.correct), true);
 });
 
 test("a run record's digest covers its body, so a swapped body is visible", () => {

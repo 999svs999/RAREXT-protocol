@@ -22,6 +22,12 @@ export const RUN_RECORD_KIND = "rarext.model-run.record.v1";
 export const MODEL_RUN_APP = "ai-model-run";
 /** The artifact kind the registry verifies model-run transcripts under. */
 export const MODEL_RUN_ARTIFACT_KIND = "ai.model-run";
+/**
+ * The artifact kind the deployment commitment is published under. It shares
+ * the run challenge/app: one challenge commits one deployment, and both the
+ * manifest and the runs it produced are verified against it.
+ */
+export const MODEL_DEPLOYMENT_ARTIFACT_KIND = "ai.model-deployment";
 
 /** A transcript larger than this is not published; inference still succeeds. */
 export const MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
@@ -184,6 +190,26 @@ export interface ModelRunVerification {
     responseDigest: string;
     textDigest: string;
     replayable: boolean;
+    /** Wall time covered by startedAt/completedAt, when both parse. */
+    durationMs: number | null;
+    /** completionTokens per second over durationMs, when both are known. */
+    tokensPerSecond: number | null;
+    checks: string[];
+  };
+  error?: string;
+}
+
+export interface DeploymentVerification {
+  correct: boolean;
+  score: number;
+  proof: unknown;
+  details: {
+    representation: "exact";
+    deploymentDigest: string;
+    modelId: string;
+    weightsDigest: string | null;
+    engine: EngineName;
+    backend: HardwareBackend;
     checks: string[];
   };
   error?: string;
@@ -194,4 +220,18 @@ export interface LedgerVerification {
   count: number;
   head: string | null;
   errors: Array<{ index: number; reason: string }>;
+}
+
+export interface LedgerAudit {
+  ok: boolean;
+  count: number;
+  /** Hash-chain and record-digest verification. */
+  chain: LedgerVerification;
+  /** Each run verified against the same deployment challenge. */
+  runs: Array<{
+    index: number;
+    digest: string;
+    correct: boolean;
+    error: string | null;
+  }>;
 }

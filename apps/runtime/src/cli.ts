@@ -14,18 +14,28 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import { probeEngine, openAiChatUrl, extractOpenAiText } from "./engines.ts";
+import {
+  probeEngine,
+  probeEngineCatalog,
+  openAiChatUrl,
+  extractOpenAiText,
+  pullOllamaModel,
+} from "./engines.ts";
+import type { PullProgress } from "./engines.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import {
+  assessModelFit,
   buildDeployment,
   commitDeployment,
+  formatBytes,
   hardwareFromHost,
   normalizeEndpoint,
   requireValidDeployment,
 } from "./manifest.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
 import { startGateway } from "./gateway.ts";
-import { verifyRunBody } from "./transcript.ts";
+import { auditLedger, verifyRunBody } from "./transcript.ts";
+import { discoverBundle } from "./discovery.ts";
 import {
   createVerifierServer,
   runSpecFromChallenge,
@@ -41,7 +51,18 @@ import type {
   RunRecord,
 } from "./types.ts";
 
-const COMMANDS = ["deploy", "serve", "verifier", "verify", "replay", "ledger", "inspect"] as const;
+const COMMANDS = [
+  "plan",
+  "deploy",
+  "publish-deployment",
+  "discover",
+  "serve",
+  "verifier",
+  "verify",
+  "replay",
+  "ledger",
+  "inspect",
+] as const;
 type Command = (typeof COMMANDS)[number];
 
 function usage(): never {
@@ -50,7 +71,10 @@ function usage(): never {
 Usage: node apps/runtime/src/cli.ts <command> [options]
 
 Commands:
+  plan      list the engine's models and whether each fits this host's memory
   deploy    probe a local engine and write deployment.json + challenges.json + verifiers.json
+  publish-deployment  publish the deployment commitment (a model card) to RAREXT
+  discover  verify every model card and run in a bundle, without a server
   serve     serve the attested OpenAI/Anthropic gateway in front of a deployment
   verifier  run the HTTP verifier a RAREXT node calls
   verify    verify a transcript offline against a challenge
@@ -66,6 +90,7 @@ Common options:
   --state <dir>         runtime state directory (default .rarext-runtime)
   --backend <name>      cpu | metal | cuda | rocm | vulkan | unknown
   --device <label>      device label recorded in the manifest
+  --pull                fetch a missing Ollama model before committing it
   --out <dir>           where deploy writes files (default .rarext-runtime)
   --port <n>            gateway port (default 8790) or verifier port (default 8788)
   --host <host>         bind host (default 127.0.0.1)
@@ -91,6 +116,15 @@ function bool(values: Record<string, unknown>, name: string): boolean {
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function specFromChallengeFile(path: string): ModelRunSpec {
+  const challengeFile = readJson(path) as unknown;
+  const challenge =
+    typeof challengeFile === "object" && challengeFile !== null && "challenges" in challengeFile
+      ? (challengeFile as { challenges: unknown[] }).challenges[0]
+      : challengeFile;
+  return runSpecFromChallenge(challenge);
 }
 
 function loadBody(path: string): ModelRunBody {
@@ -122,6 +156,59 @@ function deploymentFrom(values: Record<string, unknown>): DeploymentCommitment {
     : commitDeployment(manifest);
 }
 
+async function commandPlan(values: Record<string, unknown>): Promise<number> {
+  const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? "http://127.0.0.1:11434");
+  const engine = flag(values, "engine") as EngineName | undefined;
+  const hardware = hardwareFromHost(
+    (flag(values, "backend") as HardwareBackend | undefined) ?? "unknown",
+    flag(values, "device") ?? null,
+  );
+
+  const catalog = await probeEngineCatalog({ endpoint, engine });
+  const rows = catalog.models.map((model) => ({ model, fit: assessModelFit(model, hardware) }));
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify({ engine: catalog.engine, hardware, models: rows }, null, 2));
+    return 0;
+  }
+
+  console.log(
+    `engine    ${catalog.engine.name}${catalog.engine.version ? ` ${catalog.engine.version}` : ""} at ${catalog.engine.endpoint}`,
+  );
+  console.log(
+    `hardware  ${hardware.backend}${hardware.device ? ` / ${hardware.device}` : ""} on ${hardware.os} ${hardware.arch}` +
+      (hardware.memoryBytes === null ? "" : ` (${formatBytes(hardware.memoryBytes)} host memory)`),
+  );
+
+  if (rows.length === 0) {
+    console.log("\nthe engine advertises no models — pull or load one first");
+    return 0;
+  }
+
+  const idWidth = Math.max(5, ...rows.map(({ model }) => model.id.length));
+  const quantWidth = Math.max(5, ...rows.map(({ model }) => (model.quantization ?? "-").length));
+  const sizeWidth = 10;
+
+  console.log("");
+  console.log(
+    `${"model".padEnd(idWidth)}  ${"quant".padEnd(quantWidth)}  ${"weights".padStart(sizeWidth)}  fit`,
+  );
+  for (const { model, fit } of rows) {
+    console.log(
+      `${model.id.padEnd(idWidth)}  ${(model.quantization ?? "-").padEnd(quantWidth)}  ` +
+        `${(fit.modelBytes === null ? "?" : formatBytes(fit.modelBytes)).padStart(sizeWidth)}  ${fit.verdict}`,
+    );
+  }
+
+  const notes = rows.filter(({ fit }) => fit.verdict !== "fits");
+  if (notes.length > 0) {
+    console.log("");
+    for (const { model, fit } of notes) console.log(`${model.id}: ${fit.note}`);
+  }
+
+  return 0;
+}
+
 async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? "http://127.0.0.1:11434");
   const engine = flag(values, "engine") as EngineName | undefined;
@@ -130,7 +217,37 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   const backend = (flag(values, "backend") as HardwareBackend | undefined) ?? "unknown";
   const device = flag(values, "device") ?? null;
 
-  const probe = await probeEngine({ endpoint, engine, model });
+  let probe;
+  try {
+    probe = await probeEngine({ endpoint, engine, model });
+  } catch (error) {
+    if (!bool(values, "pull")) throw error;
+    if (!model) {
+      throw new Error("--pull needs --model so the runtime knows what to fetch");
+    }
+    if (engine !== undefined && engine !== "ollama") {
+      throw new Error(
+        `--pull is implemented for Ollama only; pull ${model} with ${engine}'s own installer, then run deploy without --pull`,
+      );
+    }
+
+    console.error(`[runtime] ${model} is not loaded; pulling it from ${endpoint}`);
+    let lastStatus = "";
+    await pullOllamaModel({
+      endpoint,
+      model,
+      onProgress: (progress: PullProgress) => {
+        if (progress.status === lastStatus) return;
+        lastStatus = progress.status;
+        const bytes =
+          progress.total === null
+            ? ""
+            : ` (${progress.completed ?? 0}/${progress.total} bytes)`;
+        console.error(`[runtime] ${progress.status}${bytes}`);
+      },
+    });
+    probe = await probeEngine({ endpoint, engine, model });
+  }
   const manifest = commitDeployment(
     buildDeployment({
       probe,
@@ -181,6 +298,113 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   console.log(`  RAREXT_CHALLENGES=${join(out, "challenges.json")} RAREXT_VERIFIERS=${join(out, "verifiers.json")} node apps/api/src/server.ts`);
   console.log(`  node apps/runtime/src/cli.ts serve --manifest ${join(out, "deployment.json")} --publish`);
   return 0;
+}
+
+async function commandPublishDeployment(values: Record<string, unknown>): Promise<number> {
+  const deployment = deploymentFrom(values);
+  const state = resolve(flag(values, "state") ?? ".rarext-runtime");
+  const registry = flag(values, "registry") ?? "http://127.0.0.1:8787";
+  const handle = flag(values, "handle") ?? "rarext-runtime";
+  const challengeId = flag(values, "challenge") ?? challengeIdFor(deployment);
+
+  const publisher = await RuntimePublisher.open({
+    baseUrl: registry,
+    handle,
+    stateDir: state,
+    challengeId,
+  });
+  const publication = await publisher.publishDeployment(deployment);
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify(publication, null, 2));
+    return 0;
+  }
+
+  console.log(`deployment ${deployment.id} published as ${publication.id.slice(0, 12)}… under ${challengeId}`);
+  console.log(`  digest     ${deployment.digest}`);
+  console.log(
+    `  model      ${deployment.model.id}${deployment.model.quantization ? ` (${deployment.model.quantization})` : ""}`,
+  );
+  console.log(`  weights    ${deployment.model.weightsDigest ?? "not reported by the engine"}`);
+  console.log(`  registry   ${registry}`);
+  return 0;
+}
+
+async function commandDiscover(values: Record<string, unknown>): Promise<number> {
+  let bundle: unknown;
+
+  const bundlePath = flag(values, "bundle");
+  if (bundlePath) {
+    bundle = readJson(resolve(bundlePath));
+  } else {
+    const registry = (flag(values, "registry") ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
+    const response = await fetch(`${registry}/v1/bundles/latest`);
+    if (!response.ok) {
+      throw new Error(`registry returned HTTP ${response.status} for ${registry}/v1/bundles/latest`);
+    }
+    bundle = (await response.json()) as unknown;
+  }
+
+  const report = discoverBundle(bundle);
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify(report, null, 2));
+    return report.ok ? 0 : 1;
+  }
+
+  console.log(
+    `bundle root ${String(report.root ?? "").slice(0, 16)}… leafVersion ${report.leafVersion ?? "?"}`,
+  );
+
+  if (report.cards.length === 0 && report.runs.length === 0) {
+    console.log("no model cards or runs in the bundle");
+    return 1;
+  }
+
+  if (report.cards.length > 0) {
+    const idWidth = Math.max(10, ...report.cards.map((card) => card.deploymentId.length));
+    const modelWidth = Math.max(5, ...report.cards.map((card) => card.modelId.length));
+    const quantWidth = Math.max(5, ...report.cards.map((card) => (card.quantization ?? "-").length));
+
+    console.log("\nmodel cards");
+    console.log(
+      `${"deployment".padEnd(idWidth)}  ${"model".padEnd(modelWidth)}  ${"quant".padEnd(quantWidth)}  verdict`,
+    );
+    for (const card of report.cards) {
+      const verdict = card.verified
+        ? card.attested
+          ? "verified"
+          : "verified (attestation missing)"
+        : "FAILED";
+      console.log(
+        `${card.deploymentId.padEnd(idWidth)}  ${card.modelId.padEnd(modelWidth)}  ` +
+          `${(card.quantization ?? "-").padEnd(quantWidth)}  ${verdict}`,
+      );
+      if (card.error) console.log(`  ${card.error}`);
+    }
+  }
+
+  if (report.runs.length > 0) {
+    console.log("\nruns");
+    for (const run of report.runs) {
+      const verdict = run.verified
+        ? run.attested
+          ? "verified"
+          : "verified (attestation missing)"
+        : "FAILED";
+      const speed =
+        run.tokensPerSecond === null ? "" : ` ${run.tokensPerSecond.toFixed(1)} tok/s`;
+      console.log(
+        `  ${run.runDigest.slice(0, 16)}…  ${run.modelId}${speed}  ${verdict}`,
+      );
+      if (run.error) console.log(`    ${run.error}`);
+    }
+  }
+
+  console.log(
+    `\n${report.ok ? "PASS" : "FAIL"} — ${report.cards.length} card(s), ${report.runs.length} run(s) recomputed from the bundle`,
+  );
+  return report.ok ? 0 : 1;
 }
 
 async function commandServe(values: Record<string, unknown>): Promise<number> {
@@ -241,12 +465,7 @@ async function commandVerify(values: Record<string, unknown>): Promise<number> {
 
   const challengePath = flag(values, "challenge");
   if (!challengePath) throw new Error("--challenge is required");
-  const challengeFile = readJson(resolve(challengePath)) as unknown;
-  const challenge =
-    typeof challengeFile === "object" && challengeFile !== null && "challenges" in challengeFile
-      ? (challengeFile as { challenges: unknown[] }).challenges[0]
-      : challengeFile;
-  const spec: ModelRunSpec = runSpecFromChallenge(challenge);
+  const spec = specFromChallengeFile(resolve(challengePath));
   const result = verifyRunBody(body, spec);
 
   if (bool(values, "json")) {
@@ -302,9 +521,26 @@ async function commandReplay(values: Record<string, unknown>): Promise<number> {
 async function commandLedger(values: Record<string, unknown>): Promise<number> {
   const dir = resolve(flag(values, "state") ?? ".rarext-runtime");
   const ledger = new RunLedger(dir);
-  const result = ledger.verify();
+  const challengePath = flag(values, "challenge");
+
+  // Without a challenge this is the chain check. With one, every run is also
+  // verified against the deployment, so a ledger cannot mix two models under a
+  // valid chain and still pass.
+  const result = challengePath
+    ? auditLedger(ledger.records(), specFromChallengeFile(resolve(challengePath)))
+    : ledger.verify();
+
   if (bool(values, "json")) {
     console.log(JSON.stringify(result, null, 2));
+  } else if ("runs" in result) {
+    console.log(
+      `${result.ok ? "PASS" : "FAIL"} — ${result.count} run(s), chain ${result.chain.ok ? "intact" : "broken"}, ` +
+        `${result.runs.filter((run) => run.correct).length}/${result.runs.length} match the challenge, head ${String(result.chain.head).slice(0, 16)}…`,
+    );
+    for (const error of result.chain.errors) console.log(`  chain [${error.index}] ${error.reason}`);
+    for (const run of result.runs) {
+      if (!run.correct) console.log(`  run [${run.index}] ${run.digest.slice(0, 16)}… ${run.error ?? "does not match"}`);
+    }
   } else {
     console.log(`${result.ok ? "PASS" : "FAIL"} — ${result.count} run(s), head ${String(result.head).slice(0, 16)}…`);
     for (const error of result.errors) console.log(`  [${error.index}] ${error.reason}`);
@@ -329,6 +565,7 @@ async function main(): Promise<number> {
       state: { type: "string" },
       backend: { type: "string" },
       device: { type: "string" },
+      pull: { type: "boolean" },
       out: { type: "string" },
       port: { type: "string" },
       host: { type: "string" },
@@ -337,6 +574,7 @@ async function main(): Promise<number> {
       handle: { type: "string" },
       challenge: { type: "string" },
       transcript: { type: "string" },
+      bundle: { type: "string" },
       "verifier-url": { type: "string" },
       json: { type: "boolean" },
       help: { type: "boolean" },
@@ -348,8 +586,14 @@ async function main(): Promise<number> {
   if (!command || !COMMANDS.includes(command)) usage();
 
   switch (command) {
+    case "plan":
+      return commandPlan(values);
     case "deploy":
       return commandDeploy(values);
+    case "publish-deployment":
+      return commandPublishDeployment(values);
+    case "discover":
+      return commandDiscover(values);
     case "serve":
       return commandServe(values);
     case "verifier":

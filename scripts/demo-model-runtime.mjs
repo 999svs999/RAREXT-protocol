@@ -27,12 +27,23 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { canonicalDigest } from "../apps/runtime/src/digest.ts";
-import { probeEngine, openAiChatUrl, extractOpenAiText } from "../apps/runtime/src/engines.ts";
+import {
+  probeEngine,
+  probeEngineCatalog,
+  openAiChatUrl,
+  extractOpenAiText,
+} from "../apps/runtime/src/engines.ts";
 import { startGateway } from "../apps/runtime/src/gateway.ts";
 import { RunLedger, writeJsonFile } from "../apps/runtime/src/ledger.ts";
-import { buildDeployment, commitDeployment, hardwareFromHost, normalizeEndpoint } from "../apps/runtime/src/manifest.ts";
+import {
+  assessModelFit,
+  buildDeployment,
+  commitDeployment,
+  hardwareFromHost,
+  normalizeEndpoint,
+} from "../apps/runtime/src/manifest.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
-import { verifyRunBody } from "../apps/runtime/src/transcript.ts";
+import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import { RarextClient } from "../packages/agent-sdk/src/index.ts";
 
@@ -176,6 +187,20 @@ try {
     console.log("  (no Ollama at 127.0.0.1:11434 — using the deterministic mock engine)");
   }
 
+  // ── 0. Plan: does the model fit this host? ───────────────────────────────
+  const catalog = await probeEngineCatalog({ endpoint: engineSpec.endpoint });
+  const planned =
+    catalog.models.find((entry) => entry.id === engineSpec.model) ?? catalog.models[0] ?? null;
+  const plannedHardware = hardwareFromHost("cpu", engineSpec.real ? "host CPU" : "mock");
+  const fit = planned ? assessModelFit(planned, plannedHardware) : null;
+  phase(
+    "plan",
+    fit !== null,
+    fit && planned
+      ? `${planned.id}${planned.quantization ? ` (${planned.quantization})` : ""}: ${fit.verdict} — ${fit.note}`
+      : "the engine advertised no models",
+  );
+
   const probe = await probeEngine({
     endpoint: engineSpec.endpoint,
     model: engineSpec.model,
@@ -250,6 +275,10 @@ try {
     challengeId: challenge.id,
   });
 
+  // The deployment itself is a model card on RAREXT: engine, model,
+  // quantization, weight digest, hardware, and the digest every run cites.
+  const deploymentPublication = await publisher.publishDeployment(deployment);
+
   gateway = await startGateway({
     deployment,
     ledgerDir: state,
@@ -310,26 +339,54 @@ try {
       : `attested=${String(attested)} publication=${String(publicationId)} stored=${String(storedDigest).slice(0, 12)} local=${String(localRecord?.digest).slice(0, 12)}`,
   );
 
-  // ── 6. Anchor it and find it in the anchored bundle ──────────────────────
+  // ── 5b. The deployment itself is a model card on RAREXT ──────────────────
+  const deploymentPublished = await getJson(
+    `${base}/v1/publications/${deploymentPublication.id}`,
+  );
+  const deploymentVerdict = verifyDeploymentBody(deployment, spec);
+  const deploymentAttested =
+    deploymentVerdict.correct === true &&
+    deploymentPublished?.attestation?.correct === true &&
+    deploymentPublished?.attestation?.representation === "exact" &&
+    deploymentPublished?.artifact?.kind === "ai.model-deployment";
+  phase(
+    "deployment",
+    deploymentAttested,
+    deploymentAttested
+      ? `manifest ${deployment.digest.slice(0, 12)}… published as ${deploymentPublication.id.slice(0, 8)}… and attested exact`
+      : `local=${deploymentVerdict.correct} attested=${String(deploymentPublished?.attestation?.correct)}`,
+  );
+
+  // ── 6. Anchor both and find them in the anchored bundle ──────────────────
   const anchor = await registry.anchor();
   await sleep(100);
   const bundle = await getJson(`${base}/v1/bundles/latest`);
   const inBundle = (bundle.publications ?? []).find((entry) => entry.id === publicationId);
+  const deploymentInBundle = (bundle.publications ?? []).find(
+    (entry) => entry.id === deploymentPublication.id,
+  );
   const bundleBody = inBundle?.artifact?.body;
   const bundleDigest = bundleBody ? canonicalDigest(bundleBody) : null;
   const anchorCovers = (bundle.anchors ?? []).some(
     (entry) =>
       entry.root === bundle.manifest?.root &&
-      (entry.publicationIds ?? []).includes(publicationId),
+      (entry.publicationIds ?? []).includes(publicationId) &&
+      (entry.publicationIds ?? []).includes(deploymentPublication.id),
   );
+  const anchorBundleDeploymentOk =
+    deploymentInBundle !== undefined &&
+    verifyDeploymentBody(deploymentInBundle.artifact?.body, spec).correct === true;
   phase(
     "anchor",
     inBundle !== undefined &&
+      deploymentInBundle !== undefined &&
+      anchorBundleDeploymentOk &&
       bundleDigest === runDigest &&
       anchorCovers &&
       /^[0-9a-f]{64}$/.test(String(anchor.root ?? "")),
     `bundle leafVersion ${bundle.manifest?.leafVersion}; root ${String(bundle.manifest?.root).slice(0, 16)}… ` +
-      `covers ${String(publicationId).slice(0, 8)}…; body re-hashes to ${String(bundleDigest).slice(0, 12)}…`,
+      `covers ${String(publicationId).slice(0, 8)}… and ${deploymentPublication.id.slice(0, 8)}…; ` +
+      `run body re-hashes to ${String(bundleDigest).slice(0, 12)}…`,
   );
 
   // ── 7. Recompute the verification from the transcript alone ──────────────
@@ -338,7 +395,8 @@ try {
     "recompute",
     localVerification.correct === true &&
       localVerification.details.transcriptDigest === runDigest,
-    `${localVerification.details.checks.length} checks pass; transcript ${localVerification.details.transcriptDigest.slice(0, 12)}…`,
+    `${localVerification.details.checks.length} checks pass; transcript ${localVerification.details.transcriptDigest.slice(0, 12)}…` +
+      `; ${localVerification.details.tokensPerSecond === null ? "throughput n/a" : `${localVerification.details.tokensPerSecond.toFixed(1)} tok/s over ${localVerification.details.durationMs} ms`}`,
   );
 
   // ── 8. Replay the output against the live engine ─────────────────────────
@@ -383,6 +441,7 @@ try {
   writeJsonFile(join(proofDir, "bundle.json"), bundle);
   if (localRecord) writeJsonFile(join(proofDir, "run.json"), localRecord);
   writeJsonFile(join(proofDir, "verification.json"), localVerification);
+  writeJsonFile(join(proofDir, "deployment-publication.json"), deploymentPublished);
   writeFileSync(
     join(proofDir, "README.md"),
     `# AI lives on RAREXT — ${deployment.model.id}\n\n` +
@@ -390,7 +449,13 @@ try {
       `- engine: ${deployment.engine.name} ${deployment.engine.version ?? ""}\n` +
       `- model: ${deployment.model.id} (${deployment.model.quantization ?? "unknown quantization"})\n` +
       `- weights: ${deployment.model.weightsDigest ?? "not reported"}\n` +
+      `- model card: \`${deploymentPublication.id}\`\n` +
       `- run: \`${runDigest}\`\n` +
+      `- throughput: ${
+        localVerification.details.tokensPerSecond === null
+          ? "not derivable"
+          : `${localVerification.details.tokensPerSecond.toFixed(2)} tok/s over ${localVerification.details.durationMs} ms`
+      }\n` +
       `- publication: \`${publicationId}\`\n` +
       `- bundle root: \`${bundle.manifest?.root}\`\n\n` +
       `Re-check offline: \`node apps/runtime/src/cli.ts verify --transcript .ai-proof/model-runtime/run.json --challenge .ai-proof/model-runtime/challenge.json\`\n`,
@@ -399,7 +464,7 @@ try {
   const failed = phases.filter((entry) => !entry.ok);
   console.log(
     failed.length === 0
-      ? `\nDEMO PASSED: probe -> verifier -> registry -> infer -> publish -> anchor -> recompute -> replay -> ledger, ` +
+      ? `\nDEMO PASSED: plan -> probe -> verifier -> registry -> deployment -> infer -> publish -> anchor -> recompute -> replay -> ledger, ` +
           `${phases.length}/${phases.length} phases verified. AI lives on RAREXT.`
       : `\nDEMO FAILED: ${failed.map((entry) => entry.name).join(", ")}`,
   );

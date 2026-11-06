@@ -1,8 +1,13 @@
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
+import { deploymentDigest, validateDeployment } from "./manifest.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
+  DeploymentManifest,
+  DeploymentVerification,
+  EngineName,
+  HardwareBackend,
   ModelRunBody,
   ModelRunSpec,
   ModelRunVerification,
@@ -13,12 +18,13 @@ import type {
 } from "./types.ts";
 import {
   MAX_TRANSCRIPT_BYTES,
+  MODEL_DEPLOYMENT_ARTIFACT_KIND,
   MODEL_RUN_APP,
   MODEL_RUN_ARTIFACT_KIND,
   RUN_KIND,
   RUN_RECORD_KIND,
 } from "./types.ts";
-import type { LedgerVerification } from "./types.ts";
+import type { LedgerAudit, LedgerVerification } from "./types.ts";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -163,6 +169,8 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         responseDigest: "",
         textDigest: "",
         replayable: false,
+        durationMs: null,
+        tokensPerSecond: null,
         checks: [],
       },
       error: "artifact body must be an object",
@@ -220,6 +228,35 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "timestamps", Number.isFinite(started) && Number.isFinite(completed) && completed >= started);
   check(checks, failures, "previous", body.previous === null || (typeof body.previous === "string" && HEX64.test(body.previous)));
 
+  const usage = isRecord(body.usage) ? body.usage : null;
+  const usageField = (value: unknown): boolean =>
+    value === null || (Number.isSafeInteger(value) && (value as number) >= 0);
+  check(
+    checks,
+    failures,
+    "usage",
+    body.usage === null ||
+      (usage !== null &&
+        usageField(usage.promptTokens) &&
+        usageField(usage.completionTokens) &&
+        usageField(usage.totalTokens)),
+  );
+
+  // Throughput is derived, not asserted: the transcript commits the timestamps
+  // and token counts, and this arithmetic is what a reader can recompute. It
+  // does not prove the engine was fast, only that the recorded interval and
+  // completion count imply this rate.
+  const durationMs =
+    Number.isFinite(started) && Number.isFinite(completed) ? Math.max(0, completed - started) : null;
+  const completionTokens =
+    usage !== null && typeof usage.completionTokens === "number" && Number.isFinite(usage.completionTokens)
+      ? usage.completionTokens
+      : null;
+  const tokensPerSecond =
+    durationMs !== null && durationMs > 0 && completionTokens !== null
+      ? (completionTokens / durationMs) * 1000
+      : null;
+
   let replayable = false;
   if (replay) {
     replayable =
@@ -248,6 +285,8 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       responseDigest,
       textDigest: sha256Hex(text),
       replayable,
+      durationMs,
+      tokensPerSecond,
       checks,
       failures,
     },
@@ -259,6 +298,8 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       responseDigest,
       textDigest: sha256Hex(text),
       replayable,
+      durationMs,
+      tokensPerSecond,
       checks,
     },
     ...(correct ? {} : { error: `transcript failed: ${failures.join(", ")}` }),
@@ -276,10 +317,154 @@ export function runArtifact(body: ModelRunBody) {
   } as const;
 }
 
+/** The artifact envelope the registry verifies for a deployment commitment. */
+export function deploymentArtifact(body: DeploymentCommitment) {
+  return {
+    app: MODEL_RUN_APP,
+    kind: MODEL_DEPLOYMENT_ARTIFACT_KIND,
+    version: 1,
+    mediaType: "application/json",
+    body,
+  } as const;
+}
+
+const ENGINES = new Set<EngineName>(["ollama", "strata", "freetoken", "openai-compatible"]);
+const BACKENDS = new Set<HardwareBackend>(["cpu", "metal", "cuda", "rocm", "vulkan", "unknown"]);
+
+/**
+ * Verify a published deployment commitment.
+ *
+ * The manifest is the thing that names the model, weights, engine, and
+ * hardware; its digest is the identity every run cites. This recomputes that
+ * digest from the manifest itself and checks the identity against the same
+ * challenge the runs use — a deployment cannot be published under a challenge
+ * that commits a different model or different weights.
+ */
+export function verifyDeploymentBody(body: unknown, spec: ModelRunSpec): DeploymentVerification {
+  const checks: string[] = [];
+  const failures: string[] = [];
+
+  if (!isRecord(body)) {
+    return {
+      correct: false,
+      score: 0,
+      proof: null,
+      details: {
+        representation: "exact",
+        deploymentDigest: "",
+        modelId: "",
+        weightsDigest: null,
+        engine: spec.engine,
+        backend: "unknown",
+        checks: [],
+      },
+      error: "deployment body must be an object",
+    };
+  }
+
+  const manifestErrors = validateDeployment(body);
+  check(checks, failures, "manifest", manifestErrors.length === 0);
+
+  const claimed = typeof body.digest === "string" && HEX64.test(body.digest) ? body.digest : "";
+  check(checks, failures, "digest.present", claimed !== "");
+
+  const { digest: _digest, ...manifest } = body;
+  const recomputed = deploymentDigest(manifest as unknown as DeploymentManifest);
+  check(checks, failures, "digest.recomputed", claimed === recomputed);
+  check(checks, failures, "deployment.digest", recomputed === spec.deploymentDigest);
+
+  const model = isRecord(body.model) ? body.model : {};
+  const engine = isRecord(body.engine) ? body.engine : {};
+  const hardware = isRecord(body.hardware) ? body.hardware : {};
+
+  check(checks, failures, "model.id", model.id === spec.modelId);
+  check(checks, failures, "model.weightsDigest", (model.weightsDigest ?? null) === spec.weightsDigest);
+  check(checks, failures, "engine.name", engine.name === spec.engine);
+  check(
+    checks,
+    failures,
+    "hardware",
+    typeof hardware.backend === "string" &&
+      BACKENDS.has(hardware.backend as HardwareBackend) &&
+      (hardware.memoryBytes === null ||
+        (typeof hardware.memoryBytes === "number" && Number.isFinite(hardware.memoryBytes))),
+  );
+
+  const actualEngine =
+    typeof engine.name === "string" && ENGINES.has(engine.name as EngineName)
+      ? (engine.name as EngineName)
+      : spec.engine;
+  const actualBackend =
+    typeof hardware.backend === "string" && BACKENDS.has(hardware.backend as HardwareBackend)
+      ? (hardware.backend as HardwareBackend)
+      : "unknown";
+  const actualWeights = typeof model.weightsDigest === "string" ? model.weightsDigest : null;
+  const actualModel = typeof model.id === "string" ? model.id : "";
+
+  const correct = failures.length === 0;
+
+  return {
+    correct,
+    score: correct ? 100 : 0,
+    proof: {
+      representation: "exact",
+      deploymentDigest: recomputed,
+      modelId: actualModel,
+      weightsDigest: actualWeights,
+      engine: actualEngine,
+      backend: actualBackend,
+      checks,
+      failures,
+    },
+    details: {
+      representation: "exact",
+      deploymentDigest: recomputed,
+      modelId: actualModel,
+      weightsDigest: actualWeights,
+      engine: actualEngine,
+      backend: actualBackend,
+      checks,
+    },
+    ...(correct ? {} : { error: `deployment failed: ${failures.join(", ")}` }),
+  };
+}
+
 export function verifyRunRecord(record: unknown): boolean {
   if (!isRecord(record) || record.kind !== RUN_RECORD_KIND) return false;
   if (typeof record.digest !== "string" || !HEX64.test(record.digest)) return false;
   return canonicalDigest(record.body) === record.digest;
+}
+
+/**
+ * Verify every run in a ledger against one deployment challenge, in addition
+ * to the chain. The chain proves the records were not edited or removed; this
+ * proves they all belong to the deployment the caller is asking about.
+ */
+export function auditLedger(records: unknown[], spec: ModelRunSpec): LedgerAudit {
+  const chain = verifyLedger(records);
+
+  const runs = records.map((record, index) => {
+    if (!isRecord(record) || record.kind !== RUN_RECORD_KIND) {
+      return { index, digest: "", correct: false, error: "not a run record" };
+    }
+
+    const digest = typeof record.digest === "string" ? record.digest : "";
+    const verification = verifyRunBody(record.body, spec);
+
+    return {
+      index,
+      digest,
+      correct: verification.correct,
+      error: verification.error ?? null,
+    };
+  });
+
+  return {
+    ok: chain.ok && runs.every((run) => run.correct),
+    count: records.length,
+    chain,
+    runs,
+  };
 }
 
 /** Recompute every record digest and every link in an append-only ledger. */

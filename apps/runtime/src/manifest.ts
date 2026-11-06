@@ -61,6 +61,92 @@ export function hardwareFromHost(
   };
 }
 
+export type MemoryFit = "fits" | "tight" | "too-large" | "unknown";
+
+export interface ModelFit {
+  verdict: MemoryFit;
+  /** The engine's reported weight size, or null when it reports none. */
+  modelBytes: number | null;
+  /** Host memory visible to the runtime. */
+  memoryBytes: number | null;
+  /** Bytes left after the model and the reserve, or null when unknown. */
+  headroomBytes: number | null;
+  note: string;
+}
+
+const GIB = 1024 ** 3;
+
+/**
+ * Does the engine's reported weight size fit in this host's memory?
+ *
+ * This is deliberately a claim about host memory, not VRAM: a discrete GPU may
+ * hold a second copy, and an engine such as Strata can stream weights from disk
+ * when they do not fit. The verdict is therefore advisory, and `unknown` is a
+ * real answer when either side of the comparison is missing.
+ */
+export function assessModelFit(
+  model: ModelRef,
+  hardware: HardwareRef,
+  options: { reserveBytes?: number } = {},
+): ModelFit {
+  const modelBytes = model.sizeBytes;
+  const memoryBytes = hardware.memoryBytes;
+
+  if (modelBytes === null || memoryBytes === null) {
+    return {
+      verdict: "unknown",
+      modelBytes,
+      memoryBytes,
+      headroomBytes: null,
+      note: "the engine or the host did not report a size, so no fit is claimed",
+    };
+  }
+
+  const reserve = options.reserveBytes ?? Math.max(GIB, Math.floor(memoryBytes * 0.15));
+  const headroom = memoryBytes - modelBytes - reserve;
+
+  if (modelBytes > memoryBytes) {
+    return {
+      verdict: "too-large",
+      modelBytes,
+      memoryBytes,
+      headroomBytes: headroom,
+      note: "weights exceed host memory; the engine must stream from disk or offload",
+    };
+  }
+
+  if (headroom < 0) {
+    return {
+      verdict: "tight",
+      modelBytes,
+      memoryBytes,
+      headroomBytes: headroom,
+      note: `weights fit, but not with a ${formatBytes(reserve)} reserve for the context and runtime`,
+    };
+  }
+
+  return {
+    verdict: "fits",
+    modelBytes,
+    memoryBytes,
+    headroomBytes: headroom,
+    note: `weights leave ${formatBytes(headroom)} after a ${formatBytes(reserve)} reserve`,
+  };
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes)) return "?";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = Math.abs(bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const signed = bytes < 0 ? -value : value;
+  return `${signed.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
 export function buildDeployment(input: {
   probe: EngineProbe;
   hardware?: HardwareRef;

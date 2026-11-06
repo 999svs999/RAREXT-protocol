@@ -2,6 +2,7 @@ import type {
   ApiShape,
   EngineName,
   EngineProbe,
+  EngineRef,
   ModelRef,
   TokenUsage,
 } from "./types.ts";
@@ -156,22 +157,27 @@ async function probeOpenAi(
   };
 }
 
+export interface EngineCatalog {
+  engine: EngineRef;
+  apis: ApiShape[];
+  /** Every model the engine advertises. */
+  models: ModelRef[];
+}
+
 /**
- * Probe an engine and select a model. Ollama is detected by its native
- * `/api/tags`; everything else is treated as OpenAI-compatible, which is the
- * surface Strata and FreeToken both publish.
+ * Probe an engine and list every model it advertises, without choosing one.
+ * Ollama is detected by its native `/api/tags`; everything else is treated as
+ * OpenAI-compatible, which is the surface Strata and FreeToken both publish.
  */
-export async function probeEngine(options: {
+export async function probeEngineCatalog(options: {
   endpoint: string;
   engine?: EngineName;
-  model?: string;
   fetchImpl?: typeof fetch;
-}): Promise<EngineProbe> {
+}): Promise<EngineCatalog> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = normalizeEndpoint(options.endpoint);
-  const wanted = options.model;
 
-  const candidates: EngineProbe[] = [];
+  const candidates: EngineCatalog[] = [];
 
   if (options.engine === undefined || options.engine === "ollama") {
     const ollama = await probeOllama(base, fetchImpl);
@@ -190,9 +196,134 @@ export async function probeEngine(options: {
     );
   }
 
-  const probe = candidates[0];
-  probe.model = pickModel(probe.models, wanted);
-  return probe;
+  const probe = candidates[0]!;
+  return { engine: probe.engine, apis: probe.apis, models: probe.models };
+}
+
+/**
+ * Probe an engine and select one model. With no `--model`, a single-model
+ * engine is accepted and a multi-model engine is refused rather than guessed.
+ */
+export async function probeEngine(options: {
+  endpoint: string;
+  engine?: EngineName;
+  model?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<EngineProbe> {
+  const catalog = await probeEngineCatalog(options);
+
+  return {
+    engine: catalog.engine,
+    apis: catalog.apis,
+    models: catalog.models,
+    model: pickModel(catalog.models, options.model),
+  };
+}
+
+export interface PullProgress {
+  /** The engine's own status line, e.g. `pulling manifest`, `verifying sha256 digest`. */
+  status: string;
+  /** Bytes fetched so far, when the engine reports a layer. */
+  completed: number | null;
+  /** Total bytes for the layer, when known. */
+  total: number | null;
+  /** The layer digest the engine is working on, when reported. */
+  digest: string | null;
+}
+
+function pullProgress(event: Record<string, unknown>): PullProgress {
+  return {
+    status: typeof event.status === "string" ? event.status : "pulling",
+    completed: numberOrNull(event.completed),
+    total: numberOrNull(event.total),
+    digest: stringOrNull(event.digest),
+  };
+}
+
+/**
+ * Pull a model through Ollama's streaming `/api/pull`.
+ *
+ * Strata and FreeToken each ship their own downloader, so this deliberately
+ * speaks only Ollama's protocol: an engine with no pull API is left to its own
+ * installer, and `deploy --pull` refuses to pretend otherwise. The model is
+ * re-probed after the stream finishes, so the digest in the deployment is the
+ * one the engine reports for the bytes now on disk, not a value invented from
+ * the download events.
+ */
+export async function pullOllamaModel(options: {
+  endpoint: string;
+  model: string;
+  fetchImpl?: typeof fetch;
+  onProgress?: (progress: PullProgress) => void;
+  /** Milliseconds before the pull is abandoned. Undefined waits indefinitely. */
+  timeoutMs?: number;
+}): Promise<ModelRef> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const base = normalizeEndpoint(options.endpoint);
+
+  if (options.model.trim() === "") throw new Error("a model id is required to pull");
+
+  const response = await fetchImpl(`${base}/api/pull`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: options.model, stream: true }),
+    ...(options.timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(options.timeoutMs) }),
+  });
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).trim();
+    throw new Error(
+      `the engine at ${base} refused to pull ${options.model}: HTTP ${response.status}` +
+        (detail === "" ? "" : ` — ${detail.slice(0, 300)}`),
+    );
+  }
+
+  if (response.body) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const consume = (line: string): void => {
+      const trimmed = line.trim();
+      if (trimmed === "") return;
+
+      let event: unknown;
+      try {
+        event = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      if (!isRecord(event)) return;
+      if (typeof event.error === "string" && event.error.length > 0) {
+        throw new Error(`the engine refused to pull ${options.model}: ${event.error}`);
+      }
+      options.onProgress?.(pullProgress(event));
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        consume(line);
+        newline = buffer.indexOf("\n");
+      }
+    }
+
+    buffer += decoder.decode();
+    consume(buffer);
+  }
+
+  const probe = await probeOllama(base, fetchImpl);
+  if (!probe) {
+    throw new Error(`the pull finished but ${base} no longer answers /api/tags`);
+  }
+  return pickModel(probe.models, options.model);
 }
 
 export function openAiChatUrl(endpoint: string): string {

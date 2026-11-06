@@ -13,8 +13,12 @@ and a registry verifier.
 Full guide: [`docs/MODEL-RUNTIME.md`](../../docs/MODEL-RUNTIME.md).
 
 ```bash
+# 0. see which models the engine has and whether they fit this host's memory
+node apps/runtime/src/cli.ts plan --endpoint http://127.0.0.1:11434
+
 # 1. probe the engine and write deployment.json / challenges.json / verifiers.json
-node apps/runtime/src/cli.ts deploy --endpoint http://127.0.0.1:11434 --model qwen2.5:0.5b
+#    (--pull fetches a missing Ollama model first, then commits its digest)
+node apps/runtime/src/cli.ts deploy --endpoint http://127.0.0.1:11434 --model qwen2.5:0.5b --pull
 
 # 2. run the verifier and a registry that loads the challenge
 node apps/runtime/src/cli.ts verifier --port 8788
@@ -22,11 +26,17 @@ RAREXT_CHALLENGES=.rarext-runtime/challenges.json \
 RAREXT_VERIFIERS=.rarext-runtime/verifiers.json \
 node apps/api/src/server.ts
 
-# 3. serve and publish
+# 3. publish the deployment commitment as a model card
+node apps/runtime/src/cli.ts publish-deployment \
+  --manifest .rarext-runtime/deployment.json \
+  --registry http://127.0.0.1:8787
+
+# 4. serve and publish runs
 node apps/runtime/src/cli.ts serve --manifest .rarext-runtime/deployment.json --publish
 
-# 4. verify and replay offline
+# 5. verify, audit, and replay offline
 node apps/runtime/src/cli.ts verify --transcript .rarext-runtime/runs.jsonl --challenge .rarext-runtime/challenges.json
+node apps/runtime/src/cli.ts ledger --state .rarext-runtime --challenge .rarext-runtime/challenges.json
 node apps/runtime/src/cli.ts replay --transcript .rarext-runtime/runs.jsonl --endpoint http://127.0.0.1:11434
 ```
 
