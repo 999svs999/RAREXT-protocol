@@ -54,7 +54,8 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     value.engine !== "ollama" &&
     value.engine !== "strata" &&
     value.engine !== "freetoken" &&
-    value.engine !== "openai-compatible"
+    value.engine !== "openai-compatible" &&
+    value.engine !== "anthropic"
   ) {
     throw new Error("challenge.spec.engine must name a supported engine");
   }

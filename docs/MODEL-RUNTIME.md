@@ -25,8 +25,17 @@ engine as the kernel and adds:
 The one-command proof is:
 
 ```bash
-npm run demo:model-runtime
+npm run demo:model-runtime     # local engine (Ollama today)
+npm run demo:cloud-runtime     # remote endpoint, no local weights or inference
 ```
+
+The runtime has two placements. A **local** deployment probes an engine on the
+same host; a **remote** deployment commits an OpenAI- or Anthropic-compatible
+endpoint somewhere else, forwards to it, and never downloads weights or runs
+inference itself. The rest of this document describes the control plane both
+share. The cloud-only path — provider commands, public gateway binding, TLS,
+the registry/mirror/anchor/discover route, and what it does and does not prove —
+is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
 
 ## Why these two engines are the reference
 
@@ -218,6 +227,24 @@ other OpenAI-compatible server are probed through `/v1/models` (Ollama also
 through `/api/tags`). If you omit `--model` and the engine advertises more than
 one model, the command refuses and lists them rather than guessing.
 
+A cloud deployment is the same command with `--remote` and a provider endpoint:
+
+```bash
+export RAREXT_UPSTREAM_API_KEY='...'
+node apps/runtime/src/cli.ts deploy \
+  --remote \
+  --endpoint https://api.provider.example \
+  --engine openai-compatible \
+  --model <provider-model-id> \
+  --out .rarext-runtime
+```
+
+It records `placement: "remote"`, `hardware.backend: "cloud"`, and
+`hardware.memoryBytes: null`; it refuses `--pull` and refuses a loopback
+endpoint unless `--allow-loopback` is passed for a test fixture. See
+[CLOUD-RUNTIME.md](CLOUD-RUNTIME.md) for the Anthropic-compatible provider and
+the public gateway recipe.
+
 ### Getting the weights
 
 `deploy --pull` closes the gap between "an engine is running" and "the model is
@@ -251,7 +278,26 @@ node apps/runtime/src/cli.ts serve \
   --registry http://127.0.0.1:8787
 ```
 
-The gateway listens on `127.0.0.1:8790` by default:
+The gateway listens on `127.0.0.1:8790` by default. A cloud gateway binds an
+interface the platform routes to and names the public URL:
+
+```bash
+export RAREXT_UPSTREAM_API_KEY='...'
+export RAREXT_GATEWAY_TOKEN='...'
+node apps/runtime/src/cli.ts serve \
+  --manifest .rarext-runtime/deployment.json \
+  --host 0.0.0.0 \
+  --public-url https://ai.example.com \
+  --publish \
+  --registry https://registry.example.com
+```
+
+`RAREXT_GATEWAY_TOKEN` requires `Authorization: Bearer ...` on inference and
+the run ledger; `/health`, `/v1/deployment`, and `/v1/models` stay readable so a
+deployment can be found like a model card. TLS is terminated at the edge. The
+full cloud recipe is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
+
+Routes:
 
 - `POST /v1/chat/completions` — OpenAI, including streaming (SSE is teed to the
   client and recorded);
@@ -301,6 +347,10 @@ node apps/runtime/src/cli.ts replay \
 node apps/runtime/src/cli.ts ledger \
   --state .rarext-runtime \
   --challenge .rarext-runtime/challenges.json
+
+# verify an anchored bundle with no registry or engine
+node apps/runtime/src/cli.ts discover --bundle .ai-proof/model-runtime/bundle.json
+node apps/runtime/src/cli.ts discover --registry http://127.0.0.1:8787
 ```
 
 `verify` recomputes the transcript offline. `replay` re-sends the committed
@@ -308,32 +358,39 @@ request to the live engine and compares the output byte for byte; it only exists
 when the run was made with `temperature: 0` **and** an explicit `seed`. `ledger`
 recomputes the chain; with `--challenge` it also verifies every run against the
 deployment, so a ledger that mixes two models fails even when its chain is
-intact.
+intact. `discover` recomputes every model card and run in a bundle against the
+challenge carried in that bundle; it trusts neither the registry nor the
+attestation, and exits non-zero if any card or run was edited after publication.
 
 ## What the demo proves
 
-The demo was run on a Mac with Ollama `0.23.2` and `qwen2.5:0.5b` (Q4_K_M,
-`sha256:a8b0…c67`):
+The local demo was run on a Mac with Ollama `0.23.2` and `qwen2.5:0.5b`
+(Q4_K_M, `sha256:a8b0…c67`):
 
 ```
 [PASS] plan — qwen2.5:0.5b (Q4_K_M): fits — weights leave 6.4 GiB after a 1.2 GiB reserve
-[PASS] probe — ollama 0.23.2 serving qwen2.5:0.5b (Q4_K_M), deployment b03dbe76ee0aca2a…
+[PASS] probe — ollama 0.23.2 serving qwen2.5:0.5b (Q4_K_M), deployment 4694d3c98d54bfd7…
 [PASS] verifier — refuses a bodyless artifact and names representation exact
-[PASS] registry — loaded model-run-b03dbe76ee0aca2a (app ai-model-run)
-[PASS] infer — qwen2.5:0.5b answered in 775ms: "AI lives on RAREXT" (run d105c21041bc…)
-[PASS] publish — publication 20b2b60b… attested exact; body hashes to d105c21041bc…
-[PASS] deployment — manifest b03dbe76ee0a… published as 13d37bf4… and attested exact
-[PASS] anchor — bundle leafVersion 4; root ab8c31a2151c10ef… covers 20b2b60b… and 13d37bf4…; run body re-hashes to d105c21041bc…
-[PASS] recompute — 16 checks pass; transcript d105c21041bc…; 9.2 tok/s over 764 ms
+[PASS] registry — loaded model-run-4694d3c98d54bfd7 (app ai-model-run)
+[PASS] infer — qwen2.5:0.5b answered: "AI lives on RAREXT" (run 549e336c62bb…)
+[PASS] publish — publication 9b9b0e25… attested exact; body hashes to 549e336c62bb…
+[PASS] deployment — manifest 4694d3c98d54… published as e39bab7d… and attested exact
+[PASS] anchor — bundle leafVersion 4; root b3a6ae8819b37c9a… covers 9b9b0e25… and e39bab7d…
+[PASS] discover — offline discovery recomputed 1 card(s) and 1 run(s) from the bundle root
+[PASS] recompute — 16 checks pass; transcript 549e336c62bb…; 1.6 tok/s over 4406 ms
 [PASS] replay — output reproduced byte for byte (18 chars)
-[PASS] ledger — 1 record(s), head d105c21041bc6ab7…
+[PASS] ledger — 1 record(s), head 549e336c62bbea34…
 
-DEMO PASSED: plan -> probe -> verifier -> registry -> deployment -> infer -> publish -> anchor -> recompute -> replay -> ledger, 11/11 phases verified. AI lives on RAREXT.
+DEMO PASSED: plan -> probe -> verifier -> registry -> deployment -> infer -> publish -> anchor -> discover -> recompute -> replay -> ledger, 12/12 phases verified. AI lives on RAREXT.
 ```
 
-It writes `deployment.json`, `challenge.json`, `run.json`, `bundle.json`, and
-`verification.json` to `.ai-proof/model-runtime/` (gitignored) with a README
-that names the run and the command to re-check it offline.
+The cloud demo (`npm run demo:cloud-runtime`) runs the same control plane with
+no Ollama and no local model file: a remote endpoint is committed with
+`placement: "remote"`, the gateway binds `0.0.0.0` behind a client token,
+the card and run are published and anchored, and `discover` recomputes both
+offline. It writes the same proof artifacts to `.ai-proof/cloud-runtime/`,
+including a `cloud.json` that reports whether the target was a real provider or
+the deterministic fixture and that no model file exists in the state directory.
 
 ## Deploying for real
 
@@ -343,9 +400,14 @@ the supervisor you already use:
 - **macOS** — `examples/model-runtime/launchd/com.rarext.runtime.plist.template`
 - **Linux** — `examples/model-runtime/systemd/rarext-runtime.service`
 - **Docker** — `examples/model-runtime/docker-compose.yml` (Ollama + runtime)
+- **Cloud** — the same process in a container or VM, with a remote
+  `--endpoint`, `--host 0.0.0.0`, `--public-url`, and TLS at the edge. See
+  [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
 
-Keep the engine and the runtime on the same host: the endpoint is a loopback
-address, and the ledger is local by design.
+For a local deployment, keep the engine and the runtime on the same host: the
+endpoint is a loopback address, and the ledger is local by design. For a remote
+deployment, the engine is the provider's; the runtime, ledger, and signing key
+can live in the cloud too, and the endpoint is the only thing that leaves it.
 
 ## Privacy and safety
 
@@ -368,24 +430,34 @@ address, and the ledger is local by design.
 
 - Anthropic streaming is refused (`stream:false` required); OpenAI streaming is
   supported and recorded as an SSE transcript.
-- `--pull` is Ollama-only. Strata, FreeToken, and other engines keep their own
-  installers; the runtime commits the model they serve rather than reimplementing
-  their downloaders.
+- An OpenAI-shaped client needs an OpenAI-compatible upstream. An
+  Anthropic-native upstream serves `/v1/messages`; an OpenAI request to it is
+  refused with `501` rather than translated silently.
+- `--pull` is Ollama-only and local-only. In remote mode it is refused: the
+  provider already holds the weights, and the runtime never downloads them.
+- Strata, FreeToken, and other local engines keep their own installers; the
+  runtime commits the model they serve rather than reimplementing their
+  downloaders.
 - Replay covers the OpenAI surface. An engine that changes its sampler between
   versions can fail a replay even with the same weights; the transcript records
-  the engine version so the failure is explainable.
+  the engine version so the failure is explainable. Anthropic Messages has no
+  seed field, so an Anthropic-native run is exact but not replayable.
 - One deployment per manifest. A multi-model engine gets one manifest and one
   challenge per model, which is the intended shape: the weights, not the
   process, are the subject.
 - The registry's verifier checks the transcript, not the tensor math. Full
   generative replay for large models is the next representation class — the
   transcript is the commitment it will build on.
+- A remote provider that reports no weight digest is recorded honestly with
+  `null`; the deployment is pinned to its id and endpoint, not to bytes the
+  provider never named.
 
 ## Tests
 
 ```bash
-npm run test:runtime      # 31 unit/integration tests, no model needed
-npm run demo:model-runtime
+npm run test:runtime       # 41 unit/integration tests, no model needed
+npm run demo:model-runtime # local Ollama path
+npm run demo:cloud-runtime # remote path, no local engine or weights
 ```
 
 The unit tests use mock engine streams and cover: manifest digest stability,
@@ -394,5 +466,8 @@ tamperable field, cross-deployment refusal, ledger chaining and tamper
 detection, ledger auditing against a challenge, deployment-card verification
 and challenge mismatch, OpenAI and Anthropic surfaces, streaming teeing,
 model-mismatch refusal, the refusal of unattested Anthropic streaming,
-memory-fit planning, derived throughput, and Ollama's streaming pull (progress,
-error events, non-2xx answers, and the re-probe that supplies the digest).
+memory-fit planning, derived throughput, Ollama's streaming pull (progress,
+error events, non-2xx answers, and the re-probe that supplies the digest),
+remote placement and cloud hardware validation, auth-header forwarding, the
+gateway client-token gate and public URL, native Anthropic forwarding, and
+offline discovery of a tampered bundle.

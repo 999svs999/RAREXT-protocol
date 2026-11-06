@@ -3,16 +3,18 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { RunLedger } from "./ledger.ts";
 import {
+  anthropicMessagesUrl,
   extractSseText,
   openAiChatUrl,
   samplingFromRequest,
   translateAnthropicRequest,
   translateOpenAiResponse,
+  usageFromAnthropic,
   usageFromOpenAi,
 } from "./engines.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
-import type { DeploymentCommitment, RunRecord } from "./types.ts";
+import type { ApiShape, DeploymentCommitment, RunRecord } from "./types.ts";
 import { MAX_REQUEST_BYTES, RUNTIME_VERSION } from "./types.ts";
 
 export interface GatewayOptions {
@@ -21,6 +23,14 @@ export interface GatewayOptions {
   publisher?: RuntimePublisher | null;
   host?: string;
   port?: number;
+  /** The URL clients should use; required when bound to 0.0.0.0 behind TLS. */
+  publicUrl?: string;
+  /** Bearer token required on inference and ledger routes, when configured. */
+  gatewayToken?: string | null;
+  /** Which shape the remote engine speaks. Defaults from the deployment. */
+  upstreamApi?: ApiShape;
+  /** Auth/protocol headers forwarded to the remote engine. */
+  upstreamHeaders?: Record<string, string>;
   upstreamTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
@@ -92,12 +102,23 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const log = options.log ?? (() => {});
   const timeoutMs = options.upstreamTimeoutMs ?? 120_000;
+  const upstreamApi: ApiShape =
+    options.upstreamApi ?? (deployment.engine.name === "anthropic" ? "anthropic" : "openai");
+  const upstreamHeaders = options.upstreamHeaders ?? {};
+  const gatewayToken = options.gatewayToken ?? null;
 
   const baseHeaders = (): Record<string, string> => ({
     "x-rarext-runtime": RUNTIME_VERSION,
     "x-rarext-deployment": deployment.digest,
     "x-rarext-model": deployment.model.id,
+    "x-rarext-placement": deployment.placement ?? "local",
   });
+
+  function authorized(request: IncomingMessage): boolean {
+    if (gatewayToken === null) return true;
+    const header = request.headers.authorization ?? "";
+    return header === `Bearer ${gatewayToken}`;
+  }
 
   function resolveModel(payload: Record<string, unknown>): string | null {
     const requested = typeof payload.model === "string" ? payload.model : "";
@@ -194,12 +215,25 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     payload.model = model;
     if (payload.stream !== undefined) payload.stream = payload.stream === true;
 
+    if (upstreamApi !== "openai") {
+      sendJson(response, 501, {
+        error:
+          "this deployment forwards to an Anthropic-compatible upstream; use /v1/messages. " +
+          "OpenAI-shaped clients need an OpenAI-compatible engine.",
+      });
+      return;
+    }
+
     const startedAt = new Date().toISOString();
     let upstream: Response;
     try {
       upstream = await fetchImpl(openAiChatUrl(deployment.engine.endpoint), {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          ...upstreamHeaders,
+        },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -286,8 +320,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    const translated = translateAnthropicRequest(payload, deployment.model.id);
-    const model = resolveModel(translated);
+    const nativeAnthropic = upstreamApi === "anthropic";
+    const upstreamBody = nativeAnthropic
+      ? { ...payload, model: deployment.model.id, stream: false }
+      : { ...translateAnthropicRequest(payload, deployment.model.id) };
+
+    const model = resolveModel(upstreamBody);
     if (model === null) {
       sendJson(response, 400, {
         type: "error",
@@ -295,17 +333,24 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       });
       return;
     }
-    translated.model = model;
+    upstreamBody.model = model;
 
     const startedAt = new Date().toISOString();
     let upstream: Response;
     try {
-      upstream = await fetchImpl(openAiChatUrl(deployment.engine.endpoint), {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(translated),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      upstream = await fetchImpl(
+        nativeAnthropic ? anthropicMessagesUrl(deployment.engine.endpoint) : openAiChatUrl(deployment.engine.endpoint),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+            ...upstreamHeaders,
+          },
+          body: JSON.stringify(upstreamBody),
+          signal: AbortSignal.timeout(timeoutMs),
+        },
+      );
     } catch (error) {
       sendJson(response, 502, {
         type: "error",
@@ -324,8 +369,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     const json = (await upstream.json()) as Record<string, unknown>;
-    const result = await record("openai", translated, json, usageFromOpenAi(json), startedAt);
-    const anthropic = translateOpenAiResponse(json, deployment.model.id);
+    const result = nativeAnthropic
+      ? await record("anthropic", upstreamBody, json, usageFromAnthropic(json), startedAt)
+      : await record("openai", upstreamBody, json, usageFromOpenAi(json), startedAt);
+    const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
     sendJson(response, 200, anthropic, { ...baseHeaders(), ...runHeaders(result) });
   }
 
@@ -362,11 +409,31 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           ok: true,
           runtime: RUNTIME_VERSION,
           deployment: deployment.digest,
+          placement: deployment.placement ?? "local",
           engine: deployment.engine,
           model: deployment.model,
+          upstreamApi,
+          auth: { gateway: gatewayToken !== null, upstream: Object.keys(upstreamHeaders).length > 0 },
           ledger: { head: ledger.head(), runs: ledger.records().length },
           publishing: options.publisher ? { handle: options.publisher.handle } : null,
         });
+        return;
+      }
+
+      // Inference and the run ledger are the private surfaces: a public cloud
+      // gateway must not let a stranger read prompts or spend the operator's
+      // upstream quota. Deployment discovery stays public, like a model card.
+      const protectedPath =
+        path === "/v1/chat/completions" ||
+        path === "/v1/messages" ||
+        path.startsWith("/v1/rarext/");
+      if (protectedPath && !authorized(request)) {
+        sendJson(
+          response,
+          401,
+          { error: "missing or invalid bearer token" },
+          { "www-authenticate": 'Bearer realm="rarext-runtime"' },
+        );
         return;
       }
 
@@ -436,11 +503,14 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   await new Promise<void>((resolve) => server.listen(options.port ?? 8790, options.host ?? "127.0.0.1", resolve));
   const address = server.address();
   const port = address !== null && typeof address === "object" ? address.port : (options.port ?? 8790);
+  const bindHost = options.host ?? "127.0.0.1";
+  const dialHost = bindHost === "0.0.0.0" || bindHost === "::" ? "127.0.0.1" : bindHost;
+  const url = options.publicUrl ?? `http://${dialHost}:${port}`;
 
   return {
     server,
     port,
-    url: `http://${options.host ?? "127.0.0.1"}:${port}`,
+    url,
     ledger,
     close: async () => {
       server.closeAllConnections?.();

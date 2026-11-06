@@ -43,7 +43,7 @@ welcome.
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, the [storage benchmark](bench/storage/README.md) that gates it, and the [1 GB repair measurement](bench/repair/README.md) that records where the current code sits.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
-- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) takes the next step: deploy a large model on hardware you own (Ollama, Strata, FreeToken, or any OpenAI-compatible engine) and publish every inference as an exact, replayable transcript.
+- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) takes the next step: deploy a large model on hardware you own (Ollama, Strata, FreeToken, or any OpenAI-compatible engine) and publish every inference as an exact, replayable transcript. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote OpenAI/Anthropic-compatible endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
 disagree with a decision, the RFC folder is where the argument happens.
@@ -137,10 +137,19 @@ a real serving engine (Ollama on `127.0.0.1:11434`; Strata and FreeToken expose
 the same OpenAI surface), commits a deployment manifest including the engine's
 weight digest, starts the transcript verifier and a real registry, runs a
 completion through the attested gateway, publishes the transcript, anchors it,
-re-hashes the body from the anchored bundle, replays the output against the live
-engine, and verifies the append-only ledger. If no engine is running it uses a
-deterministic mock so the integration proof still runs in CI — and says so. See
+re-hashes the body from the anchored bundle, discovers the card and run offline,
+replays the output against the live engine, and verifies the append-only ledger.
+If no engine is running it uses a deterministic mock so the integration proof
+still runs in CI — and says so. See
 [the model runtime guide](docs/MODEL-RUNTIME.md).
+
+`npm run demo:cloud-runtime` is the same thesis with no local compute: it commits
+a remote OpenAI/Anthropic-compatible endpoint with `placement: "remote"`, binds
+the attested gateway on `0.0.0.0` behind a client token, publishes the card and
+run, anchors them, and recomputes both from the bundle while proving that no
+model file exists on the host. Set `RAREXT_CLOUD_ENDPOINT` to run it against a
+real provider; without it a deterministic remote fixture stands in and says so.
+See [the cloud runtime guide](docs/CLOUD-RUNTIME.md).
 
 The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool. The same server exposes `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`, `rarext_storage_audit`, and `rarext_storage_pin`; configure `RAREXT_STORAGE_HOLDERS` (or `RAREXT_HOLDERS`) and `RAREXT_PIN_URL` first. The [MCP storage example](examples/mcp-storage) runs the whole path locally, including token-protected holders and a pin service; `apps/api/test/mcp-storage-agent.test.ts` runs that external-client path as part of `npm test`.
 

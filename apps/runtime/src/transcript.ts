@@ -1,6 +1,6 @@
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
-import { deploymentDigest, validateDeployment } from "./manifest.ts";
+import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -96,6 +96,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
       name: input.deployment.engine.name,
       version: input.deployment.engine.version,
     },
+    api: input.api,
     request: { body: input.request, digest: request.digest, bytes: request.bytes },
     response: {
       body: input.response,
@@ -203,7 +204,15 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "response.digest", response.digest === responseDigest);
   check(checks, failures, "response.bytes", response.bytes === responseBytes);
 
-  const api: ApiShape = replay?.api === "anthropic" ? "anthropic" : "openai";
+  const api: ApiShape =
+    body.api === "anthropic" || body.api === "openai"
+      ? body.api
+      : replay?.api === "anthropic" || replay?.api === "openai"
+        ? replay.api
+        : isRecord(response.body) &&
+            (response.body.type === "message" || Array.isArray(response.body.content))
+          ? "anthropic"
+          : "openai";
   const text = extractResponseText(response.body, api);
   check(checks, failures, "response.text", response.text === text);
   check(checks, failures, "response.textDigest", response.textDigest === sha256Hex(text));
@@ -328,8 +337,8 @@ export function deploymentArtifact(body: DeploymentCommitment) {
   } as const;
 }
 
-const ENGINES = new Set<EngineName>(["ollama", "strata", "freetoken", "openai-compatible"]);
-const BACKENDS = new Set<HardwareBackend>(["cpu", "metal", "cuda", "rocm", "vulkan", "unknown"]);
+const ENGINES = new Set<EngineName>(["ollama", "strata", "freetoken", "openai-compatible", "anthropic"]);
+const BACKENDS = new Set<HardwareBackend>(["cpu", "metal", "cuda", "rocm", "vulkan", "cloud", "unknown"]);
 
 /**
  * Verify a published deployment commitment.
@@ -389,6 +398,32 @@ export function verifyDeploymentBody(body: unknown, spec: ModelRunSpec): Deploym
       (hardware.memoryBytes === null ||
         (typeof hardware.memoryBytes === "number" && Number.isFinite(hardware.memoryBytes))),
   );
+  check(
+    checks,
+    failures,
+    "placement",
+    body.placement === undefined || body.placement === "local" || body.placement === "remote",
+  );
+  if (body.placement === "remote") {
+    // A remote commitment claims that this process has no weights and no local
+    // inference. Keeping the hardware record consistent makes that claim
+    // checkable: a manifest cannot be called remote while claiming local memory.
+    check(
+      checks,
+      failures,
+      "placement.remote",
+      hardware.backend === "cloud" && hardware.memoryBytes === null,
+    );
+
+    // A loopback endpoint is local compute. It is allowed only when the
+    // manifest is explicitly marked as a test fixture, so a real cloud card
+    // cannot quietly point at the publisher's own machine.
+    const remoteEndpoint = typeof engine.endpoint === "string" ? engine.endpoint : "";
+    if (remoteEndpoint !== "" && isLoopbackEndpoint(remoteEndpoint)) {
+      const labels = isRecord(body.labels) ? body.labels : {};
+      check(checks, failures, "placement.fixture", labels.fixture === "loopback");
+    }
+  }
 
   const actualEngine =
     typeof engine.name === "string" && ENGINES.has(engine.name as EngineName)

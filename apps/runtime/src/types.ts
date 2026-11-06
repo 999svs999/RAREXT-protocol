@@ -34,9 +34,14 @@ export const MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 /** Largest request body the gateway will read. */
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
-export type EngineName = "ollama" | "strata" | "freetoken" | "openai-compatible";
+export type EngineName = "ollama" | "strata" | "freetoken" | "openai-compatible" | "anthropic";
 export type ApiShape = "openai" | "anthropic";
-export type HardwareBackend = "cpu" | "metal" | "cuda" | "rocm" | "vulkan" | "unknown";
+export type HardwareBackend = "cpu" | "metal" | "cuda" | "rocm" | "vulkan" | "cloud" | "unknown";
+/**
+ * Where the model actually runs. A remote deployment forwards to an endpoint
+ * the operator does not own; no weights or inference happen in this process.
+ */
+export type Placement = "local" | "remote";
 
 export interface EngineRef {
   /** Which serving engine is behind the endpoint. */
@@ -85,6 +90,11 @@ export interface DeploymentManifest {
   engine: EngineRef;
   model: ModelRef;
   hardware: HardwareRef;
+  /**
+   * Where the engine runs. Omitted on manifests written before cloud
+   * deployment existed; absent means local, which is what those manifests were.
+   */
+  placement?: Placement;
   /** Which API shapes the runtime exposes. */
   apis: ApiShape[];
   createdAt: string;
@@ -143,6 +153,8 @@ export interface ModelRunBody {
   deployment: { id: string; digest: string };
   model: { id: string; weightsDigest: string | null };
   engine: { name: EngineName; version: string | null };
+  /** The upstream API shape the transcript records. Absent on older records. */
+  api?: ApiShape;
   request: TranscriptRequest;
   response: TranscriptResponse;
   sampling: SamplingParams;

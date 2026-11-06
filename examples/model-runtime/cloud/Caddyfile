@@ -1,0 +1,6 @@
+# Terminate TLS at the edge and forward to the attested gateway.
+# RAREXT_PUBLIC_HOST is the DNS name that points at this host (for example
+# ai.example.com). Caddy obtains and renews the certificate automatically.
+{$RAREXT_PUBLIC_HOST} {
+	reverse_proxy runtime:8790
+}

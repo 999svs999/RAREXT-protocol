@@ -18,24 +18,41 @@ import {
   probeEngine,
   probeEngineCatalog,
   openAiChatUrl,
+  anthropicMessagesUrl,
+  extractAnthropicText,
   extractOpenAiText,
   pullOllamaModel,
 } from "./engines.ts";
 import type { PullProgress } from "./engines.ts";
+import {
+  DEFAULT_GATEWAY_TOKEN_ENV,
+  DEFAULT_UPSTREAM_KEY_ENV,
+  defaultUpstreamApi,
+  defaultUpstreamAuth,
+  describeUpstream,
+  parseUpstreamAuth,
+  resolveSecret,
+  upstreamHeaders,
+  upstreamShapeFromLabels,
+} from "./cloud.ts";
+import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import {
   assessModelFit,
   buildDeployment,
   commitDeployment,
   formatBytes,
+  hardwareFromCloud,
   hardwareFromHost,
+  isLoopbackEndpoint,
   normalizeEndpoint,
   requireValidDeployment,
 } from "./manifest.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
+import { RarextClient } from "../../../packages/agent-sdk/src/index.ts";
 import { startGateway } from "./gateway.ts";
-import { auditLedger, verifyRunBody } from "./transcript.ts";
-import { discoverBundle } from "./discovery.ts";
+import { auditLedger, verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
+import { discoverBundle, verifiedRemoteDeployments } from "./discovery.ts";
 import {
   createVerifierServer,
   runSpecFromChallenge,
@@ -43,6 +60,7 @@ import {
   RUNTIME_VERIFIER_MANIFEST,
 } from "./verifier.ts";
 import type {
+  ApiShape,
   DeploymentCommitment,
   EngineName,
   HardwareBackend,
@@ -55,6 +73,7 @@ const COMMANDS = [
   "plan",
   "deploy",
   "publish-deployment",
+  "anchor",
   "discover",
   "serve",
   "verifier",
@@ -72,8 +91,9 @@ Usage: node apps/runtime/src/cli.ts <command> [options]
 
 Commands:
   plan      list the engine's models and whether each fits this host's memory
-  deploy    probe a local engine and write deployment.json + challenges.json + verifiers.json
+  deploy    probe an engine and write deployment.json + challenges.json + verifiers.json
   publish-deployment  publish the deployment commitment (a model card) to RAREXT
+  anchor    anchor pending publications on a RAREXT registry
   discover  verify every model card and run in a bundle, without a server
   serve     serve the attested OpenAI/Anthropic gateway in front of a deployment
   verifier  run the HTTP verifier a RAREXT node calls
@@ -84,18 +104,28 @@ Commands:
 
 Common options:
   --endpoint <url>      engine base URL (default http://127.0.0.1:11434 for deploy)
-  --engine <name>       ollama | strata | freetoken | openai-compatible
+  --engine <name>       ollama | strata | freetoken | openai-compatible | anthropic
   --model <id>          engine-native model id
+  --remote              commit a cloud deployment; no weights or inference run here
+  --allow-loopback      permit --remote against 127.0.0.1 (test fixtures only)
+  --upstream-api <api>  openai | anthropic (the remote engine's native shape)
+  --upstream-auth <a>   none | bearer | x-api-key (default follows the API shape)
+  --upstream-key-env <name>  environment variable holding the upstream key
   --manifest <path>     deployment.json (default .rarext-runtime/deployment.json)
+  --deployment <id>     serve the verified remote card with this id or digest from --bundle/--registry
+  --bundle <path>       a bundle to verify instead of fetching one from --registry
   --state <dir>         runtime state directory (default .rarext-runtime)
-  --backend <name>      cpu | metal | cuda | rocm | vulkan | unknown
+  --backend <name>      cpu | metal | cuda | rocm | vulkan | cloud | unknown
   --device <label>      device label recorded in the manifest
-  --pull                fetch a missing Ollama model before committing it
+  --pull                fetch a missing Ollama model before committing it (local only)
   --out <dir>           where deploy writes files (default .rarext-runtime)
   --port <n>            gateway port (default 8790) or verifier port (default 8788)
-  --host <host>         bind host (default 127.0.0.1)
+  --host <host>         bind host (default 127.0.0.1; use 0.0.0.0 in a cloud container)
+  --public-url <url>    URL clients use when the bind host is not dialable
+  --gateway-token-env <name>  environment variable holding the gateway bearer token
   --publish             publish run transcripts to RAREXT
-  --registry <url>      RAREXT API base (default http://127.0.0.1:8787)
+  --anchor              anchor after publishing (publish-deployment)
+  --registry <url>      RAREXT API base (default http://127.0.0.1:8787; plan reads its cards)
   --handle <name>       runtime publication handle (default rarext-runtime)
   --challenge <id>      challenge id to publish under (default derived from manifest)
   --transcript <path>   run record JSON for verify/replay
@@ -127,6 +157,35 @@ function specFromChallengeFile(path: string): ModelRunSpec {
   return runSpecFromChallenge(challenge);
 }
 
+interface UpstreamOptions {
+  api: ApiShape;
+  auth: UpstreamAuth;
+  keyEnv: string;
+  token: string | null;
+  headers: Record<string, string>;
+}
+
+function upstreamOptions(
+  values: Record<string, unknown>,
+  engine: EngineName,
+  fallback?: UpstreamShape,
+): UpstreamOptions {
+  const api = (flag(values, "upstream-api") as ApiShape | undefined) ?? fallback?.api ?? defaultUpstreamApi(engine);
+  const auth = parseUpstreamAuth(
+    flag(values, "upstream-auth"),
+    fallback?.auth ?? defaultUpstreamAuth(api),
+  );
+  const keyEnv = flag(values, "upstream-key-env") ?? DEFAULT_UPSTREAM_KEY_ENV;
+  const token = auth === "none" ? null : resolveSecret(keyEnv);
+  return {
+    api,
+    auth,
+    keyEnv,
+    token,
+    headers: upstreamHeaders({ api, auth, token }),
+  };
+}
+
 function loadBody(path: string): ModelRunBody {
   let value: unknown;
 
@@ -156,29 +215,157 @@ function deploymentFrom(values: Record<string, unknown>): DeploymentCommitment {
     : commitDeployment(manifest);
 }
 
+const DEFAULT_REGISTRY = "http://127.0.0.1:8787";
+
+async function loadBundle(values: Record<string, unknown>): Promise<{ bundle: unknown; source: string }> {
+  const bundlePath = flag(values, "bundle");
+  if (bundlePath) {
+    const path = resolve(bundlePath);
+    return { bundle: readJson(path), source: path };
+  }
+
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const response = await fetch(`${registry}/v1/bundles/latest`);
+  if (!response.ok) {
+    throw new Error(`registry returned HTTP ${response.status} for ${registry}/v1/bundles/latest`);
+  }
+  return { bundle: (await response.json()) as unknown, source: registry };
+}
+
+/** A remote card a bundle proves, or a local manifest when none was named. */
+async function deploymentForServe(
+  values: Record<string, unknown>,
+): Promise<{ deployment: DeploymentCommitment; provenance: string | null }> {
+  const selector = flag(values, "deployment");
+  if (selector === undefined) {
+    return { deployment: deploymentFrom(values), provenance: null };
+  }
+  if (flag(values, "manifest") !== undefined) {
+    throw new Error("--deployment reads a published card; omit --manifest, or pass --manifest without --deployment");
+  }
+
+  const { bundle, source } = await loadBundle(values);
+  const { deployments, error } = verifiedRemoteDeployments(bundle);
+  if (deployments.length === 0) throw new Error(error ?? "the bundle carries no verified remote model card");
+
+  const match = deployments.find(
+    (entry) => entry.card.deploymentId === selector || entry.deployment.digest === selector,
+  );
+  if (match === undefined) {
+    const available = deployments.map((entry) => entry.card.deploymentId).join(", ");
+    throw new Error(`no verified remote card matches "${selector}" (bundle has ${available})`);
+  }
+
+  const root =
+    typeof bundle === "object" && bundle !== null
+      ? (bundle as { manifest?: { root?: unknown } }).manifest?.root
+      : undefined;
+  const provenance =
+    `verified from ${source}` + (typeof root === "string" ? ` root ${root.slice(0, 16)}…` : "");
+  return { deployment: match.deployment, provenance };
+}
+
+async function commandPlanCatalog(values: Record<string, unknown>): Promise<number> {
+  const { bundle, source } = await loadBundle(values);
+  const { deployments, error } = verifiedRemoteDeployments(bundle);
+  if (deployments.length === 0) throw new Error(error ?? "no verified remote model card");
+
+  const cards = deployments.map(({ card, deployment }) => ({
+    deploymentId: card.deploymentId,
+    deploymentDigest: deployment.digest,
+    modelId: card.modelId,
+    quantization: card.quantization,
+    engine: card.engine,
+    endpoint: deployment.engine.endpoint,
+    attested: card.attested,
+    verified: card.verified,
+    placement: card.placement,
+  }));
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify({ placement: "remote", source, cards }, null, 2));
+    return 0;
+  }
+
+  console.log(`remote model cards from ${source}`);
+  console.log("no host-memory verdict: inference runs at the endpoint, not on this machine");
+
+  const idWidth = Math.max(10, ...cards.map((card) => card.deploymentId.length));
+  const modelWidth = Math.max(5, ...cards.map((card) => card.modelId.length));
+  const engineWidth = Math.max(6, ...cards.map((card) => card.engine.length));
+
+  console.log("");
+  console.log(
+    `${"deployment".padEnd(idWidth)}  ${"digest".padEnd(12)}  ${"model".padEnd(modelWidth)}  ` +
+      `${"engine".padEnd(engineWidth)}  endpoint`,
+  );
+  for (const card of cards) {
+    console.log(
+      `${card.deploymentId.padEnd(idWidth)}  ${card.deploymentDigest.slice(0, 12).padEnd(12)}  ` +
+        `${card.modelId.padEnd(modelWidth)}  ${card.engine.padEnd(engineWidth)}  ${card.endpoint}`,
+    );
+  }
+  return 0;
+}
+
 async function commandPlan(values: Record<string, unknown>): Promise<number> {
-  const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? "http://127.0.0.1:11434");
-  const engine = flag(values, "engine") as EngineName | undefined;
+  if (flag(values, "endpoint") === undefined && (flag(values, "registry") !== undefined || flag(values, "bundle") !== undefined)) {
+    return commandPlanCatalog(values);
+  }
+
+  const remote = bool(values, "remote") || flag(values, "placement") === "remote";
+  const endpoint = normalizeEndpoint(
+    flag(values, "endpoint") ?? (remote ? "" : "http://127.0.0.1:11434"),
+  );
+  if (endpoint === "") throw new Error("--endpoint is required with --remote");
+  const engine = (flag(values, "engine") as EngineName | undefined) ?? (remote ? "openai-compatible" : undefined);
+  const upstream = upstreamOptions(values, engine ?? "openai-compatible");
   const hardware = hardwareFromHost(
     (flag(values, "backend") as HardwareBackend | undefined) ?? "unknown",
     flag(values, "device") ?? null,
   );
 
-  const catalog = await probeEngineCatalog({ endpoint, engine });
-  const rows = catalog.models.map((model) => ({ model, fit: assessModelFit(model, hardware) }));
+  const catalog = await probeEngineCatalog({
+    endpoint,
+    engine,
+    api: remote ? upstream.api : undefined,
+    headers: upstream.headers,
+  });
+  const rows = catalog.models.map((model) => ({
+    model,
+    fit: remote ? null : assessModelFit(model, hardware),
+  }));
 
   if (bool(values, "json")) {
-    console.log(JSON.stringify({ engine: catalog.engine, hardware, models: rows }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          placement: remote ? "remote" : "local",
+          engine: catalog.engine,
+          hardware: remote ? null : hardware,
+          upstream: remote ? describeUpstream(upstream) : null,
+          models: rows,
+        },
+        null,
+        2,
+      ),
+    );
     return 0;
   }
 
   console.log(
     `engine    ${catalog.engine.name}${catalog.engine.version ? ` ${catalog.engine.version}` : ""} at ${catalog.engine.endpoint}`,
   );
-  console.log(
-    `hardware  ${hardware.backend}${hardware.device ? ` / ${hardware.device}` : ""} on ${hardware.os} ${hardware.arch}` +
-      (hardware.memoryBytes === null ? "" : ` (${formatBytes(hardware.memoryBytes)} host memory)`),
-  );
+  if (remote) {
+    console.log(
+      `placement remote — inference runs on ${catalog.engine.endpoint}; this host's memory is not used`,
+    );
+  } else {
+    console.log(
+      `hardware  ${hardware.backend}${hardware.device ? ` / ${hardware.device}` : ""} on ${hardware.os} ${hardware.arch}` +
+        (hardware.memoryBytes === null ? "" : ` (${formatBytes(hardware.memoryBytes)} host memory)`),
+    );
+  }
 
   if (rows.length === 0) {
     console.log("\nthe engine advertises no models — pull or load one first");
@@ -191,35 +378,65 @@ async function commandPlan(values: Record<string, unknown>): Promise<number> {
 
   console.log("");
   console.log(
-    `${"model".padEnd(idWidth)}  ${"quant".padEnd(quantWidth)}  ${"weights".padStart(sizeWidth)}  fit`,
+    `${"model".padEnd(idWidth)}  ${"quant".padEnd(quantWidth)}  ${"weights".padStart(sizeWidth)}  ${remote ? "placement" : "fit"}`,
   );
   for (const { model, fit } of rows) {
     console.log(
       `${model.id.padEnd(idWidth)}  ${(model.quantization ?? "-").padEnd(quantWidth)}  ` +
-        `${(fit.modelBytes === null ? "?" : formatBytes(fit.modelBytes)).padStart(sizeWidth)}  ${fit.verdict}`,
+        `${(fit?.modelBytes === null || fit === null ? (model.sizeBytes === null ? "?" : formatBytes(model.sizeBytes)) : formatBytes(fit.modelBytes)).padStart(sizeWidth)}  ` +
+        `${fit === null ? "remote" : fit.verdict}`,
     );
   }
 
-  const notes = rows.filter(({ fit }) => fit.verdict !== "fits");
-  if (notes.length > 0) {
-    console.log("");
-    for (const { model, fit } of notes) console.log(`${model.id}: ${fit.note}`);
+  if (!remote) {
+    const notes = rows.filter(({ fit }) => fit !== null && fit.verdict !== "fits");
+    if (notes.length > 0) {
+      console.log("");
+      for (const { model, fit } of notes) {
+        if (fit !== null) console.log(`${model.id}: ${fit.note}`);
+      }
+    }
   }
 
   return 0;
 }
 
 async function commandDeploy(values: Record<string, unknown>): Promise<number> {
-  const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? "http://127.0.0.1:11434");
-  const engine = flag(values, "engine") as EngineName | undefined;
+  const remote = bool(values, "remote") || flag(values, "placement") === "remote";
+  const endpointFlag = flag(values, "endpoint");
+  if (remote && endpointFlag === undefined) {
+    throw new Error("--remote needs --endpoint <https://provider.example>; there is no local default");
+  }
+  const endpoint = normalizeEndpoint(endpointFlag ?? "http://127.0.0.1:11434");
+  const engine =
+    (flag(values, "engine") as EngineName | undefined) ?? (remote ? "openai-compatible" : undefined);
   const model = flag(values, "model");
   const out = resolve(flag(values, "out") ?? ".rarext-runtime");
   const backend = (flag(values, "backend") as HardwareBackend | undefined) ?? "unknown";
   const device = flag(values, "device") ?? null;
+  const upstream = upstreamOptions(values, engine ?? "openai-compatible");
+
+  if (remote && bool(values, "pull")) {
+    throw new Error(
+      "--pull is local-only. A cloud deployment never downloads weights onto this host; the provider already holds them.",
+    );
+  }
+  if (remote && isLoopbackEndpoint(endpoint) && !bool(values, "allow-loopback")) {
+    throw new Error(
+      `--remote points at loopback (${endpoint}), which is local compute. ` +
+        "Pass --allow-loopback only for a test fixture, or name the cloud endpoint.",
+    );
+  }
 
   let probe;
   try {
-    probe = await probeEngine({ endpoint, engine, model });
+    probe = await probeEngine({
+      endpoint,
+      engine,
+      model,
+      api: remote ? upstream.api : undefined,
+      headers: upstream.headers,
+    });
   } catch (error) {
     if (!bool(values, "pull")) throw error;
     if (!model) {
@@ -251,8 +468,21 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   const manifest = commitDeployment(
     buildDeployment({
       probe,
-      hardware: hardwareFromHost(backend, device),
+      hardware: remote ? hardwareFromCloud(endpoint) : hardwareFromHost(backend, device),
+      placement: remote ? "remote" : undefined,
       id: flag(values, "id"),
+      ...(remote
+        ? {
+            labels: {
+              execution: "cloud",
+              upstreamApi: upstream.api,
+              upstreamAuth: upstream.auth,
+              ...(isLoopbackEndpoint(endpoint) ? { fixture: "loopback" } : {}),
+            },
+            notes:
+              `Remote deployment: inference runs at ${endpoint}. No weights are stored or executed on this host.`,
+          }
+        : {}),
     }),
   );
 
@@ -269,6 +499,8 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
           deployment: manifest,
           challenge: challengeFor(manifest),
           challengeId: challengeIdFor(manifest),
+          placement: manifest.placement ?? "local",
+          upstream: remote ? describeUpstream(upstream) : null,
           files: {
             deployment: join(out, "deployment.json"),
             challenges: join(out, "challenges.json"),
@@ -284,10 +516,18 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   }
 
   console.log(`deployment ${manifest.id}`);
+  console.log(`  placement ${manifest.placement ?? "local"}`);
   console.log(`  engine    ${manifest.engine.name}${manifest.engine.version ? ` ${manifest.engine.version}` : ""} at ${manifest.engine.endpoint}`);
   console.log(`  model     ${manifest.model.id}${manifest.model.quantization ? ` (${manifest.model.quantization})` : ""}`);
   console.log(`  weights   ${manifest.model.weightsDigest ?? "not reported by the engine"}`);
-  console.log(`  hardware  ${manifest.hardware.backend}${manifest.hardware.device ? ` / ${manifest.hardware.device}` : ""} on ${manifest.hardware.os} ${manifest.hardware.arch}`);
+  if (remote) {
+    console.log(
+      `  execution remote — no weights or inference on this host; auth ${upstream.auth}` +
+        (upstream.auth === "none" ? "" : ` via $${upstream.keyEnv}${upstream.token === null ? " (unset)" : ""}`),
+    );
+  } else {
+    console.log(`  hardware  ${manifest.hardware.backend}${manifest.hardware.device ? ` / ${manifest.hardware.device}` : ""} on ${manifest.hardware.os} ${manifest.hardware.arch}`);
+  }
   console.log(`  digest    ${manifest.digest}`);
   console.log(`\nwrote:`);
   console.log(`  ${join(out, "deployment.json")}`);
@@ -296,7 +536,10 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   console.log(`\nnext:`);
   console.log(`  node apps/runtime/src/cli.ts verifier --port 8788`);
   console.log(`  RAREXT_CHALLENGES=${join(out, "challenges.json")} RAREXT_VERIFIERS=${join(out, "verifiers.json")} node apps/api/src/server.ts`);
-  console.log(`  node apps/runtime/src/cli.ts serve --manifest ${join(out, "deployment.json")} --publish`);
+  console.log(
+    `  node apps/runtime/src/cli.ts serve --manifest ${join(out, "deployment.json")} --publish` +
+      (remote ? " --host 0.0.0.0 --public-url https://your-gateway.example" : ""),
+  );
   return 0;
 }
 
@@ -314,9 +557,10 @@ async function commandPublishDeployment(values: Record<string, unknown>): Promis
     challengeId,
   });
   const publication = await publisher.publishDeployment(deployment);
+  const anchor = bool(values, "anchor") ? await publisher.client.anchor() : null;
 
   if (bool(values, "json")) {
-    console.log(JSON.stringify(publication, null, 2));
+    console.log(JSON.stringify({ publication, anchor }, null, 2));
     return 0;
   }
 
@@ -327,24 +571,32 @@ async function commandPublishDeployment(values: Record<string, unknown>): Promis
   );
   console.log(`  weights    ${deployment.model.weightsDigest ?? "not reported by the engine"}`);
   console.log(`  registry   ${registry}`);
+  if (anchor !== null) {
+    console.log(`  anchor     ${anchor.root} (${anchor.leafCount} leaf/leaves, version ${anchor.leafVersion ?? "?"})`);
+  }
+  return 0;
+}
+
+async function commandAnchor(values: Record<string, unknown>): Promise<number> {
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const client = new RarextClient({ baseUrl: registry });
+  const anchor = await client.anchor();
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify(anchor, null, 2));
+    return 0;
+  }
+
+  console.log(`anchored ${registry}`);
+  console.log(`  root         ${anchor.root}`);
+  console.log(`  leaves       ${anchor.leafCount} (version ${anchor.leafVersion ?? "?"})`);
+  console.log(`  publications ${anchor.publicationIds.length}`);
+  for (const id of anchor.publicationIds) console.log(`    ${id}`);
   return 0;
 }
 
 async function commandDiscover(values: Record<string, unknown>): Promise<number> {
-  let bundle: unknown;
-
-  const bundlePath = flag(values, "bundle");
-  if (bundlePath) {
-    bundle = readJson(resolve(bundlePath));
-  } else {
-    const registry = (flag(values, "registry") ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
-    const response = await fetch(`${registry}/v1/bundles/latest`);
-    if (!response.ok) {
-      throw new Error(`registry returned HTTP ${response.status} for ${registry}/v1/bundles/latest`);
-    }
-    bundle = (await response.json()) as unknown;
-  }
-
+  const { bundle } = await loadBundle(values);
   const report = discoverBundle(bundle);
 
   if (bool(values, "json")) {
@@ -408,12 +660,28 @@ async function commandDiscover(values: Record<string, unknown>): Promise<number>
 }
 
 async function commandServe(values: Record<string, unknown>): Promise<number> {
-  const deployment = deploymentFrom(values);
+  const { deployment, provenance } = await deploymentForServe(values);
+  const verdict = verifyDeploymentBody(deployment, runSpecFromChallenge(challengeFor(deployment)));
+  if (!verdict.correct) {
+    throw new Error(`refusing to serve a deployment that does not verify: ${verdict.error ?? "unknown error"}`);
+  }
   const state = resolve(flag(values, "state") ?? ".rarext-runtime");
   const publish = bool(values, "publish");
-  const registry = flag(values, "registry") ?? "http://127.0.0.1:8787";
+  const registry = flag(values, "registry") ?? DEFAULT_REGISTRY;
   const handle = flag(values, "handle") ?? "rarext-runtime";
   const challengeId = flag(values, "challenge") ?? challengeIdFor(deployment);
+  const upstream =
+    deployment.placement === "remote"
+      ? upstreamOptions(
+          values,
+          deployment.engine.name,
+          upstreamShapeFromLabels(deployment.labels, deployment.engine.name),
+        )
+      : upstreamOptions(values, deployment.engine.name);
+  const gatewayTokenEnv = flag(values, "gateway-token-env") ?? DEFAULT_GATEWAY_TOKEN_ENV;
+  const gatewayToken = resolveSecret(gatewayTokenEnv);
+  const host = flag(values, "host") ?? "127.0.0.1";
+  const publicUrl = flag(values, "public-url");
 
   const publisher = publish
     ? await RuntimePublisher.open({ baseUrl: registry, handle, stateDir: state, challengeId })
@@ -423,18 +691,34 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     deployment,
     ledgerDir: state,
     publisher,
-    host: flag(values, "host") ?? "127.0.0.1",
+    host,
     port: flag(values, "port") ? Number(flag(values, "port")) : 8790,
+    publicUrl,
+    gatewayToken,
+    upstreamApi: upstream.api,
+    upstreamHeaders: upstream.headers,
     log: (message) => console.error(`[runtime] ${message}`),
   });
 
   console.log(`rarext-runtime serving ${deployment.model.id} on ${gateway.url}`);
+  console.log(`  placement  ${deployment.placement ?? "local"}`);
+  console.log(`  upstream   ${deployment.engine.endpoint} (${upstream.api})`);
+  if (provenance !== null) console.log(`  card       ${provenance}`);
+  if (deployment.placement === "remote") {
+    console.log("  compute    none on this host — requests are forwarded to the remote engine");
+  }
   console.log(`  openai     POST ${gateway.url}/v1/chat/completions`);
   console.log(`  anthropic  POST ${gateway.url}/v1/messages`);
   console.log(`  deployment GET  ${gateway.url}/v1/deployment`);
   console.log(`  runs       GET  ${gateway.url}/v1/rarext/runs`);
   console.log(`  ledger     GET  ${gateway.url}/v1/rarext/ledger`);
+  console.log(
+    `  auth       ${gatewayToken === null ? "off (set " + gatewayTokenEnv + " to require a bearer token)" : `bearer token from ${gatewayTokenEnv}`}`,
+  );
   console.log(`  publishing ${publisher ? `as ${handle} under ${challengeId} -> ${registry}` : "off (local ledger only)"}`);
+  if (host === "0.0.0.0" && publicUrl === undefined) {
+    console.log("  warning    bound to every interface; pass --public-url so clients get the TLS URL");
+  }
 
   const stop = async () => {
     await gateway.close();
@@ -487,15 +771,20 @@ async function commandReplay(values: Record<string, unknown>): Promise<number> {
   }
 
   const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? body.replay.endpoint);
+  const api: ApiShape = body.replay.api === "anthropic" ? "anthropic" : "openai";
+  const upstream = upstreamOptions(values, api === "anthropic" ? "anthropic" : "openai-compatible");
   const request = {
     ...(body.replay.request as Record<string, unknown>),
     model: flag(values, "model") ?? body.model.id,
     stream: false,
   };
 
-  const response = await fetch(openAiChatUrl(endpoint), {
+  const response = await fetch(api === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...upstream.headers,
+    },
     body: JSON.stringify(request),
   });
   if (!response.ok) {
@@ -504,7 +793,7 @@ async function commandReplay(values: Record<string, unknown>): Promise<number> {
   }
 
   const json = (await response.json()) as unknown;
-  const text = extractOpenAiText(json);
+  const text = api === "anthropic" ? extractAnthropicText(json) : extractOpenAiText(json);
   const same = text === body.response.text;
   if (bool(values, "json")) {
     console.log(JSON.stringify({ same, expected: body.response.text, replayed: text }, null, 2));
@@ -562,14 +851,24 @@ async function main(): Promise<number> {
       engine: { type: "string" },
       model: { type: "string" },
       manifest: { type: "string" },
+      deployment: { type: "string" },
       state: { type: "string" },
       backend: { type: "string" },
       device: { type: "string" },
       pull: { type: "boolean" },
+      remote: { type: "boolean" },
+      placement: { type: "string" },
+      "allow-loopback": { type: "boolean" },
+      "upstream-api": { type: "string" },
+      "upstream-auth": { type: "string" },
+      "upstream-key-env": { type: "string" },
+      "gateway-token-env": { type: "string" },
+      "public-url": { type: "string" },
       out: { type: "string" },
       port: { type: "string" },
       host: { type: "string" },
       publish: { type: "boolean" },
+      anchor: { type: "boolean" },
       registry: { type: "string" },
       handle: { type: "string" },
       challenge: { type: "string" },
@@ -592,6 +891,8 @@ async function main(): Promise<number> {
       return commandDeploy(values);
     case "publish-deployment":
       return commandPublishDeployment(values);
+    case "anchor":
+      return commandAnchor(values);
     case "discover":
       return commandDiscover(values);
     case "serve":

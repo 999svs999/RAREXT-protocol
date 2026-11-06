@@ -10,6 +10,7 @@ import type {
   HardwareBackend,
   HardwareRef,
   ModelRef,
+  Placement,
 } from "./types.ts";
 import { DEPLOYMENT_KIND } from "./types.ts";
 
@@ -59,6 +60,47 @@ export function hardwareFromHost(
     os: `${os.platform()} ${os.release()}`,
     arch: os.arch(),
   };
+}
+
+/**
+ * Hardware for a deployment whose weights and inference live behind a remote
+ * endpoint. The local host's memory is deliberately not recorded: it has no
+ * bearing on a model the operator cannot execute here, and recording it would
+ * imply a fit check this process never performed.
+ */
+export function hardwareFromCloud(endpoint: string): HardwareRef {
+  let device: string;
+  try {
+    device = new URL(endpoint).host;
+  } catch {
+    device = endpoint;
+  }
+
+  return {
+    backend: "cloud",
+    device,
+    memoryBytes: null,
+    os: "remote",
+    arch: "remote",
+  };
+}
+
+/** True when the endpoint names this machine (or an unspecified interface). */
+export function isLoopbackEndpoint(endpoint: string): boolean {
+  let host: string;
+  try {
+    host = new URL(normalizeEndpoint(endpoint)).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  return (
+    host === "localhost" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host)
+  );
 }
 
 export type MemoryFit = "fits" | "tight" | "too-large" | "unknown";
@@ -150,6 +192,7 @@ export function formatBytes(bytes: number): string {
 export function buildDeployment(input: {
   probe: EngineProbe;
   hardware?: HardwareRef;
+  placement?: Placement;
   apis?: ApiShape[];
   id?: string;
   labels?: Record<string, string>;
@@ -162,6 +205,7 @@ export function buildDeployment(input: {
     engine: input.probe.engine,
     model: input.probe.model,
     hardware: input.hardware ?? hardwareFromHost(),
+    ...(input.placement === undefined ? {} : { placement: input.placement }),
     apis: input.apis ?? input.probe.apis,
     createdAt: input.createdAt ?? new Date().toISOString(),
     ...(input.labels === undefined ? {} : { labels: input.labels }),
@@ -174,6 +218,7 @@ const ENGINE_NAMES = new Set<EngineName>([
   "strata",
   "freetoken",
   "openai-compatible",
+  "anthropic",
 ]);
 const API_SHAPES = new Set<ApiShape>(["openai", "anthropic"]);
 const BACKENDS = new Set<HardwareBackend>([
@@ -182,8 +227,10 @@ const BACKENDS = new Set<HardwareBackend>([
   "cuda",
   "rocm",
   "vulkan",
+  "cloud",
   "unknown",
 ]);
+const PLACEMENTS = new Set<Placement>(["local", "remote"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -285,6 +332,17 @@ export function validateDeployment(value: unknown): string[] {
   }
   if (value.notes !== undefined && typeof value.notes !== "string") {
     errors.push("manifest.notes must be a string");
+  }
+  if (value.placement !== undefined && (typeof value.placement !== "string" || !PLACEMENTS.has(value.placement as Placement))) {
+    errors.push(`manifest.placement must be one of ${[...PLACEMENTS].join(", ")} when present`);
+  }
+  if (value.placement === "remote") {
+    if (!isRecord(hardware) || hardware.backend !== "cloud") {
+      errors.push('manifest.hardware.backend must be "cloud" for a remote deployment');
+    }
+    if (isRecord(hardware) && hardware.memoryBytes !== null) {
+      errors.push("manifest.hardware.memoryBytes must be null for a remote deployment");
+    }
   }
 
   return errors;

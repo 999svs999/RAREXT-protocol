@@ -43,6 +43,7 @@ import {
   normalizeEndpoint,
 } from "../apps/runtime/src/manifest.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
+import { discoverBundle } from "../apps/runtime/src/discovery.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import { RarextClient } from "../packages/agent-sdk/src/index.ts";
@@ -389,6 +390,16 @@ try {
       `run body re-hashes to ${String(bundleDigest).slice(0, 12)}…`,
   );
 
+  // ── 6b. A stranger verifies the bundle without this server ───────────────
+  const discovery = discoverBundle(bundle);
+  phase(
+    "discover",
+    discovery.ok === true && discovery.cards.length === 1 && discovery.runs.length === 1,
+    discovery.ok
+      ? `offline discovery recomputed ${discovery.cards.length} card(s) and ${discovery.runs.length} run(s) from bundle root ${String(discovery.root).slice(0, 16)}…`
+      : `discovery refused: ${discovery.error ?? "a card or run did not recompute"}`,
+  );
+
   // ── 7. Recompute the verification from the transcript alone ──────────────
   const localVerification = verifyRunBody(bundleBody, spec);
   phase(
@@ -464,7 +475,7 @@ try {
   const failed = phases.filter((entry) => !entry.ok);
   console.log(
     failed.length === 0
-      ? `\nDEMO PASSED: plan -> probe -> verifier -> registry -> deployment -> infer -> publish -> anchor -> recompute -> replay -> ledger, ` +
+      ? `\nDEMO PASSED: plan -> probe -> verifier -> registry -> deployment -> infer -> publish -> anchor -> discover -> recompute -> replay -> ledger, ` +
           `${phases.length}/${phases.length} phases verified. AI lives on RAREXT.`
       : `\nDEMO FAILED: ${failed.map((entry) => entry.name).join(", ")}`,
   );

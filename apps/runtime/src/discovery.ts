@@ -1,6 +1,7 @@
 import { verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
+import { commitDeployment, requireValidDeployment } from "./manifest.ts";
 import { runSpecFromChallenge } from "./verifier.ts";
-import type { ModelRunSpec } from "./types.ts";
+import type { DeploymentCommitment, ModelRunSpec } from "./types.ts";
 import { MODEL_DEPLOYMENT_ARTIFACT_KIND, MODEL_RUN_ARTIFACT_KIND } from "./types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -15,6 +16,8 @@ export interface DiscoveredCard {
   weightsDigest: string | null;
   engine: string;
   backend: string;
+  /** "remote" when the card commits an endpoint the publisher does not execute. */
+  placement: string;
   deploymentDigest: string;
   /** The bundle's attestation says the registry verified it. */
   attested: boolean;
@@ -127,6 +130,7 @@ export function discoverBundle(bundle: unknown): DiscoveryReport {
         weightsDigest: typeof model.weightsDigest === "string" ? model.weightsDigest : null,
         engine: typeof engine.name === "string" ? engine.name : "",
         backend: typeof hardware.backend === "string" ? hardware.backend : "unknown",
+        placement: typeof record.placement === "string" ? record.placement : "local",
         deploymentDigest: result?.details.deploymentDigest ?? "",
         attested: attested(attestation),
         verified: result?.correct === true,
@@ -159,5 +163,63 @@ export function discoverBundle(bundle: unknown): DiscoveryReport {
     cards,
     runs,
     ok: entries.length > 0 && entries.every((entry) => entry.verified && entry.attested),
+  };
+}
+
+export interface VerifiedRemoteDeployment {
+  card: DiscoveredCard;
+  /** The committed manifest, re-derived from the card and re-hashed here. */
+  deployment: DeploymentCommitment;
+}
+
+export interface VerifiedRemoteDeployments {
+  deployments: VerifiedRemoteDeployment[];
+  error: string | null;
+}
+
+/**
+ * The remote deployments a bundle actually proves.
+ *
+ * A card is returned only when this process recomputed it, it commits
+ * `placement: "remote"`, and the manifest re-hashes to the digest the verifier
+ * derived from the same bytes. The bundle's attestation is not consulted: a
+ * control plane can adopt a card the registry never attested, but it cannot
+ * adopt one whose bytes do not verify.
+ */
+export function verifiedRemoteDeployments(bundle: unknown): VerifiedRemoteDeployments {
+  const report = discoverBundle(bundle);
+  if (report.error) return { deployments: [], error: report.error };
+
+  const publications =
+    isRecord(bundle) && Array.isArray(bundle.publications) ? bundle.publications : [];
+  const byPublication = new Map<string, Record<string, unknown>>();
+  for (const raw of publications) {
+    if (isRecord(raw)) byPublication.set(idOf(raw), raw);
+  }
+
+  const deployments: VerifiedRemoteDeployment[] = [];
+  for (const card of report.cards) {
+    if (!card.verified || card.placement !== "remote") continue;
+
+    const raw = byPublication.get(card.publicationId);
+    const artifact = raw !== undefined && isRecord(raw.artifact) ? raw.artifact : null;
+    if (artifact === null) continue;
+
+    let deployment: DeploymentCommitment;
+    try {
+      const body = artifact.body;
+      if (!isRecord(body)) continue;
+      const { digest: _claimed, ...manifest } = body;
+      deployment = commitDeployment(requireValidDeployment(manifest));
+    } catch {
+      continue;
+    }
+    if (deployment.digest !== card.deploymentDigest) continue;
+    deployments.push({ card, deployment });
+  }
+
+  return {
+    deployments,
+    error: deployments.length === 0 ? "the bundle carries no verified remote model card" : null,
   };
 }

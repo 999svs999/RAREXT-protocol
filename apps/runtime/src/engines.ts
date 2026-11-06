@@ -18,9 +18,13 @@ async function getJson(
   url: string,
   fetchImpl: typeof fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  headers: Record<string, string> = {},
 ): Promise<unknown | null> {
   try {
-    const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetchImpl(url, {
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -73,6 +77,24 @@ function modelFromOpenAi(raw: Record<string, unknown>): ModelRef {
   };
 }
 
+function modelFromAnthropic(raw: Record<string, unknown>): ModelRef {
+  const metadata = isRecord(raw.metadata) ? raw.metadata : {};
+  const digest =
+    stringOrNull(raw.digest) ??
+    stringOrNull(metadata.weightsDigest) ??
+    stringOrNull(metadata.digest);
+  return {
+    id: String(raw.id ?? raw.name ?? ""),
+    family: stringOrNull(metadata.family) ?? stringOrNull(raw.display_name) ?? "anthropic",
+    parameters: stringOrNull(metadata.parameters),
+    quantization: stringOrNull(metadata.quantization),
+    format: stringOrNull(metadata.format),
+    sizeBytes: numberOrNull(raw.size) ?? numberOrNull(metadata.sizeBytes),
+    weightsDigest: digest === null ? null : /^[a-z0-9-]+:/i.test(digest) ? digest : `sha256:${digest}`,
+    contextLength: numberOrNull(metadata.contextLength) ?? numberOrNull(raw.context_length),
+  };
+}
+
 function pickModel(models: ModelRef[], wanted: string | undefined): ModelRef {
   if (models.length === 0) {
     throw new Error("the engine advertises no models — pull or load one first");
@@ -100,11 +122,15 @@ function pickModel(models: ModelRef[], wanted: string | undefined): ModelRef {
   );
 }
 
-async function probeOllama(base: string, fetchImpl: typeof fetch): Promise<EngineProbe | null> {
-  const tags = await getJson(`${base}/api/tags`, fetchImpl);
+async function probeOllama(
+  base: string,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string> = {},
+): Promise<EngineProbe | null> {
+  const tags = await getJson(`${base}/api/tags`, fetchImpl, DEFAULT_TIMEOUT_MS, headers);
   if (!isRecord(tags) || !Array.isArray(tags.models)) return null;
 
-  const versionPayload = await getJson(`${base}/api/version`, fetchImpl);
+  const versionPayload = await getJson(`${base}/api/version`, fetchImpl, DEFAULT_TIMEOUT_MS, headers);
   const version =
     isRecord(versionPayload) && typeof versionPayload.version === "string"
       ? versionPayload.version
@@ -128,8 +154,9 @@ async function probeOpenAi(
   base: string,
   fetchImpl: typeof fetch,
   engineName: EngineName,
+  headers: Record<string, string> = {},
 ): Promise<EngineProbe | null> {
-  const payload = await getJson(`${openAiBase(base)}/models`, fetchImpl);
+  const payload = await getJson(`${openAiBase(base)}/models`, fetchImpl, DEFAULT_TIMEOUT_MS, headers);
   if (!isRecord(payload) || !Array.isArray(payload.data)) return null;
 
   const models = payload.data
@@ -137,7 +164,7 @@ async function probeOpenAi(
     .map(modelFromOpenAi)
     .filter((model) => model.id.length > 0);
 
-  const versionPayload = await getJson(`${base}/version`, fetchImpl);
+  const versionPayload = await getJson(`${base}/version`, fetchImpl, DEFAULT_TIMEOUT_MS, headers);
   const version =
     isRecord(versionPayload) && typeof versionPayload.version === "string"
       ? versionPayload.version
@@ -145,14 +172,37 @@ async function probeOpenAi(
 
   return {
     engine: {
-      name: engineName === "openai-compatible" ? "openai-compatible" : engineName,
+      name: engineName,
       version,
       endpoint: base,
     },
     model: models[0],
-    apis: engineName === "strata" || engineName === "freetoken"
-      ? ["openai", "anthropic"]
-      : ["openai", "anthropic"],
+    apis: engineName === "anthropic" ? ["anthropic"] : ["openai", "anthropic"],
+    models,
+  };
+}
+
+async function probeAnthropic(
+  base: string,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string> = {},
+): Promise<EngineProbe | null> {
+  // The Anthropic API uses the same `/v1/models` listing shape, but with its
+  // own auth and version headers. A provider that speaks only Messages has no
+  // listing; the operator then names `--model` and the deploy path still works
+  // because `probeEngine` accepts a single explicitly named model.
+  const payload = await getJson(`${openAiBase(base)}/models`, fetchImpl, DEFAULT_TIMEOUT_MS, headers);
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return null;
+
+  const models = payload.data
+    .filter(isRecord)
+    .map(modelFromAnthropic)
+    .filter((model) => model.id.length > 0);
+
+  return {
+    engine: { name: "anthropic", version: null, endpoint: base },
+    model: models[0],
+    apis: ["anthropic"],
     models,
   };
 }
@@ -172,27 +222,39 @@ export interface EngineCatalog {
 export async function probeEngineCatalog(options: {
   endpoint: string;
   engine?: EngineName;
+  /** Which listing/auth surface the remote endpoint speaks. */
+  api?: ApiShape;
+  /** Auth and protocol headers for a remote endpoint. */
+  headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
 }): Promise<EngineCatalog> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = normalizeEndpoint(options.endpoint);
+  const headers = options.headers ?? {};
 
   const candidates: EngineCatalog[] = [];
+  const api = options.api ?? (options.engine === "anthropic" ? "anthropic" : "openai");
 
-  if (options.engine === undefined || options.engine === "ollama") {
-    const ollama = await probeOllama(base, fetchImpl);
-    if (ollama) candidates.push(ollama);
-  }
+  if (api === "anthropic") {
+    const anthropic = await probeAnthropic(base, fetchImpl, headers);
+    if (anthropic) candidates.push(anthropic);
+  } else {
+    if (options.engine === undefined || options.engine === "ollama") {
+      const ollama = await probeOllama(base, fetchImpl, headers);
+      if (ollama) candidates.push(ollama);
+    }
 
-  if (options.engine !== "ollama") {
-    const explicit = options.engine ?? "openai-compatible";
-    const openai = await probeOpenAi(base, fetchImpl, explicit);
-    if (openai) candidates.push(openai);
+    if (options.engine !== "ollama") {
+      const explicit = options.engine ?? "openai-compatible";
+      const openai = await probeOpenAi(base, fetchImpl, explicit, headers);
+      if (openai) candidates.push(openai);
+    }
   }
 
   if (candidates.length === 0) {
     throw new Error(
-      `no serving engine answered at ${base} — expected Ollama's /api/tags or an OpenAI-compatible /v1/models`,
+      `no serving engine answered at ${base} — expected Ollama's /api/tags, an OpenAI-compatible /v1/models, ` +
+        `or an Anthropic-compatible /v1/models`,
     );
   }
 
@@ -208,6 +270,8 @@ export async function probeEngine(options: {
   endpoint: string;
   engine?: EngineName;
   model?: string;
+  api?: ApiShape;
+  headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
 }): Promise<EngineProbe> {
   const catalog = await probeEngineCatalog(options);

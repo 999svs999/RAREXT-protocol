@@ -1,0 +1,91 @@
+# RAREXT model runtime — cloud-only control plane.
+#
+# The model and inference live at RAREXT_CLOUD_ENDPOINT. Nothing in this compose
+# file downloads weights or runs a local engine. The first service commits the
+# remote deployment, the second serves the attested gateway; the verifier and
+# registry are remote RAREXT services named by environment variables.
+#
+#   cp examples/model-runtime/cloud/.env.example examples/model-runtime/cloud/.env
+#   # fill in the provider, registry, verifier, and URLs
+#   docker compose -f examples/model-runtime/cloud/compose.yml up --build
+#
+# Add the `tls` profile to terminate HTTPS with Caddy:
+#   docker compose -f examples/model-runtime/cloud/compose.yml --profile tls up --build
+
+services:
+  deploy:
+    build:
+      context: ../../..
+      dockerfile: examples/model-runtime/cloud/Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - runtime-state:/state
+    command:
+      - deploy
+      - --remote
+      - --endpoint
+      - ${RAREXT_CLOUD_ENDPOINT:?set RAREXT_CLOUD_ENDPOINT in .env}
+      - --engine
+      - ${RAREXT_CLOUD_ENGINE:-openai-compatible}
+      - --upstream-api
+      - ${RAREXT_CLOUD_API:-openai}
+      - --model
+      - ${RAREXT_CLOUD_MODEL:?set RAREXT_CLOUD_MODEL in .env}
+      - --out
+      - /state
+      - --verifier-url
+      - ${RAREXT_VERIFIER_URL:?set RAREXT_VERIFIER_URL in .env}
+
+  runtime:
+    build:
+      context: ../../..
+      dockerfile: examples/model-runtime/cloud/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+    volumes:
+      - runtime-state:/state
+    ports:
+      - "8790:8790"
+    command:
+      - serve
+      - --manifest
+      - /state/deployment.json
+      - --state
+      - /state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8790"
+      - --public-url
+      - ${RAREXT_PUBLIC_URL:?set RAREXT_PUBLIC_URL in .env}
+      - --registry
+      - ${RAREXT_REGISTRY_URL:?set RAREXT_REGISTRY_URL in .env}
+      - --publish
+      - --gateway-token-env
+      - RAREXT_GATEWAY_TOKEN
+      - --upstream-key-env
+      - RAREXT_UPSTREAM_API_KEY
+
+  caddy:
+    image: caddy:2
+    profiles: ["tls"]
+    depends_on:
+      - runtime
+    environment:
+      RAREXT_PUBLIC_HOST: ${RAREXT_PUBLIC_HOST:?set RAREXT_PUBLIC_HOST in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  runtime-state:
+  caddy-data:
+  caddy-config:

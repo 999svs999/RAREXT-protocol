@@ -36,6 +36,7 @@
     "test:takedown": "node scripts/takedown-test.mjs",
     "demo:durability": "node scripts/durability-demo.mjs",
     "demo:model-runtime": "node scripts/demo-model-runtime.mjs",
+    "demo:cloud-runtime": "node scripts/demo-cloud-runtime.mjs",
     "model:runtime": "node apps/runtime/src/cli.ts",
     "example:mcp-storage": "node --experimental-strip-types examples/mcp-storage/main.ts",
     "example:external-agent": "node --experimental-strip-types examples/external-agent/main.ts",
