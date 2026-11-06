@@ -382,7 +382,11 @@ async function verifyLinks(base, page, html) {
 }
 
 async function verifyLive(files, seed, root, sourceCommit) {
-  const base = liveBaseFor(seed);
+  // The published host is not always the host we can read back. rarext.co
+  // answers 403 for /mirror/*, so verification runs against the branch's real
+  // origin (GitHub Pages) unless a host is named explicitly.
+  const override = process.env.RAREXT_LIVE_BASE?.trim();
+  const base = override ? new URL(override.endsWith("/") ? override : `${override}/`).href : liveBaseFor(seed);
   const live = new Map();
 
   await Promise.all(
