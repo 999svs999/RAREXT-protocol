@@ -111,6 +111,17 @@ A length mismatch is an error, never a silent pass. Nobody can inflate a
 metric's meaning after the fact: the metric, the reference, and the bound are
 all committed before the artifact is verified.
 
+## Running a model on RAREXT
+
+Verification needs something to verify. [MODEL-RUNTIME.md](MODEL-RUNTIME.md)
+describes the deployment side: probe a local engine (Ollama, Strata, FreeToken,
+or any OpenAI-compatible server), commit the deployment manifest and weight
+digest as a challenge, and put the attested gateway in front of it. Every
+completion becomes an `ai.model-run` artifact whose request, response, text, and
+deployment are committed by digest; the registry verifier recomputes them, and a
+holder of the same weights can replay a deterministic run and compare the output
+byte for byte. The demo is `npm run demo:model-runtime`.
+
 ## Where the evidence is committed
 
 - **Claim / attestation** carry `representation`, and for bounded claims
@@ -242,11 +253,14 @@ the model it demonstrates.
 
 ## Non-goals for v1
 
-- No on-chain training, no gradient flow, no token streaming. RAREXT commits
-  and verifies AI *artifacts and their provenance*; it does not execute models.
-- The `xorshift32` replay class is deliberately tiny. Larger model classes
-  enter through `bounded` (metric-thresholded reconstructions) or future
-  generative classes with more expensive replay — the representation kind is
-  the contract, the verifier is swappable.
+- No on-chain training, no gradient flow, no token streaming in the registry. RAREXT commits
+  and verifies AI *artifacts and their provenance*; the registry does not execute models.
+  A model runs in a local engine behind [the model runtime](MODEL-RUNTIME.md), which records
+  the exact transcript the registry verifies. The gateway does stream; the registry does not.
+- The `xorshift32` replay class is deliberately tiny. Larger model classes enter through
+  `bounded` (metric-thresholded reconstructions) or the `exact` model-run transcript, with a
+  local `replay` check when the engine is deterministic. A future generative class with more
+  expensive replay is the next step — the representation kind is the contract, the verifier
+  is swappable.
 - A `generative` semantics record with `claimKind: "generative"` is the planned
   next step for meaning-level licensing of AI claims.

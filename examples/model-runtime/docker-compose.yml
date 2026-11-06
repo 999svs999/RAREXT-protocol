@@ -1,0 +1,110 @@
+# Ollama + RAREXT model runtime + verifier + registry.
+#
+#   docker compose -f examples/model-runtime/docker-compose.yml up --build
+#
+# Set RAREXT_MODEL to any model Ollama can pull. The runtime never invents a
+# weight digest: it records the one Ollama reports.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  pull:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull ${RAREXT_MODEL:-qwen2.5:0.5b}"]
+
+  deploy:
+    image: node:24
+    working_dir: /work
+    volumes:
+      - ../..:/work
+      - runtime-state:/state
+    depends_on:
+      pull:
+        condition: service_completed_successfully
+    command:
+      - node
+      - apps/runtime/src/cli.ts
+      - deploy
+      - --endpoint
+      - http://ollama:11434
+      - --model
+      - ${RAREXT_MODEL:-qwen2.5:0.5b}
+      - --out
+      - /state
+      - --backend
+      - ${RAREXT_BACKEND:-cuda}
+      - --verifier-url
+      - http://verifier:8788/verify
+
+  verifier:
+    image: node:24
+    working_dir: /work
+    volumes:
+      - ../..:/work
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+    command: ["node", "apps/runtime/src/cli.ts", "verifier", "--host", "0.0.0.0", "--port", "8788"]
+
+  registry:
+    image: node:24
+    working_dir: /work
+    volumes:
+      - ../..:/work
+      - runtime-state:/state
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      RAREXT_DATA: /state/registry.json
+      RAREXT_CHALLENGES: /state/challenges.json
+      RAREXT_VERIFIERS: /state/verifiers.json
+    ports:
+      - "8787:8787"
+    command: ["node", "apps/api/src/server.ts"]
+
+  runtime:
+    image: node:24
+    working_dir: /work
+    volumes:
+      - ../..:/work
+      - runtime-state:/state
+    depends_on:
+      - registry
+    environment:
+      RAREXT_MODEL: ${RAREXT_MODEL:-qwen2.5:0.5b}
+    ports:
+      - "8790:8790"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        node apps/runtime/src/cli.ts deploy \
+          --endpoint http://ollama:11434 \
+          --model "$$RAREXT_MODEL" \
+          --out /state \
+          --backend ${RAREXT_BACKEND:-cuda} \
+          --verifier-url http://verifier:8788/verify &&
+        node apps/runtime/src/cli.ts serve \
+          --manifest /state/deployment.json \
+          --state /state \
+          --publish \
+          --registry http://registry:8787 \
+          --host 0.0.0.0 \
+          --port 8790
+
+volumes:
+  ollama:
+  runtime-state:

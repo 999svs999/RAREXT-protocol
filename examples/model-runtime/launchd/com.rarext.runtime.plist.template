@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS supervisor for rarext-runtime.
+
+  Install:
+    cp examples/model-runtime/launchd/com.rarext.runtime.plist.template \
+       ~/Library/LaunchAgents/com.rarext.runtime.plist
+    # replace __REPO__ and __STATE__ with absolute paths
+    launchctl load ~/Library/LaunchAgents/com.rarext.runtime.plist
+
+  The engine (Ollama, Strata, FreeToken) must already be running.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.rarext.runtime</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>__REPO__/apps/runtime/src/cli.ts</string>
+    <string>serve</string>
+    <string>--manifest</string>
+    <string>__STATE__/deployment.json</string>
+    <string>--state</string>
+    <string>__STATE__</string>
+    <string>--publish</string>
+    <string>--registry</string>
+    <string>http://127.0.0.1:8787</string>
+    <string>--port</string>
+    <string>8790</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__STATE__/runtime.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__STATE__/runtime.err.log</string>
+</dict>
+</plist>

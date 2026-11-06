@@ -263,6 +263,18 @@ function externalVerifier(
           typeof payload.gateCount === "number" && Number.isFinite(payload.gateCount)
             ? Math.max(0, Math.round(payload.gateCount))
             : 0,
+        // An external verifier may name the representation it checked and the
+        // metric it measured. Carry them onto the attestation unchanged: the
+        // registry does not invent evidence it did not compute.
+        ...(payload.representation === "exact" ||
+        payload.representation === "bounded" ||
+        payload.representation === "generative"
+          ? { representation: payload.representation }
+          : {}),
+        ...(typeof payload.metricName === "string" ? { metricName: payload.metricName } : {}),
+        ...(typeof payload.metricValue === "number" && Number.isFinite(payload.metricValue)
+          ? { metricValue: payload.metricValue }
+          : {}),
         semanticsId: challenge.semanticsId,
         semanticsVersion: challenge.semanticsVersion,
         semanticsHash: "",
