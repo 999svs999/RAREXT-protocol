@@ -533,6 +533,10 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
     execution,
     chunkBytes,
   });
+  const errors = verifyModelBundle(bundle);
+  if (errors.length > 0) {
+    throw new Error(`refusing to store an invalid bundle: ${errors.join("; ")}`);
+  }
 
   const uploaded = await uploadBundle({ registry, bundle, chunks });
   const bundlePath = join(out, "model-bundle.json");

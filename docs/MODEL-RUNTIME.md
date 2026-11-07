@@ -459,9 +459,10 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 ## Tests
 
 ```bash
-npm run test:runtime       # 41 unit/integration tests, no model needed
+npm run test:runtime       # 54 unit/integration tests, no model needed
 npm run demo:model-runtime # local Ollama path
 npm run demo:cloud-runtime # remote path, no local engine or weights
+npm run demo:web4-model    # weights are RAREXT blobs, served by a provider node
 ```
 
 The unit tests use mock engine streams and cover: manifest digest stability,

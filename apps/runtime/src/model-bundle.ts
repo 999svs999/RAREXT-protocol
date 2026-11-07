@@ -641,6 +641,9 @@ export function crossCheckProviderCard(
 ): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
 
+  if (bundle.id !== card.bundle.id) {
+    errors.push(`bundle id ${bundle.id} does not match the card (${card.bundle.id})`);
+  }
   if (bundle.digest !== card.bundle.digest) {
     errors.push(`bundle digest ${bundle.digest} does not match the card (${card.bundle.digest})`);
   }
@@ -661,6 +664,9 @@ export function crossCheckProviderCard(
   }
   if (bundle.model.id !== card.model.id) {
     errors.push("bundle model id does not match the card");
+  }
+  if (canonicalize(bundle.execution) !== canonicalize(card.execution)) {
+    errors.push("bundle execution class does not match the card");
   }
 
   return { ok: errors.length === 0, errors };
