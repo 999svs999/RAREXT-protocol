@@ -69,11 +69,15 @@ From any machine with the bundle:
 ```bash
 node apps/runtime/src/cli.ts discover --registry "$RAREXT_REGISTRY_URL"
 node apps/runtime/src/cli.ts discover --bundle bundle.json
+
+# list verified cloud models from the network, without probing a provider
+node apps/runtime/src/cli.ts plan --registry "$RAREXT_REGISTRY_URL"
 ```
 
 `discover` recomputes the model card and every run from the bundle alone. It does
 not contact the gateway or the provider, and it exits non-zero if a byte was
-edited after publication.
+edited after publication. `plan --registry` lists the verified remote cards and
+the endpoints they commit.
 
 A second control plane can serve the card that bundle proved, with no local
 deployment file:

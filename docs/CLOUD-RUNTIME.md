@@ -19,9 +19,10 @@ npm run demo:cloud-runtime
 
 runs the whole path with no Ollama and no local model file:
 `target -> plan -> deploy -> verifier -> registry -> card -> serve -> infer ->
-publish -> weights -> anchor -> discover -> recompute -> ledger`. Without a
-provider it uses a deterministic remote *fixture* on loopback and says so; set
-the variables below to run the same commands against a real provider.
+publish -> weights -> anchor -> discover -> catalog -> adopt -> recompute ->
+ledger`. Without a provider it uses a deterministic remote *fixture* on loopback
+and says so; set the variables below to run the same commands against a real
+provider.
 
 ## What is local, and what is not
 
@@ -285,8 +286,10 @@ With a real `RAREXT_CLOUD_ENDPOINT`, the demo proves:
   of its own;
 - the registry attested the card and the run as `exact`;
 - the anchored bundle carries both, and `discover` recomputes them offline;
-- a second gateway adopts the verified card from the bundle alone and forwards
-  a completion, with no local `deployment.json`;
+- `plan --registry` lists the card and the endpoint it commits, with no
+  provider probe and no host-memory claim;
+- the CLI adopts the verified card from the bundle alone and forwards a
+  completion, with no local `deployment.json`;
 - no `.gguf`, `.safetensors`, `.bin`, `.pt`, `.pth`, or `.onnx` file exists in
   the runtime state.
 
