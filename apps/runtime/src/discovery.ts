@@ -199,7 +199,10 @@ export function verifiedRemoteDeployments(bundle: unknown): VerifiedRemoteDeploy
 
   const deployments: VerifiedRemoteDeployment[] = [];
   for (const card of report.cards) {
-    if (!card.verified || card.placement !== "remote") continue;
+    // `remote` is an endpoint somebody else runs; `web4` is an endpoint whose
+    // weights are committed RAREXT blobs. Both are network placements and both
+    // are adopted only after this process recomputes the card.
+    if (!card.verified || (card.placement !== "remote" && card.placement !== "web4")) continue;
 
     const raw = byPublication.get(card.publicationId);
     const artifact = raw !== undefined && isRecord(raw.artifact) ? raw.artifact : null;

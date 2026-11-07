@@ -12,6 +12,7 @@ import type {
   ModelRunSpec,
   ModelRunVerification,
   ReplayEnvelope,
+  RunBundleRef,
   RunRecord,
   SamplingParams,
   TokenUsage,
@@ -60,6 +61,32 @@ function checkedCanonical(value: unknown, label: string): { digest: string; byte
   return { digest: canonicalDigest(value), bytes };
 }
 
+/**
+ * The bundle reference a deployment commits in its labels, in the exact shape
+ * a run records. A deployment without `execution: "web4"` has no bundle.
+ */
+export function bundleRefFromDeployment(
+  deployment: DeploymentManifest,
+): RunBundleRef | null {
+  const labels = deployment.labels;
+  if (labels?.execution !== "web4") return null;
+  const { bundle, shardsRoot, manifestHash } = labels;
+  if (
+    typeof bundle !== "string" ||
+    typeof shardsRoot !== "string" ||
+    typeof manifestHash !== "string" ||
+    typeof deployment.model.weightsDigest !== "string"
+  ) {
+    return null;
+  }
+  return {
+    digest: bundle,
+    shardsRoot,
+    manifestHash,
+    weightsDigest: deployment.model.weightsDigest,
+  };
+}
+
 export interface CreateRunInput {
   deployment: DeploymentCommitment;
   api: ApiShape;
@@ -84,6 +111,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
   const request = checkedCanonical(input.request, "request");
   const response = checkedCanonical(input.response, "response");
   const text = extractResponseText(input.response, input.api);
+  const bundle = bundleRefFromDeployment(input.deployment);
 
   return {
     kind: RUN_KIND,
@@ -96,6 +124,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
       name: input.deployment.engine.name,
       version: input.deployment.engine.version,
     },
+    ...(bundle === null ? {} : { bundle }),
     api: input.api,
     request: { body: input.request, digest: request.digest, bytes: request.bytes },
     response: {
@@ -193,6 +222,27 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "model.id", model.id === spec.modelId);
   check(checks, failures, "model.weightsDigest", (model.weightsDigest ?? null) === spec.weightsDigest);
   check(checks, failures, "engine.name", engine.name === spec.engine);
+
+  if (spec.bundleDigest === undefined) {
+    // Local and remote runs name no bundle; a web4 bundle cannot be attached to
+    // a challenge that never committed it.
+    check(checks, failures, "bundle.absent", body.bundle === undefined);
+  } else {
+    const bundle = isRecord(body.bundle) ? body.bundle : {};
+    check(checks, failures, "bundle.digest", bundle.digest === spec.bundleDigest);
+    if (spec.shardsRoot !== undefined) {
+      check(checks, failures, "bundle.shardsRoot", bundle.shardsRoot === spec.shardsRoot);
+    }
+    if (spec.manifestHash !== undefined) {
+      check(checks, failures, "bundle.manifestHash", bundle.manifestHash === spec.manifestHash);
+    }
+    check(
+      checks,
+      failures,
+      "bundle.weightsDigest",
+      bundle.weightsDigest === spec.weightsDigest && bundle.weightsDigest === model.weightsDigest,
+    );
+  }
 
   const requestDigest = canonicalDigest(request.body);
   const requestBytes = canonicalBytes(request.body);
@@ -338,7 +388,16 @@ export function deploymentArtifact(body: DeploymentCommitment) {
 }
 
 const ENGINES = new Set<EngineName>(["ollama", "strata", "freetoken", "openai-compatible", "anthropic"]);
-const BACKENDS = new Set<HardwareBackend>(["cpu", "metal", "cuda", "rocm", "vulkan", "cloud", "unknown"]);
+const BACKENDS = new Set<HardwareBackend>([
+  "cpu",
+  "metal",
+  "cuda",
+  "rocm",
+  "vulkan",
+  "cloud",
+  "network",
+  "unknown",
+]);
 
 /**
  * Verify a published deployment commitment.
@@ -402,8 +461,52 @@ export function verifyDeploymentBody(body: unknown, spec: ModelRunSpec): Deploym
     checks,
     failures,
     "placement",
-    body.placement === undefined || body.placement === "local" || body.placement === "remote",
+    body.placement === undefined ||
+      body.placement === "local" ||
+      body.placement === "remote" ||
+      body.placement === "web4",
   );
+  if (body.placement === "web4") {
+    const labels = isRecord(body.labels) ? body.labels : {};
+    // The weights are blobs, not a promise: the card names the bundle the
+    // provider fetched, and the model's weight digest must be the bundle's.
+    check(
+      checks,
+      failures,
+      "placement.web4",
+      hardware.backend === "network" &&
+        hardware.memoryBytes === null &&
+        labels.execution === "web4",
+    );
+    check(
+      checks,
+      failures,
+      "bundle.commitment",
+      typeof labels.bundle === "string" &&
+        HEX64.test(labels.bundle) &&
+        typeof labels.shardsRoot === "string" &&
+        HEX64.test(labels.shardsRoot) &&
+        typeof labels.manifestHash === "string" &&
+        HEX64.test(labels.manifestHash),
+    );
+    check(
+      checks,
+      failures,
+      "challenge.bundle",
+      typeof spec.bundleDigest === "string" &&
+        typeof spec.weightsDigest === "string" &&
+        labels.bundle === spec.bundleDigest &&
+        (spec.shardsRoot === undefined || labels.shardsRoot === spec.shardsRoot) &&
+        (spec.manifestHash === undefined || labels.manifestHash === spec.manifestHash),
+    );
+
+    // A loopback provider is a test fixture, exactly as a loopback remote
+    // endpoint is; a real card cannot quietly run on the publisher's machine.
+    const web4Endpoint = typeof engine.endpoint === "string" ? engine.endpoint : "";
+    if (web4Endpoint !== "" && isLoopbackEndpoint(web4Endpoint)) {
+      check(checks, failures, "placement.fixture", labels.fixture === "loopback");
+    }
+  }
   if (body.placement === "remote") {
     // A remote commitment claims that this process has no weights and no local
     // inference. Keeping the hardware record consistent makes that claim

@@ -27,6 +27,31 @@ export function challengeIdFor(manifest: DeploymentCommitment): string {
   return `model-run-${manifest.digest.slice(0, 16)}`;
 }
 
+/**
+ * The bundle commitments a web4 deployment carries into its challenge. A
+ * local or remote manifest has no bundle, so the challenge names none and the
+ * verifier requires runs to omit `body.bundle`.
+ */
+function bundleSpec(labels: Record<string, string> | undefined): {
+  bundleDigest?: string;
+  shardsRoot?: string;
+  manifestHash?: string;
+} {
+  if (
+    labels?.execution !== "web4" ||
+    typeof labels.bundle !== "string" ||
+    typeof labels.shardsRoot !== "string" ||
+    typeof labels.manifestHash !== "string"
+  ) {
+    return {};
+  }
+  return {
+    bundleDigest: labels.bundle,
+    shardsRoot: labels.shardsRoot,
+    manifestHash: labels.manifestHash,
+  };
+}
+
 export function challengeFor(manifest: DeploymentCommitment) {
   return {
     id: challengeIdFor(manifest),
@@ -42,6 +67,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       modelId: manifest.model.id,
       weightsDigest: manifest.model.weightsDigest,
       engine: manifest.engine.name,
+      // A web4 deployment commits the bundle its provider fetched; the run and
+      // card verifier checks the same three commitments.
+      ...bundleSpec(manifest.labels),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

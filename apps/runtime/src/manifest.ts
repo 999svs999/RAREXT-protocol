@@ -85,6 +85,29 @@ export function hardwareFromCloud(endpoint: string): HardwareRef {
   };
 }
 
+/**
+ * Hardware for a provider on the RAREXT network. It is neither this host nor a
+ * cloud vendor: the provider is a participant whose card commits the model
+ * bundle it fetched from RAREXT storage. This process records no memory
+ * because it cannot see the provider's machine.
+ */
+export function hardwareFromNetwork(endpoint: string): HardwareRef {
+  let device: string;
+  try {
+    device = new URL(endpoint).host;
+  } catch {
+    device = endpoint;
+  }
+
+  return {
+    backend: "network",
+    device,
+    memoryBytes: null,
+    os: "network",
+    arch: "network",
+  };
+}
+
 /** True when the endpoint names this machine (or an unspecified interface). */
 export function isLoopbackEndpoint(endpoint: string): boolean {
   let host: string;
@@ -228,9 +251,10 @@ const BACKENDS = new Set<HardwareBackend>([
   "rocm",
   "vulkan",
   "cloud",
+  "network",
   "unknown",
 ]);
-const PLACEMENTS = new Set<Placement>(["local", "remote"]);
+const PLACEMENTS = new Set<Placement>(["local", "remote", "web4"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -342,6 +366,39 @@ export function validateDeployment(value: unknown): string[] {
     }
     if (isRecord(hardware) && hardware.memoryBytes !== null) {
       errors.push("manifest.hardware.memoryBytes must be null for a remote deployment");
+    }
+  }
+
+  if (value.placement === "web4") {
+    if (!isRecord(hardware) || hardware.backend !== "network") {
+      errors.push('manifest.hardware.backend must be "network" for a web4 deployment');
+    }
+    if (isRecord(hardware) && hardware.memoryBytes !== null) {
+      errors.push("manifest.hardware.memoryBytes must be null for a web4 deployment");
+    }
+
+    const labels = isRecord(value.labels) ? value.labels : {};
+    if (labels.execution !== "web4") {
+      errors.push('manifest.labels.execution must be "web4" for a web4 deployment');
+    }
+    if (typeof labels.bundle !== "string" || !/^[0-9a-f]{64}$/.test(labels.bundle)) {
+      errors.push("manifest.labels.bundle must be the 64-hex model bundle digest");
+    }
+    if (typeof labels.shardsRoot !== "string" || !/^[0-9a-f]{64}$/.test(labels.shardsRoot)) {
+      errors.push("manifest.labels.shardsRoot must be the 64-hex shard commitment");
+    }
+    if (typeof labels.manifestHash !== "string" || !/^[0-9a-f]{64}$/.test(labels.manifestHash)) {
+      errors.push("manifest.labels.manifestHash must be the 64-hex bundle manifest address");
+    }
+    // The whole point of the placement is that the weights are committed bytes.
+    // A null digest would make every run omit its bundle reference and leave the
+    // challenge with nothing to check the model against.
+    if (
+      !isRecord(model) ||
+      typeof model.weightsDigest !== "string" ||
+      !/^sha256:[0-9a-f]{64}$/.test(model.weightsDigest)
+    ) {
+      errors.push("manifest.model.weightsDigest must be sha256:<64 hex> for a web4 deployment");
     }
   }
 

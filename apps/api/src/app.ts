@@ -84,6 +84,7 @@ import {
   BlobStore,
   emptyInclusionProof,
   manifestInclusion,
+  sha256Bytes,
   verifyManifestInclusion,
 } from "./storage.ts";
 import { buildBundle, verifyBundle } from "./bundle.ts";
@@ -256,6 +257,31 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
     "content-length": Buffer.byteLength(payload),
   });
   res.end(payload);
+}
+
+/**
+ * Read raw bytes for the binary blob route. Model weights do not fit in the
+ * 1 MB JSON body cap, and base64 inflates them by a third; this path streams
+ * the exact bytes and lets the store's own 32 MiB cap be the boundary.
+ */
+function readRawBytes(req: IncomingMessage, limit: number): Promise<Buffer> {
+  return new Promise((resolvePromise, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error(`request body above ${limit} bytes`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => resolvePromise(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {
@@ -1450,7 +1476,10 @@ export function createApp(options: AppOptions = {}): AppServer {
 
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
     res.setHeader("access-control-allow-origin", "*");
-    res.setHeader("access-control-allow-headers", "content-type, authorization");
+    res.setHeader(
+      "access-control-allow-headers",
+      "content-type, authorization, x-rarext-hash, x-rarext-media-type, x-rarext-retention-until",
+    );
     res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
 
     try {
@@ -3078,6 +3107,61 @@ export function createApp(options: AppOptions = {}): AppServer {
           token: process.env.RAREXT_HOLDER_TOKEN || undefined,
           fetch: options.fetch,
         }));
+        return;
+      }
+
+      // Binary upload for payloads that cannot fit the JSON body cap — model
+      // weights, archives, disk images. The bytes are hashed here and a
+      // caller-supplied digest is checked, so a resumed or retried upload is
+      // still content-addressed rather than trusted.
+      if (req.method === "POST" && pathname === "/v1/blobs/raw") {
+        const declared = Number(req.headers["content-length"] ?? "0");
+        if (Number.isFinite(declared) && declared > blobs.maxBytes) {
+          send(res, 413, {
+            error: `blob is ${declared} bytes, above the ${blobs.maxBytes} byte cap`,
+          });
+          return;
+        }
+
+        const bytes = await readRawBytes(req, blobs.maxBytes);
+        if (bytes.length === 0) {
+          send(res, 400, { error: "body must contain the blob bytes" });
+          return;
+        }
+
+        const expectedHeader = req.headers["x-rarext-hash"];
+        const expected = typeof expectedHeader === "string" ? expectedHeader.trim().toLowerCase() : "";
+        if (expected !== "" && !/^[0-9a-f]{64}$/.test(expected)) {
+          send(res, 400, { error: "x-rarext-hash must be a 64-character sha256 hex digest" });
+          return;
+        }
+
+        const hash = sha256Bytes(bytes);
+        if (expected !== "" && hash !== expected) {
+          send(res, 409, {
+            error: `x-rarext-hash ${expected} does not match the uploaded bytes (${hash})`,
+          });
+          return;
+        }
+
+        const mediaHeader = req.headers["x-rarext-media-type"];
+        const mediaType =
+          typeof mediaHeader === "string" && /^[\w.+-]+\/[\w.+-]+(;[\w-]+=[\w.-]+)*$/.test(mediaHeader)
+            ? mediaHeader
+            : "application/octet-stream";
+        const retentionHeader = req.headers["x-rarext-retention-until"];
+
+        const record = blobs.put(bytes, {
+          mediaType,
+          tier: "public",
+          sealed: false,
+          retentionUntil:
+            typeof retentionHeader === "string" && retentionHeader.trim() !== ""
+              ? retentionHeader.trim()
+              : null,
+        });
+
+        send(res, 201, record);
         return;
       }
 

@@ -44,10 +44,23 @@ import {
   formatBytes,
   hardwareFromCloud,
   hardwareFromHost,
+  hardwareFromNetwork,
   isLoopbackEndpoint,
   normalizeEndpoint,
   requireValidDeployment,
 } from "./manifest.ts";
+import {
+  buildModelBundle,
+  bundleManifestHash,
+  crossCheckProviderCard,
+  fetchBundleChunks,
+  fetchBundleManifest,
+  fetchProviderCard,
+  uploadBundle,
+  verifyModelBundle,
+} from "./model-bundle.ts";
+import type { ExecutionRef, ModelBundle } from "./model-bundle.ts";
+import { loadProviderBundle, startProvider } from "./provider.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
 import { RarextClient } from "../../../packages/agent-sdk/src/index.ts";
 import { startGateway } from "./gateway.ts";
@@ -64,6 +77,7 @@ import type {
   DeploymentCommitment,
   EngineName,
   HardwareBackend,
+  ModelRef,
   ModelRunBody,
   ModelRunSpec,
   RunRecord,
@@ -71,6 +85,8 @@ import type {
 
 const COMMANDS = [
   "plan",
+  "bundle",
+  "provider",
   "deploy",
   "publish-deployment",
   "anchor",
@@ -91,6 +107,8 @@ Usage: node apps/runtime/src/cli.ts <command> [options]
 
 Commands:
   plan      list the engine's models and whether each fits this host's memory
+  bundle    shard a model file into RAREXT blobs and write model-bundle.json
+  provider  fetch a model bundle from RAREXT, verify it, and serve it
   deploy    probe an engine and write deployment.json + challenges.json + verifiers.json
   publish-deployment  publish the deployment commitment (a model card) to RAREXT
   anchor    anchor pending publications on a RAREXT registry
@@ -107,7 +125,19 @@ Common options:
   --engine <name>       ollama | strata | freetoken | openai-compatible | anthropic
   --model <id>          engine-native model id
   --remote              commit a cloud deployment; no weights or inference run here
-  --allow-loopback      permit --remote against 127.0.0.1 (test fixtures only)
+  --web4                commit a RAREXT provider; weights are storage blobs
+  --provider <url>      the web4 provider endpoint to adopt (defaults to --endpoint)
+  --file <path>         model file to shard with bundle, or native JSON model
+  --native              build a deterministic xorshift32 model from --vocab
+  --vocab <a,b,c>       comma-separated tokens for --native
+  --params <a,b,c>      xorshift32 shifts for --native (default 13,17,5)
+  --steps <n>           default token count for a native provider (default 32)
+  --execution <kind>    native | engine for a bundle (default engine)
+  --engine-model <id>   engine-native name a provider creates (default bundle id)
+  --chunk-bytes <n>     shard size for bundle (default 8 MiB)
+  --manifest-hash <hex> fetch the bundle manifest by content address
+  --verify-shards       download and hash every shard at deploy time
+  --allow-loopback      permit --remote/--web4 against 127.0.0.1 (test fixtures only)
   --upstream-api <api>  openai | anthropic (the remote engine's native shape)
   --upstream-auth <a>   none | bearer | x-api-key (default follows the API shape)
   --upstream-key-env <name>  environment variable holding the upstream key
@@ -283,11 +313,11 @@ async function commandPlanCatalog(values: Record<string, unknown>): Promise<numb
   }));
 
   if (bool(values, "json")) {
-    console.log(JSON.stringify({ placement: "remote", source, cards }, null, 2));
+    console.log(JSON.stringify({ placement: "network", source, cards }, null, 2));
     return 0;
   }
 
-  console.log(`remote model cards from ${source}`);
+  console.log(`network model cards from ${source}`);
   console.log("no host-memory verdict: inference runs at the endpoint, not on this machine");
 
   const idWidth = Math.max(10, ...cards.map((card) => card.deploymentId.length));
@@ -401,7 +431,340 @@ async function commandPlan(values: Record<string, unknown>): Promise<number> {
   return 0;
 }
 
+function parseIntegerList(value: string | undefined, field: string, count: number): number[] {
+  if (value === undefined) throw new Error(`${field} is required`);
+  const parts = value.split(",").map((part) => part.trim()).filter((part) => part !== "");
+  if (parts.length !== count) {
+    throw new Error(`${field} must have ${count} comma-separated integers`);
+  }
+  return parts.map((part) => {
+    const parsed = Number(part);
+    if (!Number.isSafeInteger(parsed)) throw new Error(`${field} entries must be integers`);
+    return parsed;
+  });
+}
+
+function modelRefFromFlags(values: Record<string, unknown>, overrides: Partial<ModelRef> = {}): ModelRef {
+  const id = flag(values, "model");
+  if (id === undefined || id === "") throw new Error("--model is required to name the model");
+  const contextLength = flag(values, "context-length");
+  return {
+    id,
+    family: flag(values, "family") ?? null,
+    parameters: flag(values, "parameters") ?? null,
+    quantization: flag(values, "quantization") ?? null,
+    format: flag(values, "format") ?? null,
+    sizeBytes: null,
+    weightsDigest: null,
+    contextLength:
+      contextLength === undefined ? null : Number.isSafeInteger(Number(contextLength)) ? Number(contextLength) : null,
+    ...overrides,
+  };
+}
+
+/**
+ * Store a model in RAREXT. The bytes are sharded, each shard is uploaded with
+ * its sha256, and the bundle commits the shard list plus the whole-file digest.
+ * The model file is not registered anywhere else; RAREXT storage is the model.
+ */
+async function commandBundle(values: Record<string, unknown>): Promise<number> {
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const out = resolve(flag(values, "out") ?? ".rarext-runtime");
+  const native = bool(values, "native");
+  const executionFlag = flag(values, "execution");
+  if (executionFlag !== undefined && executionFlag !== "native" && executionFlag !== "engine") {
+    throw new Error("--execution must be native or engine");
+  }
+
+  let bytes: Buffer;
+  let execution: ExecutionRef;
+  const overrides: Partial<ModelRef> = {};
+
+  if (native) {
+    if (executionFlag === "engine") throw new Error("--native and --execution engine cannot be combined");
+    const vocab = (flag(values, "vocab") ?? "alpha,beta,gamma,delta,epsilon,zeta,eta,theta")
+      .split(",")
+      .map((token) => token.trim())
+      .filter((token) => token !== "");
+    if (vocab.length === 0) throw new Error("--vocab must name at least one token");
+    if (vocab.some((token) => token.length > 256)) {
+      throw new Error("each --vocab token must be at most 256 characters");
+    }
+
+    const params = flag(values, "params") ?? "13,17,5";
+    const [a, b, c] = parseIntegerList(params, "--params", 3);
+    const model = { kind: "xorshift32", params: { a: a!, b: b!, c: c! }, vocab };
+    const file = join(out, "native-model.json");
+    writeJsonFile(file, model);
+    bytes = readFileSync(file);
+    overrides.family = flag(values, "family") ?? "rarext-native";
+    overrides.format = flag(values, "format") ?? "json";
+    overrides.quantization = flag(values, "quantization") ?? "exact";
+    execution = {
+      kind: "native",
+      modelClass: "xorshift32",
+      defaultSteps: Number(flag(values, "steps") ?? 32),
+    };
+  } else {
+    const fileFlag = flag(values, "file");
+    if (fileFlag === undefined) {
+      throw new Error("--file <model file> is required (or pass --native with --vocab)");
+    }
+    bytes = readFileSync(resolve(fileFlag));
+    const engine = (flag(values, "engine") as EngineName | undefined) ?? "ollama";
+    execution =
+      executionFlag === "native"
+        ? {
+            kind: "native",
+            modelClass: "xorshift32",
+            defaultSteps: Number(flag(values, "steps") ?? 32),
+          }
+        : {
+            kind: "engine",
+            engine,
+            engineModel: flag(values, "engine-model") ?? flag(values, "model") ?? null,
+          };
+  }
+
+  const chunkBytes = Number(flag(values, "chunk-bytes") ?? 8 * 1024 * 1024);
+  const { bundle, chunks } = buildModelBundle({
+    bytes,
+    model: modelRefFromFlags(values, overrides),
+    execution,
+    chunkBytes,
+  });
+
+  const uploaded = await uploadBundle({ registry, bundle, chunks });
+  const bundlePath = join(out, "model-bundle.json");
+  writeJsonFile(bundlePath, bundle);
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify({ bundle, manifestHash: uploaded.manifestHash, bundlePath }, null, 2));
+    return 0;
+  }
+
+  console.log(`bundled ${bundle.model.id} into RAREXT storage at ${registry}`);
+  console.log(`  bundle      ${bundle.id}`);
+  console.log(`  digest      ${bundle.digest}`);
+  console.log(`  weights     ${bundle.model.weightsDigest}`);
+  console.log(`  shards      ${bundle.shards.length} (${formatBytes(bundle.totalBytes)})`);
+  console.log(`  shardsRoot  ${bundle.shardsRoot}`);
+  console.log(`  manifest    ${uploaded.manifestHash}`);
+  console.log(`  execution   ${bundle.execution.kind}`);
+  console.log(`\nwrote ${bundlePath}`);
+  console.log(`\nnext:`);
+  console.log(`  node apps/runtime/src/cli.ts provider --bundle ${bundlePath} --registry ${registry} --port 8791`);
+  return 0;
+}
+
+/**
+ * Run a provider node. It fetches every shard from RAREXT, verifies the
+ * committed digest, and only then loads the model. The original model file is
+ * never consulted, so the provider is serving the network's bytes.
+ */
+async function commandProvider(values: Record<string, unknown>): Promise<number> {
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const manifestHash = flag(values, "manifest-hash");
+  const bundle = await loadProviderBundle({
+    ...(flag(values, "bundle") === undefined ? {} : { bundlePath: resolve(flag(values, "bundle")!) }),
+    registry,
+    ...(manifestHash === undefined ? {} : { manifestHash }),
+  });
+
+  const engineEndpoint =
+    flag(values, "engine-endpoint") ??
+    (bundle.execution.kind === "engine" ? "http://127.0.0.1:11434" : undefined);
+  const out = flag(values, "out") === undefined ? null : resolve(flag(values, "out")!);
+
+  const provider = await startProvider({
+    bundle,
+    registry,
+    stateDir: resolve(flag(values, "state") ?? ".rarext-provider"),
+    ...(engineEndpoint === undefined ? {} : { engineEndpoint }),
+    host: flag(values, "host") ?? "127.0.0.1",
+    port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
+    ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
+    providerHandle: flag(values, "handle") ?? null,
+    log: (message) => console.error(`[provider] ${message}`),
+  });
+
+  if (out !== null) writeJsonFile(out, provider.card);
+  if (bool(values, "json")) {
+    console.log(JSON.stringify({ url: provider.url, card: provider.card, bundle }, null, 2));
+  } else {
+    console.log(`rarext provider serving ${bundle.model.id} on ${provider.url}`);
+    console.log(`  bundle      ${bundle.digest}`);
+    console.log(`  weights     ${bundle.model.weightsDigest}`);
+    console.log(`  shards      ${bundle.shards.length} verified from ${registry}`);
+    console.log(`  execution   ${bundle.execution.kind}`);
+    console.log(`  card        ${provider.card.digest}`);
+    console.log(`  openai      POST ${provider.url}/v1/chat/completions`);
+    console.log(`  card        GET  ${provider.url}/v1/provider-card`);
+    if (out !== null) console.log(`\nwrote ${out}`);
+  }
+
+  const stop = async () => {
+    await provider.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+  await new Promise<void>(() => {});
+  return 0;
+}
+
+/**
+ * Deploy against a RAREXT provider. The provider card is not trusted: its
+ * digest is recomputed, the bundle manifest is fetched from RAREXT by its
+ * content address, and the two must commit the same weights. `--verify-shards`
+ * additionally downloads every shard before a card is adopted.
+ */
+async function commandDeployWeb4(values: Record<string, unknown>): Promise<number> {
+  const providerEndpoint = normalizeEndpoint(
+    flag(values, "provider") ?? flag(values, "endpoint") ?? "",
+  );
+  if (providerEndpoint === "") {
+    throw new Error("--web4 needs --provider <https://provider.example>; there is no local default");
+  }
+  if (isLoopbackEndpoint(providerEndpoint) && !bool(values, "allow-loopback")) {
+    throw new Error(
+      `--web4 points at loopback (${providerEndpoint}), which is local compute. ` +
+        "Pass --allow-loopback only for a test fixture, or name the provider.",
+    );
+  }
+
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const card = await fetchProviderCard({ endpoint: providerEndpoint });
+  if (normalizeEndpoint(card.endpoint) !== providerEndpoint) {
+    throw new Error(
+      `provider card names ${card.endpoint}, not the endpoint that served it (${providerEndpoint})`,
+    );
+  }
+
+  const bundlePath = flag(values, "bundle");
+  let bundle: ModelBundle;
+  if (bundlePath !== undefined) {
+    const loaded = await loadProviderBundle({ bundlePath: resolve(bundlePath) });
+    bundle = loaded;
+  } else {
+    bundle = await fetchBundleManifest({
+      registry,
+      manifestHash: flag(values, "manifest-hash") ?? card.bundle.manifestHash,
+    });
+  }
+
+  const crossCheck = crossCheckProviderCard(card, bundle);
+  if (!crossCheck.ok) {
+    throw new Error(`provider card does not match the RAREXT bundle: ${crossCheck.errors.join("; ")}`);
+  }
+
+  if (bool(values, "verify-shards")) {
+    console.error(`[runtime] downloading ${bundle.shards.length} shard(s) from ${registry}`);
+    await fetchBundleChunks({
+      registry,
+      bundle,
+      onShard: (index, size) =>
+        console.error(`[runtime]   shard ${index + 1}/${bundle.shards.length} ${size} bytes`),
+    });
+  }
+
+  const healthResponse = await fetch(`${providerEndpoint}/health`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!healthResponse.ok) {
+    throw new Error(`provider ${providerEndpoint} is not healthy: HTTP ${healthResponse.status}`);
+  }
+  const health = (await healthResponse.json()) as { bundle?: unknown; weightsDigest?: unknown };
+  if (health.bundle !== bundle.digest || health.weightsDigest !== bundle.model.weightsDigest) {
+    throw new Error(
+      `provider health does not commit this bundle (bundle ${String(health.bundle)}, ` +
+        `weights ${String(health.weightsDigest)})`,
+    );
+  }
+
+  const probe = {
+    engine: { name: "openai-compatible" as EngineName, version: "web4", endpoint: providerEndpoint },
+    model: card.model,
+    apis: ["openai"] as ApiShape[],
+    models: [card.model],
+  };
+
+  const out = resolve(flag(values, "out") ?? ".rarext-runtime");
+  const manifest = commitDeployment(
+    buildDeployment({
+      probe,
+      hardware: hardwareFromNetwork(providerEndpoint),
+      placement: "web4",
+      id: flag(values, "id"),
+      labels: {
+        execution: "web4",
+        bundle: bundle.digest,
+        shardsRoot: bundle.shardsRoot,
+        manifestHash: card.bundle.manifestHash,
+        provider: card.id,
+        providerCard: card.digest,
+        ...(isLoopbackEndpoint(providerEndpoint) ? { fixture: "loopback" } : {}),
+      },
+      notes:
+        `web4 deployment: the weights are ${bundle.shards.length} RAREXT blob(s) committed as ` +
+        `${bundle.model.weightsDigest}; provider ${card.id} fetched and verified them before serving at ` +
+        `${providerEndpoint}. No weights or inference run on this host.`,
+    }),
+  );
+
+  writeJsonFile(join(out, "deployment.json"), manifest);
+  writeJsonFile(join(out, "challenges.json"), challengesFile(manifest));
+  const verifierUrl = flag(values, "verifier-url") ?? "http://127.0.0.1:8788/verify";
+  writeJsonFile(join(out, "verifiers.json"), verifierConfig(verifierUrl));
+  writeJsonFile(join(out, "verifier-manifest.json"), RUNTIME_VERIFIER_MANIFEST);
+
+  if (bool(values, "json")) {
+    console.log(
+      JSON.stringify(
+        {
+          deployment: manifest,
+          challenge: challengeFor(manifest),
+          challengeId: challengeIdFor(manifest),
+          placement: "web4",
+          providerCard: card,
+          bundle,
+          files: {
+            deployment: join(out, "deployment.json"),
+            challenges: join(out, "challenges.json"),
+            verifiers: join(out, "verifiers.json"),
+          },
+          verifierUrl,
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+
+  console.log(`deployment ${manifest.id}`);
+  console.log(`  placement ${manifest.placement}`);
+  console.log(`  provider  ${card.id} at ${providerEndpoint}`);
+  console.log(`  model     ${manifest.model.id}${manifest.model.quantization ? ` (${manifest.model.quantization})` : ""}`);
+  console.log(`  weights   ${manifest.model.weightsDigest}`);
+  console.log(`  bundle    ${bundle.digest} (${bundle.shards.length} shard(s), ${formatBytes(bundle.totalBytes)})`);
+  console.log(`  shards    ${bundle.shardsRoot}`);
+  console.log(`  execution ${bundle.execution.kind} — no weights or inference on this host`);
+  console.log(`  digest    ${manifest.digest}`);
+  console.log(`\nwrote:`);
+  console.log(`  ${join(out, "deployment.json")}`);
+  console.log(`  ${join(out, "challenges.json")}   (RAREXT_CHALLENGES)`);
+  console.log(`  ${join(out, "verifiers.json")}    (RAREXT_VERIFIERS, verifier at ${verifierUrl})`);
+  console.log(`\nnext:`);
+  console.log(`  node apps/runtime/src/cli.ts serve --manifest ${join(out, "deployment.json")} --publish`);
+  return 0;
+}
+
 async function commandDeploy(values: Record<string, unknown>): Promise<number> {
+  if (bool(values, "web4") || flag(values, "placement") === "web4") {
+    return commandDeployWeb4(values);
+  }
+
   const remote = bool(values, "remote") || flag(values, "placement") === "remote";
   const endpointFlag = flag(values, "endpoint");
   if (remote && endpointFlag === undefined) {
@@ -671,7 +1034,7 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   const handle = flag(values, "handle") ?? "rarext-runtime";
   const challengeId = flag(values, "challenge") ?? challengeIdFor(deployment);
   const upstream =
-    deployment.placement === "remote"
+    deployment.placement === "remote" || deployment.placement === "web4"
       ? upstreamOptions(
           values,
           deployment.engine.name,
@@ -706,6 +1069,11 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   if (provenance !== null) console.log(`  card       ${provenance}`);
   if (deployment.placement === "remote") {
     console.log("  compute    none on this host — requests are forwarded to the remote engine");
+  }
+  if (deployment.placement === "web4") {
+    const labels = deployment.labels ?? {};
+    console.log(`  bundle     ${labels.bundle ?? "?"} (${labels.shardsRoot ?? "?"})`);
+    console.log("  compute    none on this host — the provider fetched verified RAREXT blobs");
   }
   console.log(`  openai     POST ${gateway.url}/v1/chat/completions`);
   console.log(`  anthropic  POST ${gateway.url}/v1/messages`);
@@ -857,7 +1225,25 @@ async function main(): Promise<number> {
       device: { type: "string" },
       pull: { type: "boolean" },
       remote: { type: "boolean" },
+      web4: { type: "boolean" },
       placement: { type: "string" },
+      provider: { type: "string" },
+      file: { type: "string" },
+      native: { type: "boolean" },
+      vocab: { type: "string" },
+      params: { type: "string" },
+      steps: { type: "string" },
+      execution: { type: "string" },
+      "engine-model": { type: "string" },
+      "chunk-bytes": { type: "string" },
+      "manifest-hash": { type: "string" },
+      "verify-shards": { type: "boolean" },
+      "engine-endpoint": { type: "string" },
+      family: { type: "string" },
+      parameters: { type: "string" },
+      quantization: { type: "string" },
+      format: { type: "string" },
+      "context-length": { type: "string" },
       "allow-loopback": { type: "boolean" },
       "upstream-api": { type: "string" },
       "upstream-auth": { type: "string" },
@@ -887,6 +1273,10 @@ async function main(): Promise<number> {
   switch (command) {
     case "plan":
       return commandPlan(values);
+    case "bundle":
+      return commandBundle(values);
+    case "provider":
+      return commandProvider(values);
     case "deploy":
       return commandDeploy(values);
     case "publish-deployment":

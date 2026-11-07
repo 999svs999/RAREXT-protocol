@@ -551,7 +551,7 @@ try {
   );
   phase(
     "catalog",
-    catalogReport?.placement === "remote" &&
+    catalogReport?.placement === "network" &&
       listed?.modelId === model &&
       String(listed?.endpoint ?? "").replace(/\/$/, "") === target.endpoint.replace(/\/$/, ""),
     `RAREXT listed ${model} at ${listed?.endpoint ?? "?"} from the anchored bundle; no local probe`,

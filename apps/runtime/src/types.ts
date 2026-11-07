@@ -36,12 +36,27 @@ export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
 export type EngineName = "ollama" | "strata" | "freetoken" | "openai-compatible" | "anthropic";
 export type ApiShape = "openai" | "anthropic";
-export type HardwareBackend = "cpu" | "metal" | "cuda" | "rocm" | "vulkan" | "cloud" | "unknown";
+export type HardwareBackend =
+  | "cpu"
+  | "metal"
+  | "cuda"
+  | "rocm"
+  | "vulkan"
+  | "cloud"
+  /** A machine contributed to the RAREXT network, neither this host nor a cloud vendor. */
+  | "network"
+  | "unknown";
 /**
- * Where the model actually runs. A remote deployment forwards to an endpoint
- * the operator does not own; no weights or inference happen in this process.
+ * Where the model actually runs.
+ *
+ * - `local`: an engine on this host.
+ * - `remote`: an endpoint this process does not execute; the weights and the
+ *   compute are somebody else's, named by the engine URL.
+ * - `web4`: a RAREXT provider. The weights are content-addressed blobs in
+ *   RAREXT storage, the provider fetched and verified them, and the deployment
+ *   commits the bundle digest so a reader can check the model bytes.
  */
-export type Placement = "local" | "remote";
+export type Placement = "local" | "remote" | "web4";
 
 export interface EngineRef {
   /** Which serving engine is behind the endpoint. */
@@ -148,11 +163,28 @@ export interface ReplayEnvelope {
   params: SamplingParams;
 }
 
+/**
+ * The model bytes a web4 run was produced from. Absent on local/remote runs,
+ * whose weights the operator trusts the engine to name.
+ */
+export interface RunBundleRef {
+  /** sha256 of the canonical model bundle. */
+  digest: string;
+  /** Commitment over the shard list. */
+  shardsRoot: string;
+  /** sha256:<hex> of the reassembled model file. */
+  weightsDigest: string;
+  /** Content address of the bundle manifest blob. */
+  manifestHash: string;
+}
+
 export interface ModelRunBody {
   kind: typeof RUN_KIND;
   deployment: { id: string; digest: string };
   model: { id: string; weightsDigest: string | null };
   engine: { name: EngineName; version: string | null };
+  /** Present when the run names a RAREXT-hosted model bundle. */
+  bundle?: RunBundleRef;
   /** The upstream API shape the transcript records. Absent on older records. */
   api?: ApiShape;
   request: TranscriptRequest;
@@ -180,6 +212,14 @@ export interface ModelRunSpec {
   modelId: string;
   weightsDigest: string | null;
   engine: EngineName;
+  /**
+   * Present when the challenge commits a RAREXT-hosted model. A run or card
+   * that does not name the same bundle fails, so weights cannot be swapped
+   * between a verified card and an unrelated transcript.
+   */
+  bundleDigest?: string;
+  shardsRoot?: string;
+  manifestHash?: string;
 }
 
 export interface EngineProbe {

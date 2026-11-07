@@ -27,15 +27,19 @@ The one-command proof is:
 ```bash
 npm run demo:model-runtime     # local engine (Ollama today)
 npm run demo:cloud-runtime     # remote endpoint, no local weights or inference
+npm run demo:web4-model        # weights are RAREXT blobs, served by a provider node
 ```
 
-The runtime has two placements. A **local** deployment probes an engine on the
+The runtime has three placements. A **local** deployment probes an engine on the
 same host; a **remote** deployment commits an OpenAI- or Anthropic-compatible
 endpoint somewhere else, forwards to it, and never downloads weights or runs
-inference itself. The rest of this document describes the control plane both
-share. The cloud-only path — provider commands, public gateway binding, TLS,
-the registry/mirror/anchor/discover route, and what it does and does not prove —
-is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
+inference itself; a **web4** deployment stores the weights as sharded RAREXT
+blobs and forwards to a provider that fetched and verified them. The rest of this
+document describes the control plane all three share. The cloud-only path —
+provider commands, public gateway binding, TLS, the registry/mirror/anchor/discover
+route, and what it does and does not prove — is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
+The storage-native path — model bundles, sharding, provider cards, and the
+verification chain — is in [WEB4-MODEL.md](WEB4-MODEL.md).
 
 ## Why these two engines are the reference
 

@@ -60,11 +60,23 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     throw new Error("challenge.spec.engine must name a supported engine");
   }
 
+  const optionalHash = (field: string): string | undefined => {
+    const raw = value[field];
+    if (raw === undefined) return undefined;
+    if (typeof raw !== "string" || !/^[0-9a-f]{64}$/.test(raw)) {
+      throw new Error(`challenge.spec.${field} must be a 64-character sha256 hex digest when present`);
+    }
+    return raw;
+  };
+
   return {
     deploymentDigest: value.deploymentDigest,
     modelId: value.modelId,
     weightsDigest: (value.weightsDigest as string | null) ?? null,
     engine: value.engine,
+    ...(value.bundleDigest === undefined ? {} : { bundleDigest: optionalHash("bundleDigest") }),
+    ...(value.shardsRoot === undefined ? {} : { shardsRoot: optionalHash("shardsRoot") }),
+    ...(value.manifestHash === undefined ? {} : { manifestHash: optionalHash("manifestHash") }),
   };
 }
 

@@ -29,7 +29,8 @@ Those are names, not links, so every document is linked once in the reference be
 | --- | --- |
 | [APP-PROTOCOL.md](APP-PROTOCOL.md) | How does an app publish an artifact, get it verified, and read it back over HTTP? |
 | [AI-VERIFICATION.md](AI-VERIFICATION.md) | How does RAREXT verify AI artifacts — exact, generative, and bounded claims — and how do I check one myself? |
-| [MODEL-RUNTIME.md](MODEL-RUNTIME.md) | How do I deploy a large model (local engine or remote provider) and publish every inference as an exact, replayable RAREXT transcript? |
+| [MODEL-RUNTIME.md](MODEL-RUNTIME.md) | How do I deploy a large model (local engine, remote provider, or RAREXT network) and publish every inference as an exact, replayable RAREXT transcript? |
+| [WEB4-MODEL.md](WEB4-MODEL.md) | How do the weights themselves live on RAREXT — model bundles, sharded blobs, a provider node that fetches and verifies them, and a run a stranger can replay? |
 | [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md) | How do I run the model entirely in the cloud — remote endpoint, no local weights or inference, a public gateway, and the registry/mirror/anchor/discover path? |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What are the components, what talks to what, and which parts are still target-state? |
 | [BRANDING.md](BRANDING.md) | Which brand is speaking, and what may each one claim? |

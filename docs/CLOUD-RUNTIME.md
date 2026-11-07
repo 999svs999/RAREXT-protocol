@@ -1,11 +1,13 @@
 # AI lives in the cloud on RAREXT
 
-The model runtime has two placements. `local` probes an engine on the machine
+The model runtime has three placements. `local` probes an engine on the machine
 that runs the gateway. `remote` commits an OpenAI- or Anthropic-compatible
-endpoint somewhere else and forwards every request to it. In a remote
-deployment the runtime holds **no weights**, downloads **no model files**, and
-runs **no inference**; it is the control plane that records and publishes what
-the cloud engine said.
+endpoint somewhere else and forwards every request to it. `web4` stores the
+weights as sharded RAREXT blobs and forwards to a provider that fetched and
+verified them ([WEB4-MODEL.md](WEB4-MODEL.md)). In a remote deployment the
+runtime holds **no weights**, downloads **no model files**, and runs **no
+inference**; it is the control plane that records and publishes what the cloud
+engine said.
 
 The deployment identity does not change between placements. It is still
 `sha256(canonicalize(manifest))`, and the challenge still commits the deployment
@@ -212,9 +214,9 @@ node apps/runtime/src/cli.ts plan --registry https://registry.example.com
 node apps/runtime/src/cli.ts plan --bundle bundle.json --json
 ```
 
-It lists each verified remote card's deployment id, digest, model, engine, and
-endpoint. It makes no host-memory claim and contacts no engine; the endpoint is
-the one the card commits.
+It lists each verified remote or web4 card's deployment id, digest, model,
+engine, and endpoint. It makes no host-memory claim and contacts no engine; the
+endpoint is the one the card commits.
 
 ## Serve from a verified card
 
