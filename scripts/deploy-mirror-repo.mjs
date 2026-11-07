@@ -20,13 +20,26 @@
 // the repository does not have it yet (idempotent on subsequent runs).
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SOURCE = join(ROOT, "site", "registry");
-const WORKTREE = join(ROOT, ".data", "deploy-mirror-repo");
+// A per-process worktree, not a shared one: the scheduled ship and a manual
+// re-run overlapped on this path and both tried to clone into it, which fails
+// with "cannot copy .../info/exclude: File exists". Unique dirs make the runs
+// independent; stale ones from a killed run are swept first.
+const WORKTREE = join(ROOT, ".data", `deploy-mirror-repo-${process.pid}`);
+for (const stale of readdirSafe(join(ROOT, ".data"))) {
+  if (!stale.startsWith("deploy-mirror-repo-")) continue;
+  const full = join(ROOT, ".data", stale);
+  try {
+    if (Date.now() - statSync(full).mtimeMs > 60 * 60 * 1000) rmSync(full, { recursive: true, force: true });
+  } catch {
+    // a dir that vanished mid-scan is fine
+  }
+}
 const OWNER = "999svs999";
 const REPO = "RAREXT-mirror";
 const REPO_SLUG = `${OWNER}/${REPO}`;
