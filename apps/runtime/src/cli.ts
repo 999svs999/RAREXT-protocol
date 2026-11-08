@@ -604,7 +604,13 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   writeJsonFile(bundlePath, bundle);
 
   if (bool(values, "json")) {
-    console.log(JSON.stringify({ bundle, manifestHash: uploaded.manifestHash, bundlePath }, null, 2));
+    console.log(
+      JSON.stringify(
+        { bundle, manifestHash: uploaded.manifestHash, bundlePath, sealKeyPath },
+        null,
+        2,
+      ),
+    );
     return 0;
   }
 

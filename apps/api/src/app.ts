@@ -172,6 +172,12 @@ import {
   budgetPaymentRecords,
   canonicalize,
   inferenceCreditRecords,
+  TRANSFER_KIND,
+  transferProblems,
+  transferRecords,
+  transferRoot,
+  creditBalances,
+  type TransferInstruction,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
 import {
@@ -2483,6 +2489,89 @@ export function createApp(options: AppOptions = {}): AppServer {
               ...creditLedgerProof(all, record, recordRootHash),
             },
           },
+        });
+        return;
+      }
+
+      // Moving credits between keys. A transfer is a signed instruction from the
+      // payer; the node records the debit and the credit it implies. It is not a
+      // faucet: the payer can only move credits it has, so a key that earned 12
+      // cannot send 12 twice — the ledger's no-overdraft rule is the double-spend
+      // check, and anyone recomputing the records gets the same balances.
+      if (req.method === "POST" && pathname === "/v1/work/transfer") {
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== TRANSFER_KIND) {
+          send(res, 400, { error: `payload must be a ${TRANSFER_KIND} instruction` });
+          return;
+        }
+        const instruction: TransferInstruction = {
+          kind: TRANSFER_KIND,
+          from: typeof payload.from === "string" ? payload.from : "",
+          to: typeof payload.to === "string" ? payload.to : "",
+          amount: typeof payload.amount === "number" ? payload.amount : 0,
+          nonce: typeof payload.nonce === "string" ? payload.nonce : "",
+          at: typeof payload.at === "string" ? payload.at : "",
+        };
+        const problems = transferProblems(instruction);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems.join("; ") });
+          return;
+        }
+        const from = instruction.from;
+        const to = instruction.to;
+        const amount = instruction.amount;
+        const payer = store.resolveKey(from);
+        if (!payer) {
+          send(res, 403, { error: "the paying key is not registered: a transfer binds a real identity" });
+          return;
+        }
+        if (!store.resolveKey(to)) {
+          send(res, 403, { error: "the receiving key is not registered: a transfer binds a real identity" });
+          return;
+        }
+        if (typeof payload.signature !== "string" || payload.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        if (!verifyPayload(payer.publicKey as unknown as RarextJsonWebKey, instruction, payload.signature)) {
+          send(res, 401, { error: "the transfer is not signed by the paying key" });
+          return;
+        }
+
+        const id = transferRoot(instruction, recordRootHash);
+        const already = store
+          .listCredits()
+          .some((credit) => credit.action === "transfer" && credit.artifactHash === id);
+        if (already) {
+          send(res, 409, { error: "this transfer has already been applied" });
+          return;
+        }
+
+        // The double-spend check: the payer can only move credits it holds.
+        const before = creditBalances(store.listCredits());
+        const available = before[from] ?? 0;
+        if (available < amount) {
+          send(res, 402, {
+            error: `insufficient credits: ${from} holds ${available}, the transfer is ${amount}`,
+          });
+          return;
+        }
+
+        const records = transferRecords(instruction, recordRootHash);
+        for (const record of records) store.addCredit(record as unknown as CreditRecord);
+        const all = store.listCredits();
+        const after = creditBalances(all);
+        send(res, 201, {
+          transfer: { id, from, to, amount, nonce: instruction.nonce, at: instruction.at },
+          balances: { from: after[from] ?? 0, to: after[to] ?? 0 },
+          receipts: records.map((record) => ({
+            ...record,
+            root: creditRoot(record, recordRootHash),
+            ledger: {
+              root: creditLedgerRoot(all, recordRootHash),
+              ...creditLedgerProof(all, record, recordRootHash),
+            },
+          })),
         });
         return;
       }

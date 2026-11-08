@@ -168,6 +168,17 @@ export {
   inferenceCreditLedgerRoot,
 } from "./inference.ts";
 export type { InferenceCreditInput, InferenceQuorumProvider } from "./inference.ts";
+export {
+  TRANSFER_KIND,
+  TRANSFER_ACTION,
+  TRANSFER_ROOT_DOMAIN,
+  transferRoot,
+  transferRecords,
+  transferProblems,
+  creditBalances,
+  creditLedgerProblems,
+} from "./transfers.ts";
+export type { TransferInstruction } from "./transfers.ts";
 export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";

@@ -30,6 +30,14 @@ export type ActionId =
    */
   | "infer"
   /**
+   * A TRANSFER between keys: a signed movement of credits from the payer to the
+   * payee. Like `governance`, the board does not offer it as a job — nobody is
+   * paid to move value — but it lives in the same ledger and the same
+   * commitment as every other record. A transfer is a debit and a credit that
+   * sum to zero, so the ledger stays conserved.
+   */
+  | "transfer"
+  /**
    * A GOVERNANCE payment: the debit and credit a decided budget becomes. It is recorded in the same
    * ledger and covered by the same commitment as work, but the board does not offer it as a job —
    * nobody earns it by doing work, and it exists because a community can fund what it decides.

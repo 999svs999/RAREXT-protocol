@@ -9,6 +9,7 @@
  * can re-derive from the same blob store.
  *
  *   storage   shard a model into content-addressed blobs with `bundle`
+ *   sealed    (RAREXT_WEB4_SEAL=1) store ciphertext the store never opens
  *   provider  fetch/verify the shards with `provider` and serve them
  *   deploy    commit placement "web4" and the bundle digest with `deploy`
  *   registry  start a real RAREXT node with the run verifier and challenge
@@ -18,6 +19,7 @@
  *   infer     run inference through the providers, not on this host
  *   publish   publish the run with its quorum evidence
  *   pay       pay each agreeing operator and prove it against the ledger root
+ *   settle    the node records the payments, and a key moves credits to another
  *   compare   ask every provider the same question and compare answers
  *   weights   prove the source model file is gone and the bytes came from RAREXT
  *   replay    regenerate the output from the committed bundle and seed
@@ -34,6 +36,10 @@
  *   RAREXT_WEB4_ENGINE_MODEL=rarext-web4-qwen \
  *   node scripts/demo-web4-model.mjs
  *
+ * To store the weights as ciphertext the RAREXT node never opens (native only):
+ *
+ *   RAREXT_WEB4_SEAL=1 node scripts/demo-web4-model.mjs
+ *
  * With a GGUF the provider reassembles the file from RAREXT shards, asks the
  * provider's own Ollama to load it, and serves that. The weights still come
  * from RAREXT; the engine is the provider's, not the caller's.
@@ -41,7 +47,15 @@
 
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -64,7 +78,7 @@ import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
 import { verifyDeploymentBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
-import { RarextClient } from "../packages/agent-sdk/src/index.ts";
+import { AgentSigner, RarextClient, generateAgentKeypair } from "../packages/agent-sdk/src/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const state = mkdtempSync(join(tmpdir(), "rarext-web4-model-"));
@@ -196,6 +210,13 @@ try {
 
   const gguf = process.env.RAREXT_WEB4_GGUF;
   const real = typeof gguf === "string" && gguf !== "";
+  const seal = process.env.RAREXT_WEB4_SEAL === "1";
+  if (seal && real) {
+    throw new Error(
+      "sealed inference is native-only: an engine provider materializes weights to a file. " +
+        "Run without RAREXT_WEB4_GGUF to demo sealing.",
+    );
+  }
   const modelId = process.env.RAREXT_WEB4_MODEL ?? (real ? "rarext-web4-model" : "rarext-native-proof");
   const engineModel = process.env.RAREXT_WEB4_ENGINE_MODEL ?? "rarext-web4-model";
   // Credits each distinct agreeing operator earns for the run. Payment is a
@@ -246,6 +267,7 @@ try {
       ];
   const bundled = await runCli([
     ...bundleArgs,
+    ...(seal ? ["--seal"] : []),
     "--registry",
     startBase,
     "--out",
@@ -258,6 +280,14 @@ try {
   const bundleReport = JSON.parse(bundled.stdout);
   const bundle = bundleReport.bundle;
   const manifestHash = bundleReport.manifestHash;
+  const sealKeyPath = bundleReport.sealKeyPath ?? null;
+  if (seal && sealKeyPath === null) throw new Error("sealed bundle produced no seal key file");
+  // The replay phase is a legitimate key holder: it recomputes the model from
+  // the committed bundle, so for a sealed bundle it opens the shards too.
+  const sealKey =
+    seal && sealKeyPath !== null
+      ? Buffer.from(readFileSync(sealKeyPath, "utf8").trim(), "hex")
+      : null;
 
   const listed = await getJson(`${startBase}/v1/blobs`);
   const shardHashes = new Set(bundle.shards.map((shard) => shard.hash));
@@ -272,6 +302,39 @@ try {
     `${bundle.shards.length} shard(s), ${bundle.totalBytes} bytes, weights ${bundle.model.weightsDigest.slice(0, 20)}…; ` +
       `the bundle manifest is ${manifestHash.slice(0, 12)}…`,
   );
+
+  // ── 2b. Sealing: the store holds ciphertext, not the weights ─────────────
+  // With RAREXT_WEB4_SEAL=1 the shards on the node are AES-256-GCM ciphertext.
+  // The node never holds the model: the plaintext file is not addressable, and
+  // the shard bytes hash to the committed ciphertext. A provider opens them in
+  // memory with a key delivered out of band.
+  const plaintextHash = bundle.model.weightsDigest.replace(/^sha256:/, "");
+  const plaintextListed = listed.some((record) => record.hash === plaintextHash);
+  let sealedDetail = "";
+  if (seal) {
+    const rawShard = Buffer.from(
+      await (await fetch(`${startBase}/v1/blobs/${bundle.shards[0].hash}/raw`)).arrayBuffer(),
+    );
+    const shardIsCommittedCiphertext =
+      createHash("sha256").update(rawShard).digest("hex") === bundle.shards[0].hash;
+    sealedDetail = shardIsCommittedCiphertext
+      ? `the node holds ${bundle.sealing?.scheme} ciphertext; the plaintext file ${plaintextHash.slice(0, 12)}… is not stored`
+      : "the stored shard does not hash to its commitment";
+    phase(
+      "sealed",
+      bundle.sealing?.scheme === "aes-256-gcm" &&
+        bundle.totalBytes !== bundle.model.sizeBytes &&
+        shardIsCommittedCiphertext &&
+        !plaintextListed,
+      sealedDetail,
+    );
+  } else {
+    phase(
+      "sealed",
+      bundle.sealing === undefined && bundle.totalBytes === bundle.model.sizeBytes,
+      "open bundle: the shards are the plaintext bytes (set RAREXT_WEB4_SEAL=1 to store ciphertext)",
+    );
+  }
 
   // Delete the source model. The provider may only use RAREXT from here on.
   let deletedSource = false;
@@ -296,6 +359,7 @@ try {
       String(providerPort),
       "--handle",
       "provider-a",
+      ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
     {},
@@ -328,6 +392,7 @@ try {
         String(providerBPort),
         "--handle",
         "provider-b",
+        ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ],
       {},
       (line) => {
@@ -363,6 +428,7 @@ try {
     String(bounty),
     "--registry",
     startBase,
+    ...(seal ? ["--seal-key-file", sealKeyPath] : []),
     "--allow-loopback",
     "--verify-shards",
     "--out",
@@ -640,7 +706,11 @@ try {
 
   // ── 11. Replay from the committed bundle, not from the provider ──────────
   const fetched = await fetchBundleManifest({ registry: baseUrl, manifestHash });
-  const { bytes } = await fetchBundleChunks({ registry: baseUrl, bundle: fetched });
+  const { bytes } = await fetchBundleChunks({
+    registry: baseUrl,
+    bundle: fetched,
+    ...(sealKey === null ? {} : { sealKey }),
+  });
   let replayOk = false;
   let replayDetail = "";
   if (!real) {
@@ -722,6 +792,126 @@ try {
       `latest bundle alone proves no provider`,
   );
 
+  // ── 12b. The operators are paid, and one moves credits to another key ────
+  // The run is anchored and attested. Each provider registers its own key with
+  // the node and claims the inference credit the run committed; the node
+  // recomputes the payment from the run and records it. Then the first operator
+  // moves credits to a fresh key: a signed debit and credit that sum to zero,
+  // proved against the whole-ledger root, with a second spend refused.
+  const operatorSigners = providerCards.map((_, index) => {
+    const dir = index === 0 ? providerState : providerBState;
+    const stored = JSON.parse(readFileSync(join(dir, "provider-identity.json"), "utf8"));
+    return new AgentSigner(stored.privateKey);
+  });
+  const transferRecipient = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+
+  const registerIdentity = async (handle, signer) => {
+    const response = await fetch(`${baseUrl}/v1/identities`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handle, publicKey: signer.publicKey }),
+    });
+    if (!response.ok) throw new Error(`register ${handle}: HTTP ${response.status} ${await response.text()}`);
+    return response.json();
+  };
+  const claimInference = async (operatorKeyId, signer) => {
+    const claim = {
+      kind: "rarext.inference-work.v1",
+      operator: operatorKeyId,
+      runDigest,
+      at: new Date().toISOString(),
+    };
+    const response = await fetch(`${baseUrl}/v1/work/inference`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...claim, signature: signer.sign(claim) }),
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+  const statementFor = (keyId) => getJson(`${baseUrl}/v1/work/statement?keyId=${encodeURIComponent(keyId)}`);
+
+  let settleOk = true;
+  let settleDetail = "";
+  try {
+    const paid = [];
+    for (const [index, cardEntry] of providerCards.entries()) {
+      const signer = operatorSigners[index];
+      const identity = await registerIdentity(`web4-operator-${index}`, signer);
+      if (identity.keyId !== cardEntry.provider.keyId) {
+        throw new Error(`registered ${identity.keyId}, but the card names ${cardEntry.provider.keyId}`);
+      }
+      const claim = await claimInference(cardEntry.provider.keyId, signer);
+      if (claim.status !== 201) {
+        throw new Error(`claim ${index}: HTTP ${claim.status} ${JSON.stringify(claim.body)}`);
+      }
+      paid.push(cardEntry.provider.keyId);
+    }
+    const earned = (await statementFor(paid[0])).credits.earned;
+    if (earned !== bounty) throw new Error(`operator 0 earned ${earned}, expected ${bounty}`);
+
+    const recipient = await registerIdentity("web4-treasury", transferRecipient);
+    const amount = 5;
+    const instruction = {
+      kind: "rarext.credit-transfer.v1",
+      from: paid[0],
+      to: recipient.keyId,
+      amount,
+      nonce: `demo-${Date.now()}`,
+      at: new Date().toISOString(),
+    };
+    const transferred = await fetch(`${baseUrl}/v1/work/transfer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...instruction, signature: operatorSigners[0].sign(instruction) }),
+    });
+    const transferText = await transferred.text();
+    if (transferred.status !== 201) throw new Error(`transfer: HTTP ${transferred.status} ${transferText}`);
+    const transfer = JSON.parse(transferText);
+    const received = transfer.receipts.find((entry) => entry.keyId === recipient.keyId);
+    const proofOk =
+      received !== undefined &&
+      received.ledger != null &&
+      verifyProof(
+        creditLeaf(
+          {
+            keyId: received.keyId,
+            action: received.action,
+            bounty: received.bounty,
+            challengeId: received.challengeId,
+            artifactHash: received.artifactHash,
+            at: received.at,
+          },
+          sha256Hex,
+        ),
+        received.ledger.proof,
+        received.ledger.root,
+        received.ledger.index,
+        bytesSha256,
+      ) === true;
+
+    const payer = await statementFor(paid[0]);
+    const payee = await statementFor(recipient.keyId);
+    const overspend = { ...instruction, amount: bounty * 1000, nonce: `demo-${Date.now()}-2` };
+    const refused = await fetch(`${baseUrl}/v1/work/transfer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...overspend, signature: operatorSigners[0].sign(overspend) }),
+    });
+
+    settleOk =
+      payer.credits.net === bounty - amount &&
+      payee.credits.net === amount &&
+      proofOk &&
+      refused.status === 402;
+    settleDetail =
+      `${paid.length} operator(s) settled ${bounty} credit(s); operator 0 moved ${amount} to a fresh key ` +
+      `(net ${payer.credits.net}) with proof ${String(proofOk)}; an overspend was refused (${refused.status})`;
+  } catch (error) {
+    settleOk = false;
+    settleDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("settle", settleOk, settleDetail);
+
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
   const victim = bundle.shards[0].hash;
   writeFileSync(join(blobDir, victim), Buffer.from("not the committed bytes"));
@@ -731,6 +921,7 @@ try {
     join(state, "model-bundle.json"),
     "--registry",
     baseUrl,
+    ...(seal && sealKeyPath !== null ? ["--seal-key-file", sealKeyPath] : []),
     "--state",
     join(state, "provider-tamper"),
     "--port",

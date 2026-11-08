@@ -85,6 +85,23 @@ export interface ModelBundle {
   digest: string;
 }
 
+export const PROVIDER_MACHINE_KIND = "rarext.provider-machine.v1";
+
+/**
+ * A provider's machine identity. `machine` names the box (a host fingerprint,
+ * or an operator's own id); `measurement` is a digest over what the provider
+ * says it is running on. For a declared machine this is a hash of the id; a TEE
+ * deployment would put the enclave measurement here. The value is only as
+ * trustworthy as the key that signs the card — it proves the OPERATOR claims
+ * these machines are distinct, not that they are physically so.
+ */
+export interface ProviderIndependence {
+  kind: typeof PROVIDER_MACHINE_KIND;
+  machine: string;
+  measurement: string;
+  issuedAt: string;
+}
+
 export interface ProviderCard {
   kind: typeof MODEL_PROVIDER_KIND;
   version: 1;
@@ -112,6 +129,13 @@ export interface ProviderCard {
     suite?: string;
   };
   apis: ApiShape[];
+  /**
+   * The machine the provider attests it runs on. Covered by the card signature,
+   * which is the operator's own key: the machine identity is bound to the key
+   * that signs for it. A deployment can require a quorum over distinct
+   * machines, so two keys on one box are not two independent answers.
+   */
+  independence?: ProviderIndependence;
   createdAt: string;
   /**
    * The provider's own signature over the card, when it has an identity. It
@@ -700,6 +724,7 @@ export interface BuildProviderCardInput {
   manifestHash: string;
   endpoint: string;
   provider?: ProviderCard["provider"];
+  independence?: ProviderCard["independence"];
   apis?: ApiShape[];
   id?: string;
   createdAt?: string;
@@ -737,6 +762,7 @@ export function buildProviderCard(input: BuildProviderCardInput): ProviderCard {
     model: input.bundle.model,
     execution: input.bundle.execution,
     provider: input.provider ?? { handle: null, keyId: null },
+    ...(input.independence === undefined ? {} : { independence: input.independence }),
     apis: input.apis ?? (["openai"] as ApiShape[]),
     createdAt: input.createdAt ?? new Date().toISOString(),
   } satisfies Omit<ProviderCard, "digest" | "signature">;
@@ -843,6 +869,34 @@ export function verifyProviderCard(value: unknown): string[] {
       }
     } else if (value.signature !== undefined) {
       errors.push("provider card signature requires provider.publicKey");
+    }
+  }
+
+  if (value.independence !== undefined) {
+    if (!isRecord(value.independence)) {
+      errors.push("provider card independence must be an object");
+    } else {
+      if (value.independence.kind !== PROVIDER_MACHINE_KIND) {
+        errors.push(`provider card independence.kind must be "${PROVIDER_MACHINE_KIND}"`);
+      }
+      if (
+        typeof value.independence.machine !== "string" ||
+        value.independence.machine.length === 0
+      ) {
+        errors.push("provider card independence.machine must be a non-empty string");
+      }
+      if (
+        typeof value.independence.measurement !== "string" ||
+        !HEX64.test(value.independence.measurement)
+      ) {
+        errors.push("provider card independence.measurement must be a sha256 hex digest");
+      }
+      if (
+        typeof value.independence.issuedAt !== "string" ||
+        Number.isNaN(Date.parse(value.independence.issuedAt))
+      ) {
+        errors.push("provider card independence.issuedAt must be an ISO timestamp");
+      }
     }
   }
 

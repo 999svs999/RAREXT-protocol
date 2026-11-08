@@ -2,8 +2,11 @@ import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { arch, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+
+import { sha256Hex } from "./digest.ts";
 
 import {
   AgentSigner,
@@ -23,6 +26,7 @@ import {
   fetchBundleManifest,
   buildProviderCard,
   bundleManifestHash,
+  PROVIDER_MACHINE_KIND,
   verifyModelBundle,
 } from "./model-bundle.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";

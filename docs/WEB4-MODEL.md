@@ -78,7 +78,9 @@ different ones.
 
 1. fetch the bundle manifest by content address and verify its digest;
 2. fetch every shard, checking each shard's length and sha256;
-3. reassemble the file and check it against `model.weightsDigest`;
+3. reassemble the file and check it against `model.weightsDigest` — or, for a
+   sealed bundle, open each shard in memory with the key and check the plaintext
+   against the same digest;
 4. only then load the model — parse the committed native model, or write the
    verified file and ask the provider's Ollama to create it;
 5. serve an OpenAI-compatible `/v1/chat/completions` and `/v1/models`;
@@ -87,6 +89,27 @@ different ones.
 
 If one byte of one shard is wrong, the provider refuses to start. There is no
 "best effort" load.
+
+### Sealed weights
+
+A bundle can be **sealed**. `bundle --seal` shards the model, encrypts each shard
+with AES-256-GCM under a fresh 32-byte key, and stores the ciphertext; the
+manifest commits the ciphertext's `shardsRoot` and `totalBytes` alongside the
+plaintext's `weightsDigest` and `sizeBytes`, plus `sealing.keyCommitment` — the
+sha256 of the key, never the key.
+
+The consequence is that RAREXT holds ciphertext. The store operator, a mirror,
+or anyone reading the blobs gets bytes that hash to the committed shards and
+open to nothing without the key. A provider is given the key out of band
+(`--seal-key-file`); it checks the key against `keyCommitment`, opens the shards
+in memory, verifies the plaintext against `weightsDigest`, and serves. It never
+writes plaintext weights to disk.
+
+Sealing is native-only today. An `engine` bundle loads its weights from a file
+the engine reads asynchronously, so a sealed engine bundle is **refused** rather
+than silently materialized. Sealing hides the weights from the store and the
+wire, not from the provider: the provider holds the key and sees the weights in
+memory. Prompts remain visible to the provider either way.
 
 A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
 `rarext.provider-identity.v1`). The card it serves is signed with that key, and
@@ -384,16 +407,23 @@ why a large file is sharded rather than sent as one object.
   people or run on unrelated hardware or upstream engines — one party can hold
   many keys. The bundled demo's two operators are separate processes, and keys,
   on one machine.
-- **The provider sees the weights and the prompts.** Encryption at rest is the
-  sealed storage tier; inference over sealed weights is not implemented.
+- **Sealed weights hide the model from the store and the wire, not the operator.**
+  A sealed bundle's shards are AES-256-GCM ciphertext, so the RAREXT node, a
+  mirror, and anyone reading the blobs hold only ciphertext, and a provider opens
+  them in memory without writing plaintext (an engine bundle, which loads from a
+  file, refuses a sealed bundle). But the provider holds the key and sees the
+  weights in memory, and prompts are still visible to it. Privacy from the
+  operator needs a TEE or MPC, which is not implemented.
 - **Inference is not cryptographically proven.** The run transcript proves the
   bytes exchanged; a deterministic native model can be replayed from the bundle;
   an arbitrary GGUF cannot be reproduced bit-for-bit by the protocol alone.
-- **Payment is per run, not a currency.** A committed bounty is recorded and
-  settled in RAREXT's credit ledger: the run commits who was paid, the verifier
-  recomputes it, and an operator proves its receipt against the ledger root. What
-  is not implemented is moving value off the ledger — there is no cash-out, and a
-  bounty is only as good as the accounts behind it.
+- **Credits move on the ledger, not off it.** A committed bounty is recorded and
+  settled in RAREXT's credit ledger; the run commits who was paid, the verifier
+  recomputes it, and an operator proves its receipt against the ledger root. A key
+  can then move credits it holds to another key with a signed transfer
+  (`/v1/work/transfer`): a zero-sum debit/credit pair, refused if it would overdraw
+  the payer, proved against the same whole-ledger root. There is still no cash-out —
+  no bank to withdraw from — and a bounty is only as good as the accounts behind it.
 - **The engine is the provider's.** With `execution.kind: "engine"` the provider
   must have Ollama (today) and reproduces the model locally from the verified
   file. The weights still come from RAREXT; the compute is the provider's.

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
@@ -31,7 +31,9 @@ import {
   fetchBundleChunks,
   fetchBundleManifest,
   fetchProviderCard,
+  generateSealKey,
   providerCardDigest,
+  sealKeyCommitment,
   uploadBundle,
   verifyModelBundle,
   verifyProviderCard,
@@ -224,6 +226,126 @@ test("a provider fetches the model from RAREXT, verifies it, and serves it", asy
     assert.equal(legacyBody.choices[0]!.text, first.choices[0]!.message.content);
   } finally {
     if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a sealed bundle lives on RAREXT as ciphertext and opens only with the key", async () => {
+  const reg = await registry();
+  const sealKey = generateSealKey();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+    });
+    assert.equal(bundle.sealing?.scheme, "aes-256-gcm");
+    assert.equal(bundle.sealing?.keyCommitment, sealKeyCommitment(sealKey));
+    assert.notEqual(bundle.totalBytes, bundle.model.sizeBytes, "ciphertext is larger than the plaintext");
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    // What the node holds is exactly the committed ciphertext: the plaintext
+    // model is not in the store, and the raw blob hashes to the shard hash.
+    const rawShard = Buffer.from(
+      await (await fetch(`${reg.base}/v1/blobs/${bundle.shards[0]!.hash}/raw`)).arrayBuffer(),
+    );
+    assert.equal(createHash("sha256").update(rawShard).digest("hex"), bundle.shards[0]!.hash);
+    assert.equal(rawShard.includes(Buffer.from("xorshift32")), false, "the store never holds the model");
+    const listed = (await (await fetch(`${reg.base}/v1/blobs`)).json()) as Array<{ hash: string }>;
+    const plaintextHash = createHash("sha256").update(NATIVE_BYTES).digest("hex");
+    assert.equal(
+      listed.some((record) => record.hash === plaintextHash),
+      false,
+      "the plaintext file is not addressable in the store",
+    );
+
+    // A reader without the key verifies the ciphertext but cannot produce the
+    // plaintext; with the key the opened bytes match the model identity.
+    const sealedChunks = await Promise.all(
+      bundle.shards.map(async (shard) =>
+        Buffer.from(await (await fetch(`${reg.base}/v1/blobs/${shard.hash}/raw`)).arrayBuffer()),
+      ),
+    );
+    const withoutKey = verifyBundleChunks(bundle, sealedChunks);
+    assert.equal(withoutKey.ok, true, withoutKey.errors.join("; "));
+    assert.notDeepEqual(withoutKey.bytes, NATIVE_BYTES);
+    const withKey = verifyBundleChunks(bundle, sealedChunks, sealKey);
+    assert.equal(withKey.ok, true, withKey.errors.join("; "));
+    assert.deepEqual(withKey.bytes, NATIVE_BYTES);
+
+    // The provider refuses without the key, refuses a wrong key by commitment,
+    // and serves only when the opened plaintext matches the committed model.
+    await assert.rejects(
+      startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "nokey"), port: 0 }),
+      /sealed/,
+    );
+    await assert.rejects(
+      startProvider({
+        bundle,
+        registry: reg.base,
+        stateDir: join(reg.root, "wrongkey"),
+        port: 0,
+        sealKey: randomBytes(32),
+      }),
+      /key commitment/,
+    );
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "provider"),
+      port: 0,
+      sealKey,
+    });
+    assert.deepEqual(provider.modelBytes, NATIVE_BYTES);
+    assert.equal(provider.card.bundle.sealed, true);
+    const completion = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "sealed?" }],
+        max_tokens: 8,
+      }),
+    });
+    const body = (await completion.json()) as { choices: Array<{ message: { content: string } }> };
+    assert.equal(completion.status, 200);
+    assert.ok(body.choices[0]!.message.content.length > 0);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a sealed engine bundle is refused rather than writing plaintext to disk", async () => {
+  const reg = await registry();
+  const sealKey = generateSealKey();
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: Buffer.from("GGUF-not-really"),
+      model: { ...NATIVE_REF, id: "sealed-engine", format: "gguf", weightsDigest: null },
+      execution: { kind: "engine", engine: "ollama", engineModel: "sealed" },
+      chunkBytes: 8,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+    });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    await assert.rejects(
+      startProvider({
+        bundle,
+        registry: reg.base,
+        stateDir: join(reg.root, "engine"),
+        port: 0,
+        sealKey,
+        engineEndpoint: "http://127.0.0.1:1",
+      }),
+      /sealed weights/,
+    );
+  } finally {
     await reg.close();
   }
 });

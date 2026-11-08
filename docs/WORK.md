@@ -96,9 +96,46 @@ Credits are recorded against a **key**, not a device. A worker that exports its
 identity can move its earnings to another machine, which is what makes "rewarded on
 any device" true rather than aspirational.
 
-Credits are not money yet. They are a unit of account for work delivered, redeemable
-for services the platform provides — storage, verification, mirrors. The chain settles
-them.
+Credits are a unit of account for work delivered, redeemable for services the
+platform provides — storage, verification, mirrors, model inference. They are not
+cash: there is no bank to withdraw from, and the chain settles them.
+
+## Moving credits between keys
+
+Credits are not glued to the key that earned them. A key can move what it holds to
+another key with a signed instruction:
+
+```
+POST /v1/work/transfer
+{"kind":"rarext.credit-transfer.v1","from":"<keyId>","to":"<keyId>",
+ "amount":5,"nonce":"<unique>","at":"<now>","signature":"<base64 over the instruction>"}
+```
+
+A transfer is not a faucet and not a mint: the node records the debit and the credit
+the instruction implies — two records that sum to zero, both naming the transfer's
+own identity — and it pays only what the payer already holds. The rule that stops a
+double-spend is stated over the whole ledger: **no key may end up overdrawn**. Because
+every transfer is a zero-sum pair, the total is conserved, so an overdraft can only be
+the same credits spent twice. A node enforcing it at write time and a reader
+recomputing it from the records agree, because it is a function of the set, not the
+order. Two transfers that differ only in `nonce` are two movements; the SAME signed
+instruction can never be applied twice, because its identity is a function of the
+nonce.
+
+Each of the two records carries its own recomputable root and a Merkle inclusion proof
+against the node's whole-ledger root (the same `creditLedgerRoot` every other rail
+rides), so a payee can prove it was paid against a commitment anyone can recompute:
+
+```
+{"transfer":{"id":"<64-hex>","from":"…","to":"…","amount":5,"nonce":"…","at":"…"},
+ "balances":{"from":7,"to":5},
+ "receipts":[{"keyId":"…","action":"transfer","bounty":-5,"artifactHash":"<64-hex>",
+              "ledger":{"root":"<64-hex>","index":3,"proof":["…"]}}, …]}
+```
+
+`GET /v1/work/statement?keyId=…` reads the same ledger from the earner's side —
+`credits.earned`, `credits.spent`, `credits.net` — so a transferred balance is visible
+as a spend and a net, not hidden in one total.
 
 ## Participation receipts
 

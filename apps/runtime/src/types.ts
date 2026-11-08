@@ -203,6 +203,13 @@ export interface RunQuorumProvider {
    * cannot satisfy the threshold by running several endpoints.
    */
   operator?: string | null;
+  /**
+   * The machine identity the provider attested in its card, when one was. A
+   * deployment may require its agreeing providers to sit on distinct machines,
+   * so an operator cannot satisfy the threshold by pointing at several
+   * processes on one box.
+   */
+  machine?: string | null;
 }
 
 export interface RunQuorum {
@@ -296,6 +303,16 @@ export interface ModelRunSpec {
    * carry matching `credits`, recomputed from the quorum evidence.
    */
   inferenceBounty?: number;
+  /**
+   * When "machine", the quorum must be met by agreeing providers that attested
+   * DISTINCT machines. `machines` is the operator-aligned machine list the
+   * deployment committed from the signed provider cards, so a run cannot invent
+   * a machine: each agreeing provider's (operator, machine) pair must be one the
+   * deployment committed.
+   */
+  independence?: "machine";
+  /** Machine identities, aligned index-for-index with `operators`. */
+  machines?: string[];
 }
 
 export interface ProviderCardVerification {
