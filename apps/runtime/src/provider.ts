@@ -15,11 +15,15 @@ import type { JsonWebKey as NodeJsonWebKey } from "node:crypto";
 
 import {
   MAX_GENERATIVE_OUTPUT_LENGTH,
-  generate,
+  generateTokens,
   isXorshiftModel,
 } from "../../../packages/core/src/ai.ts";
 import type { XorshiftModel } from "../../../packages/core/src/ai.ts";
-import { sha256Hex } from "./digest.ts";
+import { comparableCompletion } from "./completion.ts";
+import { runtimeCodeMeasurement } from "./code-measurement.ts";
+import { canonicalDigest, sha256Hex } from "./digest.ts";
+import { verifyImageManifest } from "./image-manifest.ts";
+import type { ImageManifest } from "./image-manifest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   fetchBundleChunks,
@@ -66,6 +70,18 @@ export interface ProviderOptions {
    */
   measurement?: string | null;
   /**
+   * The measurement of the code this process is running. Defaults to a digest of
+   * the runtime's own source, so a deployment that pins one refuses an enclave
+   * running other code.
+   */
+  codeMeasurement?: string | null;
+  /**
+   * A vendor-signed image manifest vouching for the running code. The provider
+   * refuses to start unless the manifest is valid AND its image is the code this
+   * process actually runs, then binds that manifest into its attestation.
+   */
+  imageManifest?: ImageManifest;
+  /**
    * The key that opens a sealed bundle. The provider decrypts the shards in
    * memory and never writes plaintext weights to disk; without the key a sealed
    * bundle is refused before any model is loaded.
@@ -101,6 +117,11 @@ export interface ProviderOptions {
    * operator's serving process never holds the plaintext weights.
    */
   enclaveEndpoint?: string;
+  /**
+   * Ask the engine for per-token logprobs and record a decode JUDGMENT, so an
+   * engine run is checked at the decode level rather than the text level alone.
+   */
+  engineLogprobs?: boolean;
   /** How the engine loads a verified file. Injected in tests; Ollama in production. */
   engineCreate?: EngineCreate;
   fetchImpl?: typeof fetch;
@@ -196,7 +217,7 @@ function longestToken(model: XorshiftModel): number {
 export function runNativeModel(
   model: XorshiftModel,
   input: { prompt: string; steps: number; seed?: number | null },
-): { text: string; seed: number; steps: number } {
+): { text: string; seed: number; steps: number; tokens: number[] } {
   const seed =
     typeof input.seed === "number" && Number.isSafeInteger(input.seed)
       ? input.seed >>> 0
@@ -204,7 +225,58 @@ export function runNativeModel(
 
   const bound = Math.floor(MAX_GENERATIVE_OUTPUT_LENGTH / Math.max(1, longestToken(model)));
   const steps = Math.max(1, Math.min(input.steps, bound));
-  return { text: generate(model, seed, steps), seed, steps };
+  const tokens = generateTokens(model, seed, steps);
+  return {
+    text: tokens.map((token) => model.vocab[token]).join(""),
+    seed,
+    steps,
+    tokens,
+  };
+}
+
+/**
+ * What a run commits about its decode. The native class records the token ids it
+ * emitted; an engine that exposes per-token logprobs records a JUDGMENT — the
+ * token sequence and each token's logprob — so an engine run can be checked at
+ * the decode level too, not only at the text level. An engine that exposes
+ * neither records nothing, which is honest.
+ */
+export type TraceData =
+  | { kind: "rarext.decode-trace.v1"; tokens: number[] }
+  | { kind: "rarext.judgment.v1"; tokens: string[]; logprobs: number[] };
+
+/**
+ * The decode trace a run records: the trace fields plus a digest over them. A
+ * replay re-runs and refuses when the digest diverges. The digest covers the
+ * trace WITHOUT the digest field, so the verifier recomputes it the same way.
+ */
+export function decodeTrace(trace: TraceData | null): Record<string, unknown> {
+  if (trace === null) return {};
+  return { rarext_trace: { ...trace, digest: canonicalDigest(trace) } };
+}
+
+/**
+ * The base64 header a provider returns: its operator key's signature over the
+ * request digest and the comparable response digest. A gateway that relays the
+ * answer cannot fabricate it, so the run proves what the provider said.
+ */
+function responseReceiptHeader(
+  signer: AgentSigner,
+  requestBody: unknown,
+  responseBody: Record<string, unknown>,
+): string {
+  const payload = {
+    kind: "rarext.response-receipt.v1",
+    request: canonicalDigest(requestBody),
+    response: canonicalDigest(comparableCompletion(responseBody)),
+  };
+  const receipt = {
+    ...payload,
+    signature: signer.sign(payload),
+    publicKey: signer.publicKey,
+    suite: signer.suite,
+  };
+  return Buffer.from(JSON.stringify(receipt), "utf8").toString("base64");
 }
 
 function parseNativeModel(bytes: Buffer): XorshiftModel {
@@ -508,10 +580,27 @@ async function startEnclaveProxy(options: ProviderOptions, enclaveEndpoint: stri
           signal: AbortSignal.timeout(120_000),
         });
         const text = await upstream.text();
-        response.writeHead(upstream.status, {
+        const headers: Record<string, string> = {
           "content-type": upstream.headers.get("content-type") ?? "application/json",
           "x-rarext-enclave": "forwarded",
-        });
+        };
+        // The forwarder signs its own receipt over what it returned, so the
+        // gateway's record of this operator's answer is verifiable too.
+        if (upstream.ok) {
+          try {
+            const parsed = JSON.parse(text) as unknown;
+            if (isRecord(parsed)) {
+              headers["x-rarext-receipt"] = responseReceiptHeader(
+                signer,
+                JSON.parse(raw) as unknown,
+                parsed,
+              );
+            }
+          } catch {
+            // A non-JSON body (a stream) carries no receipt.
+          }
+        }
+        response.writeHead(upstream.status, headers);
         response.end(text);
         return;
       }
@@ -630,6 +719,14 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   const identity = loadProviderIdentity(options.stateDir, options.providerHandle ?? null);
   const signer = new AgentSigner(identity.privateKey as unknown as NodeJsonWebKey);
 
+  /**
+   * Sign the receipt for one response: the operator's own key over the request
+   * digest and the comparable response digest. The gateway that relays the answer
+   * cannot fabricate this, so the transcript proves what the provider said.
+   */
+  const receiptHeader = (requestBody: unknown, responseBody: Record<string, unknown>): string =>
+    responseReceiptHeader(signer, requestBody, responseBody);
+
   // The machine this provider attests, bound to the key that signs the card. The
   // default is the host, so co-located providers collide and a machine-independent
   // challenge can tell they are one box.
@@ -637,6 +734,25 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     options.machine ?? `host:${hostname()}:${platform()}:${arch()}`;
   const measurement =
     options.measurement ?? sha256Hex(`rarext.machine.v1\n${machine}`);
+  // The code this process runs. With a vendor-signed image manifest, the code
+  // identity is bound to the vendor's signature, and the provider refuses to run
+  // if the manifest does not vouch for the code it is actually running.
+  let codeMeasurement: string;
+  let imageManifest: ImageManifest | undefined;
+  if (options.imageManifest !== undefined) {
+    const info = verifyImageManifest(options.imageManifest);
+    if (info === null) {
+      throw new Error("refusing to start: the image manifest is not a valid vendor-signed manifest");
+    }
+    const running = runtimeCodeMeasurement();
+    if (info.image !== running) {
+      throw new Error("refusing to start: the running code is not the signed image");
+    }
+    codeMeasurement = info.image;
+    imageManifest = options.imageManifest;
+  } else {
+    codeMeasurement = options.codeMeasurement ?? runtimeCodeMeasurement();
+  }
 
   // The engine this provider actually serves with, and the one value a run pins.
   const engineDescriptor = {
@@ -669,6 +785,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           scheme: options.teeSigner === undefined ? "software-image" : "tee",
           machine,
           measurement,
+          code: codeMeasurement,
+          ...(imageManifest === undefined ? {} : { image: imageManifest }),
           issuedAt: new Date().toISOString(),
         };
         if (options.teeSigner === undefined) return body;
@@ -691,7 +809,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   async function complete(
     body: Record<string, unknown>,
     shape: "chat" | "completions" = "chat",
-  ): Promise<{ text: string; seed: number | null; steps: number }> {
+  ): Promise<{ text: string; seed: number | null; steps: number; trace: TraceData | null }> {
     const prompt = lastUserText(body);
 
     if (native !== null) {
@@ -707,7 +825,12 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         ),
         seed,
       });
-      return { text: result.text, seed: result.seed, steps: result.steps };
+      return {
+        text: result.text,
+        seed: result.seed,
+        steps: result.steps,
+        trace: { kind: "rarext.decode-trace.v1", tokens: result.tokens },
+      };
     }
 
     if (engineModel === null || options.engineEndpoint === undefined) {
@@ -718,7 +841,14 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...body, model: engineModel, stream: false }),
+        body: JSON.stringify({
+          ...body,
+          model: engineModel,
+          stream: false,
+          // Ask for per-token logprobs when enabled, so the run records a decode
+          // judgment; an engine that ignores the field simply records none.
+          ...(options.engineLogprobs === true ? { logprobs: true } : {}),
+        }),
         signal: AbortSignal.timeout(600_000),
       },
     );
@@ -726,14 +856,35 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       throw new Error(`engine returned HTTP ${upstream.status} ${await upstream.text()}`);
     }
     const json = (await upstream.json()) as {
-      choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+      choices?: Array<{
+        message?: { content?: unknown };
+        text?: unknown;
+        logprobs?: { content?: Array<{ token?: unknown; logprob?: unknown }> };
+      }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const text =
       shape === "chat"
         ? String(json.choices?.[0]?.message?.content ?? "")
         : String(json.choices?.[0]?.text ?? "");
-    return { text, seed: null, steps: json.usage?.completion_tokens ?? 0 };
+
+    // A decode judgment, when the engine exposes token logprobs.
+    const content = json.choices?.[0]?.logprobs?.content;
+    let trace: TraceData | null = null;
+    if (Array.isArray(content) && content.length > 0) {
+      const tokens: string[] = [];
+      const logprobs: number[] = [];
+      for (const entry of content) {
+        if (typeof entry?.token !== "string" || typeof entry?.logprob !== "number") {
+          tokens.length = 0;
+          break;
+        }
+        tokens.push(entry.token);
+        logprobs.push(entry.logprob);
+      }
+      if (tokens.length > 0) trace = { kind: "rarext.judgment.v1", tokens, logprobs };
+    }
+    return { text, seed: null, steps: json.usage?.completion_tokens ?? 0, trace };
   }
 
   const server = createServer(async (request, response) => {
@@ -760,10 +911,41 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       // The machine attestation on its own, so a forwarding provider can adopt
       // the enclave's identity (quote and chain included) without the card.
       if (request.method === "GET" && url.pathname === "/v1/attestation") {
+        const nonce = url.searchParams.get("nonce");
+        const base = cardFor().independence;
+        // A challenged attestation: bind the verifier's fresh nonce into a
+        // freshly-signed quote, so a replayed (stale) quote is refused.
+        let attestation: unknown = base ?? null;
+        if (
+          nonce !== null &&
+          /^[0-9a-f]{16,128}$/.test(nonce) &&
+          base !== undefined &&
+          options.teeSigner !== undefined
+        ) {
+          const body: Omit<ProviderIndependence, "quote"> = {
+            kind: base.kind,
+            scheme: base.scheme,
+            machine: base.machine,
+            measurement: base.measurement,
+            ...(base.code === undefined ? {} : { code: base.code }),
+            ...(base.image === undefined ? {} : { image: base.image }),
+            issuedAt: base.issuedAt,
+            challenge: nonce,
+          };
+          attestation = {
+            ...body,
+            quote: {
+              signature: options.teeSigner.sign(providerQuotePayload(body)),
+              publicKey: options.teeSigner.publicKey,
+              suite: options.teeSigner.suite,
+              ...(options.teeChain === undefined ? {} : { chain: options.teeChain }),
+            },
+          };
+        }
         sendJson(response, 200, {
           role: "enclave",
           bundle: options.bundle.digest,
-          attestation: cardFor().independence ?? null,
+          attestation,
           // The enclave's public key, so a caller can seal a prompt to it.
           enclavePublicKey:
             options.enclaveKey === undefined
@@ -821,7 +1003,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           const result = await complete(inner);
           const created = Math.floor(Date.now() / 1000);
           const promptWords = lastUserText(inner).split(/\s+/).filter(Boolean).length;
-          sendJson(response, 200, {
+          const sealedPayload = {
             model: modelId,
             confidential: sealResponse(opened.key, {
               id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
@@ -840,8 +1022,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
                 completion_tokens: result.steps,
                 total_tokens: promptWords + result.steps,
               },
+              ...decodeTrace(result.trace),
             }),
-          });
+          };
+          response.setHeader("x-rarext-receipt", receiptHeader(body, sealedPayload));
+          sendJson(response, 200, sealedPayload);
           return;
         }
 
@@ -876,7 +1061,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
         response.setHeader("x-rarext-bundle", options.bundle.digest);
         if (result.seed !== null) response.setHeader("x-rarext-seed", String(result.seed));
-        sendJson(response, 200, {
+        const completionBody = {
           id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
           object: "chat.completion",
           created,
@@ -894,7 +1079,10 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             total_tokens:
               lastUserText(body).split(/\s+/).filter(Boolean).length + result.steps,
           },
-        });
+          ...decodeTrace(result.trace),
+        };
+        response.setHeader("x-rarext-receipt", receiptHeader(body, completionBody));
+        sendJson(response, 200, completionBody);
         return;
       }
 
@@ -914,7 +1102,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           ]);
           return;
         }
-        sendJson(response, 200, {
+        const textCompletion = {
           id: "cmpl-final",
           object: "text_completion",
           created,
@@ -925,7 +1113,10 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             completion_tokens: result.steps,
             total_tokens: result.steps,
           },
-        });
+          ...decodeTrace(result.trace),
+        };
+        response.setHeader("x-rarext-receipt", receiptHeader(body, textCompletion));
+        sendJson(response, 200, textCompletion);
         return;
       }
 

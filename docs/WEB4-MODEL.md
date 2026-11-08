@@ -294,6 +294,28 @@ evidence, not a tally. The verifier recomputes `agreed` as the number of recorde
 providers whose digest equals the response the run carries, so a gateway cannot
 claim agreement it did not get, and a repeated endpoint cannot count twice.
 
+### Provider receipts: the gateway is not trusted either
+
+The quorum evidence above is what the GATEWAY recorded. So each provider also
+signs a **receipt** over the exact exchange — its operator key over the request
+digest and the comparable response digest — and returns it in an
+`x-rarext-receipt` header:
+
+```json
+{ "kind": "rarext.response-receipt.v1",
+  "request": "<request digest>", "response": "<comparable response digest>",
+  "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
+```
+
+The gateway records each receipt in the run's `quorum.providers`; the verifier
+checks that the `request` matches the run's request digest, the `response` matches
+that provider's recorded `responseDigest`, the signature verifies, and the signing
+key is the operator the run names. A gateway that rewrites a provider's answer — or
+fabricates one — cannot produce a matching receipt, so the transcript proves what
+each provider said, not just what the gateway claims. A stream carries no receipt
+(there is no complete body to sign), and an env-var label operator is not a key, so
+the binding is enforced whenever the operator is a key id.
+
 Every signed provider card names the operator that runs it: `provider.keyId` is
 the key id of the provider's own signing key, and `provider.publicKey` is the key
 itself. `deploy` commits those identities as `labels.operators` (falling back to
@@ -456,13 +478,106 @@ omit any required stage, and the verifier recomputes it. So a leaf signed outsid
 the measured boot — even one chained to the vendor root — cannot count: the chain
 must extend through firmware and the OS the deployment trusts.
 
+Each link also carries a `measurement` (a digest of that stage's image), and a
+deployment can pin the values it approves:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <vendor-root-key-id> --tee-chain-depth 3 \
+  --tee-boot-stages firmware,os,app \
+  --tee-boot-measurements firmware=<hex>,os=<hex>,app=<hex> \
+  --registry https://registry.example
+```
+
+`deploy --tee-boot-measurements` commits `labels.teeStageMeasurements` and REFUSES
+unless every adopted provider's chain carries exactly those values. The challenge
+commits `spec.teeStageMeasurements`; the gateway and the verifier require each
+agreeing provider's per-stage measurement to equal the approved one, so the stage
+names become checked values — a chain running different firmware is refused even
+though it reaches the vendor root and names the stages.
+
+### Freshness
+
+An attestation is only worth as much as it is fresh: a captured quote replayed
+later is not proof the machine is running that image NOW. `--tee-freshness
+challenge` closes that. Each run, the gateway generates a nonce and asks every
+provider for its attestation bound to it:
+
+```
+GET /v1/attestation?nonce=<hex>   →   { "attestation": { …, "challenge": "<hex>", "quote": { … } } }
+```
+
+The provider re-signs a quote covering the nonce, and the gateway records those
+nonce-bound attestations in the run. A provider that answers with a stale
+(unchallenged) quote is refused before a run is written, and the verifier requires
+every agreeing provider to bind the SAME nonce — one run, one challenge, so a
+replayed attestation cannot pass. `deploy --tee-freshness challenge` commits
+`labels.teeFreshness`; the challenge commits `spec.teeFreshness`.
+
+### The enclave's own code
+
+A boot chain measures the firmware and OS; the enclave's OWN code is a separate
+thing. Each provider measures the code it is running — a digest of the runtime
+source on disk — and attests it as `independence.code`. A deployment pins the
+code it approves:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <vendor-root-key-id> --tee-code <code-measurement> \
+  --registry https://registry.example
+```
+
+`deploy --tee-code` commits `labels.teeCodeMeasurement` and REFUSES unless every
+adopted provider attests that digest. The challenge commits
+`spec.teeCodeMeasurement`; the gateway refuses a run in which any agreeing
+provider attests other code, and the verifier recomputes the rule from the run.
+So an enclave running different code is refused by name — the code identity is
+pinned, not merely claimed. `provider --code-measurement <hex>` overrides the
+measured digest (for a build that measures itself out of band).
+
+#### The image manifest: the digest is vendor-signed
+
+A self-computed digest is only what the running process says. It becomes a
+certified value when a **vendor signs an image manifest** for it:
+
+```json
+{ "kind": "rarext.image-manifest.v1", "image": "<code digest>", "runtime": "…",
+  "publishedAt": "…", "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
+```
+
+`provider --image-manifest <file>` makes the provider refuse to run unless the
+manifest is valid AND its `image` is the code the process is actually running, then
+binds the manifest into its attestation (`independence.image`). A deployment pins
+the vendor whose signature it accepts:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <vendor-root-key-id> \
+  --tee-code <code-digest> --tee-signed-image <vendor-root-key-id> \
+  --registry https://registry.example
+```
+
+`deploy --tee-signed-image` commits `labels.teeSignedImage` and REFUSES unless every
+adopted provider presents a manifest signed by that vendor that vouches for the
+approved code. The gateway and the verifier require the same, so an image signed by
+another vendor — or an enclave whose measured image is not the signed one — is
+refused. The code digest is now bound to a vendor signature, not the running
+source's word.
+
 The honest boundary: the root is a fixed key shipped with the protocol, so this is
 the *shape* of a hardware root — a deployment pins a vendor root it did not choose,
-a chain must extend through the stages it trusts, and a leaf cannot stand in for
-either — but the root is still a file, not a fuse, and the stage names are claims
-the chain carries, not values a silicon fuses. A real TEE (SGX/SEV-SNP) records the
-measurements in hardware and holds the root in silicon; the chain, the stages, and
-the `scheme` field are built for it, but no hardware root is wired in.
+a chain must extend through the stages it trusts, each stage's measurement must be
+the approved value, the enclave's own code must be the approved build under the
+vendor's signature, and each attestation must be fresh for a nonce the verifier
+chose — but the root is still a file, not a fuse, and the measurements are digests
+the code and chain carry, not values a silicon records. A real TEE (SGX/SEV-SNP)
+records the measurements in hardware, holds the root in silicon, and signs the nonce
+with a key that never leaves the chip; the chain, the stages, the measurements, the
+code digest, the signed image manifest, the nonce challenge, and the `scheme` field
+are built for it, but no hardware root is wired in.
 
 The digest is over the comparable completion: `id`, `created`, and
 `system_fingerprint` are transport metadata and are removed before comparison.
@@ -587,6 +702,43 @@ This does not make an arbitrary GGUF bit-for-bit reproducible; it makes a replay
 of one *checkable*: same weights, same engine, and the output compared — or the
 replay is refused by name.
 
+### The decode trace
+
+For the deterministic `native` class, a replay is checked at the level of the
+DECODE, not just the text. The provider records the token ids it emitted as a
+`rarext_trace` in the response:
+
+```json
+"rarext_trace": { "kind": "rarext.decode-trace.v1", "tokens": [3, 7, 1, …], "digest": "…" }
+```
+
+The `digest` binds the tokens to the response, so the verifier recomputes it —
+editing the tokens is caught in the transcript. A replay re-runs, digests its own
+token ids, and **refuses when the trace diverges** from the committed one, even if
+the text happened to match: the point is that the same bytes were decoded, not
+that a similar string came out. `replay` reports `traceMatches`, and a divergence
+ends the replay by name.
+
+### The engine judgment
+
+An engine run can be checked at the decode level too, when the engine exposes
+per-token logprobs. With `provider --engine-logprobs`, the provider asks the engine
+for logprobs and records a **judgment** — the token sequence and each token's
+logprob — as the run's trace:
+
+```json
+"rarext_trace": { "kind": "rarext.judgment.v1",
+                  "tokens": ["hello", " world", …],
+                  "logprobs": [-0.1, -0.2, …], "digest": "…" }
+```
+
+The verifier recomputes the digest the same way (over the trace without the digest
+field), so editing a logprob is caught. A replay re-runs on the pinned engine,
+records its own judgment, and refuses when the digest diverges — so an arbitrary
+GGUF run is checked at the token/logprob level, not only at the text level. An
+engine that exposes neither token ids nor logprobs records no trace, honestly;
+`--engine-logprobs` is opt-in because not every engine supports it.
+
 ## Commands
 
 ```bash
@@ -636,27 +788,32 @@ why a large file is sharded rather than sent as one object.
 ## Honest limits
 
 - **A quorum can require signed operators, distinct machines, allowlisted
-  measurements, and machine quotes chained from the VENDOR hardware root through a
-  measured boot — but the shipped root is a file, not a fuse, and the stage names
-  are claims, not fuses.** The card names a key id, machine, and measurement under
-  the operator's signature, plus a leaf-signed quote chained up through firmware and
-  the OS to the vendor root the protocol ships (`hardware-root.ts`); the deployment
-  commits the operators, operator-aligned machines, a measurement allowlist, and
-  (with `--tee-vendor` + `--tee-chain-depth` + `--tee-boot-stages`) the vendor root,
-  minimum depth, and required boot stages. A quorum then needs that many distinct
-  keys and machines, every agreeing provider on the approved list, and every
-  agreeing quote's chain reaching the pinned vendor root at that depth AND naming
-  every required stage — enforced by the gateway and recomputed by the verifier. The
-  operator supplies only a LEAF key and cannot mint its own trust: a bare leaf
-  (depth zero), a chain ending at an operator anchor, a chain rooted elsewhere, or a
-  chain that reaches the root without measuring the boot is refused by name. What it
-  still does not prove is that the machine ids name physically separate boxes, that
-  the stage names reflect a real boot, or that the vendor root is real silicon: the
-  root is a fixed key the protocol ships and the stages are claims the chain carries,
-  so it is hardware-*shaped* but a file. A TEE that records the measurements in
-  hardware and fuses the root into the chip is what closes that last gap; the
-  `scheme` field, the chain, and the stages are built for it, but no hardware root is
-  wired in. The bundled demo's two providers are co-located, which is why a
+  measurements, machine quotes chained from the VENDOR hardware root through a
+  measured boot whose per-stage measurements are allowlisted, and nonce-FRESH
+  attestations — but the shipped root is a file, not a fuse, and the measurements
+  are digests the chain carries, not values a silicon records.** The card names a key
+  id, machine, and measurement under the operator's signature, plus a leaf-signed
+  quote chained up through firmware and the OS to the vendor root the protocol ships
+  (`hardware-root.ts`); the deployment commits the operators, operator-aligned
+  machines, a measurement allowlist, and (with `--tee-vendor` + `--tee-chain-depth` +
+  `--tee-boot-stages` + `--tee-boot-measurements` + `--tee-freshness challenge`) the
+  vendor root, minimum depth, required boot stages, approved per-stage measurements,
+  and freshness. A quorum then needs that many distinct keys and machines, every
+  agreeing provider on the approved list, and every agreeing quote's chain reaching
+  the pinned vendor root at that depth, naming every required stage, carrying the
+  approved measurement per stage, AND bound to one fresh nonce for the run — enforced
+  by the gateway and recomputed by the verifier. The operator supplies only a LEAF
+  key and cannot mint its own trust: a bare leaf (depth zero), a chain ending at an
+  operator anchor, a chain rooted elsewhere, a chain that skips the boot stages, a
+  chain running unapproved firmware/OS/app, or a REPLAYED (stale) attestation is
+  refused by name. What it still does not prove is that the machine ids name
+  physically separate boxes, that the measurements reflect a real boot, or that the
+  vendor root is real silicon: the root is a fixed key the protocol ships and the
+  measurements are digests the chain carries, so it is hardware-*shaped* but a file.
+  A TEE that records the measurements in hardware, fuses the root into the chip, and
+  signs the nonce with a key that never leaves the chip is what closes that last gap;
+  the `scheme` field, the chain, the stages, the measurements, and the nonce
+  challenge are built for it, but no hardware root is wired in. The bundled demo's two providers are co-located, which is why a
   machine-independent quorum refuses them.
 - **Sealed weights hide the model from the store and the wire, and — through an
   enclave — from the serving process; only a hardware TEE hides them from the
@@ -669,18 +826,29 @@ why a large file is sharded rather than sent as one object.
   false`), and only the enclave process opens the model. A confidential request
   (`{ confidential: { wrappedKey, nonce, ciphertext } }`) is sealed to the enclave
   too, so the prompt and the answer are ciphertext everywhere but inside the
-  enclave — the forwarder, a gateway, or a relay never sees them. But a software
-  enclave is not silicon: an operator with root on the enclave's host can read its
-  memory and, with it, the prompt. A hardware-rooted TEE (SGX/SEV-SNP) is what
-  closes that; the attestation chain and `scheme` field are shaped for it, but no
-  hardware root is wired in.
+  enclave — the forwarder, a gateway, or a relay never sees them. The enclave's own
+  code is pinned and the digest is bound to a VENDOR-SIGNED image manifest
+  (`--tee-code` + `--tee-signed-image`), so an enclave running different code, or an
+  image signed by another vendor, is refused — the code identity is checked, not
+  claimed. But a software enclave is not silicon: an operator with root on the
+  enclave's host can read its memory and, with it, the prompt, and the manifest is
+  signed by a key file shipped with the protocol rather than one a chip holds. A
+  hardware-rooted TEE (SGX/SEV-SNP), whose image measurement the silicon takes and
+  whose root key never leaves the die, is what closes that; the attestation chain,
+  the code digest, the signed image manifest, and the `scheme` field are shaped for
+  it, but no hardware root is wired in.
 - **Inference is not cryptographically proven.** The run transcript proves the
-  bytes exchanged; a deterministic native model can be replayed from the bundle.
-  An arbitrary GGUF is still not reproduced bit-for-bit by the protocol alone —
-  the weights do not determine the engine's arithmetic. What the protocol does is
-  pin the engine (`engine.fingerprint`), record it in the run, and refuse a replay
-  whose provider runs a different engine, so a replay is a checked re-execution
-  under a named engine rather than a claim.
+  bytes exchanged; a deterministic native model can be replayed from the bundle,
+  and for that class the run records its **decode trace** (token ids + digest), so
+  a replay is refused when the decode diverges — not just when the text does. An
+  engine run can be checked at the same level when the engine exposes per-token
+  logprobs: `--engine-logprobs` records a **judgment** (tokens + logprobs + digest),
+  and a replay of it is refused when the judgment diverges. What is still not proven
+  is that the engine's arithmetic IS the model's — an arbitrary GGUF is not
+  reproduced bit-for-bit by the protocol alone, and an engine that exposes neither
+  tokens nor logprobs records no trace. For such an engine the protocol pins the
+  engine (`engine.fingerprint`) and refuses a replay whose provider runs a different
+  engine: a checked re-execution under a named engine, not a proof of determinism.
 - **Credits move on the ledger, and can leave it against an external
   reference — but the protocol does not move real value.** A committed bounty is
   recorded and settled in RAREXT's credit ledger; the run commits who was paid, the

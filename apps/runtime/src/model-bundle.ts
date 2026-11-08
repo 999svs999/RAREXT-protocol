@@ -11,6 +11,8 @@ import type { KeyObject, JsonWebKey } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
+import { verifyImageManifest } from "./image-manifest.ts";
+import type { ImageManifest } from "./image-manifest.ts";
 import type { SignatureSuite } from "../../../packages/core/src/types.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import type { ApiShape, EngineName, ModelRef } from "./types.ts";
@@ -163,6 +165,25 @@ export interface ProviderIndependence {
   scheme?: string;
   issuedAt: string;
   /**
+   * The measurement of the code the enclave is RUNNING. A deployment pins it, so
+   * an enclave that runs different code is refused — the code identity is checked,
+   * not claimed. For a hardware enclave this is the image measurement; here it is
+   * a digest of the runtime's own source.
+   */
+  code?: string;
+  /**
+   * A vendor-signed image manifest vouching for `code`. When present, the code
+   * digest is bound to the vendor's signature, so a deployment that pins the
+   * vendor accepts the image only if it is the signed one.
+   */
+  image?: ImageManifest;
+  /**
+   * The verifier's freshness nonce, when the attestation is challenged. A quote
+   * binds the nonce it was made for, so a replayed (stale) attestation — one made
+   * for an earlier nonce — is refused.
+   */
+  challenge?: string;
+  /**
    * A signed quote over the fields above. The provider's card signature proves
    * the OPERATOR claims this machine; this quote, signed by a vendor key the
    * deployment pins, is what lets a verifier check the claim instead of
@@ -178,6 +199,9 @@ export function providerQuotePayload(independence: ProviderIndependence): {
   machine: string;
   measurement: string;
   issuedAt: string;
+  code?: string;
+  image?: ImageManifest;
+  challenge?: string;
 } {
   return {
     kind: independence.kind,
@@ -185,6 +209,9 @@ export function providerQuotePayload(independence: ProviderIndependence): {
     machine: independence.machine,
     measurement: independence.measurement,
     issuedAt: independence.issuedAt,
+    ...(independence.code === undefined ? {} : { code: independence.code }),
+    ...(independence.image === undefined ? {} : { image: independence.image }),
+    ...(independence.challenge === undefined ? {} : { challenge: independence.challenge }),
   };
 }
 
@@ -817,6 +844,58 @@ function normalizeBase(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+/**
+ * The registries to try, primary first, de-duplicated. A bundle is
+ * content-addressed, so its shards and manifest are the same bytes wherever they
+ * are mirrored; naming more than one means no single registry is a hard
+ * dependency for serving a model.
+ */
+function registryBases(input: { registry?: string; registries?: readonly string[] }): string[] {
+  const list = [
+    ...(input.registries ?? []),
+    ...(input.registry === undefined ? [] : [input.registry]),
+  ];
+  const bases = [
+    ...new Set(list.map((entry) => normalizeBase(entry)).filter((entry) => entry !== "")),
+  ];
+  if (bases.length === 0) throw new Error("at least one registry is required");
+  return bases;
+}
+
+/**
+ * Fetch one shard from the first registry that serves bytes matching the
+ * commitment. A registry that is down, missing the shard, or serving the wrong
+ * bytes is skipped; the fetch fails only when every registry fails, naming what
+ * each did.
+ */
+async function fetchShard(
+  registries: readonly string[],
+  shard: BundleShard,
+  fetchImpl: typeof fetch,
+): Promise<Buffer> {
+  const attempts: string[] = [];
+  for (const base of registries) {
+    try {
+      const response = await fetchImpl(`${base}/v1/blobs/${shard.hash}/raw`);
+      if (!response.ok) {
+        attempts.push(`${base}: HTTP ${response.status}`);
+        continue;
+      }
+      const chunk = Buffer.from(await response.arrayBuffer());
+      if (chunk.length !== shard.size || sha256Hex(chunk) !== shard.hash) {
+        attempts.push(`${base}: bytes do not match the commitment`);
+        continue;
+      }
+      return chunk;
+    } catch (error) {
+      attempts.push(`${base}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(
+    `shard ${shard.index} (${shard.hash}) is unavailable from every registry: ${attempts.join("; ")}`,
+  );
+}
+
 export interface UploadBundleInput {
   registry: string;
   bundle: ModelBundle;
@@ -882,7 +961,10 @@ export async function uploadBundle(input: UploadBundleInput): Promise<UploadedBu
 }
 
 export interface FetchBundleInput {
-  registry: string;
+  /** The primary registry. */
+  registry?: string;
+  /** Mirrors to fall back to, so one registry outage does not stop a provider. */
+  registries?: string[];
   bundle: ModelBundle;
   fetchImpl?: typeof fetch;
   onShard?: (index: number, size: number) => void;
@@ -1251,6 +1333,23 @@ export function verifyProviderCard(value: unknown): string[] {
         Number.isNaN(Date.parse(value.independence.issuedAt))
       ) {
         errors.push("provider card independence.issuedAt must be an ISO timestamp");
+      }
+      if (
+        value.independence.code !== undefined &&
+        (typeof value.independence.code !== "string" || !HEX64.test(value.independence.code))
+      ) {
+        errors.push("provider card independence.code must be a sha256 hex digest when present");
+      }
+      if (value.independence.image !== undefined) {
+        const info = verifyImageManifest(value.independence.image);
+        if (info === null) {
+          errors.push("provider card independence.image must be a vendor-signed image manifest");
+        } else if (
+          typeof value.independence.code === "string" &&
+          info.image !== value.independence.code
+        ) {
+          errors.push("provider card independence.image does not vouch for the attested code");
+        }
       }
       if (value.independence.quote !== undefined) {
         const quote = value.independence.quote;

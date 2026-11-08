@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -30,6 +31,8 @@ import {
   providerStageMeasurements,
   verifyProviderChain,
 } from "./model-bundle.ts";
+import { verifyImageManifest } from "./image-manifest.ts";
+import { comparableCompletion } from "./completion.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -147,21 +150,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * The part of a completion that two providers must agree on. Ids are minted per
- * request, and `created` is a wall clock, so comparing the raw envelopes would
- * report disagreement even when the model said exactly the same thing. The
- * gateway returns and records this comparable shape, so the transcript's
- * response digest is over the answer, not the server's clock.
+ * The comparable completion lives in `completion.ts`, shared with the provider so
+ * a provider's signed receipt digests the very answer the gateway records.
  */
-function comparableResponse(response: Record<string, unknown>): Record<string, unknown> {
-  const {
-    id: _id,
-    created: _created,
-    system_fingerprint: _fingerprint,
-    ...rest
-  } = response;
-  return rest;
-}
+const comparableResponse = comparableCompletion;
 
 /**
  * The local OpenAI/Anthropic-compatible endpoint.
@@ -231,6 +223,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (stage !== undefined && stage !== "" && measurement !== undefined) record[stage] = measurement;
     }
     return record;
+  })();
+  // The enclave code measurement the deployment approved, when it pinned one.
+  const allowedCode = (() => {
+    if (allowedVendor === null) return null;
+    const raw = deployment.labels?.teeCodeMeasurement;
+    return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
+  })();
+  // The vendor whose signature over the enclave image the deployment requires.
+  const allowedSignedImage = (() => {
+    if (allowedVendor === null) return null;
+    const raw = deployment.labels?.teeSignedImage;
+    return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
   })();
 
   // The bounty the deployment committed, if any. Payment is a commitment the
@@ -404,6 +408,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   interface QuorumResult {
     response: Record<string, unknown>;
     quorum: RunQuorum;
+    /** The exact request body every provider was sent. */
+    request: Record<string, unknown>;
   }
 
   type QuorumOutcome = QuorumResult | { error: string; status: number; details?: unknown };
@@ -424,8 +430,36 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const machineFor = (endpoint: string): string | null => options.machines?.[endpoint] ?? null;
     const measurementFor = (endpoint: string): string | null =>
       options.measurements?.[endpoint] ?? null;
+
+    // A freshness challenge: fetch each provider's attestation for a nonce we
+    // just generated, so a replayed (stale) attestation cannot pass.
+    const requireChallenge = allowedVendor !== null && deployment.labels?.teeFreshness === "challenge";
+    const challengeNonce = requireChallenge ? randomBytes(32).toString("hex") : null;
+    let freshAttestations: Record<string, RunProviderAttestation> = {};
+    if (challengeNonce !== null) {
+      const pairs = await Promise.all(
+        upstreams.map(async (endpoint) => {
+          try {
+            const res = await fetchImpl(`${endpoint}/v1/attestation?nonce=${challengeNonce}`, {
+              signal: AbortSignal.timeout(timeoutMs),
+            });
+            if (!res.ok) return [endpoint, null] as const;
+            const json = (await res.json()) as { attestation?: RunProviderAttestation | null };
+            return [endpoint, json.attestation ?? null] as const;
+          } catch {
+            return [endpoint, null] as const;
+          }
+        }),
+      );
+      freshAttestations = Object.fromEntries(
+        pairs.filter((pair): pair is readonly [string, RunProviderAttestation] => pair[1] !== null),
+      );
+    }
     const attestationFor = (endpoint: string): RunProviderAttestation | null =>
-      options.attestations?.[endpoint] ?? null;
+      freshAttestations[endpoint] ?? options.attestations?.[endpoint] ?? null;
+    // The exact bytes sent to every provider: the transcript records THESE, so a
+    // provider's signed receipt (over the request it received) binds to the run.
+    const forwarded = { ...body, stream: false };
     const attempts = await Promise.all(
       upstreams.map(async (endpoint) => {
         const url = shape === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint);
@@ -437,7 +471,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
               accept: "application/json",
               ...upstreamHeaders,
             },
-            body: JSON.stringify({ ...body, stream: false }),
+            body: JSON.stringify(forwarded),
             signal: AbortSignal.timeout(timeoutMs),
           });
           if (!response.ok) {
@@ -451,12 +485,24 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             return { endpoint, error: "response is not a JSON object" };
           }
           const comparable = comparableResponse(json);
+          // The provider's own signature over the exact request and response, so
+          // the transcript proves what it said rather than trusting the gateway.
+          let receipt: unknown = null;
+          const receiptHeader = response.headers.get("x-rarext-receipt");
+          if (receiptHeader !== null) {
+            try {
+              receipt = JSON.parse(Buffer.from(receiptHeader, "base64").toString("utf8"));
+            } catch {
+              receipt = null;
+            }
+          }
           return {
             endpoint,
             operator: operatorFor(endpoint),
             machine: machineFor(endpoint),
             measurement: measurementFor(endpoint),
             attestation: attestationFor(endpoint),
+            receipt,
             json: comparable,
             digest: canonicalDigest(comparable),
           };
@@ -476,6 +522,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         machine: string | null;
         measurement: string | null;
         attestation: RunProviderAttestation | null;
+        receipt: unknown;
         json: Record<string, unknown>;
         digest: string;
       } => "digest" in attempt,
@@ -529,11 +576,22 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       winnerAnswers.every(
         (answer) =>
           verifyProviderChain(answer.attestation) === allowedVendor &&
+          (challengeNonce === null || answer.attestation?.challenge === challengeNonce) &&
           providerChainDepth(answer.attestation) >= allowedChainDepth &&
           allowedBootStages.every((stage) => providerBootStages(answer.attestation).includes(stage)) &&
           Object.entries(allowedStageMeasurements).every(
             ([stage, measurement]) => providerStageMeasurements(answer.attestation)[stage] === measurement,
-          ),
+          ) &&
+          (allowedCode === null || answer.attestation?.code === allowedCode) &&
+          (allowedSignedImage === null ||
+            (() => {
+              const info = verifyImageManifest(answer.attestation?.image);
+              return (
+                info !== null &&
+                info.vendorKeyId === allowedSignedImage &&
+                (allowedCode === null || info.image === allowedCode)
+              );
+            })()),
       );
 
     if (
@@ -575,6 +633,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const agreed = answered.filter((answer) => answer.digest === winner);
     return {
       response: winnerAnswers[0]!.json,
+      request: forwarded,
       quorum: {
         required: quorumRequired,
         responded: answered.length,
@@ -589,6 +648,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           machine: answer.machine,
           measurement: answer.measurement,
           ...(answer.attestation === null ? {} : { attestation: answer.attestation }),
+          ...(answer.receipt === null ? {} : { receipt: answer.receipt }),
         })),
       },
     };
@@ -753,7 +813,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       }
       const result = await record(
         "openai",
-        payload,
+        outcome.request,
         outcome.response,
         usageFromOpenAi(outcome.response),
         startedAt,
@@ -903,7 +963,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const result = nativeAnthropic
         ? await record(
             "anthropic",
-            upstreamBody,
+            outcome.request,
             outcome.response,
             usageFromAnthropic(outcome.response),
             startedAt,
@@ -911,7 +971,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           )
         : await record(
             "openai",
-            upstreamBody,
+            outcome.request,
             outcome.response,
             usageFromOpenAi(outcome.response),
             startedAt,

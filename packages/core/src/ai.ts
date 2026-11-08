@@ -107,20 +107,26 @@ export function isGenerativeSpec(value: unknown): value is GenerativeSpec {
  * form: x ^= x << a; x ^= x >>> b; x ^= x << c, all mod 2^32. The token at
  * each step is vocab[state % vocab.length].
  */
-export function generate(model: XorshiftModel, seed: number, steps: number): string {
+export function generateTokens(model: XorshiftModel, seed: number, steps: number): number[] {
   const { a, b, c } = model.params;
   let state = seed >>> 0;
-  let out = "";
+  const tokens: number[] = [];
 
   for (let i = 0; i < steps; i++) {
     state ^= (state << a) >>> 0;
     state ^= state >>> b;
     state ^= (state << c) >>> 0;
     state >>>= 0;
-    out += model.vocab[state % model.vocab.length];
+    tokens.push(state % model.vocab.length);
   }
 
-  return out;
+  return tokens;
+}
+
+export function generate(model: XorshiftModel, seed: number, steps: number): string {
+  return generateTokens(model, seed, steps)
+    .map((token) => model.vocab[token])
+    .join("");
 }
 
 export interface GenerativeReplay {

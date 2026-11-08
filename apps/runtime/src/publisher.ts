@@ -161,6 +161,29 @@ function teeBootStagesSpec(labels: Record<string, string> | undefined): string[]
 }
 
 /** The measurement a deployment approves for each boot stage. */
+/** The vendor key whose signature over the enclave image a deployment requires. */
+function teeSignedImageSpec(labels: Record<string, string> | undefined): string | undefined {
+  const raw = labels?.teeSignedImage;
+  if (typeof raw !== "string" || !/^[0-9a-f]{64}$/.test(raw)) return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  return raw;
+}
+
+/** The measurement of the enclave's own code a deployment approves. */
+function teeCodeMeasurementSpec(labels: Record<string, string> | undefined): string | undefined {
+  const raw = labels?.teeCodeMeasurement;
+  if (typeof raw !== "string" || !/^[0-9a-f]{64}$/.test(raw)) return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  return raw;
+}
+
+/** Whether a deployment requires fresh (nonce-challenged) attestations. */
+function teeFreshnessSpec(labels: Record<string, string> | undefined): "challenge" | undefined {
+  if (labels?.teeFreshness !== "challenge") return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  return "challenge";
+}
+
 function teeStageMeasurementsSpec(
   labels: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
@@ -244,6 +267,15 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(teeStageMeasurementsSpec(manifest.labels) === undefined
         ? {}
         : { teeStageMeasurements: teeStageMeasurementsSpec(manifest.labels) }),
+      ...(teeFreshnessSpec(manifest.labels) === undefined
+        ? {}
+        : { teeFreshness: teeFreshnessSpec(manifest.labels) }),
+      ...(teeCodeMeasurementSpec(manifest.labels) === undefined
+        ? {}
+        : { teeCodeMeasurement: teeCodeMeasurementSpec(manifest.labels) }),
+      ...(teeSignedImageSpec(manifest.labels) === undefined
+        ? {}
+        : { teeSignedImage: teeSignedImageSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

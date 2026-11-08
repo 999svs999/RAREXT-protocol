@@ -12,6 +12,8 @@ import {
   verifyProviderCard,
   verifyProviderChain,
 } from "./model-bundle.ts";
+import { verifyImageManifest } from "./image-manifest.ts";
+import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -386,6 +388,67 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     const committedDepth = spec.teeChainDepth ?? 0;
     const committedStages = spec.teeBootStages ?? [];
     const committedMeasurements = Object.entries(spec.teeStageMeasurements ?? {});
+    // Freshness: one run, one nonce — every agreeing provider must bind the SAME
+    // challenge, so a replayed attestation (made for another nonce) fails.
+    const requireFreshness = spec.teeFreshness === "challenge";
+    const challenges = agreeing
+      .map((entry) => (isRecord(entry.attestation) && typeof entry.attestation.challenge === "string"
+        ? entry.attestation.challenge
+        : null))
+      .filter((challenge): challenge is string => challenge !== null);
+    const freshnessMet =
+      !requireFreshness || (challenges.length === agreeing.length && new Set(challenges).size === 1);
+    // The enclave code the deployment approved: every agreeing provider must
+    // attest the same code digest, so an enclave running other code is refused.
+    const codeMet =
+      spec.teeCodeMeasurement === undefined ||
+      agreeing.every(
+        (entry) => isRecord(entry.attestation) && entry.attestation.code === spec.teeCodeMeasurement,
+      );
+    // A provider's OWN receipt: its operator key over the request digest and the
+    // response it returned. When present, it must bind to the recorded operator
+    // and to the exact bytes, so a gateway cannot fabricate a provider's answer.
+    const receiptsMet = providers
+      .filter((entry): entry is Record<string, unknown> => isRecord(entry) && entry.receipt !== undefined)
+      .every((entry) => {
+        const receipt = entry.receipt;
+        if (!isRecord(receipt) || receipt.kind !== "rarext.response-receipt.v1") return false;
+        if (receipt.request !== requestDigest || receipt.response !== entry.responseDigest) return false;
+        if (!isRecord(receipt.publicKey) || typeof receipt.signature !== "string") return false;
+        const payload = { kind: receipt.kind, request: receipt.request, response: receipt.response };
+        let ok = false;
+        try {
+          ok = verifyPayload(
+            receipt.publicKey as never,
+            payload,
+            receipt.signature,
+            typeof receipt.suite === "string" ? (receipt.suite as never) : undefined,
+          );
+        } catch {
+          ok = false;
+        }
+        if (!ok) return false;
+        // When the recorded operator is a key id (64-hex), the receipt must be
+        // signed by that key; a label operator is not a key and is not checked.
+        return (
+          typeof entry.operator !== "string" ||
+          !HEX64.test(entry.operator) ||
+          publicKeyId(receipt.publicKey as never) === entry.operator
+        );
+      });
+
+    // A vendor-signed image manifest: every agreeing provider must present one
+    // signed by the pinned vendor that vouches for the approved code.
+    const signedImageMet =
+      spec.teeSignedImage === undefined ||
+      agreeing.every((entry) => {
+        const info = verifyImageManifest(isRecord(entry.attestation) ? entry.attestation.image : undefined);
+        return (
+          info !== null &&
+          info.vendorKeyId === spec.teeSignedImage &&
+          (spec.teeCodeMeasurement === undefined || info.image === spec.teeCodeMeasurement)
+        );
+      });
     const quotesMet =
       committedVendor === undefined
         ? true
@@ -420,7 +483,11 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         operatorsMet &&
         machinesMet &&
         measurementsMet &&
-        quotesMet,
+        quotesMet &&
+        freshnessMet &&
+        codeMet &&
+        signedImageMet &&
+        receiptsMet,
     );
     check(
       checks,
@@ -493,6 +560,39 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   const text = extractResponseText(response.body, api);
   check(checks, failures, "response.text", response.text === text);
   check(checks, failures, "response.textDigest", response.textDigest === sha256Hex(text));
+
+  // A run records what it decoded: the native class records token ids, an engine
+  // that exposes logprobs records a token+logprob judgment. The digest binds the
+  // trace to the response, so editing it is caught here, and a REPLAY compares
+  // its own trace to this one.
+  const trace =
+    isRecord(response.body) && isRecord(response.body.rarext_trace)
+      ? response.body.rarext_trace
+      : null;
+  if (trace !== null) {
+    const kind = trace.kind;
+    const tokenOk =
+      kind === "rarext.decode-trace.v1"
+        ? Array.isArray(trace.tokens) &&
+          trace.tokens.length > 0 &&
+          trace.tokens.every((token) => Number.isSafeInteger(token))
+        : kind === "rarext.judgment.v1"
+          ? Array.isArray(trace.tokens) &&
+            trace.tokens.length > 0 &&
+            trace.tokens.every((token) => typeof token === "string") &&
+            Array.isArray(trace.logprobs) &&
+            trace.logprobs.length === trace.tokens.length &&
+            trace.logprobs.every((value) => typeof value === "number")
+          : false;
+    // The digest covers the trace WITHOUT the digest field.
+    const { digest, ...covered } = trace;
+    check(
+      checks,
+      failures,
+      "response.decodeTrace",
+      tokenOk && typeof digest === "string" && digest === canonicalDigest(covered),
+    );
+  }
 
   check(
     checks,

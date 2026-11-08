@@ -7,14 +7,23 @@ import {
 import type { ApiShape, ModelRunBody } from "./types.ts";
 
 export interface ReplayResult {
-  /** True only when the run was reproduced by the pinned engine. */
+  /** True only when the run was reproduced by the pinned engine, trace included. */
   ok: boolean;
   reason: string | null;
   /** The provider's present engine fingerprint, when it reported one. */
   engineFingerprint: string | null;
   /** Whether the replayed output matched; null when no replay was attempted. */
   reproduced: boolean | null;
+  /**
+   * Whether the re-execution's decode trace matched the committed one. Null (or
+   * absent) when the run carries no trace (an engine that exposes no token ids).
+   */
+  traceMatches?: boolean | null;
   replayed: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -123,11 +132,35 @@ export async function replayEngineRun(input: {
   const json = (await response.json()) as unknown;
   const text = api === "anthropic" ? extractAnthropicText(json) : extractOpenAiText(json);
   const reproduced = text === body.response.text;
+
+  // The decode trace: the re-execution's token ids must digest to the committed
+  // trace. A run with a trace whose replay diverges is refused even if the text
+  // happened to match — the point is the decode, not just the string.
+  const recordedTrace =
+    isRecord(body.response.body) && isRecord(body.response.body.rarext_trace)
+      ? body.response.body.rarext_trace
+      : null;
+  const replayedTrace = isRecord(json) && isRecord(json.rarext_trace) ? json.rarext_trace : null;
+  let traceMatches: boolean | null = null;
+  if (recordedTrace !== null) {
+    traceMatches =
+      replayedTrace !== null &&
+      typeof replayedTrace.digest === "string" &&
+      replayedTrace.digest === recordedTrace.digest;
+  }
+
+  const ok = reproduced && traceMatches !== false;
   return {
-    ok: reproduced,
-    reason: reproduced ? null : "the replayed output differs from the committed output",
+    ok,
+    reason:
+      traceMatches === false
+        ? "the decode trace diverged from the committed trace"
+        : reproduced
+          ? null
+          : "the replayed output differs from the committed output",
     engineFingerprint: present,
     reproduced,
+    traceMatches,
     replayed: text,
   };
 }

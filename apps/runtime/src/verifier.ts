@@ -102,7 +102,39 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.teeStageMeasurements === undefined
       ? {}
       : { teeStageMeasurements: teeStageMeasurementsFromSpec(value.teeStageMeasurements, value.teeBootStages) }),
+    ...(value.teeFreshness === undefined
+      ? {}
+      : { teeFreshness: teeFreshnessFromSpec(value.teeFreshness, value.teeVendor) }),
+    ...(value.teeCodeMeasurement === undefined
+      ? {}
+      : { teeCodeMeasurement: teeCodeMeasurementFromSpec(value.teeCodeMeasurement, value.teeVendor) }),
+    ...(value.teeSignedImage === undefined
+      ? {}
+      : { teeSignedImage: teeCodeMeasurementFromSpec(value.teeSignedImage, value.teeVendor) }),
   };
+}
+
+/** An approved code measurement needs a pinned root to bind it to. */
+function teeCodeMeasurementFromSpec(code: unknown, teeVendor: unknown): string {
+  if (typeof code !== "string" || !/^[0-9a-f]{64}$/.test(code)) {
+    throw new Error("challenge.spec.teeCodeMeasurement must be a sha256 hex digest when present");
+  }
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeCodeMeasurement requires challenge.spec.teeVendor");
+  }
+  return code;
+}
+
+/** Freshness only means something with a pinned root to bind the quote to. */
+function teeFreshnessFromSpec(freshness: unknown, teeVendor: unknown): "challenge" {
+  if (freshness !== "challenge") {
+    throw new Error('challenge.spec.teeFreshness must be "challenge" when present');
+  }
+
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeFreshness requires challenge.spec.teeVendor");
+  }
+  return "challenge";
 }
 
 /** Approved stage measurements only mean something with named stages to pin. */

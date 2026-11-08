@@ -233,6 +233,12 @@ export interface RunQuorumProvider {
    * pinned vendor key without trusting the gateway.
    */
   attestation?: RunProviderAttestation;
+  /**
+   * The provider's OWN signature over the request and the response it returned.
+   * Recorded so the transcript proves what the provider said, rather than
+   * trusting the gateway that relayed it.
+   */
+  receipt?: unknown;
 }
 
 /** The independence attestation as a run records it, quote included. */
@@ -242,6 +248,12 @@ export interface RunProviderAttestation {
   machine?: string | null;
   measurement?: string | null;
   issuedAt?: string;
+  /** The measurement of the code the enclave runs, when it attested one. */
+  code?: string;
+  /** The vendor-signed image manifest vouching for that code, when present. */
+  image?: unknown;
+  /** The freshness nonce the quote was made for, when the deployment challenged it. */
+  challenge?: string;
   quote?: { signature: string; publicKey: unknown; suite: string };
 }
 
@@ -384,6 +396,25 @@ export interface ModelRunSpec {
    * `teeBootStages`.
    */
   teeStageMeasurements?: Record<string, string>;
+  /**
+   * When "challenge", the deployment requires a FRESH attestation: the gateway
+   * supplies a nonce, the provider binds it into a freshly-signed quote, and a
+   * replayed (stale) attestation is refused. Committed only with `teeVendor`.
+   */
+  teeFreshness?: "challenge";
+  /**
+   * The measurement of the enclave's own code the deployment approves. When
+   * committed, every agreeing provider must attest that code digest, so an
+   * enclave running other code is refused. Committed only with `teeVendor`.
+   */
+  teeCodeMeasurement?: string;
+  /**
+   * The vendor key id whose signature over the enclave IMAGE manifest the
+   * deployment requires. When committed, every agreeing provider must present a
+   * vendor-signed manifest for its code, so a self-measured digest is bound to a
+   * vendor signature. Committed only with `teeVendor`.
+   */
+  teeSignedImage?: string;
 }
 
 export interface ProviderCardVerification {

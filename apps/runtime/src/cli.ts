@@ -35,6 +35,7 @@ import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import { canonicalDigest } from "./digest.ts";
 import { replayEngineRun } from "./replay.ts";
+import { verifyImageManifest } from "./image-manifest.ts";
 import {
   assessModelFit,
   buildDeployment,
@@ -153,12 +154,18 @@ Common options:
   --measure <hex,...>   deploy: allowlist of measurements a provider must match
   --engine-version <v>  the serving engine's version, pinned by its fingerprint
   --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
+  --engine-logprobs     ask the engine for token logprobs and record a decode judgment
   --tee-key-file <p>    the leaf/attestation key that signs a provider's machine quote
   --tee-cert-file <p>   certificates chaining the leaf key up to the trust anchor
   --tee-vendor <keyId>  deploy: the trust-anchor key id a quote's chain must terminate at
   --tee-chain-depth <n> deploy: minimum chain depth (2 = leaf -> platform -> vendor root)
   --tee-boot-stages <list> deploy: measured-boot stages the chain must name (e.g. firmware,os,app)
   --tee-boot-measurements <list> deploy: per-stage measurements (e.g. firmware=<hex>,os=<hex>,app=<hex>)
+  --tee-freshness <k>   deploy: "challenge" — require a fresh nonce-bound attestation per run
+  --tee-code <hex>      deploy: the enclave code measurement providers must attest
+  --code-measurement <hex>  provider: override the measured code digest (default: this runtime)
+  --image-manifest <p>      provider: a vendor-signed image manifest vouching for the running code
+  --tee-signed-image <keyId>  deploy: the vendor key whose image-manifest signature is required
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -718,6 +725,12 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     providerHandle: flag(values, "handle") ?? null,
     ...(flag(values, "machine") === undefined ? {} : { machine: flag(values, "machine") }),
     ...(flag(values, "measurement") === undefined ? {} : { measurement: flag(values, "measurement") }),
+    ...(flag(values, "code-measurement") === undefined
+      ? {}
+      : { codeMeasurement: flag(values, "code-measurement") }),
+    ...(flag(values, "image-manifest") === undefined
+      ? {}
+      : { imageManifest: readJson(resolve(flag(values, "image-manifest")!)) as never }),
     ...(flag(values, "engine-version") === undefined
       ? {}
       : { engineVersion: flag(values, "engine-version") }),
@@ -736,6 +749,7 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "enclave-endpoint") === undefined
       ? {}
       : { enclaveEndpoint: flag(values, "enclave-endpoint") }),
+    ...(bool(values, "engine-logprobs") ? { engineLogprobs: true } : {}),
     ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
   });
@@ -1074,6 +1088,56 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     teeStageMeasurements = record;
   }
 
+  // Freshness: challenge each provider with a nonce so a replayed attestation is
+  // refused.
+  const teeFreshnessFlag = flag(values, "tee-freshness");
+  let teeFreshness: "challenge" | null = null;
+  if (teeFreshnessFlag !== undefined) {
+    if (teeFreshnessFlag !== "challenge") throw new Error('--tee-freshness must be "challenge"');
+    if (teeVendor === null) throw new Error("--tee-freshness requires --tee-vendor");
+    teeFreshness = "challenge";
+  }
+
+  // The enclave code the deployment approves: every adopted provider must attest
+  // it, so an enclave running other code is refused.
+  const teeCodeFlag = flag(values, "tee-code");
+  let teeCode: string | null = null;
+  if (teeCodeFlag !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(teeCodeFlag)) throw new Error("--tee-code must be a sha256 hex digest");
+    if (teeVendor === null) throw new Error("--tee-code requires --tee-vendor");
+    const mismatched = cards.filter((entry) => entry.independence?.code !== teeCodeFlag);
+    if (mismatched.length > 0) {
+      throw new Error(
+        `--tee-code does not match every provider's code measurement ` +
+          `(${cards.map((entry) => entry.independence?.code ?? "none").join(", ")})`,
+      );
+    }
+    teeCode = teeCodeFlag;
+  }
+
+  // A vendor-signed image manifest: every adopted provider must present one,
+  // signed by the pinned vendor, that vouches for the approved code.
+  const teeSignedImageFlag = flag(values, "tee-signed-image");
+  let teeSignedImage: string | null = null;
+  if (teeSignedImageFlag !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(teeSignedImageFlag)) {
+      throw new Error("--tee-signed-image must be a sha256 hex key id");
+    }
+    if (teeVendor === null) throw new Error("--tee-signed-image requires --tee-vendor");
+    const unsatisfied = cards.filter((entry) => {
+      const info = verifyImageManifest(entry.independence?.image);
+      return (
+        info === null ||
+        info.vendorKeyId !== teeSignedImageFlag ||
+        (teeCode !== null && info.image !== teeCode)
+      );
+    });
+    if (unsatisfied.length > 0) {
+      throw new Error("--tee-signed-image is not satisfied by every provider's image manifest");
+    }
+    teeSignedImage = teeSignedImageFlag;
+  }
+
   const primary = endpoints[0]!;
   const card = cards[0]!;
   const probe = {
@@ -1126,6 +1190,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
                 .map(([stage, measurement]) => `${stage}=${measurement}`)
                 .join(","),
             }),
+        ...(teeFreshness === null ? {} : { teeFreshness }),
+        ...(teeCode === null ? {} : { teeCodeMeasurement: teeCode }),
+        ...(teeSignedImage === null ? {} : { teeSignedImage }),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -2069,12 +2136,18 @@ async function main(): Promise<number> {
       measure: { type: "string" },
       "engine-version": { type: "string" },
       "engine-digest": { type: "string" },
+      "engine-logprobs": { type: "boolean" },
       "tee-key-file": { type: "string" },
       "tee-cert-file": { type: "string" },
       "tee-vendor": { type: "string" },
       "tee-chain-depth": { type: "string" },
       "tee-boot-stages": { type: "string" },
       "tee-boot-measurements": { type: "string" },
+      "tee-freshness": { type: "string" },
+      "tee-code": { type: "string" },
+      "code-measurement": { type: "string" },
+      "tee-signed-image": { type: "string" },
+      "image-manifest": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },

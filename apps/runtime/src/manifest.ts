@@ -598,6 +598,30 @@ export function validateDeployment(value: unknown): string[] {
         }
       }
     }
+    if (labels.teeFreshness !== undefined) {
+      if (labels.teeFreshness !== "challenge") {
+        errors.push('manifest.labels.teeFreshness must be "challenge" when present');
+      }
+      if (labels.teeVendor === undefined) {
+        errors.push("manifest.labels.teeFreshness requires labels.teeVendor");
+      }
+    }
+    if (labels.teeCodeMeasurement !== undefined) {
+      if (typeof labels.teeCodeMeasurement !== "string" || !/^[0-9a-f]{64}$/.test(labels.teeCodeMeasurement)) {
+        errors.push("manifest.labels.teeCodeMeasurement must be a sha256 hex digest");
+      }
+      if (labels.teeVendor === undefined) {
+        errors.push("manifest.labels.teeCodeMeasurement requires labels.teeVendor");
+      }
+    }
+    if (labels.teeSignedImage !== undefined) {
+      if (typeof labels.teeSignedImage !== "string" || !/^[0-9a-f]{64}$/.test(labels.teeSignedImage)) {
+        errors.push("manifest.labels.teeSignedImage must be a sha256 hex key id");
+      }
+      if (labels.teeVendor === undefined) {
+        errors.push("manifest.labels.teeSignedImage requires labels.teeVendor");
+      }
+    }
   }
 
   return errors;

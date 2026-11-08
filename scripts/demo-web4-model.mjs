@@ -18,6 +18,7 @@
  *   serve     bind the gateway in front of the providers
  *   infer     run inference through the providers, not on this host
  *   publish   publish the run with its quorum evidence
+ *   receipt   each provider signs what it said; the gateway cannot fabricate it
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
  *   redeem    a key cashes credits out of the ledger against an external reference
@@ -93,14 +94,23 @@ import {
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
 import { openResponse, sealRequest } from "../apps/runtime/src/confidential.ts";
+import { replayEngineRun } from "../apps/runtime/src/replay.ts";
 import {
   HARDWARE_ROOT_KEY_ID,
+  hardwareRootSigner,
   issueHardwareChain,
   issueMeasuredBootChain,
 } from "../apps/runtime/src/hardware-root.ts";
+import { runtimeCodeMeasurement } from "../apps/runtime/src/code-measurement.ts";
+import { signImageManifest, verifyImageManifest } from "../apps/runtime/src/image-manifest.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
-import { AgentSigner, RarextClient, generateAgentKeypair } from "../packages/agent-sdk/src/index.ts";
+import {
+  AgentSigner,
+  RarextClient,
+  generateAgentKeypair,
+  publicKeyId,
+} from "../packages/agent-sdk/src/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const state = mkdtempSync(join(tmpdir(), "rarext-web4-model-"));
@@ -260,6 +270,17 @@ try {
     teeLeaves.push({ leaf, leafPath, certPath, keyId: leaf.keyId, stages, measurements });
   }
 
+  // A vendor-signed image manifest: the vendor vouches that the enclave image has
+  // the running code's measurement. The provider refuses to run if the manifest
+  // does not vouch for the code it is actually running, and the deployment pins
+  // the vendor whose signature it accepts.
+  const codeManifest = signImageManifest(
+    { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
+    hardwareRootSigner(),
+  );
+  const codeManifestPath = join(state, "image-manifest.json");
+  writeJsonFile(codeManifestPath, codeManifest);
+
   // ── 1. A RAREXT node that holds bytes ────────────────────────────────────
   api = spawnApi({
     PORT: "0",
@@ -396,6 +417,9 @@ try {
       teeLeaves[0].leafPath,
       "--tee-cert-file",
       teeLeaves[0].certPath,
+      "--image-manifest",
+      codeManifestPath,
+      "--engine-logprobs",
       ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
@@ -433,6 +457,8 @@ try {
         teeLeaves[1].leafPath,
         "--tee-cert-file",
         teeLeaves[1].certPath,
+        "--image-manifest",
+        codeManifestPath,
         ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ],
       {},
@@ -475,6 +501,12 @@ try {
     "firmware,os,app",
     "--tee-boot-measurements",
     `firmware=${teeLeaves[0].measurements.firmware},os=${teeLeaves[0].measurements.os},app=${teeLeaves[0].measurements.app}`,
+    "--tee-freshness",
+    "challenge",
+    "--tee-code",
+    providerCards[0].independence.code,
+    "--tee-signed-image",
+    HARDWARE_ROOT_KEY_ID,
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -656,6 +688,31 @@ try {
       : `attested=${String(attested)} publication=${String(publicationId)}`,
   );
 
+  // ── 9r. Provider receipts: each provider signed what it said ─────────────
+  // The transcript carries the provider's OWN signature over the request and the
+  // response it returned, so the run proves what it said rather than trusting the
+  // gateway that relayed it.
+  const receipts = publishedBody?.quorum?.providers ?? [];
+  const receiptOk =
+    receipts.length === providerUrls.length &&
+    receipts.every((entry) => {
+      const receipt = entry.receipt;
+      return (
+        receipt?.kind === "rarext.response-receipt.v1" &&
+        receipt.response === entry.responseDigest &&
+        receipt.request === publishedBody?.request?.digest &&
+        publicKeyId(receipt.publicKey) === entry.operator
+      );
+    }) &&
+    verifyRunBody(publishedBody, spec).correct === true;
+  phase(
+    "receipt",
+    receiptOk,
+    receiptOk
+      ? `${providerUrls.length} provider receipt(s) signed by their operators bound to the run's request/response; the run verifies with them`
+      : "a provider receipt is missing or does not bind to the run",
+  );
+
   // ── 9a. The run paid every agreeing operator, and each can prove it ──────
   // The gateway derived the payment from the quorum evidence and the committed
   // bounty; the run commits a ledger root over one receipt per distinct
@@ -780,14 +837,37 @@ try {
     const model = JSON.parse(bytes.toString("utf8"));
     if (isXorshiftModel(model)) {
       const replay = runNativeModel(model, { prompt, steps: 24, seed: 4242 });
-      replayOk = replay.text === text;
+      // The run recorded the exact token ids it decoded; the replay's trace must
+      // digest to the same value, and a different seed must diverge.
+      const runTrace = publishedBody?.response?.body?.rarext_trace;
+      const { digest: runDigest0, ...runCovered } = runTrace ?? {};
+      const traceSelfConsistent =
+        Array.isArray(runTrace?.tokens) && runTrace.digest === canonicalDigest(runCovered);
+      const replayedTrace = { kind: "rarext.decode-trace.v1", tokens: replay.tokens };
+      const traceMatches = traceSelfConsistent && runTrace.digest === canonicalDigest(replayedTrace);
+      const diverge = runNativeModel(model, { prompt, steps: 24, seed: 4243 });
+      const divergenceDetected =
+        canonicalDigest({ kind: "rarext.decode-trace.v1", tokens: diverge.tokens }) !==
+        canonicalDigest(replayedTrace);
+      replayOk = replay.text === text && traceMatches && divergenceDetected;
       replayDetail = replayOk
-        ? `replayed ${JSON.stringify(text.slice(0, 60))}… from the committed model + seed 4242`
-        : `committed model produced ${JSON.stringify(replay.text.slice(0, 60))}…`;
+        ? `replayed ${JSON.stringify(text.slice(0, 44))}… from the committed model + seed 4242; its decode trace ` +
+          `(${replay.tokens.length} tokens) matched, and a different seed diverged`
+        : `trace self=${String(traceSelfConsistent)} matches=${String(traceMatches)} diverge=${String(divergenceDetected)}`;
     }
   } else {
-    replayOk = true;
-    replayDetail = "a GGUF is replayed by a provider holding the same committed digest; exact bytes are the run transcript";
+    // An engine run is checked at the decode level: the run recorded a token +
+    // logprob judgment, and replay re-runs on the pinned engine and compares it.
+    const replayed = publishedBody
+      ? await replayEngineRun({ body: publishedBody, endpoint: providerUrls[0] })
+      : null;
+    const runTrace = publishedBody?.response?.body?.rarext_trace;
+    const judgmentRecorded =
+      runTrace?.kind === "rarext.judgment.v1" && Array.isArray(runTrace.tokens) && runTrace.tokens.length > 0;
+    replayOk = judgmentRecorded && replayed?.ok === true && replayed?.traceMatches === true;
+    replayDetail = replayOk
+      ? `replayed the GGUF run on the pinned engine; its decode judgment (${runTrace.tokens.length} tokens with logprobs) matched`
+      : `judgment=${String(judgmentRecorded)} replay=${String(replayed?.reason ?? replayed?.reproduced)}`;
   }
   phase("replay", replayOk, replayDetail);
 
@@ -1233,6 +1313,101 @@ try {
     };
     const wrongMeasurementRefused =
       providerStageMeasurements(wrongMeasure).firmware !== teeLeaves[0].measurements.firmware;
+    // Freshness: the gateway challenged each provider with one nonce, and the run
+    // records the nonce-bound attestations. A run whose providers carry a
+    // different nonce (a replayed attestation) is refused.
+    const nonces = (runBody?.quorum?.providers ?? []).map((entry) => entry.attestation?.challenge);
+    const freshnessOk =
+      spec.teeFreshness === "challenge" &&
+      nonces.length === providerUrls.length &&
+      nonces.every((value) => typeof value === "string" && value !== "") &&
+      new Set(nonces).size === 1;
+    const freshnessRefused =
+      runBody !== null &&
+      verifyRunBody(
+        {
+          ...runBody,
+          quorum: {
+            ...runBody.quorum,
+            providers: (runBody.quorum?.providers ?? []).map((entry, index) =>
+              index === 0
+                ? { ...entry, attestation: { ...entry.attestation, challenge: "00".repeat(32) } }
+                : entry,
+            ),
+          },
+        },
+        spec,
+      ).correct === false;
+    // The enclave's own code: every provider runs the same code, the deployment
+    // pins that digest, and a code the providers do not run is refused.
+    const codePinned =
+      typeof providerCards[0].independence?.code === "string" &&
+      providerCards.every((entry) => entry.independence?.code === providerCards[0].independence.code) &&
+      spec.teeCodeMeasurement === providerCards[0].independence.code &&
+      (runBody?.quorum?.providers ?? []).every(
+        (entry) => entry.attestation?.code === providerCards[0].independence.code,
+      );
+    const wrongCode = await runCli([
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--tee-vendor",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-code",
+      "0".repeat(64),
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "quote-badcode"),
+      "--json",
+    ]);
+    const codeRefused =
+      wrongCode.status !== 0 &&
+      /code measurement/.test((wrongCode.stderr || "") + (wrongCode.stdout || ""));
+    // The code digest is bound to a VENDOR-SIGNED image manifest: the deployment
+    // pins the vendor, so a manifest signed elsewhere is refused.
+    const manifestOk =
+      spec.teeSignedImage === HARDWARE_ROOT_KEY_ID &&
+      providerCards.every((entry) => {
+        const info = verifyImageManifest(entry.independence?.image);
+        return (
+          info !== null &&
+          info.vendorKeyId === HARDWARE_ROOT_KEY_ID &&
+          info.image === providerCards[0].independence.code
+        );
+      }) &&
+      (runBody?.quorum?.providers ?? []).every((entry) => {
+        const info = verifyImageManifest(entry.attestation?.image);
+        return info !== null && info.vendorKeyId === HARDWARE_ROOT_KEY_ID;
+      });
+    const foreignManifest = signImageManifest(
+      { image: providerCards[0].independence.code, runtime: "rarext-runtime" },
+      new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey),
+    );
+    const foreignRefused = verifyImageManifest(foreignManifest).vendorKeyId !== HARDWARE_ROOT_KEY_ID;
+    const wrongSignedImage = await runCli([
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--tee-vendor",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-signed-image",
+      "0".repeat(64),
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "quote-badimage"),
+      "--json",
+    ]);
+    const signedImageRefused =
+      wrongSignedImage.status !== 0 &&
+      /signed-image/.test((wrongSignedImage.stderr || "") + (wrongSignedImage.stdout || ""));
     // A vendor pin the providers cannot satisfy is refused at deploy time.
     const wrongPin = await runCli([
       "deploy",
@@ -1265,13 +1440,22 @@ try {
       measurementsPinned &&
       spec.teeStageMeasurements?.firmware === teeLeaves[0].measurements.firmware &&
       wrongMeasurementRefused &&
+      freshnessOk &&
+      freshnessRefused &&
+      codePinned &&
+      codeRefused &&
+      manifestOk &&
+      foreignRefused &&
+      signedImageRefused &&
       runAttested &&
       wrongPin.status !== 0 &&
       /machine quote/.test((wrongPin.stderr || "") + (wrongPin.stdout || ""));
     quoteDetail =
       `vendor root ${anchorKeyId.slice(0, 14)}… pinned at depth 3; each provider's leaf -> os -> firmware -> root ` +
-      `chain measures every stage to the approved value; a chain rooted elsewhere, a chain with no boot stages, and a ` +
-      `chain running unapproved firmware were refused`;
+      `chain measures every stage to the approved value; a nonce-freshness challenge bound one nonce across the run; ` +
+      `the enclave's code digest is bound to a vendor-signed image manifest; a chain rooted elsewhere, a chain with ` +
+      `no boot stages, a chain running unapproved firmware, a replayed (stale) attestation, unapproved enclave code, ` +
+      `and an image signed by another vendor were refused`;
   } catch (error) {
     quoteOk = false;
     quoteDetail = error instanceof Error ? error.message : String(error);
