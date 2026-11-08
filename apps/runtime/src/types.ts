@@ -72,6 +72,17 @@ export interface EngineRef {
   version: string | null;
   /** Base URL, normalised without a trailing slash and without `/v1`. */
   endpoint: string;
+  /**
+   * The engine image/binary digest when the operator can report one. Null is
+   * honest; a replay that pins the engine treats a changed digest as a
+   * different engine.
+   */
+  digest?: string | null;
+  /**
+   * sha256 over `{name, version, digest}`: the engine pin a run records and a
+   * replay checks against the provider's present engine.
+   */
+  fingerprint?: string;
 }
 
 export interface ModelRef {
@@ -210,6 +221,28 @@ export interface RunQuorumProvider {
    * processes on one box.
    */
   machine?: string | null;
+  /**
+   * The measurement the provider attested. A deployment may commit an allowlist
+   * of measurements, and then a provider running software the deployment did not
+   * approve is refused — the machine claim is checked, not taken on faith.
+   */
+  measurement?: string | null;
+  /**
+   * The provider's full independence attestation, including the vendor-signed
+   * quote. Recorded so a verifier can check the quote against the deployment's
+   * pinned vendor key without trusting the gateway.
+   */
+  attestation?: RunProviderAttestation;
+}
+
+/** The independence attestation as a run records it, quote included. */
+export interface RunProviderAttestation {
+  kind?: string;
+  scheme?: string;
+  machine?: string | null;
+  measurement?: string | null;
+  issuedAt?: string;
+  quote?: { signature: string; publicKey: unknown; suite: string };
 }
 
 export interface RunQuorum {
@@ -243,7 +276,7 @@ export interface ModelRunBody {
   kind: typeof RUN_KIND;
   deployment: { id: string; digest: string };
   model: { id: string; weightsDigest: string | null };
-  engine: { name: EngineName; version: string | null };
+  engine: { name: EngineName; version: string | null; fingerprint?: string | null };
   /** Present when the run names a RAREXT-hosted model bundle. */
   bundle?: RunBundleRef;
   /** Present when the deployment required agreement across providers. */
@@ -313,6 +346,24 @@ export interface ModelRunSpec {
   independence?: "machine";
   /** Machine identities, aligned index-for-index with `operators`. */
   machines?: string[];
+  /**
+   * An ALLOWLIST of accepted machine measurements. When committed, every
+   * agreeing provider must attest a measurement on the list, so a quorum cannot
+   * be met by a provider running software the deployment did not approve.
+   */
+  measurements?: string[];
+  /**
+   * The engine the deployment pinned: a fingerprint over the serving engine's
+   * name, version, and (when known) image digest. A run records it, and a
+   * replay refuses a provider whose present engine differs.
+   */
+  engineFingerprint?: string;
+  /**
+   * The vendor key id whose machine quotes the deployment accepts, when it
+   * pinned one. Every agreeing provider's quote must verify under a key with
+   * this id, so a forged or unverifiable quote is refused.
+   */
+  teeVendor?: string;
 }
 
 export interface ProviderCardVerification {

@@ -20,6 +20,9 @@
  *   publish   publish the run with its quorum evidence
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
+ *   measure   a deployment approves provider measurements, or is refused
+ *   quote     a provider's machine claim is vendor-signed and checked against a pin
+ *   engine-pin  the run pins the serving engine; a replay refuses a changed one
  *   compare   ask every provider the same question and compare answers
  *   weights   prove the source model file is gone and the bytes came from RAREXT
  *   replay    regenerate the output from the committed bundle and seed
@@ -36,9 +39,13 @@
  *   RAREXT_WEB4_ENGINE_MODEL=rarext-web4-qwen \
  *   node scripts/demo-web4-model.mjs
  *
- * To store the weights as ciphertext the RAREXT node never opens (native only):
+ * To store the weights as ciphertext the RAREXT node never opens:
  *
  *   RAREXT_WEB4_SEAL=1 node scripts/demo-web4-model.mjs
+ *
+ * Sealing works for a native model and for a GGUF. The engine path opens the
+ * sealed bytes into a mode-0600 file under the OS temp dir, lets the engine load
+ * it, and removes it — never the provider's state dir, never a cached artifact.
  *
  * With a GGUF the provider reassembles the file from RAREXT shards, asks the
  * provider's own Ollama to load it, and serves that. The weights still come
@@ -73,10 +80,11 @@ import {
   fetchBundleManifest,
   fetchProviderCard,
   verifyModelBundle,
+  verifyProviderQuote,
 } from "../apps/runtime/src/model-bundle.ts";
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
-import { verifyDeploymentBody } from "../apps/runtime/src/transcript.ts";
+import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import { AgentSigner, RarextClient, generateAgentKeypair } from "../packages/agent-sdk/src/index.ts";
 
@@ -211,12 +219,6 @@ try {
   const gguf = process.env.RAREXT_WEB4_GGUF;
   const real = typeof gguf === "string" && gguf !== "";
   const seal = process.env.RAREXT_WEB4_SEAL === "1";
-  if (seal && real) {
-    throw new Error(
-      "sealed inference is native-only: an engine provider materializes weights to a file. " +
-        "Run without RAREXT_WEB4_GGUF to demo sealing.",
-    );
-  }
   const modelId = process.env.RAREXT_WEB4_MODEL ?? (real ? "rarext-web4-model" : "rarext-native-proof");
   const engineModel = process.env.RAREXT_WEB4_ENGINE_MODEL ?? "rarext-web4-model";
   // Credits each distinct agreeing operator earns for the run. Payment is a
@@ -226,6 +228,16 @@ try {
   if (!Number.isSafeInteger(bounty) || bounty <= 0) {
     throw new Error(`RAREXT_WEB4_BOUNTY must be a positive integer, got ${process.env.RAREXT_WEB4_BOUNTY}`);
   }
+
+  // A vendor/attestation key: it signs each provider's machine quote, and the
+  // deployment pins its key id. In a real TEE this key lives in the chip.
+  const teeKeypair = generateAgentKeypair("ecdsa-p256");
+  const teeVendor = new AgentSigner(teeKeypair.privateKey);
+  const teeKeyPath = join(state, "tee-vendor.json");
+  writeJsonFile(teeKeyPath, {
+    privateKey: teeKeypair.privateKey,
+    publicKey: teeKeypair.publicKey,
+  });
 
   // ── 1. A RAREXT node that holds bytes ────────────────────────────────────
   api = spawnApi({
@@ -359,6 +371,8 @@ try {
       String(providerPort),
       "--handle",
       "provider-a",
+      "--tee-key-file",
+      teeKeyPath,
       ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
@@ -392,6 +406,8 @@ try {
         String(providerBPort),
         "--handle",
         "provider-b",
+        "--tee-key-file",
+        teeKeyPath,
         ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ],
       {},
@@ -426,6 +442,8 @@ try {
     String(providerUrls.length),
     "--bounty",
     String(bounty),
+    "--tee-vendor",
+    teeVendor.keyId,
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -448,7 +466,8 @@ try {
       deployment.labels.providers.split(",").length === providerUrls.length &&
       deployment.labels.operators.split(",").length === providerUrls.length &&
       new Set(deployment.labels.operators.split(",")).size === providerUrls.length &&
-      deployment.labels.bounty === String(bounty),
+      deployment.labels.bounty === String(bounty) &&
+      deployment.labels.teeVendor === teeVendor.keyId,
     `${modelId} as ${deployment.digest.slice(0, 16)}…; bundle ${bundle.digest.slice(0, 16)}…, ` +
       `quorum ${deployment.labels.quorum}/${providerUrls.length}` +
       (deployment.labels.operators ? ` over ${deployment.labels.operators.split(",").length} operator(s)` : "") +
@@ -541,6 +560,11 @@ try {
         url,
         providerCards[index].provider.keyId ?? providerCards[index].provider.handle ?? url,
       ]),
+    ),
+    // The deployment pins a vendor key, so the gateway verifies each provider's
+    // machine quote before it will write a run.
+    attestations: Object.fromEntries(
+      providerUrls.map((url, index) => [url, providerCards[index].independence]),
     ),
     log: (message) => console.log(`  [runtime] ${message}`),
   });
@@ -694,14 +718,22 @@ try {
 
   const runtimeStateFiles = modelFilesIn(state);
   const sourceGone = real || deletedSource;
+  // A sealed provider never keeps the model: not in the caller's state (checked
+  // above) and not in the provider's own state directory either — the opened
+  // bytes live only in memory, or in an ephemeral file the engine loading
+  // removes. An open engine provider DOES cache the file, which is why this
+  // holds only for a sealed bundle.
+  const providerKeepsNoModel = !seal || modelFilesIn(providerState).length === 0;
   phase(
     "weights",
     sourceGone &&
       runtimeStateFiles.length === 0 &&
+      providerKeepsNoModel &&
       deployment.model.weightsDigest === bundle.model.weightsDigest,
-    real
+    (real
       ? `the provider reassembled the GGUF from RAREXT shards; the caller's state has no .gguf`
-      : `the source model file was deleted before the provider started; it served ${bundle.shards.length} verified RAREXT blobs`,
+      : `the source model file was deleted before the provider started; it served ${bundle.shards.length} verified RAREXT blobs`) +
+      (seal ? `; the provider state holds no model file` : ""),
   );
 
   // ── 11. Replay from the committed bundle, not from the provider ──────────
@@ -940,7 +972,7 @@ try {
       "--independence",
       "machine",
       "--registry",
-      startBase,
+      baseUrl,
       "--allow-loopback",
       "--out",
       join(state, "machine-deploy"),
@@ -960,7 +992,7 @@ try {
       "--independence",
       "machine",
       "--registry",
-      startBase,
+      baseUrl,
       "--allow-loopback",
       "--out",
       join(state, "machine-deploy-single"),
@@ -981,8 +1013,7 @@ try {
         singleDeployment.labels.machines.split(",").length === 1;
       independenceDetail =
         `both providers attest machine ${String(machines[0]).slice(0, 20)}…; a 2-machine quorum was refused, ` +
-        `a 1-machine quorum committed` +
-        ` [refusedOut=${((refusedDeploy?.stderr || refusedDeploy?.stdout || "")).slice(0, 240)} | singleOut=${(single.stderr || single.stdout || "").slice(0, 240)}]`;
+        `a 1-machine quorum committed`;
     } else {
       independenceOk =
         singleDeployment?.labels.independence === "machine" &&
@@ -994,6 +1025,191 @@ try {
     independenceDetail = error instanceof Error ? error.message : String(error);
   }
   phase("independence", independenceOk, independenceDetail);
+
+  // ── 12d. Measurement allowlist: the attestation is checked, not believed ─
+  // The provider card attests a measurement (the software/image digest). A
+  // deployment can approve a set of measurements, and then a provider running
+  // anything else cannot count. `deploy --measure` refuses an allowlist that
+  // does not cover the providers it is adopting.
+  let measureOk = false;
+  let measureDetail = "";
+  try {
+    const approved = providerCards[0].independence?.measurement;
+    if (!/^[0-9a-f]{64}$/.test(approved)) throw new Error("the provider attests no measurement");
+    const deployWithMeasure = (measure) =>
+      runCli([
+        "deploy",
+        "--web4",
+        ...providerUrls.flatMap((url) => ["--provider", url]),
+        "--quorum",
+        String(providerUrls.length),
+        "--measure",
+        measure,
+        "--registry",
+        baseUrl,
+        "--allow-loopback",
+        "--out",
+        join(state, `measure-${measure.slice(0, 8)}`),
+        "--json",
+      ]);
+    const good = await deployWithMeasure(approved);
+    const goodDeployment = good.status === 0 ? JSON.parse(good.stdout).deployment : null;
+    const refused = await deployWithMeasure("0".repeat(64));
+    measureOk =
+      goodDeployment?.labels.measurements === approved &&
+      refused.status !== 0 &&
+      /measurement/.test((refused.stderr || "") + (refused.stdout || ""));
+    measureDetail =
+      `provider attests measurement ${String(approved).slice(0, 16)}…; an allowlist naming it was ` +
+      `committed, an allowlist without it was refused`;
+  } catch (error) {
+    measureOk = false;
+    measureDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("measure", measureOk, measureDetail);
+
+  // ── 12f. Machine quote: a vendor-signed claim the deployment checks ──────
+  // Each provider's machine claim is signed by a vendor key the deployment pins.
+  // The run records the quotes and the verifier recomputes them; a quote that
+  // does not verify under the pinned key — or a pin the providers cannot satisfy
+  // — is refused.
+  let quoteOk = false;
+  let quoteDetail = "";
+  try {
+    const vendorKeyId = teeVendor.keyId;
+    const runBody = publishedBody ?? localRecord?.body ?? null;
+    const cardsQuote = providerCards.every(
+      (entry) =>
+        entry.independence?.quote !== undefined &&
+        verifyProviderQuote(entry.independence) === vendorKeyId,
+    );
+    // A forged quote: the measurement changes, the vendor signature does not.
+    const forged = { ...providerCards[0].independence, measurement: "0".repeat(64) };
+    const forgedRefused = verifyProviderQuote(forged) === null;
+    // A vendor pin the providers cannot satisfy is refused at deploy time.
+    const wrongPin = await runCli([
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--tee-vendor",
+      "0".repeat(64),
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "quote-badpin"),
+      "--json",
+    ]);
+    const runAttested =
+      Array.isArray(runBody?.quorum?.providers) &&
+      runBody.quorum.providers.every((entry) => entry.attestation !== undefined);
+
+    quoteOk =
+      deployment.labels.teeVendor === vendorKeyId &&
+      spec.teeVendor === vendorKeyId &&
+      cardsQuote &&
+      forgedRefused &&
+      runAttested &&
+      wrongPin.status !== 0 &&
+      /machine quote/.test((wrongPin.stderr || "") + (wrongPin.stdout || ""));
+    quoteDetail =
+      `vendor ${vendorKeyId.slice(0, 16)}… pinned; every provider quote verifies under it; a forged ` +
+      `quote and a pin the providers could not satisfy were refused`;
+  } catch (error) {
+    quoteOk = false;
+    quoteDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("quote", quoteOk, quoteDetail);
+
+  // ── 12e. Engine pin: a replay refuses a provider whose engine changed ────
+  // An arbitrary GGUF cannot be reproduced bit-for-bit by the protocol alone.
+  // What the protocol does instead: pin the serving engine in the deployment
+  // (name, version, digest → one fingerprint), record it in the run, and refuse
+  // to call it a replay unless the provider's present engine matches.
+  let enginePinOk = false;
+  let enginePinDetail = "";
+  let badEngineProvider = null;
+  try {
+    const pin = deployment.labels.engineFingerprint;
+    const healthA = await getJson(`${providerUrls[0]}/health`);
+    const runBody = publishedBody ?? localRecord?.body ?? null;
+    const specHasPin = spec.engineFingerprint === pin;
+    const runRecordsPin = runBody?.engine?.fingerprint === pin;
+    const providerMatches = healthA.engineFingerprint === pin;
+
+    // The verifier recomputes the pin: a run naming another engine is refused.
+    const swappedOk =
+      runBody !== null &&
+      verifyRunBody(
+        { ...runBody, engine: { ...runBody.engine, fingerprint: "0".repeat(64) } },
+        spec,
+      ).correct === false;
+
+    writeJsonFile(join(state, "run.json"), runBody);
+
+    // A provider running a different engine build is refused by replay. Native
+    // only: an engine provider would reload the whole model just to answer
+    // /health, which the demo does not pay for twice.
+    let liveRefusal = true;
+    let liveDetail = "the verifier refused a run that named another engine";
+    if (!real) {
+      const badPort = await freePort();
+      badEngineProvider = spawnProcess(
+        [
+          "apps/runtime/src/cli.ts",
+          "provider",
+          "--bundle",
+          join(state, "model-bundle.json"),
+          "--registry",
+          baseUrl,
+          "--state",
+          join(state, "provider-badengine"),
+          "--port",
+          String(badPort),
+          ...(seal && sealKeyPath !== null ? ["--seal-key-file", sealKeyPath] : []),
+          "--engine-version",
+          "other-engine",
+        ],
+        {},
+        (line) => {
+          const match = line.match(/rarext provider serving .* on (https?:\/\/[^\s]+)/);
+          return match ? match[1].replace(/\/$/, "") : null;
+        },
+      );
+      const badUrl = await badEngineProvider.ready;
+      const refused = await runCli([
+        "replay",
+        "--transcript",
+        join(state, "run.json"),
+        "--endpoint",
+        badUrl,
+        "--json",
+      ]);
+      liveRefusal =
+        refused.status !== 0 && /engine/.test((refused.stderr || "") + (refused.stdout || ""));
+      liveDetail = "a provider on another engine was refused by replay";
+    }
+
+    enginePinOk =
+      typeof pin === "string" &&
+      /^[0-9a-f]{64}$/.test(pin) &&
+      specHasPin &&
+      runRecordsPin &&
+      providerMatches &&
+      swappedOk &&
+      liveRefusal;
+    enginePinDetail =
+      `engine ${String(pin).slice(0, 16)}… pinned in the deployment and the run; the provider matches; ` +
+      liveDetail;
+  } catch (error) {
+    enginePinOk = false;
+    enginePinDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (badEngineProvider !== null) badEngineProvider.stop();
+  }
+  phase("engine-pin", enginePinOk, enginePinDetail);
 
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
   const victim = bundle.shards[0].hash;

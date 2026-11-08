@@ -17,10 +17,6 @@ import { parseArgs } from "node:util";
 import {
   probeEngine,
   probeEngineCatalog,
-  openAiChatUrl,
-  anthropicMessagesUrl,
-  extractAnthropicText,
-  extractOpenAiText,
   pullOllamaModel,
 } from "./engines.ts";
 import type { PullProgress } from "./engines.ts";
@@ -38,6 +34,7 @@ import {
 import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import { canonicalDigest } from "./digest.ts";
+import { replayEngineRun } from "./replay.ts";
 import {
   assessModelFit,
   buildDeployment,
@@ -59,12 +56,13 @@ import {
   fetchProviderCard,
   generateSealKey,
   uploadBundle,
+  verifyProviderQuote,
   verifyModelBundle,
 } from "./model-bundle.ts";
 import type { ExecutionRef, ModelBundle } from "./model-bundle.ts";
 import { loadProviderBundle, startProvider } from "./provider.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
-import { RarextClient } from "../../../packages/agent-sdk/src/index.ts";
+import { AgentSigner, RarextClient } from "../../../packages/agent-sdk/src/index.ts";
 import { startGateway } from "./gateway.ts";
 import { auditLedger, verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
 import { discoverBundle, fetchAnchoredBundles, fetchVerifiedProvidersAcrossRegistries, verifiedProviders, verifiedRemoteDeployments } from "./discovery.ts";
@@ -82,6 +80,7 @@ import type {
   ModelRef,
   ModelRunBody,
   ModelRunSpec,
+  RunProviderAttestation,
   RunRecord,
 } from "./types.ts";
 
@@ -144,6 +143,12 @@ Common options:
   --seal                store the shards as ciphertext; write the key beside the bundle
   --seal-key-file <p>   read a seal key (64 hex chars or 32 bytes) for bundle/provider/deploy
   --machine <id>        the machine identity a provider attests (default: host fingerprint)
+  --measurement <hex>   the software/image measurement a provider attests (default: machine digest)
+  --measure <hex,...>   deploy: allowlist of measurements a provider must match
+  --engine-version <v>  the serving engine's version, pinned by its fingerprint
+  --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
+  --tee-key-file <p>    the vendor/attestation key that signs a provider's machine quote
+  --tee-vendor <keyId>  deploy: the vendor key id whose machine quotes are accepted
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -216,6 +221,23 @@ function readJson(path: string): unknown {
  * Read a seal key file: 64 hex characters (what `bundle --seal` writes) or the
  * raw 32 bytes. Anything else is refused rather than hashed into a wrong key.
  */
+/**
+ * Read a vendor/attestation key file: a JWK private key, or an object with a
+ * `privateKey` (what the demo writes). Refused rather than guessed at.
+ */
+function readTeeSigner(path: string): { sign(payload: unknown): string; publicKey: unknown; suite: string } {
+  const value = readJson(path) as Record<string, unknown>;
+  const privateKey =
+    value.privateKey !== undefined
+      ? (value.privateKey as never)
+      : (value as never);
+  try {
+    return new AgentSigner(privateKey);
+  } catch (error) {
+    throw new Error(`tee key at ${path} is not a usable private key: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function readSealKeyFile(path: string): Buffer {
   const raw = readFileSync(path);
   const text = raw.toString("utf8").trim();
@@ -668,6 +690,16 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
     providerHandle: flag(values, "handle") ?? null,
     ...(flag(values, "machine") === undefined ? {} : { machine: flag(values, "machine") }),
+    ...(flag(values, "measurement") === undefined ? {} : { measurement: flag(values, "measurement") }),
+    ...(flag(values, "engine-version") === undefined
+      ? {}
+      : { engineVersion: flag(values, "engine-version") }),
+    ...(flag(values, "engine-digest") === undefined
+      ? {}
+      : { engineDigest: flag(values, "engine-digest") }),
+    ...(flag(values, "tee-key-file") === undefined
+      ? {}
+      : { teeSigner: readTeeSigner(resolve(flag(values, "tee-key-file")!)) }),
     ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
   });
@@ -802,7 +834,7 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     });
   }
 
-  await Promise.all(
+  const healthFingerprints = await Promise.all(
     endpoints.map(async (endpoint) => {
       const healthResponse = await fetch(`${endpoint}/health`, {
         signal: AbortSignal.timeout(15_000),
@@ -810,15 +842,30 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
       if (!healthResponse.ok) {
         throw new Error(`provider ${endpoint} is not healthy: HTTP ${healthResponse.status}`);
       }
-      const health = (await healthResponse.json()) as { bundle?: unknown; weightsDigest?: unknown };
+      const health = (await healthResponse.json()) as {
+        bundle?: unknown;
+        weightsDigest?: unknown;
+        engineFingerprint?: unknown;
+      };
       if (health.bundle !== bundle.digest || health.weightsDigest !== bundle.model.weightsDigest) {
         throw new Error(
           `provider ${endpoint} health does not commit this bundle (bundle ${String(health.bundle)}, ` +
             `weights ${String(health.weightsDigest)})`,
         );
       }
+      return typeof health.engineFingerprint === "string" &&
+        /^[0-9a-f]{64}$/.test(health.engineFingerprint)
+        ? health.engineFingerprint
+        : null;
     }),
   );
+
+  // Pin the engine only when every provider reports the same one: a run names a
+  // single engine, so a heterogeneous fleet is honestly left unpinned.
+  const enginePins = [...new Set(healthFingerprints.filter((pin): pin is string => pin !== null))];
+  const enginePin = healthFingerprints.every((pin) => pin !== null) && enginePins.length === 1
+    ? enginePins[0]!
+    : null;
 
   const quorumFlag = flag(values, "quorum");
   const quorum = quorumFlag === undefined ? endpoints.length : Number(quorumFlag);
@@ -878,6 +925,54 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     }
   }
 
+  // A measurement allowlist: the deployment approves software images, and a
+  // provider running anything else cannot count. Every adopted provider's
+  // measurement must be on the list, so a mismatched allowlist is caught here
+  // rather than at the first run.
+  const measureFlag = flag(values, "measure");
+  let allowedMeasurements: string[] | null = null;
+  if (measureFlag !== undefined) {
+    const list = measureFlag.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+    if (list.length === 0) throw new Error("--measure needs at least one sha256 hex measurement");
+    if (list.some((entry) => !/^[0-9a-f]{64}$/.test(entry))) {
+      throw new Error("--measure entries must be sha256 hex digests");
+    }
+    if (!operatorsCommitted) {
+      throw new Error("--measure requires every provider card to name an operator identity");
+    }
+    const cardMeasurements = cards.map((entry) => entry.independence?.measurement ?? null);
+    const unlisted = cardMeasurements.filter((value) => value === null || !list.includes(value));
+    if (unlisted.length > 0) {
+      throw new Error(
+        `--measure allowlist does not include every provider's measurement: ` +
+          `${cardMeasurements.join(", ")}`,
+      );
+    }
+    allowedMeasurements = [...new Set(list)];
+  }
+
+  // A pinned vendor key: the deployment accepts machine quotes only from this
+  // key. Every adopted provider must present a quote that verifies under it, so
+  // a pin the providers cannot satisfy is caught here.
+  const teeVendorFlag = flag(values, "tee-vendor");
+  let teeVendor: string | null = null;
+  if (teeVendorFlag !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(teeVendorFlag)) {
+      throw new Error("--tee-vendor must be a sha256 hex key id");
+    }
+    if (!operatorsCommitted) {
+      throw new Error("--tee-vendor requires every provider card to name an operator identity");
+    }
+    const vendors = cards.map((entry) => verifyProviderQuote(entry.independence));
+    if (vendors.some((vendor) => vendor !== teeVendorFlag)) {
+      throw new Error(
+        `--tee-vendor ${teeVendorFlag} does not match every provider's machine quote ` +
+          `(${vendors.map((vendor) => vendor ?? "none").join(", ")})`,
+      );
+    }
+    teeVendor = teeVendorFlag;
+  }
+
   const primary = endpoints[0]!;
   const card = cards[0]!;
   const probe = {
@@ -913,6 +1008,14 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         // Machine independence commits the operator-aligned machine ids, so a
         // run cannot invent a machine to pass the distinctness rule.
         ...(independence ? { independence: "machine", machines: machineIds.join(",") } : {}),
+        // A measurement allowlist commits the approved software images, so the
+        // challenge and the verifier can refuse a provider running anything else.
+        ...(allowedMeasurements === null ? {} : { measurements: allowedMeasurements.join(",") }),
+        // The engine the providers actually serve with: committed so a run
+        // records it and a replay can refuse a provider whose engine changed.
+        ...(enginePin === null ? {} : { engineFingerprint: enginePin }),
+        // The pinned vendor key whose machine quotes the deployment accepts.
+        ...(teeVendor === null ? {} : { teeVendor }),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -1362,6 +1465,44 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
       ? Object.fromEntries(upstreams.map((endpoint, index) => [endpoint, committedMachines[index]!]))
       : undefined;
 
+  // When the deployment approves specific measurements, the gateway needs each
+  // provider's PRESENT measurement to check it, so it fetches the cards. An
+  // unreachable or unmeasured provider is recorded as unmeasured and refused,
+  // rather than silently counted.
+  let measurements: Record<string, string> | undefined;
+  if (labels.measurements !== undefined) {
+    const pairs = await Promise.all(
+      upstreams.map(async (endpoint) => {
+        try {
+          const card = await fetchProviderCard({ endpoint });
+          return [endpoint, card.independence?.measurement ?? ""] as const;
+        } catch {
+          return [endpoint, ""] as const;
+        }
+      }),
+    );
+    measurements = Object.fromEntries(pairs);
+  }
+
+  // When the deployment pins a vendor key, the gateway needs each provider's
+  // full quote to verify it, so it fetches the cards' independence blocks.
+  let attestations: Record<string, RunProviderAttestation> | undefined;
+  if (labels.teeVendor !== undefined) {
+    const pairs = await Promise.all(
+      upstreams.map(async (endpoint) => {
+        try {
+          const card = await fetchProviderCard({ endpoint });
+          return [endpoint, card.independence] as const;
+        } catch {
+          return [endpoint, undefined] as const;
+        }
+      }),
+    );
+    attestations = Object.fromEntries(
+      pairs.filter((pair): pair is readonly [string, NonNullable<(typeof pair)[1]>] => pair[1] !== undefined),
+    );
+  }
+
   const publisher = publish
     ? await RuntimePublisher.open({ baseUrl: registry, handle, stateDir: state, challengeId })
     : null;
@@ -1386,6 +1527,8 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     ...(commitsQuorum ? { upstreams, quorum } : {}),
     ...(commitsQuorum && operators !== undefined ? { operators } : {}),
     ...(commitsQuorum && machines !== undefined ? { machines } : {}),
+    ...(commitsQuorum && measurements !== undefined ? { measurements } : {}),
+    ...(commitsQuorum && attestations !== undefined ? { attestations } : {}),
     log: (message) => console.error(`[runtime] ${message}`),
   });
 
@@ -1687,38 +1830,53 @@ async function commandReplay(values: Record<string, unknown>): Promise<number> {
   const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? body.replay.endpoint);
   const api: ApiShape = body.replay.api === "anthropic" ? "anthropic" : "openai";
   const upstream = upstreamOptions(values, api === "anthropic" ? "anthropic" : "openai-compatible");
-  const request = {
-    ...(body.replay.request as Record<string, unknown>),
-    model: flag(values, "model") ?? body.model.id,
-    stream: false,
-  };
 
-  const response = await fetch(api === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...upstream.headers,
-    },
-    body: JSON.stringify(request),
+  // The engine pin is checked first: a provider running a different engine is not
+  // the engine the run committed, so its output would prove nothing.
+  const result = await replayEngineRun({
+    body,
+    endpoint,
+    api,
+    headers: upstream.headers,
   });
-  if (!response.ok) {
-    console.error(`replay failed: HTTP ${response.status} ${await response.text()}`);
+
+  if (bool(values, "json")) {
+    console.log(
+      JSON.stringify(
+        {
+          same: result.ok,
+          enginePinned: body.engine.fingerprint ?? null,
+          enginePresent: result.engineFingerprint,
+          reason: result.reason,
+          expected: body.response.text,
+          replayed: result.replayed,
+        },
+        null,
+        2,
+      ),
+    );
+    return result.ok ? 0 : 1;
+  }
+
+  if (result.engineFingerprint !== null && body.engine.fingerprint !== undefined) {
+    console.log(
+      `${result.engineFingerprint === body.engine.fingerprint ? "engine pinned" : "engine differs"} — ` +
+        `${String(body.engine.fingerprint).slice(0, 16)}… vs ${result.engineFingerprint.slice(0, 16)}…`,
+    );
+  }
+  if (result.reproduced === null) {
+    console.log(`FAIL — ${result.reason ?? "replay did not run"}`);
     return 1;
   }
-
-  const json = (await response.json()) as unknown;
-  const text = api === "anthropic" ? extractAnthropicText(json) : extractOpenAiText(json);
-  const same = text === body.response.text;
-  if (bool(values, "json")) {
-    console.log(JSON.stringify({ same, expected: body.response.text, replayed: text }, null, 2));
-  } else {
-    console.log(`${same ? "PASS" : "FAIL"} — replay ${same ? "reproduced" : "did NOT reproduce"} the committed output (${text.length} chars)`);
-    if (!same) {
-      console.log(`  committed: ${JSON.stringify(body.response.text.slice(0, 160))}`);
-      console.log(`  replayed:  ${JSON.stringify(text.slice(0, 160))}`);
-    }
+  console.log(
+    `${result.ok ? "PASS" : "FAIL"} — replay ${result.ok ? "reproduced" : "did NOT reproduce"} ` +
+      `the committed output (${String(result.replayed).length} chars)`,
+  );
+  if (!result.ok) {
+    console.log(`  committed: ${JSON.stringify(body.response.text.slice(0, 160))}`);
+    console.log(`  replayed:  ${JSON.stringify(String(result.replayed).slice(0, 160))}`);
   }
-  return same ? 0 : 1;
+  return result.ok ? 0 : 1;
 }
 
 async function commandLedger(values: Record<string, unknown>): Promise<number> {
@@ -1794,6 +1952,12 @@ async function main(): Promise<number> {
       seal: { type: "boolean" },
       "seal-key-file": { type: "string" },
       machine: { type: "string" },
+      measurement: { type: "string" },
+      measure: { type: "string" },
+      "engine-version": { type: "string" },
+      "engine-digest": { type: "string" },
+      "tee-key-file": { type: "string" },
+      "tee-vendor": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },

@@ -115,6 +115,32 @@ function independenceSpec(labels: Record<string, string> | undefined): "machine"
   return "machine";
 }
 
+/**
+ * The machine-measurement allowlist a deployment committed. Only meaningful
+ * with a quorum of operators to check it against, so a half-committed list is
+ * treated as absent rather than enforced vacuously.
+ */
+function measurementsSpec(labels: Record<string, string> | undefined): string[] | undefined {
+  if (labels?.measurements === undefined) return undefined;
+  if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
+  const measurements = labels.measurements
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  return measurements.length === 0 ? undefined : measurements;
+}
+
+/**
+ * The vendor key whose machine quotes a deployment accepts. Needs a quorum of
+ * operators to gate, so a half-committed pin is treated as absent.
+ */
+function teeVendorSpec(labels: Record<string, string> | undefined): string | undefined {
+  const raw = labels?.teeVendor;
+  if (typeof raw !== "string" || !/^[0-9a-f]{64}$/.test(raw)) return undefined;
+  if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
+  return raw;
+}
+
 function inferenceBountySpec(labels: Record<string, string> | undefined): number | undefined {
   if (labels?.bounty === undefined) return undefined;
   if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
@@ -153,6 +179,26 @@ export function challengeFor(manifest: DeploymentCommitment) {
             independence: independenceSpec(manifest.labels),
             machines: machinesSpec(manifest.labels),
           }),
+      ...(measurementsSpec(manifest.labels) === undefined
+        ? {}
+        : { measurements: measurementsSpec(manifest.labels) }),
+      // The engine pin: a run records it, and a replay checks the provider's
+      // present engine against it. A web4 deployment pins the provider's engine
+      // in a label; a probed deployment can carry it on the manifest engine.
+      ...(() => {
+        const fromLabel = manifest.labels?.engineFingerprint;
+        if (typeof fromLabel === "string" && /^[0-9a-f]{64}$/.test(fromLabel)) {
+          return { engineFingerprint: fromLabel };
+        }
+        return typeof manifest.engine.fingerprint === "string"
+          ? { engineFingerprint: manifest.engine.fingerprint }
+          : {};
+      })(),
+      // The pinned vendor key: every agreeing provider's machine quote must
+      // verify under it.
+      ...(teeVendorSpec(manifest.labels) === undefined
+        ? {}
+        : { teeVendor: teeVendorSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

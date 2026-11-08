@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { arch, hostname, platform } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { arch, hostname, platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -19,14 +19,17 @@ import {
 } from "../../../packages/core/src/ai.ts";
 import type { XorshiftModel } from "../../../packages/core/src/ai.ts";
 import { sha256Hex } from "./digest.ts";
+import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   fetchBundleChunks,
   fetchBundleManifest,
   buildProviderCard,
   bundleManifestHash,
   PROVIDER_MACHINE_KIND,
+  providerQuotePayload,
   verifyModelBundle,
 } from "./model-bundle.ts";
+import type { ProviderIndependence } from "./model-bundle.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";
 import { normalizeEndpoint } from "./manifest.ts";
 import type { ApiShape } from "./types.ts";
@@ -52,11 +55,32 @@ export interface ProviderOptions {
    */
   machine?: string | null;
   /**
+   * The measurement the provider attests. Defaults to a digest of the machine
+   * identity; an operator running an approved image passes the image's
+   * measurement, which a deployment's allowlist can then require.
+   */
+  measurement?: string | null;
+  /**
    * The key that opens a sealed bundle. The provider decrypts the shards in
    * memory and never writes plaintext weights to disk; without the key a sealed
    * bundle is refused before any model is loaded.
    */
   sealKey?: Uint8Array;
+  /**
+   * The serving engine's version and image digest, when the operator knows them.
+   * They are folded into the engine fingerprint a run pins and a replay checks.
+   */
+  engineVersion?: string | null;
+  engineDigest?: string | null;
+  /**
+   * The vendor/attestation key that signs this provider's machine quote. In a
+   * real TEE this key lives in the chip; here the operator supplies it, and a
+   * deployment pins its key id. Without it the card carries an unsigned machine
+   * claim (allowlist-checkable, but not quote-verifiable).
+   */
+  teeSigner?: { sign(payload: unknown): string; publicKey: unknown; suite: string };
+  /** How the engine loads a verified file. Injected in tests; Ollama in production. */
+  engineCreate?: EngineCreate;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
 }
@@ -214,57 +238,29 @@ function loadProviderIdentity(stateDir: string, handle: string | null): Provider
   return identity;
 }
 
-async function materializeEngineModel(input: {
-  bundle: ModelBundle;
-  bytes: Buffer;
-  stateDir: string;
+/**
+ * How a provider hands a verified file to its engine. Injected so a test can
+ * watch the file's lifecycle without an engine installed; production uses the
+ * Ollama CLI.
+ */
+export type EngineCreate = (input: {
+  engineModel: string;
+  file: string;
+  modelfile: string;
   engineEndpoint: string;
-  log: (message: string) => void;
-}): Promise<string> {
-  if (input.bundle.execution.kind !== "engine") {
-    throw new Error("materializeEngineModel requires an engine execution");
-  }
-  const engine = input.bundle.execution.engine;
-  if (engine !== "ollama") {
-    throw new Error(
-      `engine execution is implemented for Ollama only; ${engine} must load the fetched file itself`,
-    );
-  }
+}) => Promise<void>;
 
-  const format = input.bundle.model.format ?? "bin";
-  const directory = join(input.stateDir, "models");
-  mkdirSync(directory, { recursive: true });
-  const file = join(directory, `${sanitizeFilePart(input.bundle.id)}.${sanitizeFilePart(format)}`);
-
-  const expected = input.bundle.model.weightsDigest?.replace(/^sha256:/, "") ?? "";
-  let write = true;
-  if (existsSync(file)) {
-    write = sha256Hex(readFileSync(file)) !== expected;
-  }
-  if (write) {
-    writeFileSync(file, input.bytes);
-    input.log(`wrote ${input.bytes.length} verified bytes to ${file}`);
-  } else {
-    input.log(`reusing verified model file ${file}`);
-  }
-
-  const engineModel = input.bundle.execution.engineModel ?? input.bundle.id;
-  const endpoint = normalizeEndpoint(input.engineEndpoint);
-  input.log(`asking ${engine} to create ${engineModel} from the verified file`);
-
-  // Ollama's `/api/create` accepts model names and uploaded files, not a path
-  // on the provider's disk. The provider already has the verified file, so it
-  // uses the engine's own CLI, which does. No shell is involved: argv is an
-  // array, and the Modelfile is written by this process.
-  const modelfile = join(directory, `${sanitizeFilePart(engineModel)}.Modelfile`);
-  writeFileSync(modelfile, `FROM ${file}\n`);
-
-  const host = new URL(endpoint);
+const defaultEngineCreate: EngineCreate = async (input) => {
+  const host = new URL(normalizeEndpoint(input.engineEndpoint));
   const ollamaHost = `${host.hostname}:${host.port || "11434"}`;
+  // Ollama's `/api/create` accepts model names and uploaded files, not a path
+  // on the provider's disk. The provider has the verified file, so it uses the
+  // engine's own CLI, which does. No shell is involved: argv is an array, and
+  // the Modelfile is written by this process.
   try {
     await promisify(execFile)(
       "ollama",
-      ["create", engineModel, "-f", modelfile],
+      ["create", input.engineModel, "-f", input.modelfile],
       {
         env: { ...process.env, OLLAMA_HOST: ollamaHost },
         timeout: 600_000,
@@ -278,7 +274,74 @@ async function materializeEngineModel(input: {
         : error instanceof Error
           ? error.message
           : String(error);
-    throw new Error(`engine refused to create ${engineModel}: ${detail.slice(-1000)}`);
+    throw new Error(`engine refused to create ${input.engineModel}: ${detail.slice(-1000)}`);
+  }
+};
+
+async function materializeEngineModel(input: {
+  bundle: ModelBundle;
+  bytes: Buffer;
+  stateDir: string;
+  engineEndpoint: string;
+  log: (message: string) => void;
+  /** A sealed bundle is opened only long enough for the engine to load it. */
+  sealed?: boolean;
+  engineCreate?: EngineCreate;
+}): Promise<string> {
+  if (input.bundle.execution.kind !== "engine") {
+    throw new Error("materializeEngineModel requires an engine execution");
+  }
+  const engine = input.bundle.execution.engine;
+  if (engine !== "ollama") {
+    throw new Error(
+      `engine execution is implemented for Ollama only; ${engine} must load the fetched file itself`,
+    );
+  }
+
+  const format = input.bundle.model.format ?? "bin";
+  const sealed = input.sealed === true;
+  // A sealed model is written to a mode-0600 file under the OS temp directory —
+  // never the provider's state dir, never a cached artifact — and the whole
+  // directory is removed after the engine has loaded it. The plaintext is on
+  // disk only for the load, which is what feeding a file-based engine costs.
+  const directory = sealed
+    ? mkdtempSync(join(tmpdir(), "rarext-sealed-engine-"))
+    : join(input.stateDir, "models");
+  if (!sealed) mkdirSync(directory, { recursive: true });
+  const file = join(directory, `${sanitizeFilePart(input.bundle.id)}.${sanitizeFilePart(format)}`);
+
+  if (sealed) {
+    writeFileSync(file, input.bytes, { mode: 0o600 });
+    input.log(
+      `opened ${input.bytes.length} sealed bytes into an ephemeral file the provider never keeps`,
+    );
+  } else {
+    const expected = input.bundle.model.weightsDigest?.replace(/^sha256:/, "") ?? "";
+    let write = true;
+    if (existsSync(file)) {
+      write = sha256Hex(readFileSync(file)) !== expected;
+    }
+    if (write) {
+      writeFileSync(file, input.bytes);
+      input.log(`wrote ${input.bytes.length} verified bytes to ${file}`);
+    } else {
+      input.log(`reusing verified model file ${file}`);
+    }
+  }
+
+  const engineModel = input.bundle.execution.engineModel ?? input.bundle.id;
+  input.log(`asking ${engine} to create ${engineModel} from the verified file`);
+  const modelfile = join(directory, `${sanitizeFilePart(engineModel)}.Modelfile`);
+  writeFileSync(modelfile, `FROM ${file}\n`);
+
+  const create = input.engineCreate ?? defaultEngineCreate;
+  try {
+    await create({ engineModel, file, modelfile, engineEndpoint: input.engineEndpoint });
+  } finally {
+    if (sealed) {
+      rmSync(directory, { recursive: true, force: true });
+      input.log(`removed the ephemeral sealed file for ${engineModel}`);
+    }
   }
 
   return engineModel;
@@ -312,17 +375,6 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     );
   }
 
-  // A sealed bundle may only be served natively: the engine path materializes
-  // the weights to a file for the engine's own loader, which would put plaintext
-  // on disk. That would defeat the point of sealing, so it is refused rather
-  // than silently leaked.
-  if (options.bundle.sealing !== undefined && options.bundle.execution.kind === "engine") {
-    throw new Error(
-      "an engine bundle cannot serve sealed weights: the engine loads from a file. " +
-        "Sealed inference is native-only today.",
-    );
-  }
-
   log(
     `fetching ${options.bundle.shards.length} shard(s) / ${options.bundle.totalBytes} bytes ` +
       `for ${options.bundle.model.id} from ${options.registry}` +
@@ -337,7 +389,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   });
   log(
     `verified ${bytes.length} bytes against ${options.bundle.model.weightsDigest}` +
-      (options.bundle.sealing === undefined ? "" : " (opened in memory; no plaintext on disk)"),
+      (options.bundle.sealing === undefined ? "" : " (opened in memory; the RAREXT store never holds plaintext)"),
   );
 
   let native: XorshiftModel | null = null;
@@ -354,6 +406,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       stateDir: options.stateDir,
       engineEndpoint: options.engineEndpoint,
       log,
+      ...(options.bundle.sealing === undefined ? {} : { sealed: true }),
+      ...(options.engineCreate === undefined ? {} : { engineCreate: options.engineCreate }),
     });
   }
 
@@ -373,7 +427,21 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   // challenge can tell they are one box.
   const machine =
     options.machine ?? `host:${hostname()}:${platform()}:${arch()}`;
-  const measurement = sha256Hex(`rarext.machine.v1\n${machine}`);
+  const measurement =
+    options.measurement ?? sha256Hex(`rarext.machine.v1\n${machine}`);
+
+  // The engine this provider actually serves with, and the one value a run pins.
+  const engineDescriptor = {
+    name:
+      options.bundle.execution.kind === "engine"
+        ? options.bundle.execution.engine
+        : "rarext-native",
+    version:
+      options.engineVersion ??
+      (options.bundle.execution.kind === "engine" ? null : "xorshift32"),
+    digest: options.engineDigest ?? null,
+  };
+  const engineFingerprint = engineDescriptorFingerprint(engineDescriptor);
 
   function cardFor(): ProviderCard {
     if (card !== null) return card;
@@ -387,12 +455,24 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         publicKey: signer.publicKey,
         suite: signer.suite,
       },
-      independence: {
-        kind: PROVIDER_MACHINE_KIND,
-        machine,
-        measurement,
-        issuedAt: new Date().toISOString(),
-      },
+      independence: (() => {
+        const body: Omit<ProviderIndependence, "quote"> = {
+          kind: PROVIDER_MACHINE_KIND,
+          scheme: options.teeSigner === undefined ? "software-image" : "tee",
+          machine,
+          measurement,
+          issuedAt: new Date().toISOString(),
+        };
+        if (options.teeSigner === undefined) return body;
+        return {
+          ...body,
+          quote: {
+            signature: options.teeSigner.sign(providerQuotePayload(body)),
+            publicKey: options.teeSigner.publicKey,
+            suite: options.teeSigner.suite,
+          },
+        };
+      })(),
       apis: ["openai"] as ApiShape[],
       sign: (payload) => signer.sign(payload),
     });
@@ -457,6 +537,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           bundle: options.bundle.digest,
           weightsDigest: options.bundle.model.weightsDigest,
           execution: options.bundle.execution.kind,
+          engine: engineDescriptor,
+          engineFingerprint,
         });
         return;
       }

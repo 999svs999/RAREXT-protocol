@@ -24,10 +24,12 @@ import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
+import { verifyProviderQuote } from "./model-bundle.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
   RunInferenceCredits,
+  RunProviderAttestation,
   RunQuorum,
   RunRecord,
 } from "./types.ts";
@@ -70,6 +72,18 @@ export interface GatewayOptions {
    * answer, so the run is refused instead of written.
    */
   machines?: Record<string, string>;
+  /**
+   * Measurement per endpoint (the provider's present attestation). When the
+   * deployment commits a measurement allowlist, every agreeing provider's
+   * measurement must be on it, or the run is refused.
+   */
+  measurements?: Record<string, string>;
+  /**
+   * Each endpoint's full independence attestation (with its vendor quote). When
+   * the deployment pins a vendor key, every agreeing provider's quote must
+   * verify under that key, or the run is refused.
+   */
+  attestations?: Record<string, RunProviderAttestation>;
   upstreamTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
@@ -172,6 +186,20 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   // so a run whose agreeing providers sit on one box is refused before it is
   // written. The requirement is the deployment's, not a gateway switch.
   const requireDistinctMachines = deployment.labels?.independence === "machine";
+  // A measurement allowlist the deployment committed: a provider running software
+  // the deployment did not approve cannot count toward the quorum.
+  const allowedMeasurements = (() => {
+    const raw = deployment.labels?.measurements;
+    if (raw === undefined) return null;
+    const list = raw.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+    return list.length === 0 ? null : new Set(list);
+  })();
+  // The vendor key whose machine quotes the deployment accepts, when it pinned
+  // one. A quote that does not verify under this id is refused.
+  const allowedVendor = (() => {
+    const raw = deployment.labels?.teeVendor;
+    return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
+  })();
 
   // The bounty the deployment committed, if any. Payment is a commitment the
   // challenge enforces, not a gateway setting: a run only records credits when
@@ -362,6 +390,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   ): Promise<QuorumOutcome> {
     const operatorFor = (endpoint: string): string | null => options.operators?.[endpoint] ?? null;
     const machineFor = (endpoint: string): string | null => options.machines?.[endpoint] ?? null;
+    const measurementFor = (endpoint: string): string | null =>
+      options.measurements?.[endpoint] ?? null;
+    const attestationFor = (endpoint: string): RunProviderAttestation | null =>
+      options.attestations?.[endpoint] ?? null;
     const attempts = await Promise.all(
       upstreams.map(async (endpoint) => {
         const url = shape === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint);
@@ -391,6 +423,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             endpoint,
             operator: operatorFor(endpoint),
             machine: machineFor(endpoint),
+            measurement: measurementFor(endpoint),
+            attestation: attestationFor(endpoint),
             json: comparable,
             digest: canonicalDigest(comparable),
           };
@@ -408,6 +442,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         endpoint: string;
         operator: string | null;
         machine: string | null;
+        measurement: string | null;
+        attestation: RunProviderAttestation | null;
         json: Record<string, unknown>;
         digest: string;
       } => "digest" in attempt,
@@ -443,11 +479,30 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     );
     const machinesMet = !requireDistinctMachines || agreedMachines.size >= quorumRequired;
 
+    // Every agreeing provider must run an approved image when the deployment
+    // committed a measurement allowlist. This is the check that makes the
+    // machine claim more than a self-declaration.
+    const measurementsMet =
+      allowedMeasurements === null ||
+      winnerAnswers.every(
+        (answer) =>
+          typeof answer.measurement === "string" && allowedMeasurements.has(answer.measurement),
+      );
+
+    // When the deployment pinned a vendor key, every agreeing provider must
+    // present a quote that verifies under that key. A forged or unverifiable
+    // quote cannot count toward the quorum.
+    const quotesMet =
+      allowedVendor === null ||
+      winnerAnswers.every((answer) => verifyProviderQuote(answer.attestation) === allowedVendor);
+
     if (
       winnerAnswers.length < quorumRequired ||
       (ranked.length > 1 && winnerAnswers.length === runnerUp) ||
       !operatorsMet ||
-      !machinesMet
+      !machinesMet ||
+      !measurementsMet ||
+      !quotesMet
     ) {
       const operatorNote = operatorsSupplied
         ? `, ${agreedOperators.size} distinct operator(s)`
@@ -455,10 +510,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const machineNote = requireDistinctMachines
         ? `, ${agreedMachines.size} distinct machine(s)`
         : "";
+      const measurementNote = allowedMeasurements === null ? "" : ", an unapproved measurement";
+      const vendorNote = allowedVendor === null ? "" : ", an unverifiable machine quote";
       return {
         error:
           `provider quorum not met: ${quorumRequired} required, ${winnerAnswers.length} agreed` +
-          `${operatorNote}${machineNote}, ${answered.length}/${upstreams.length} answered`,
+          `${operatorNote}${machineNote}${measurementNote}${vendorNote}, ${answered.length}/${upstreams.length} answered`,
         status: 503,
         details: {
           required: quorumRequired,
@@ -466,6 +523,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             endpoint: a.endpoint,
             operator: a.operator,
             machine: a.machine,
+            measurement: a.measurement,
+            quoteVendor: verifyProviderQuote(a.attestation),
             responseDigest: a.digest,
           })),
           failed: attempts.filter((a) => "error" in a).map((a) => ({ endpoint: a.endpoint, error: a.error })),
@@ -488,6 +547,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           responseDigest: answer.digest,
           operator: answer.operator,
           machine: answer.machine,
+          measurement: answer.measurement,
+          ...(answer.attestation === null ? {} : { attestation: answer.attestation }),
         })),
       },
     };

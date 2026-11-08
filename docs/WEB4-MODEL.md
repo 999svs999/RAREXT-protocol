@@ -105,11 +105,19 @@ open to nothing without the key. A provider is given the key out of band
 in memory, verifies the plaintext against `weightsDigest`, and serves. It never
 writes plaintext weights to disk.
 
-Sealing is native-only today. An `engine` bundle loads its weights from a file
-the engine reads asynchronously, so a sealed engine bundle is **refused** rather
-than silently materialized. Sealing hides the weights from the store and the
-wire, not from the provider: the provider holds the key and sees the weights in
-memory. Prompts remain visible to the provider either way.
+Sealing works for both execution classes. A `native` provider parses the opened
+bytes in memory and never touches disk. An `engine` provider has to hand its
+engine a file, so it opens the sealed bytes into a mode-0600 file under the OS
+temp directory — never the provider's state dir, never a cached artifact — lets
+the engine load it, and removes the directory the moment the engine returns. The
+provider's state directory therefore never holds the model, which the demo checks
+for a sealed GGUF.
+
+Sealing hides the weights from the RAREXT store, from mirrors, and from the
+wire; it does **not** hide them from the provider: the provider holds the key,
+opens the weights to run them, and for an engine briefly places them on the OS
+temp filesystem to load. Prompts remain visible to the provider. Hiding the
+weights from the operator needs a TEE or MPC, which is not implemented.
 
 A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
 `rarext.provider-identity.v1`). The card it serves is signed with that key, and
@@ -256,6 +264,61 @@ node apps/runtime/src/cli.ts provider --bundle model-bundle.json \
   --registry https://registry.example --handle provider-a
 ```
 
+### Machine independence
+
+Distinct keys are not necessarily distinct machines. Each provider card also
+attests the **machine** it runs on (`independence`: a machine id and a
+measurement), and the card signature is the operator's own key — so the machine
+claim is bound to the key that makes it. A provider defaults to a host
+fingerprint, so two co-located providers attest the same machine:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --independence machine \
+  --registry https://registry.example
+```
+
+`deploy` commits the operator-aligned machine ids as `labels.machines`, and the
+challenge commits them alongside `operators` and `independence: "machine"`. The
+gateway then counts the quorum over **distinct machines** as well as distinct
+operators, refusing a run whose agreeing providers sit on one box; and the
+verifier checks each agreeing provider's `(operator, machine)` pair against the
+committed list, so a gateway cannot invent a machine to pass the rule. A
+deployment whose committed machines cannot meet the quorum is invalid before any
+run happens.
+
+The machine id is only as trustworthy as the operator's key: this proves the
+operators CLAIM distinct machines, not that the boxes are physically separate. A
+TEE deployment would put an enclave measurement in `independence.measurement`;
+today it is a hash of the declared id.
+
+### Measurement allowlist: checking the claim
+
+Recording a machine is not checking it. A deployment can also commit a
+**measurement allowlist** — the software/image digests it approves:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --measure <approved-measurement> \
+  --registry https://registry.example
+```
+
+`deploy --measure` commits `labels.measurements`, and it REFUSES an allowlist
+that does not include every provider it is adopting — so a deployment cannot name
+an approved image its own providers do not run. The challenge commits the list as
+`spec.measurements`; the gateway refuses a run in which any agreeing provider
+presents a measurement off the list, and the verifier recomputes the same rule
+from the run, so a gateway cannot quietly count an unapproved provider. Each
+provider attests a `measurement` (with a `scheme` naming what produced it —
+`software-image` today, an enclave kind for a real TEE), and a provider sets it
+with `--measurement`.
+
+This is what turns the machine claim from a self-declaration into something the
+deployment enforces: the provider still produces the value, but a value the
+deployment did not approve does not count.
+
 The digest is over the comparable completion: `id`, `created`, and
 `system_fingerprint` are transport metadata and are removed before comparison.
 If two providers disagree, or fewer than `required` answer, the gateway returns
@@ -351,6 +414,34 @@ provider holding the same `weightsDigest` is what makes a replay meaningful.
 deterministic replay function; the runtime's `exact` verifier does not invent one
 for an arbitrary engine.
 
+### The engine pin
+
+What the protocol CAN pin is the engine. Each provider reports the engine it
+serves with — name, version, and (when the operator knows it) the image digest —
+and folds them into one `engine.fingerprint`. A web4 `deploy` reads every
+provider's `/health`, and when they all report the same engine it commits that
+fingerprint as `labels.engineFingerprint`; the challenge commits it as
+`spec.engineFingerprint`, and every run records it. A heterogeneous fleet is left
+unpinned rather than pinned to one member.
+
+`rarext-runtime replay` then checks the pin **before generating anything**: it
+reads the target provider's present `/health.engineFingerprint` and refuses a
+provider running a different engine build — so "I replayed it" cannot mean "I ran
+it on some other engine and called it a match." Only a matching engine is
+re-issued, and its output is compared to the committed output. The verifier
+recomputes the same rule, refusing a run whose `engine.fingerprint` is not the
+one the challenge pinned.
+
+```bash
+# replay refuses a provider whose engine differs from the pinned one
+node apps/runtime/src/cli.ts replay --transcript run.json --endpoint https://other.example
+# engine differs — <pinned> vs <present>
+```
+
+This does not make an arbitrary GGUF bit-for-bit reproducible; it makes a replay
+of one *checkable*: same weights, same engine, and the output compared — or the
+replay is refused by name.
+
 ## Commands
 
 ```bash
@@ -399,24 +490,35 @@ why a large file is sharded rather than sent as one object.
 
 ## Honest limits
 
-- **A quorum is over signed operators, not proven machines.** A signed provider
-  card names a key id anyone can verify, and the deployment and challenge commit
-  those identities, so a quorum requires that many *distinct* signing keys; a
-  gateway configured to collapse two endpoints onto one operator refuses the run.
-  What the protocol still cannot prove is that two keys are held by independent
-  people or run on unrelated hardware or upstream engines — one party can hold
-  many keys. The bundled demo's two operators are separate processes, and keys,
-  on one machine.
+- **A quorum is over signed operators, distinct machines, and allowlisted
+  measurements — but the measurement is only as strong as what produced it.** A
+  signed provider card names a key id, a machine, and a measurement, all covered
+  by the card's own signature; the deployment and challenge commit the operators,
+  the operator-aligned machines, and a measurement allowlist. A quorum then needs
+  that many distinct keys, that many distinct machines, and every agreeing
+  provider on the approved list — enforced by the gateway and recomputed by the
+  verifier. What it still does not prove is that the machine ids name physically
+  separate boxes or that the measurements come from real hardware: the provider
+  produces its own measurement, and `scheme: "software-image"` is a digest of a
+  declared image. Only a TEE that signs its own measurement (`scheme: "sgx"`,
+  `"sev-snp"`, …) makes the value unforgeable; the field is shaped for it, but no
+  TEE is wired in. The bundled demo's two providers are co-located, which is why
+  a machine-independent quorum refuses them.
 - **Sealed weights hide the model from the store and the wire, not the operator.**
   A sealed bundle's shards are AES-256-GCM ciphertext, so the RAREXT node, a
-  mirror, and anyone reading the blobs hold only ciphertext, and a provider opens
-  them in memory without writing plaintext (an engine bundle, which loads from a
-  file, refuses a sealed bundle). But the provider holds the key and sees the
-  weights in memory, and prompts are still visible to it. Privacy from the
-  operator needs a TEE or MPC, which is not implemented.
+  mirror, and anyone reading the blobs hold only ciphertext. A native provider
+  opens them in memory; an engine provider opens them into a short-lived mode-0600
+  temp file outside its state dir and removes it after the engine loads — the
+  provider's state never holds the model. But the provider holds the key and sees
+  the weights as it runs them, and prompts are still visible to it. Privacy from
+  the operator needs a TEE or MPC, which is not implemented.
 - **Inference is not cryptographically proven.** The run transcript proves the
-  bytes exchanged; a deterministic native model can be replayed from the bundle;
-  an arbitrary GGUF cannot be reproduced bit-for-bit by the protocol alone.
+  bytes exchanged; a deterministic native model can be replayed from the bundle.
+  An arbitrary GGUF is still not reproduced bit-for-bit by the protocol alone —
+  the weights do not determine the engine's arithmetic. What the protocol does is
+  pin the engine (`engine.fingerprint`), record it in the run, and refuse a replay
+  whose provider runs a different engine, so a replay is a checked re-execution
+  under a named engine rather than a claim.
 - **Credits move on the ledger, not off it.** A committed bounty is recorded and
   settled in RAREXT's credit ledger; the run commits who was paid, the verifier
   recomputes it, and an operator proves its receipt against the ledger root. A key

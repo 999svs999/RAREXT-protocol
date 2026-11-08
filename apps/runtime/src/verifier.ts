@@ -86,7 +86,38 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.independence === undefined
       ? {}
       : independenceFromSpec(value.independence, value.quorum, value.operators, value.machines)),
+    ...(value.measurements === undefined
+      ? {}
+      : { measurements: measurementsFromSpec(value.measurements, value.quorum, value.operators) }),
+    ...(value.engineFingerprint === undefined
+      ? {}
+      : { engineFingerprint: optionalHash("engineFingerprint") }),
+    ...(value.teeVendor === undefined ? {} : { teeVendor: optionalHash("teeVendor") }),
   };
+}
+
+/**
+ * A measurement allowlist gates which software may count toward the quorum, so
+ * it needs a quorum of operators to gate. Each entry is a 64-hex measurement;
+ * the verifier then refuses any agreeing provider whose measurement is not on
+ * the list.
+ */
+function measurementsFromSpec(measurements: unknown, quorum: unknown, operators: unknown): string[] {
+  if (!Array.isArray(measurements) || measurements.length === 0) {
+    throw new Error("challenge.spec.measurements must be a non-empty array when present");
+  }
+  if (!Number.isSafeInteger(quorum) || (quorum as number) < 1) {
+    throw new Error("challenge.spec.measurements requires a committed quorum");
+  }
+  if (!Array.isArray(operators) || operators.length === 0) {
+    throw new Error("challenge.spec.measurements requires committed operators");
+  }
+  return measurements.map((entry) => {
+    if (typeof entry !== "string" || !/^[0-9a-f]{64}$/.test(entry)) {
+      throw new Error("challenge.spec.measurements entries must be sha256 hex digests");
+    }
+    return entry;
+  });
 }
 
 /**

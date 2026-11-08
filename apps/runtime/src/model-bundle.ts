@@ -7,7 +7,7 @@ import {
 import type { JsonWebKey } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
-import { verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
+import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import type { SignatureSuite } from "../../../packages/core/src/types.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import type { ApiShape, EngineName, ModelRef } from "./types.ts";
@@ -95,11 +95,76 @@ export const PROVIDER_MACHINE_KIND = "rarext.provider-machine.v1";
  * trustworthy as the key that signs the card — it proves the OPERATOR claims
  * these machines are distinct, not that they are physically so.
  */
+export interface ProviderQuote {
+  /** Base64 signature over the covered fields, by the vendor/attestation key. */
+  signature: string;
+  /** The vendor key that made the quote; a deployment pins its key id. */
+  publicKey: unknown;
+  suite: string;
+}
+
 export interface ProviderIndependence {
   kind: typeof PROVIDER_MACHINE_KIND;
   machine: string;
   measurement: string;
+  /**
+   * What produced the measurement. "software-image" today (a digest of the
+   * declared machine and image); a TEE deployment names its enclave kind
+   * ("sgx", "sev-snp", …) and puts the enclave measurement above.
+   */
+  scheme?: string;
   issuedAt: string;
+  /**
+   * A signed quote over the fields above. The provider's card signature proves
+   * the OPERATOR claims this machine; this quote, signed by a vendor key the
+   * deployment pins, is what lets a verifier check the claim instead of
+   * believing the operator. A forged or unverifiable quote is refused.
+   */
+  quote?: ProviderQuote;
+}
+
+/** The exact fields a vendor quote covers — everything but the quote itself. */
+export function providerQuotePayload(independence: ProviderIndependence): {
+  kind: string;
+  scheme: string;
+  machine: string;
+  measurement: string;
+  issuedAt: string;
+} {
+  return {
+    kind: independence.kind,
+    scheme: independence.scheme ?? "",
+    machine: independence.machine,
+    measurement: independence.measurement,
+    issuedAt: independence.issuedAt,
+  };
+}
+
+/**
+ * Verify an independence quote under its own public key, returning the vendor
+ * key id when it holds. This is self-consistency (the quote is what it says);
+ * checking it against the DEPLOYMENT's pinned vendor key is a further step the
+ * verifier and gateway perform.
+ */
+export function verifyProviderQuote(independence: unknown): string | null {
+  if (!isRecord(independence)) return null;
+  const quote = independence.quote;
+  if (!isRecord(quote) || typeof quote.signature !== "string" || !isRecord(quote.publicKey)) {
+    return null;
+  }
+  const payload = providerQuotePayload(independence as unknown as ProviderIndependence);
+  try {
+    const ok = verifyPayload(
+      quote.publicKey as unknown as JsonWebKey,
+      payload,
+      quote.signature,
+      typeof quote.suite === "string" ? (quote.suite as SignatureSuite) : undefined,
+    );
+    if (!ok) return null;
+    return publicKeyId(quote.publicKey as unknown as JsonWebKey);
+  } catch {
+    return null;
+  }
 }
 
 export interface ProviderCard {
@@ -892,10 +957,31 @@ export function verifyProviderCard(value: unknown): string[] {
         errors.push("provider card independence.measurement must be a sha256 hex digest");
       }
       if (
+        value.independence.scheme !== undefined &&
+        (typeof value.independence.scheme !== "string" || value.independence.scheme.length === 0)
+      ) {
+        errors.push("provider card independence.scheme must be a non-empty string when present");
+      }
+      if (
         typeof value.independence.issuedAt !== "string" ||
         Number.isNaN(Date.parse(value.independence.issuedAt))
       ) {
         errors.push("provider card independence.issuedAt must be an ISO timestamp");
+      }
+      if (value.independence.quote !== undefined) {
+        const quote = value.independence.quote;
+        if (
+          !isRecord(quote) ||
+          typeof quote.signature !== "string" ||
+          !isRecord(quote.publicKey) ||
+          typeof quote.suite !== "string"
+        ) {
+          errors.push(
+            "provider card independence.quote must carry a signature, a publicKey, and a suite",
+          );
+        } else if (verifyProviderQuote(value.independence) === null) {
+          errors.push("provider card independence.quote does not verify under its own key");
+        }
       }
     }
   }

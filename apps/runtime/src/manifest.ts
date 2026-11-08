@@ -1,6 +1,7 @@
 import os from "node:os";
 
 import { canonicalDigest } from "./digest.ts";
+import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -225,7 +226,16 @@ export function buildDeployment(input: {
   return {
     kind: DEPLOYMENT_KIND,
     id: input.id ?? `${slugify(input.probe.model.id)}-${input.probe.engine.name}`,
-    engine: input.probe.engine,
+    // A fingerprint pins the engine only when the caller knows it: a local or
+    // remote probe can, and a web4 deployment pins the PROVIDER's engine in a
+    // label instead (the serving shape here is not the provider's engine).
+    engine: {
+      ...input.probe.engine,
+      digest: input.probe.engine.digest ?? null,
+      ...(input.probe.engine.fingerprint === undefined
+        ? {}
+        : { fingerprint: input.probe.engine.fingerprint }),
+    },
     model: input.probe.model,
     hardware: input.hardware ?? hardwareFromHost(),
     ...(input.placement === undefined ? {} : { placement: input.placement }),
@@ -304,6 +314,24 @@ export function validateDeployment(value: unknown): string[] {
       errors.push("manifest.engine.endpoint must be an http(s) URL");
     }
     nullableString(engine.version, "manifest.engine.version", errors);
+    if (engine.digest !== undefined) {
+      nullableString(engine.digest, "manifest.engine.digest", errors);
+    }
+    if (engine.fingerprint !== undefined) {
+      if (typeof engine.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(engine.fingerprint)) {
+        errors.push("manifest.engine.fingerprint must be a sha256 hex digest");
+      } else if (
+        typeof engine.name === "string" &&
+        engine.fingerprint !==
+          engineDescriptorFingerprint({
+            name: engine.name,
+            version: typeof engine.version === "string" ? engine.version : null,
+            digest: typeof engine.digest === "string" ? engine.digest : null,
+          })
+      ) {
+        errors.push("manifest.engine.fingerprint does not match the engine descriptor");
+      }
+    }
   }
 
   const model = value.model;
@@ -502,6 +530,33 @@ export function validateDeployment(value: unknown): string[] {
         if (Number.isSafeInteger(quorum) && new Set(machines).size < quorum) {
           errors.push("manifest.labels.independence needs at least quorum distinct machines");
         }
+      }
+    }
+
+    // A measurement allowlist gates which software may count toward the quorum,
+    // so it needs a quorum of operators to gate.
+    if (labels.measurements !== undefined) {
+      if (typeof labels.measurements !== "string" || labels.measurements.trim() === "") {
+        errors.push("manifest.labels.measurements must be a comma-separated list of sha256 hex digests");
+      } else {
+        const list = labels.measurements.split(",").map((entry) => entry.trim());
+        if (list.some((entry) => !/^[0-9a-f]{64}$/.test(entry))) {
+          errors.push("manifest.labels.measurements entries must be sha256 hex digests");
+        }
+        if (labels.quorum === undefined || labels.operators === undefined) {
+          errors.push("manifest.labels.measurements requires labels.quorum and labels.operators");
+        }
+      }
+    }
+
+    // A pinned vendor key gates whose machine quotes count, so it needs a quorum
+    // of operators whose quotes it can check.
+    if (labels.teeVendor !== undefined) {
+      if (typeof labels.teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(labels.teeVendor)) {
+        errors.push("manifest.labels.teeVendor must be a sha256 hex key id");
+      }
+      if (labels.quorum === undefined || labels.operators === undefined) {
+        errors.push("manifest.labels.teeVendor requires labels.quorum and labels.operators");
       }
     }
   }

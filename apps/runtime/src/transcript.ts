@@ -5,7 +5,7 @@ import {
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
 import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
-import { verifyProviderCard } from "./model-bundle.ts";
+import { verifyProviderCard, verifyProviderQuote } from "./model-bundle.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -136,6 +136,12 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
     engine: {
       name: input.deployment.engine.name,
       version: input.deployment.engine.version,
+      ...(() => {
+        // The engine pin: the deployment's own fingerprint, or the engine the
+        // web4 providers committed in their labels.
+        const pin = input.deployment.labels?.engineFingerprint ?? input.deployment.engine.fingerprint;
+        return typeof pin === "string" && /^[0-9a-f]{64}$/.test(pin) ? { fingerprint: pin } : {};
+      })(),
     },
     ...(bundle === null ? {} : { bundle }),
     ...(input.quorum === undefined ? {} : { quorum: input.quorum }),
@@ -237,6 +243,12 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "model.id", model.id === spec.modelId);
   check(checks, failures, "model.weightsDigest", (model.weightsDigest ?? null) === spec.weightsDigest);
   check(checks, failures, "engine.name", engine.name === spec.engine);
+  // When the challenge pinned an engine, the run must name the same engine. A
+  // run on a different engine build is a different run, and cannot be replayed
+  // as this one.
+  if (spec.engineFingerprint !== undefined) {
+    check(checks, failures, "engine.fingerprint", engine.fingerprint === spec.engineFingerprint);
+  }
 
   if (spec.bundleDigest === undefined) {
     // Local and remote runs name no bundle; a web4 bundle cannot be attached to
@@ -348,6 +360,28 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
               .filter((machine): machine is string => typeof machine === "string"),
           ).size >= spec.quorum;
 
+    // A committed measurement allowlist is checked, not taken on faith: every
+    // agreeing provider must attest a measurement the deployment approved.
+    const allowedMeasurements = spec.measurements;
+    const measurementsMet =
+      allowedMeasurements === undefined
+        ? true
+        : agreeing.every(
+            (entry) =>
+              typeof entry.measurement === "string" &&
+              allowedMeasurements.includes(entry.measurement),
+          );
+
+    // When the deployment pinned a vendor key, every agreeing provider must
+    // present a machine quote that verifies under a key with that id. The
+    // verifier checks the quote itself, so a forged or unverifiable quote is
+    // caught here and not merely at the gateway.
+    const committedVendor = spec.teeVendor;
+    const quotesMet =
+      committedVendor === undefined
+        ? true
+        : agreeing.every((entry) => verifyProviderQuote(entry.attestation) === committedVendor);
+
     check(
       checks,
       failures,
@@ -366,7 +400,9 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         providers.length === responded &&
         agreed === recomputedAgreed &&
         operatorsMet &&
-        machinesMet,
+        machinesMet &&
+        measurementsMet &&
+        quotesMet,
     );
     check(
       checks,
