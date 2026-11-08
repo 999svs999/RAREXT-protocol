@@ -15,8 +15,9 @@ npm run demo:web4-model
 ```
 
 runs the whole path with a deterministic native model in seconds:
-`storage -> provider -> deploy -> registry -> card -> serve -> infer -> publish ->
-weights -> replay -> discover -> tamper -> verify`.
+`storage -> 2 providers -> deploy -> registry -> card -> announce -> serve ->
+infer -> publish -> compare -> weights -> replay -> anchor -> discover-deploy ->
+discover -> tamper -> verify`.
 
 To put a real GGUF through the same path:
 
@@ -33,7 +34,8 @@ The demo shards the GGUF into RAREXT blobs, starts a provider that fetches and
 reassembles them, asks the provider's own Ollama to load the verified file, and
 serves real completions. The caller still holds no weights and runs no model.
 The reference run stored a 397,807,936-byte `qwen2.5:0.5b` GGUF as 48 blobs and
-passed all 13 phases.
+passed all 13 phases for a real model; the native multi-provider demo passes
+16/16.
 
 ## What is committed
 
@@ -86,10 +88,18 @@ different ones.
 If one byte of one shard is wrong, the provider refuses to start. There is no
 "best effort" load.
 
-The card is not a trust anchor. Its digest is recomputed by the runtime, and the
-bundle manifest is fetched independently from RAREXT and cross-checked against
-the card. A card can be re-signed over a lie; the independent manifest still
-catches it.
+A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
+`rarext.provider-identity.v1`). The card it serves is signed with that key, and
+`provider.keyId` is the key id derived from the public key: the operator identity
+is a content address, not a label the provider asked to be called. Restarting
+with the same state directory reuses the identity; a fresh directory is a new
+operator. A reader verifies the signature over the canonical card bytes, so a
+card cannot be re-signed by a publisher claiming someone else's key.
+
+The card is still not a trust anchor. Its digest is recomputed by the runtime, and
+the bundle manifest is fetched independently from RAREXT and cross-checked against
+the card. A card can be re-digested over a lie (dropping the signature, which no
+longer covers the changed bytes); the independent manifest still catches it.
 
 ## The deployment
 
@@ -119,6 +129,128 @@ The challenge commits `bundleDigest`, `shardsRoot`, and `manifestHash` alongside
 the deployment digest, model id, weight digest, and engine. A run that does not
 name the same bundle fails, so weights cannot be swapped between a verified card
 and an unrelated transcript.
+
+## Several providers, one bundle
+
+A bundle is bytes, so more than one provider can serve it. `--provider` is
+repeatable, and the deployment commits the whole set:
+
+```bash
+node apps/runtime/src/cli.ts deploy \
+  --web4 \
+  --provider https://alice.example \
+  --provider https://bob.example \
+  --quorum 2 \
+  --registry https://registry.example
+```
+
+`labels.providers` is the committed endpoint list and `labels.quorum` is how many
+must return the same response before a run is recorded. The challenge commits the
+same `quorum`, so removing the evidence or lowering the count fails verification.
+
+A provider can publish its own card as a normal signed artifact under the model
+challenge. Deploy can then find it without being told a URL:
+
+```bash
+node apps/runtime/src/cli.ts announce --endpoint https://bob.example \
+  --manifest .rarext-runtime/deployment.json \
+  --registry https://registry.example
+
+node apps/runtime/src/cli.ts deploy --web4 --discover \
+  --bundle-digest <bundle-digest> --registry https://registry.example
+```
+
+`announce` recomputes the card, fetches the bundle manifest independently, and
+refuses a card that names different bytes before signing it. `--discover` reads
+the anchored `ai.model-provider` publications, verifies each against the
+challenge, and cross-checks each card against the manifest it will serve. It
+searches every anchored batch, not only the newest: an anchor covers the
+publications that were pending when it was made, so a provider card and a later
+run can legitimately live in different batches.
+
+The same view is available offline:
+
+```bash
+node apps/runtime/src/cli.ts discover --registry https://registry.example --all-anchors
+```
+
+That recomputes every card, provider, and run across the registry's anchors and
+reports one verdict.
+
+Discovery does not have to depend on one registry. `--mirror-registry` is
+repeatable on `announce`, `deploy --discover`, `compare --discover`, and
+`discover --all-anchors`: the same signed card is published to every named
+registry, and discovery unions the results by card digest. An unreachable mirror
+is reported and skipped, not fatal, so no single registry is the gatekeeper for
+who can serve a model.
+
+```bash
+node apps/runtime/src/cli.ts announce --endpoint https://bob.example \
+  --manifest .rarext-runtime/deployment.json \
+  --registry https://registry-a.example \
+  --mirror-registry https://registry-b.example
+
+node apps/runtime/src/cli.ts deploy --web4 --discover \
+  --bundle-digest <bundle-digest> \
+  --registry https://registry-a.example \
+  --mirror-registry https://registry-b.example
+```
+
+The gateway queries every committed provider, groups responses by canonical
+digest, and records the evidence in the run:
+
+```json
+"quorum": {
+  "required": 2,
+  "responded": 3,
+  "agreed": 2,
+  "providers": [
+    { "endpoint": "https://alice.example", "operator": "did:rarext:alice", "responseDigest": "…" },
+    { "endpoint": "https://bob.example", "operator": "did:rarext:bob", "responseDigest": "…" },
+    { "endpoint": "https://carol.example", "operator": "did:rarext:carol", "responseDigest": "…" }
+  ]
+}
+```
+
+Every provider that answered is recorded, including a dissenter: the transcript is
+evidence, not a tally. The verifier recomputes `agreed` as the number of recorded
+providers whose digest equals the response the run carries, so a gateway cannot
+claim agreement it did not get, and a repeated endpoint cannot count twice.
+
+A provider card may name the operator that runs it (`provider.keyId` or
+`provider.handle`). When every provider does, `deploy` commits those identities as
+`labels.operators` and the challenge commits them too. Agreement is then counted
+over **distinct operators**, not endpoints: two endpoints run by one operator are
+one voice, and a gateway configured that way refuses the run instead of writing it.
+A deployment whose quorum exceeds its distinct operator count is invalid.
+
+```bash
+node apps/runtime/src/cli.ts provider --bundle model-bundle.json \
+  --registry https://registry.example --handle provider-a --key-id did:rarext:alice
+```
+
+The digest is over the comparable completion: `id`, `created`, and
+`system_fingerprint` are transport metadata and are removed before comparison.
+If two providers disagree, or fewer than `required` answer, the gateway returns
+`503` with both answers and does not write a run. A disagreement is never
+averaged into a transcript.
+
+Streaming still works under a quorum. The gateway asks every provider for a
+complete response, compares them, records the run, and then re-emits the agreed
+answer as SSE (`x-rarext-stream: quorum-agreed`) with the same run digest and
+quorum headers. It is a view of the attested answer, never a pass-through of one
+provider's live stream, so nothing unverified reaches the caller.
+
+`compare` is the independent version of the same check:
+
+```bash
+node apps/runtime/src/cli.ts compare \
+  --provider https://alice.example --provider https://bob.example \
+  --registry https://registry.example --prompt "Where do weights live?"
+```
+
+It verifies every card against the bundle, asks every provider the same question,
+and prints the canonical response digests and their agreement.
 
 ## The verification chain
 
@@ -170,9 +302,18 @@ node apps/runtime/src/cli.ts bundle --native --model native-proof \
 node apps/runtime/src/cli.ts provider --bundle .rarext-runtime/model-bundle.json \
   --registry http://127.0.0.1:8787 --port 8791
 
-# deploy against it
+# deploy against it (repeat --provider for a quorum)
 node apps/runtime/src/cli.ts deploy --web4 --provider http://127.0.0.1:8791 \
   --registry http://127.0.0.1:8787 --allow-loopback --out .rarext-runtime
+
+# publish a provider card under the deployment's challenge
+node apps/runtime/src/cli.ts announce --endpoint http://127.0.0.1:8791 \
+  --manifest .rarext-runtime/deployment.json --registry http://127.0.0.1:8787
+
+# compare providers and their answers
+node apps/runtime/src/cli.ts compare --provider http://127.0.0.1:8791 \
+  --provider http://127.0.0.1:8792 --registry http://127.0.0.1:8787 \
+  --prompt "Where do weights live?"
 
 # serve the attested gateway
 node apps/runtime/src/cli.ts serve --manifest .rarext-runtime/deployment.json --publish
@@ -192,9 +333,12 @@ why a large file is sharded rather than sent as one object.
 
 ## Honest limits
 
-- **One provider is one machine.** The bundle can be fetched by any provider, but
-  this demo runs one. Provider discovery across independent operators is the next
-  step, not something the card alone supplies.
+- **A quorum is over declared operators, not proven machines.** When provider
+  cards name an operator, the deployment and challenge commit those identities and
+  a quorum requires that many *distinct* operators; a gateway configured to collapse
+  two endpoints onto one operator refuses the run. What the protocol still cannot
+  prove is that two declared operators use unrelated hardware or upstream engines.
+  The bundled demo's two operators are separate processes on one machine.
 - **The provider sees the weights and the prompts.** Encryption at rest is the
   sealed storage tier; inference over sealed weights is not implemented.
 - **Inference is not cryptographically proven.** The run transcript proves the

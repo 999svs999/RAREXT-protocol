@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
+import type { JsonWebKey } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
+import { verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
+import type { SignatureSuite } from "../../../packages/core/src/types.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import type { ApiShape, EngineName, ModelRef } from "./types.ts";
 
@@ -83,7 +86,15 @@ export interface ProviderCard {
   };
   apis: ApiShape[];
   createdAt: string;
-  /** sha256 over the canonical card with this field absent. */
+  /**
+   * The provider's own signature over the card, when it has an identity. It
+   * covers every field except `digest` and itself. A card without one is still
+   * self-digested; a card with one proves the operator controls the key it
+   * names, which is what makes the quorum's operator identities more than
+   * labels.
+   */
+  signature?: string;
+  /** sha256 over the canonical card with `digest` and `signature` absent. */
   digest: string;
 }
 
@@ -516,11 +527,19 @@ export interface BuildProviderCardInput {
   apis?: ApiShape[];
   id?: string;
   createdAt?: string;
+  /** Sign every field except digest and signature; the key id must match. */
+  sign?: (payload: Omit<ProviderCard, "digest" | "signature">) => string;
 }
 
 export function providerCardDigest(card: Omit<ProviderCard, "digest"> | ProviderCard): string {
-  const { digest: _digest, ...rest } = card as ProviderCard;
+  const { digest: _digest, signature: _signature, ...rest } = card as ProviderCard;
   return canonicalDigest(rest);
+}
+
+/** What a provider signs: every card field except the digest and signature. */
+export function providerCardPayload(card: ProviderCard): Omit<ProviderCard, "digest" | "signature"> {
+  const { digest: _digest, signature: _signature, ...rest } = card;
+  return rest;
 }
 
 export function buildProviderCard(input: BuildProviderCardInput): ProviderCard {
@@ -543,9 +562,13 @@ export function buildProviderCard(input: BuildProviderCardInput): ProviderCard {
     provider: input.provider ?? { handle: null, keyId: null },
     apis: input.apis ?? (["openai"] as ApiShape[]),
     createdAt: input.createdAt ?? new Date().toISOString(),
-  } satisfies Omit<ProviderCard, "digest">;
+  } satisfies Omit<ProviderCard, "digest" | "signature">;
 
-  return { ...partial, digest: providerCardDigest(partial) };
+  const digest = providerCardDigest(partial);
+  const signature = input.sign?.(partial);
+  return signature === undefined
+    ? { ...partial, digest }
+    : { ...partial, digest, signature };
 }
 
 export function verifyProviderCard(value: unknown): string[] {
@@ -598,6 +621,49 @@ export function verifyProviderCard(value: unknown): string[] {
 
   if (typeof value.createdAt !== "string" || Number.isNaN(Date.parse(value.createdAt))) {
     errors.push("provider card createdAt must be an ISO timestamp");
+  }
+
+  const provider = isRecord(value.provider) ? value.provider : null;
+  if (provider === null) {
+    errors.push("provider card provider must be an object");
+  } else {
+    if (provider.handle !== null && typeof provider.handle !== "string") {
+      errors.push("provider card provider.handle must be a string or null");
+    }
+    if (provider.keyId !== null && typeof provider.keyId !== "string") {
+      errors.push("provider card provider.keyId must be a string or null");
+    }
+    if (provider.publicKey !== undefined) {
+      if (!isRecord(provider.publicKey)) {
+        errors.push("provider card provider.publicKey must be a JWK object");
+      }
+      if (provider.suite !== "ecdsa-p256" && provider.suite !== "ml-dsa-44" && provider.suite !== "ml-dsa-65") {
+        errors.push("provider card provider.suite must name a signature suite");
+      }
+      if (typeof provider.keyId !== "string" || provider.keyId.length === 0) {
+        errors.push("a signed provider card must name its provider.keyId");
+      }
+      if (typeof value.signature !== "string") {
+        errors.push("a provider card with a publicKey must carry a signature");
+      } else if (isRecord(provider.publicKey)) {
+        // The operator's own key covers the same bytes the digest covers, so a
+        // card cannot be re-signed by a publisher claiming someone else's key.
+        let verified = false;
+        try {
+          verified = verifyPayload(
+            provider.publicKey as unknown as JsonWebKey,
+            providerCardPayload(value as unknown as ProviderCard),
+            value.signature,
+            provider.suite as SignatureSuite,
+          );
+        } catch {
+          verified = false;
+        }
+        if (!verified) errors.push("provider card signature does not verify");
+      }
+    } else if (value.signature !== undefined) {
+      errors.push("provider card signature requires provider.publicKey");
+    }
   }
 
   if (typeof value.digest !== "string" || !HEX64.test(value.digest)) {

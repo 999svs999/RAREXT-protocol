@@ -37,6 +37,7 @@ import {
 } from "./cloud.ts";
 import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
+import { canonicalDigest } from "./digest.ts";
 import {
   assessModelFit,
   buildDeployment,
@@ -65,7 +66,7 @@ import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "
 import { RarextClient } from "../../../packages/agent-sdk/src/index.ts";
 import { startGateway } from "./gateway.ts";
 import { auditLedger, verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
-import { discoverBundle, verifiedRemoteDeployments } from "./discovery.ts";
+import { discoverBundle, fetchAnchoredBundles, fetchVerifiedProvidersAcrossRegistries, verifiedProviders, verifiedRemoteDeployments } from "./discovery.ts";
 import {
   createVerifierServer,
   runSpecFromChallenge,
@@ -91,6 +92,8 @@ const COMMANDS = [
   "publish-deployment",
   "anchor",
   "discover",
+  "announce",
+  "compare",
   "serve",
   "verifier",
   "verify",
@@ -113,6 +116,8 @@ Commands:
   publish-deployment  publish the deployment commitment (a model card) to RAREXT
   anchor    anchor pending publications on a RAREXT registry
   discover  verify every model card and run in a bundle, without a server
+  announce  publish a provider's card under a model challenge
+  compare   verify several providers of one bundle and compare their answers
   serve     serve the attested OpenAI/Anthropic gateway in front of a deployment
   verifier  run the HTTP verifier a RAREXT node calls
   verify    verify a transcript offline against a challenge
@@ -170,8 +175,32 @@ function flag(values: Record<string, unknown>, name: string): string | undefined
   return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * A repeatable string option. Node's parseArgs returns an array when the option
+ * is declared `multiple`, a single string otherwise; callers want both.
+ */
+function flags(values: Record<string, unknown>, name: string): string[] {
+  const value = values[name];
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
+  return [];
+}
+
 function bool(values: Record<string, unknown>, name: string): boolean {
   return values[name] === true;
+}
+
+/**
+ * The registries a command may use: the primary `--registry` plus any
+ * `--mirror-registry` values, normalized and de-duplicated. A bundle is
+ * content-addressed, so the union of several registries is still verifiable —
+ * and naming more than one means no single registry is a hard dependency.
+ */
+function registryList(values: Record<string, unknown>, primary: string): string[] {
+  const all = [primary, ...flags(values, "mirror-registry")].map((entry) =>
+    entry.replace(/\/+$/, ""),
+  );
+  return [...new Set(all.filter((entry) => entry !== ""))];
 }
 
 function readJson(path: string): unknown {
@@ -589,6 +618,7 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
     ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
     providerHandle: flag(values, "handle") ?? null,
+    providerKeyId: flag(values, "key-id") ?? flag(values, "operator") ?? null,
     log: (message) => console.error(`[provider] ${message}`),
   });
 
@@ -624,42 +654,86 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
  * additionally downloads every shard before a card is adopted.
  */
 async function commandDeployWeb4(values: Record<string, unknown>): Promise<number> {
-  const providerEndpoint = normalizeEndpoint(
-    flag(values, "provider") ?? flag(values, "endpoint") ?? "",
-  );
-  if (providerEndpoint === "") {
-    throw new Error("--web4 needs --provider <https://provider.example>; there is no local default");
-  }
-  if (isLoopbackEndpoint(providerEndpoint) && !bool(values, "allow-loopback")) {
-    throw new Error(
-      `--web4 points at loopback (${providerEndpoint}), which is local compute. ` +
-        "Pass --allow-loopback only for a test fixture, or name the provider.",
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+
+  // A deployment can name providers explicitly, discover them from the
+  // registry's anchored bundle, or both. Discovery is what lets an operator
+  // adopt a provider they have never been told about; the card is still
+  // verified here before it is used.
+  const named = [...flags(values, "provider")];
+  if (flag(values, "endpoint") !== undefined) named.push(flag(values, "endpoint")!);
+  if (bool(values, "discover")) {
+    const registries = registryList(values, registry);
+    const discovered = await fetchVerifiedProvidersAcrossRegistries({
+      registries,
+      ...(flag(values, "bundle-digest") === undefined
+        ? {}
+        : { bundleDigest: flag(values, "bundle-digest") }),
+    });
+    if (discovered.providers.length === 0) {
+      throw new Error(
+        discovered.errors[0] ?? "no discovered provider card is verifiable",
+      );
+    }
+    for (const { card } of discovered.providers) named.push(card.endpoint);
+    console.error(
+      `[runtime] discovered ${discovered.providers.length} verified provider(s) across ` +
+        `${registries.length} registry(ies) / ${discovered.scanned} anchored bundle(s)`,
     );
+    for (const error of discovered.errors) console.error(`[runtime]   ${error}`);
   }
 
-  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
-  const card = await fetchProviderCard({ endpoint: providerEndpoint });
-  if (normalizeEndpoint(card.endpoint) !== providerEndpoint) {
+  const endpoints = [...new Set(named.map((endpoint) => normalizeEndpoint(endpoint)).filter((e) => e !== ""))];
+  if (endpoints.length === 0) {
     throw new Error(
-      `provider card names ${card.endpoint}, not the endpoint that served it (${providerEndpoint})`,
+      "--web4 needs --provider <https://provider.example> or --discover; there is no local default",
     );
   }
+  for (const endpoint of endpoints) {
+    if (isLoopbackEndpoint(endpoint) && !bool(values, "allow-loopback")) {
+      throw new Error(
+        `--web4 points at loopback (${endpoint}), which is local compute. ` +
+          "Pass --allow-loopback only for a test fixture, or name the provider.",
+      );
+    }
+  }
+
+  const cards = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      const card = await fetchProviderCard({ endpoint });
+      if (normalizeEndpoint(card.endpoint) !== endpoint) {
+        throw new Error(
+          `provider card names ${card.endpoint}, not the endpoint that served it (${endpoint})`,
+        );
+      }
+      return card;
+    }),
+  );
 
   const bundlePath = flag(values, "bundle");
   let bundle: ModelBundle;
   if (bundlePath !== undefined) {
-    const loaded = await loadProviderBundle({ bundlePath: resolve(bundlePath) });
-    bundle = loaded;
+    bundle = await loadProviderBundle({ bundlePath: resolve(bundlePath) });
   } else {
     bundle = await fetchBundleManifest({
       registry,
-      manifestHash: flag(values, "manifest-hash") ?? card.bundle.manifestHash,
+      manifestHash: flag(values, "manifest-hash") ?? cards[0]!.bundle.manifestHash,
     });
   }
 
-  const crossCheck = crossCheckProviderCard(card, bundle);
-  if (!crossCheck.ok) {
-    throw new Error(`provider card does not match the RAREXT bundle: ${crossCheck.errors.join("; ")}`);
+  for (const [index, card] of cards.entries()) {
+    const crossCheck = crossCheckProviderCard(card, bundle);
+    if (!crossCheck.ok) {
+      throw new Error(
+        `provider ${endpoints[index]} does not match the RAREXT bundle: ${crossCheck.errors.join("; ")}`,
+      );
+    }
+    if (card.bundle.digest !== bundle.digest) {
+      throw new Error(`provider ${endpoints[index]} serves bundle ${card.bundle.digest}, not ${bundle.digest}`);
+    }
+  }
+  if (new Set(cards.map((card) => card.model.id)).size !== 1) {
+    throw new Error("providers disagree about the model id; refusing to deploy");
   }
 
   if (bool(values, "verify-shards")) {
@@ -672,22 +746,50 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     });
   }
 
-  const healthResponse = await fetch(`${providerEndpoint}/health`, {
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!healthResponse.ok) {
-    throw new Error(`provider ${providerEndpoint} is not healthy: HTTP ${healthResponse.status}`);
-  }
-  const health = (await healthResponse.json()) as { bundle?: unknown; weightsDigest?: unknown };
-  if (health.bundle !== bundle.digest || health.weightsDigest !== bundle.model.weightsDigest) {
+  await Promise.all(
+    endpoints.map(async (endpoint) => {
+      const healthResponse = await fetch(`${endpoint}/health`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!healthResponse.ok) {
+        throw new Error(`provider ${endpoint} is not healthy: HTTP ${healthResponse.status}`);
+      }
+      const health = (await healthResponse.json()) as { bundle?: unknown; weightsDigest?: unknown };
+      if (health.bundle !== bundle.digest || health.weightsDigest !== bundle.model.weightsDigest) {
+        throw new Error(
+          `provider ${endpoint} health does not commit this bundle (bundle ${String(health.bundle)}, ` +
+            `weights ${String(health.weightsDigest)})`,
+        );
+      }
+    }),
+  );
+
+  const quorumFlag = flag(values, "quorum");
+  const quorum = quorumFlag === undefined ? endpoints.length : Number(quorumFlag);
+  if (!Number.isSafeInteger(quorum) || quorum < 1 || quorum > endpoints.length) {
     throw new Error(
-      `provider health does not commit this bundle (bundle ${String(health.bundle)}, ` +
-        `weights ${String(health.weightsDigest)})`,
+      `--quorum must be an integer between 1 and ${endpoints.length} (the number of providers)`,
     );
   }
 
+  // A provider card can name who runs it. When every card does, the deployment
+  // commits those identities and the quorum is over operators: two endpoints
+  // run by one operator cannot masquerade as two independent answers.
+  const operatorIds = cards.map((entry) => entry.provider.keyId ?? entry.provider.handle ?? null);
+  const operatorsCommitted = operatorIds.every(
+    (id): id is string => typeof id === "string" && id !== "",
+  );
+  if (operatorsCommitted && new Set(operatorIds).size < quorum) {
+    throw new Error(
+      `--quorum ${quorum} needs ${quorum} distinct operators, but the providers name only ` +
+        `${new Set(operatorIds).size}: ${operatorIds.join(", ")}`,
+    );
+  }
+
+  const primary = endpoints[0]!;
+  const card = cards[0]!;
   const probe = {
-    engine: { name: "openai-compatible" as EngineName, version: "web4", endpoint: providerEndpoint },
+    engine: { name: "openai-compatible" as EngineName, version: "web4", endpoint: primary },
     model: card.model,
     apis: ["openai"] as ApiShape[],
     models: [card.model],
@@ -697,22 +799,33 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
   const manifest = commitDeployment(
     buildDeployment({
       probe,
-      hardware: hardwareFromNetwork(providerEndpoint),
+      hardware: hardwareFromNetwork(primary),
       placement: "web4",
       id: flag(values, "id"),
       labels: {
         execution: "web4",
         bundle: bundle.digest,
         shardsRoot: bundle.shardsRoot,
-        manifestHash: card.bundle.manifestHash,
+        manifestHash: bundleManifestHash(bundle),
         provider: card.id,
         providerCard: card.digest,
-        ...(isLoopbackEndpoint(providerEndpoint) ? { fixture: "loopback" } : {}),
+        // The full provider set lives in the deployment, so a gateway can fan
+        // out and a reader can reproduce agreement without a side channel.
+        providers: endpoints.join(","),
+        providerCards: cards.map((entry) => entry.digest).join(","),
+        quorum: String(quorum),
+        // Operator identity is what makes a quorum more than a head count.
+        // Commit it when every card names one; the challenge then requires
+        // agreement across distinct operators, not just distinct endpoints.
+        ...(operatorsCommitted ? { operators: operatorIds.join(",") } : {}),
+        ...(endpoints.some((endpoint) => isLoopbackEndpoint(endpoint))
+          ? { fixture: "loopback" }
+          : {}),
       },
       notes:
         `web4 deployment: the weights are ${bundle.shards.length} RAREXT blob(s) committed as ` +
-        `${bundle.model.weightsDigest}; provider ${card.id} fetched and verified them before serving at ` +
-        `${providerEndpoint}. No weights or inference run on this host.`,
+        `${bundle.model.weightsDigest}; ${cards.length} provider(s) fetched and verified them, ` +
+        `and ${quorum} must agree before a run is recorded. No weights or inference run on this host.`,
     }),
   );
 
@@ -730,7 +843,8 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
           challenge: challengeFor(manifest),
           challengeId: challengeIdFor(manifest),
           placement: "web4",
-          providerCard: card,
+          providers: cards.map((entry, index) => ({ endpoint: endpoints[index], card: entry })),
+          quorum,
           bundle,
           files: {
             deployment: join(out, "deployment.json"),
@@ -748,7 +862,10 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
 
   console.log(`deployment ${manifest.id}`);
   console.log(`  placement ${manifest.placement}`);
-  console.log(`  provider  ${card.id} at ${providerEndpoint}`);
+  for (const [index, entry] of cards.entries()) {
+    console.log(`  provider  ${entry.id} at ${endpoints[index]}`);
+  }
+  console.log(`  quorum    ${quorum} of ${cards.length} provider(s) must agree`);
   console.log(`  model     ${manifest.model.id}${manifest.model.quantization ? ` (${manifest.model.quantization})` : ""}`);
   console.log(`  weights   ${manifest.model.weightsDigest}`);
   console.log(`  bundle    ${bundle.digest} (${bundle.shards.length} shard(s), ${formatBytes(bundle.totalBytes)})`);
@@ -963,8 +1080,48 @@ async function commandAnchor(values: Record<string, unknown>): Promise<number> {
 }
 
 async function commandDiscover(values: Record<string, unknown>): Promise<number> {
-  const { bundle } = await loadBundle(values);
-  const report = discoverBundle(bundle);
+  let report;
+  if (bool(values, "all-anchors")) {
+    const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+    const registries = registryList(values, registry);
+    const reports = [];
+    const perRegistry: Array<{ registry: string; bundles: number; error: string | null }> = [];
+    // A provider card and a later run can live in different anchors; they can
+    // also live in different registries. Read every batch from every registry
+    // and union the verdicts, so no single anchor or registry has to be the
+    // one that happens to hold the proof.
+    for (const target of registries) {
+      try {
+        const bundles = await fetchAnchoredBundles({ registry: target });
+        perRegistry.push({ registry: target, bundles: bundles.length, error: null });
+        reports.push(...bundles.map((bundle) => discoverBundle(bundle)));
+      } catch (error) {
+        perRegistry.push({
+          registry: target,
+          bundles: 0,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const latest = reports[0];
+    report = {
+      root: latest?.root ?? null,
+      leafVersion: latest?.leafVersion ?? null,
+      // One anchor covers one batch; this view is every batch every registry
+      // still serves, so a provider card anchored before a run is not lost.
+      cards: reports.flatMap((entry) => entry.cards),
+      providers: reports.flatMap((entry) => entry.providers),
+      runs: reports.flatMap((entry) => entry.runs),
+      registries: perRegistry,
+      ok:
+        reports.length > 0 &&
+        reports.every((entry) => entry.ok) &&
+        perRegistry.every((entry) => entry.error === null),
+    };
+  } else {
+    const { bundle } = await loadBundle(values);
+    report = discoverBundle(bundle);
+  }
 
   if (bool(values, "json")) {
     console.log(JSON.stringify(report, null, 2));
@@ -975,8 +1132,8 @@ async function commandDiscover(values: Record<string, unknown>): Promise<number>
     `bundle root ${String(report.root ?? "").slice(0, 16)}… leafVersion ${report.leafVersion ?? "?"}`,
   );
 
-  if (report.cards.length === 0 && report.runs.length === 0) {
-    console.log("no model cards or runs in the bundle");
+  if (report.cards.length === 0 && report.providers.length === 0 && report.runs.length === 0) {
+    console.log("no model cards, providers, or runs in the bundle");
     return 1;
   }
 
@@ -1003,6 +1160,17 @@ async function commandDiscover(values: Record<string, unknown>): Promise<number>
     }
   }
 
+  if (report.providers.length > 0) {
+    console.log("\nproviders");
+    for (const provider of report.providers) {
+      console.log(
+        `  ${provider.verified ? "verified" : "FAILED  "}  ${provider.endpoint}  ` +
+          `bundle ${provider.bundleDigest.slice(0, 16)}…  ${provider.shardCount} shard(s)`,
+      );
+      if (provider.error) console.log(`    ${provider.error}`);
+    }
+  }
+
   if (report.runs.length > 0) {
     console.log("\nruns");
     for (const run of report.runs) {
@@ -1021,7 +1189,8 @@ async function commandDiscover(values: Record<string, unknown>): Promise<number>
   }
 
   console.log(
-    `\n${report.ok ? "PASS" : "FAIL"} — ${report.cards.length} card(s), ${report.runs.length} run(s) recomputed from the bundle`,
+    `\n${report.ok ? "PASS" : "FAIL"} — ${report.cards.length} card(s), ` +
+      `${report.providers.length} provider(s), ${report.runs.length} run(s) recomputed from the bundle`,
   );
   return report.ok ? 0 : 1;
 }
@@ -1050,9 +1219,49 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   const host = flag(values, "host") ?? "127.0.0.1";
   const publicUrl = flag(values, "public-url");
 
+  // A web4 deployment commits its provider set and response threshold in its
+  // labels. The gateway uses them directly; an operator override is allowed
+  // for a fixture, but the run still records what was actually queried.
+  const labels = deployment.labels ?? {};
+  const committedProviders = (labels.providers ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  const upstreams =
+    committedProviders.length > 0
+      ? committedProviders
+      : [deployment.engine.endpoint];
+  const quorumFlag = flag(values, "quorum");
+  const quorum =
+    quorumFlag !== undefined
+      ? Number(quorumFlag)
+      : labels.quorum !== undefined
+        ? Number(labels.quorum)
+        : upstreams.length;
+
+  // `labels.operators` is aligned with `labels.providers`, so the gateway can
+  // attach an operator identity to each endpoint it queries. Without it the
+  // gateway still records endpoints; with it, agreement is counted per
+  // operator and one operator cannot fill the quorum alone.
+  const committedOperators = (labels.operators ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  const operators =
+    committedOperators.length === upstreams.length
+      ? Object.fromEntries(upstreams.map((endpoint, index) => [endpoint, committedOperators[index]!]))
+      : undefined;
+
   const publisher = publish
     ? await RuntimePublisher.open({ baseUrl: registry, handle, stateDir: state, challengeId })
     : null;
+
+  if (!Number.isSafeInteger(quorum) || quorum < 1 || quorum > upstreams.length) {
+    throw new Error(
+      `quorum must be between 1 and ${upstreams.length} (the committed provider count)`,
+    );
+  }
+  const commitsQuorum = committedProviders.length > 0 || labels.quorum !== undefined;
 
   const gateway = await startGateway({
     deployment,
@@ -1064,6 +1273,8 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     gatewayToken,
     upstreamApi: upstream.api,
     upstreamHeaders: upstream.headers,
+    ...(commitsQuorum ? { upstreams, quorum } : {}),
+    ...(commitsQuorum && operators !== undefined ? { operators } : {}),
     log: (message) => console.error(`[runtime] ${message}`),
   });
 
@@ -1077,7 +1288,9 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   if (deployment.placement === "web4") {
     const labels = deployment.labels ?? {};
     console.log(`  bundle     ${labels.bundle ?? "?"} (${labels.shardsRoot ?? "?"})`);
-    console.log("  compute    none on this host — the provider fetched verified RAREXT blobs");
+    console.log(`  providers  ${upstreams.length} committed, quorum ${quorum}`);
+    for (const endpoint of upstreams) console.log(`             ${endpoint}`);
+    console.log("  compute    none on this host — the providers fetched verified RAREXT blobs");
   }
   console.log(`  openai     POST ${gateway.url}/v1/chat/completions`);
   console.log(`  anthropic  POST ${gateway.url}/v1/messages`);
@@ -1100,6 +1313,224 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   process.on("SIGTERM", stop);
   await new Promise<void>(() => {});
   return 0;
+}
+
+/**
+ * Publish the provider's own card under the model challenge. A publisher does
+ * not need to run a deployment to announce a provider; it needs the challenge
+ * the provider serves and the endpoint. The card is fetched and cross-checked
+ * against the RAREXT bundle before it is signed.
+ */
+async function commandAnnounce(values: Record<string, unknown>): Promise<number> {
+  const endpoint = normalizeEndpoint(flag(values, "endpoint") ?? flags(values, "provider")[0] ?? "");
+  if (endpoint === "") throw new Error("--endpoint <provider URL> is required");
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+
+  const card = await fetchProviderCard({ endpoint });
+  if (normalizeEndpoint(card.endpoint) !== endpoint) {
+    throw new Error(`provider card names ${card.endpoint}, not ${endpoint}`);
+  }
+  const bundle = await fetchBundleManifest({
+    registry,
+    manifestHash: flag(values, "manifest-hash") ?? card.bundle.manifestHash,
+  });
+  const crossCheck = crossCheckProviderCard(card, bundle);
+  if (!crossCheck.ok) {
+    throw new Error(`provider card does not match the RAREXT bundle: ${crossCheck.errors.join("; ")}`);
+  }
+
+  const challengeId =
+    flag(values, "challenge") ??
+    (flag(values, "manifest") !== undefined
+      ? challengeIdFor(deploymentFrom(values))
+      : undefined);
+  if (challengeId === undefined) {
+    throw new Error("--challenge <id> (or --manifest <deployment.json>) is required");
+  }
+
+  const registries = registryList(values, registry);
+  const publications: Array<{ registry: string; publication: Awaited<ReturnType<RuntimePublisher["publishProviderCard"]>> }> = [];
+  const anchors: Array<{ registry: string; root: string }> = [];
+  const handle = flag(values, "handle") ?? "rarext-runtime";
+  const stateDir = resolve(flag(values, "state") ?? ".rarext-runtime");
+
+  // Announce to every named registry. The card is the same bytes and the same
+  // signature; a reader can verify it from any copy, so no single registry is
+  // the gatekeeper for who provides a model.
+  for (const target of registries) {
+    const publisher = await RuntimePublisher.open({
+      baseUrl: target,
+      handle,
+      stateDir,
+      challengeId,
+    });
+    const publication = await publisher.publishProviderCard(card);
+    publications.push({ registry: target, publication });
+    if (bool(values, "anchor")) {
+      const anchor = await publisher.client.anchor();
+      anchors.push({ registry: target, root: anchor.root });
+    }
+  }
+  const publication = publications[0]!.publication;
+  const anchor = anchors[0] === undefined ? null : anchors[0];
+
+  if (bool(values, "json")) {
+    console.log(JSON.stringify({ publication, publications, anchors, anchor, card, bundle }, null, 2));
+    return 0;
+  }
+
+  console.log(`provider ${card.id} announced as ${publication.id.slice(0, 12)}… under ${challengeId}`);
+  console.log(`  endpoint   ${endpoint}`);
+  console.log(`  bundle     ${bundle.digest}`);
+  console.log(`  model      ${card.model.id}`);
+  if (publications.length > 1) {
+    console.log(`  registries ${publications.length}`);
+    for (const entry of publications) console.log(`             ${entry.registry}`);
+  }
+  for (const entry of anchors) console.log(`  anchor     ${entry.registry} ${entry.root}`);
+  return 0;
+}
+
+/**
+ * Compare the providers that serve one bundle: verify every card against the
+ * registry manifest, then (when a prompt is given) ask all of them the same
+ * question and show whether their canonical responses agree.
+ */
+async function commandCompare(values: Record<string, unknown>): Promise<number> {
+  const registry = (flag(values, "registry") ?? DEFAULT_REGISTRY).replace(/\/+$/, "");
+  const named = [...flags(values, "provider")];
+  if (flag(values, "endpoint") !== undefined) named.push(flag(values, "endpoint")!);
+  if (bool(values, "discover")) {
+    const discovered = await fetchVerifiedProvidersAcrossRegistries({
+      registries: registryList(values, registry),
+      ...(flag(values, "bundle-digest") === undefined
+        ? {}
+        : { bundleDigest: flag(values, "bundle-digest") }),
+    });
+    for (const { card } of discovered.providers) named.push(card.endpoint);
+  }
+
+  const endpoints = [...new Set(named.map((entry) => normalizeEndpoint(entry)).filter((e) => e !== ""))];
+  if (endpoints.length === 0) throw new Error("--provider or --discover is required");
+
+  const cards = await Promise.all(endpoints.map((endpoint) => fetchProviderCard({ endpoint })));
+  const bundle = await fetchBundleManifest({
+    registry,
+    manifestHash: flag(values, "manifest-hash") ?? cards[0]!.bundle.manifestHash,
+  });
+
+  const verified = cards.map((card, index) => {
+    const crossCheck = crossCheckProviderCard(card, bundle);
+    const endpointMatch = normalizeEndpoint(card.endpoint) === endpoints[index];
+    return {
+      endpoint: endpoints[index]!,
+      cardDigest: card.digest,
+      modelId: card.model.id,
+      verified: crossCheck.ok && endpointMatch,
+      error: !endpointMatch
+        ? `card names ${card.endpoint}`
+        : crossCheck.ok
+          ? null
+          : crossCheck.errors.join("; "),
+    };
+  });
+
+  const quorum = flag(values, "quorum") === undefined ? endpoints.length : Number(flag(values, "quorum"));
+  if (!Number.isSafeInteger(quorum) || quorum < 1 || quorum > endpoints.length) {
+    throw new Error(`--quorum must be an integer between 1 and ${endpoints.length}`);
+  }
+
+  const prompt = flag(values, "prompt");
+  let answers:
+    | Array<{ endpoint: string; responseDigest: string | null; text: string | null; error: string | null }>
+    | null = null;
+
+  if (prompt !== undefined) {
+    const body = {
+      model: bundle.model.id,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+      stream: false,
+      max_tokens: flag(values, "max-tokens") ? Number(flag(values, "max-tokens")) : 64,
+    };
+    answers = await Promise.all(
+      endpoints.map(async (endpoint) => {
+        try {
+          const response = await fetch(`${endpoint}/v1/chat/completions`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(120_000),
+          });
+          if (!response.ok) {
+            return {
+              endpoint,
+              responseDigest: null,
+              text: null,
+              error: `HTTP ${response.status} ${(await response.text()).slice(0, 300)}`,
+            };
+          }
+          const json: unknown = await response.json();
+          const text =
+            typeof json === "object" && json !== null
+              ? String(
+                  (json as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]
+                    ?.message?.content ?? "",
+                )
+              : "";
+          return { endpoint, responseDigest: canonicalDigest(json), text, error: null };
+        } catch (error) {
+          return {
+            endpoint,
+            responseDigest: null,
+            text: null,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
+  }
+
+  const groups = new Map<string, number>();
+  for (const answer of answers ?? []) {
+    if (answer.responseDigest === null) continue;
+    groups.set(answer.responseDigest, (groups.get(answer.responseDigest) ?? 0) + 1);
+  }
+  const counts = [...groups.values()].sort((a, b) => b - a);
+  const best = counts[0] ?? 0;
+  const tie = counts.length > 1 && counts[0] === counts[1];
+  const agreementOk = answers === null || (best >= quorum && !tie);
+  const ok = verified.every((entry) => entry.verified) && agreementOk;
+
+  if (bool(values, "json")) {
+    console.log(
+      JSON.stringify({ bundle: bundle.digest, quorum, providers: verified, answers, ok }, null, 2),
+    );
+    return ok ? 0 : 1;
+  }
+
+  console.log(`bundle ${bundle.digest} (${bundle.shards.length} shard(s))`);
+  for (const entry of verified) {
+    console.log(
+      `  ${entry.verified ? "verified" : "FAILED  "}  ${entry.endpoint}  card ${entry.cardDigest.slice(0, 16)}…`,
+    );
+    if (entry.error) console.log(`    ${entry.error}`);
+  }
+  if (answers !== null) {
+    console.log(`\nasked ${answers.length} provider(s) the same prompt; quorum ${quorum}`);
+    for (const answer of answers) {
+      console.log(
+        `  ${answer.responseDigest?.slice(0, 16) ?? "---------------"}…  ${answer.endpoint}` +
+          (answer.error ? `  ${answer.error}` : ""),
+      );
+    }
+    console.log(
+      agreementOk
+        ? `\nPASS — ${best} provider(s) returned the same canonical response`
+        : `\nFAIL — largest agreement was ${best}/${answers.length}, quorum ${quorum}${tie ? " (tie)" : ""}`,
+    );
+  }
+  return ok ? 0 : 1;
 }
 
 async function commandVerifier(values: Record<string, unknown>): Promise<number> {
@@ -1231,7 +1662,13 @@ async function main(): Promise<number> {
       remote: { type: "boolean" },
       web4: { type: "boolean" },
       placement: { type: "string" },
-      provider: { type: "string" },
+      provider: { type: "string", multiple: true },
+      discover: { type: "boolean" },
+      "all-anchors": { type: "boolean" },
+      "bundle-digest": { type: "string" },
+      quorum: { type: "string" },
+      prompt: { type: "string" },
+      "max-tokens": { type: "string" },
       file: { type: "string" },
       native: { type: "boolean" },
       vocab: { type: "string" },
@@ -1260,7 +1697,10 @@ async function main(): Promise<number> {
       publish: { type: "boolean" },
       anchor: { type: "boolean" },
       registry: { type: "string" },
+      "mirror-registry": { type: "string", multiple: true },
       handle: { type: "string" },
+      "key-id": { type: "string" },
+      operator: { type: "string" },
       challenge: { type: "string" },
       transcript: { type: "string" },
       bundle: { type: "string" },
@@ -1289,6 +1729,10 @@ async function main(): Promise<number> {
       return commandAnchor(values);
     case "discover":
       return commandDiscover(values);
+    case "announce":
+      return commandAnnounce(values);
+    case "compare":
+      return commandCompare(values);
     case "serve":
       return commandServe(values);
     case "verifier":

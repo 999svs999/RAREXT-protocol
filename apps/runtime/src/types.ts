@@ -28,6 +28,13 @@ export const MODEL_RUN_ARTIFACT_KIND = "ai.model-run";
  * manifest and the runs it produced are verified against it.
  */
 export const MODEL_DEPLOYMENT_ARTIFACT_KIND = "ai.model-deployment";
+/**
+ * A provider's own claim, published under the model challenge: "I fetched this
+ * bundle, verified every shard, and serve it at this endpoint." It is a normal
+ * signed publication, so a bundle carries the providers alongside the card and
+ * the runs, and discovery can find them without being told a URL in advance.
+ */
+export const MODEL_PROVIDER_ARTIFACT_KIND = "ai.model-provider";
 
 /** A transcript larger than this is not published; inference still succeeds. */
 export const MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
@@ -178,6 +185,36 @@ export interface RunBundleRef {
   manifestHash: string;
 }
 
+/**
+ * What several providers said to the same request. The gateway queries every
+ * configured provider, groups the responses by canonical digest, and records
+ * which endpoints returned the response the run carries. It is evidence a
+ * reader can reproduce by querying the same endpoints, not proof that the
+ * operators are independent — but a single provider can no longer be the whole
+ * claim.
+ */
+export interface RunQuorumProvider {
+  endpoint: string;
+  /** canonical sha256 of the exact response body this provider returned. */
+  responseDigest: string;
+  /**
+   * The operator identity the provider committed in its card, when one was
+   * committed. Quorum is counted over distinct operators so one operator
+   * cannot satisfy the threshold by running several endpoints.
+   */
+  operator?: string | null;
+}
+
+export interface RunQuorum {
+  /** How many identical responses the deployment requires. */
+  required: number;
+  /** How many providers answered at all. */
+  responded: number;
+  /** How many returned the response this run records. */
+  agreed: number;
+  providers: RunQuorumProvider[];
+}
+
 export interface ModelRunBody {
   kind: typeof RUN_KIND;
   deployment: { id: string; digest: string };
@@ -185,6 +222,8 @@ export interface ModelRunBody {
   engine: { name: EngineName; version: string | null };
   /** Present when the run names a RAREXT-hosted model bundle. */
   bundle?: RunBundleRef;
+  /** Present when the deployment required agreement across providers. */
+  quorum?: RunQuorum;
   /** The upstream API shape the transcript records. Absent on older records. */
   api?: ApiShape;
   request: TranscriptRequest;
@@ -220,6 +259,33 @@ export interface ModelRunSpec {
   bundleDigest?: string;
   shardsRoot?: string;
   manifestHash?: string;
+  /**
+   * How many providers must agree before a run is attested. Absent or 1 means
+   * the single committed endpoint is enough. When set, a run without matching
+   * quorum evidence fails verification.
+   */
+  quorum?: number;
+  /**
+   * Distinct provider-operator identities the deployment committed, when its
+   * provider cards named them. A quorum run must count that many distinct
+   * operators among the providers that agreed, not just that many endpoints.
+   */
+  operators?: string[];
+}
+
+export interface ProviderCardVerification {
+  correct: boolean;
+  score: number;
+  proof: unknown;
+  details: {
+    representation: "exact";
+    providerCardDigest: string;
+    endpoint: string;
+    bundleDigest: string;
+    modelId: string;
+    checks: string[];
+  };
+  error?: string;
 }
 
 export interface EngineProbe {

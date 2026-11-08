@@ -1,6 +1,7 @@
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
 import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
+import { verifyProviderCard } from "./model-bundle.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -11,8 +12,10 @@ import type {
   ModelRunBody,
   ModelRunSpec,
   ModelRunVerification,
+  ProviderCardVerification,
   ReplayEnvelope,
   RunBundleRef,
+  RunQuorum,
   RunRecord,
   SamplingParams,
   TokenUsage,
@@ -20,6 +23,7 @@ import type {
 import {
   MAX_TRANSCRIPT_BYTES,
   MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_PROVIDER_ARTIFACT_KIND,
   MODEL_RUN_APP,
   MODEL_RUN_ARTIFACT_KIND,
   RUN_KIND,
@@ -101,6 +105,8 @@ export interface CreateRunInput {
   previous: string | null;
   /** Present when the engine is deterministic enough for an independent replay. */
   replay?: boolean;
+  /** Present when the deployment required agreement across providers. */
+  quorum?: RunQuorum;
 }
 
 /**
@@ -125,6 +131,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
       version: input.deployment.engine.version,
     },
     ...(bundle === null ? {} : { bundle }),
+    ...(input.quorum === undefined ? {} : { quorum: input.quorum }),
     api: input.api,
     request: { body: input.request, digest: request.digest, bytes: request.bytes },
     response: {
@@ -254,6 +261,94 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "response.digest", response.digest === responseDigest);
   check(checks, failures, "response.bytes", response.bytes === responseBytes);
 
+  // A quorum run names every provider and the exact response each returned.
+  // The chosen response must be one of those digests, and the deployment's
+  // required count must be met. The evidence is inside the transcript, so
+  // editing any of it moves the run digest.
+  if (spec.quorum === undefined) {
+    check(checks, failures, "quorum.absent", body.quorum === undefined);
+  } else {
+    const quorum = isRecord(body.quorum) ? body.quorum : null;
+    const providers = quorum !== null && Array.isArray(quorum.providers) ? quorum.providers : [];
+    const validProviders =
+      providers.length > 0 &&
+      providers.every(
+        (entry) =>
+          isRecord(entry) &&
+          typeof entry.endpoint === "string" &&
+          /^https?:\/\//.test(entry.endpoint) &&
+          typeof entry.responseDigest === "string" &&
+          HEX64.test(entry.responseDigest),
+      );
+    const required = quorum !== null ? quorum.required : null;
+    const responded = quorum !== null ? quorum.responded : null;
+    const agreed = quorum !== null ? quorum.agreed : null;
+
+    // Agreement is not whatever the recorder wrote: it is how many recorded
+    // providers returned the digest of the response the run actually carries.
+    // A dissent is allowed to be present (it is evidence), but it cannot be
+    // counted, and one endpoint cannot answer twice to inflate the count.
+    const endpoints = providers
+      .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+      .map((entry) => entry.endpoint)
+      .filter((endpoint): endpoint is string => typeof endpoint === "string");
+    const uniqueEndpoints = new Set(endpoints).size === endpoints.length;
+    const agreeing = providers.filter(
+      (entry): entry is Record<string, unknown> =>
+        isRecord(entry) && entry.responseDigest === responseDigest,
+    );
+    const recomputedAgreed = agreeing.length;
+
+    // When the challenge committed operator identities, agreement must be
+    // spread across distinct operators, not just endpoints. Each agreeing
+    // provider must name a committed operator, and there must be at least
+    // `quorum` of them. A run cannot satisfy the threshold with several
+    // endpoints run by one operator.
+    const committedOperators = spec.operators;
+    const operatorsMet =
+      committedOperators === undefined
+        ? true
+        : committedOperators.length >= spec.quorum &&
+          agreeing.every(
+            (entry) =>
+              typeof entry.operator === "string" && committedOperators.includes(entry.operator),
+          ) &&
+          new Set(
+            agreeing
+              .map((entry) => entry.operator)
+              .filter((operator): operator is string => typeof operator === "string"),
+          ).size >= spec.quorum;
+
+    check(
+      checks,
+      failures,
+      "quorum",
+      quorum !== null &&
+        required === spec.quorum &&
+        typeof required === "number" &&
+        required >= 1 &&
+        typeof responded === "number" &&
+        typeof agreed === "number" &&
+        responded >= required &&
+        agreed >= required &&
+        agreed <= responded &&
+        validProviders &&
+        uniqueEndpoints &&
+        providers.length === responded &&
+        agreed === recomputedAgreed &&
+        operatorsMet,
+    );
+    check(
+      checks,
+      failures,
+      "quorum.response",
+      validProviders &&
+        providers.some(
+          (entry) => isRecord(entry) && entry.responseDigest === responseDigest,
+        ),
+    );
+  }
+
   const api: ApiShape =
     body.api === "anthropic" || body.api === "openai"
       ? body.api
@@ -381,6 +476,21 @@ export function deploymentArtifact(body: DeploymentCommitment) {
   return {
     app: MODEL_RUN_APP,
     kind: MODEL_DEPLOYMENT_ARTIFACT_KIND,
+    version: 1,
+    mediaType: "application/json",
+    body,
+  } as const;
+}
+
+/**
+ * The artifact envelope the registry verifies for a provider card. A provider
+ * publishes its own card under the model challenge, so the card is signed and
+ * carried by the same bundle as the deployment and its runs.
+ */
+export function providerCardArtifact(body: unknown) {
+  return {
+    app: MODEL_RUN_APP,
+    kind: MODEL_PROVIDER_ARTIFACT_KIND,
     version: 1,
     mediaType: "application/json",
     body,
@@ -564,6 +674,90 @@ export function verifyDeploymentBody(body: unknown, spec: ModelRunSpec): Deploym
       checks,
     },
     ...(correct ? {} : { error: `deployment failed: ${failures.join(", ")}` }),
+  };
+}
+
+/**
+ * Verify a published provider card against the challenge that commits the
+ * model. The card's own digest proves it was not edited after the provider
+ * signed it; the challenge proves it names the bundle, weights, and model the
+ * deployment committed to. Neither is a trust anchor on its own, which is why
+ * deploy also fetches the bundle manifest independently and cross-checks it.
+ */
+export function verifyProviderCardBody(
+  body: unknown,
+  spec: ModelRunSpec,
+): ProviderCardVerification {
+  const checks: string[] = [];
+  const failures: string[] = [];
+
+  if (!isRecord(body)) {
+    return {
+      correct: false,
+      score: 0,
+      proof: null,
+      details: {
+        representation: "exact",
+        providerCardDigest: "",
+        endpoint: "",
+        bundleDigest: "",
+        modelId: "",
+        checks: [],
+      },
+      error: "provider card body must be an object",
+    };
+  }
+
+  const errors = verifyProviderCard(body);
+  check(checks, failures, "card", errors.length === 0);
+
+  const bundle = isRecord(body.bundle) ? body.bundle : {};
+  const model = isRecord(body.model) ? body.model : {};
+  const endpoint = typeof body.endpoint === "string" ? body.endpoint : "";
+  const cardDigest = typeof body.digest === "string" ? body.digest : "";
+
+  check(
+    checks,
+    failures,
+    "bundle",
+    typeof spec.bundleDigest === "string" &&
+      bundle.digest === spec.bundleDigest &&
+      (spec.shardsRoot === undefined || bundle.shardsRoot === spec.shardsRoot) &&
+      (spec.manifestHash === undefined || bundle.manifestHash === spec.manifestHash) &&
+      (spec.weightsDigest === null || bundle.weightsDigest === spec.weightsDigest),
+  );
+  check(checks, failures, "model", model.id === spec.modelId);
+  check(
+    checks,
+    failures,
+    "model.weightsDigest",
+    (model.weightsDigest ?? null) === spec.weightsDigest &&
+      bundle.weightsDigest === spec.weightsDigest,
+  );
+
+  const correct = failures.length === 0;
+
+  return {
+    correct,
+    score: correct ? 100 : 0,
+    proof: {
+      representation: "exact",
+      providerCardDigest: cardDigest,
+      endpoint,
+      bundleDigest: typeof bundle.digest === "string" ? bundle.digest : "",
+      modelId: typeof model.id === "string" ? model.id : "",
+      checks,
+      failures,
+    },
+    details: {
+      representation: "exact",
+      providerCardDigest: cardDigest,
+      endpoint,
+      bundleDigest: typeof bundle.digest === "string" ? bundle.digest : "",
+      modelId: typeof model.id === "string" ? model.id : "",
+      checks,
+    },
+    ...(correct ? {} : { error: `provider card failed: ${failures.join(", ")}` }),
   };
 }
 

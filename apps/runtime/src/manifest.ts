@@ -400,6 +400,64 @@ export function validateDeployment(value: unknown): string[] {
     ) {
       errors.push("manifest.model.weightsDigest must be sha256:<64 hex> for a web4 deployment");
     }
+
+    // A deployment may commit the whole provider set and the number that must
+    // agree. Both are checkable strings, not free-form prose: a gateway reads
+    // `providers`, and the challenge commits `quorum`.
+    let providerCount: number | null = null;
+    if (labels.providers !== undefined) {
+      if (typeof labels.providers !== "string" || labels.providers.trim() === "") {
+        errors.push("manifest.labels.providers must be a comma-separated list of endpoints");
+      } else {
+        const list = labels.providers.split(",").map((entry) => entry.trim());
+        providerCount = list.length;
+        for (const entry of list) {
+          if (!/^https?:\/\//.test(entry)) {
+            errors.push(`manifest.labels.providers entry must be an http(s) URL: ${entry}`);
+          }
+        }
+        if (new Set(list).size !== list.length) {
+          errors.push("manifest.labels.providers must not repeat an endpoint");
+        }
+      }
+    }
+    if (labels.quorum !== undefined) {
+      const quorum = Number(labels.quorum);
+      if (!Number.isSafeInteger(quorum) || quorum < 1) {
+        errors.push("manifest.labels.quorum must be a positive integer");
+      } else if (providerCount !== null && quorum > providerCount) {
+        errors.push("manifest.labels.quorum cannot exceed the committed provider count");
+      }
+    }
+
+    // Operators are who runs an endpoint. Committing them is optional, but when
+    // present they must line up with `providers`, be distinct, and be enough to
+    // satisfy the quorum: two endpoints run by one operator are one voice.
+    let operatorCount: number | null = null;
+    if (labels.operators !== undefined) {
+      if (typeof labels.operators !== "string" || labels.operators.trim() === "") {
+        errors.push("manifest.labels.operators must be a comma-separated list of operator ids");
+      } else {
+        const list = labels.operators.split(",").map((entry) => entry.trim());
+        operatorCount = list.length;
+        if (list.some((entry) => entry === "")) {
+          errors.push("manifest.labels.operators must not contain an empty operator id");
+        }
+        if (new Set(list).size !== list.length) {
+          errors.push("manifest.labels.operators must name distinct operators");
+        }
+        if (providerCount !== null && list.length !== providerCount) {
+          errors.push(
+            "manifest.labels.operators must name one operator per provider, in the same order",
+          );
+        }
+        const quorum = labels.quorum === undefined ? null : Number(labels.quorum);
+        if (quorum !== null && Number.isSafeInteger(quorum) && quorum > new Set(list).size) {
+          errors.push("manifest.labels.quorum cannot exceed the committed distinct operator count");
+        }
+      }
+    }
+    void operatorCount;
   }
 
   return errors;

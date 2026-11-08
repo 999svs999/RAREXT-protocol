@@ -13,8 +13,9 @@ import {
   usageFromOpenAi,
 } from "./engines.ts";
 import { RuntimePublisher } from "./publisher.ts";
+import { canonicalDigest } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
-import type { ApiShape, DeploymentCommitment, RunRecord } from "./types.ts";
+import type { ApiShape, DeploymentCommitment, RunQuorum, RunRecord } from "./types.ts";
 import { MAX_REQUEST_BYTES, RUNTIME_VERSION } from "./types.ts";
 
 export interface GatewayOptions {
@@ -31,6 +32,23 @@ export interface GatewayOptions {
   upstreamApi?: ApiShape;
   /** Auth/protocol headers forwarded to the remote engine. */
   upstreamHeaders?: Record<string, string>;
+  /**
+   * Every provider endpoint that serves the committed bundle. Absent means the
+   * deployment's single engine endpoint. When more than one is named the
+   * gateway queries all of them and records who agreed.
+   */
+  upstreams?: string[];
+  /**
+   * How many identical responses are required. Defaults to the number of
+   * upstreams; 1 keeps the old single-response behaviour.
+   */
+  quorum?: number;
+  /**
+   * Operator identity per endpoint, when the deployment committed operators.
+   * Agreement is then counted over distinct operators, not just endpoints, so
+   * one operator running several providers is still one voice.
+   */
+  operators?: Record<string, string>;
   upstreamTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
@@ -89,6 +107,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * The part of a completion that two providers must agree on. Ids are minted per
+ * request, and `created` is a wall clock, so comparing the raw envelopes would
+ * report disagreement even when the model said exactly the same thing. The
+ * gateway returns and records this comparable shape, so the transcript's
+ * response digest is over the answer, not the server's clock.
+ */
+function comparableResponse(response: Record<string, unknown>): Record<string, unknown> {
+  const {
+    id: _id,
+    created: _created,
+    system_fingerprint: _fingerprint,
+    ...rest
+  } = response;
+  return rest;
+}
+
+/**
  * The local OpenAI/Anthropic-compatible endpoint.
  *
  * Inference is forwarded unchanged to the engine. Alongside it, the gateway
@@ -106,6 +141,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     options.upstreamApi ?? (deployment.engine.name === "anthropic" ? "anthropic" : "openai");
   const upstreamHeaders = options.upstreamHeaders ?? {};
   const gatewayToken = options.gatewayToken ?? null;
+  const upstreams =
+    options.upstreams !== undefined && options.upstreams.length > 0
+      ? [...new Set(options.upstreams)]
+      : [deployment.engine.endpoint];
+  const quorumRequired = options.quorum ?? upstreams.length;
+  const quorumEnabled = options.quorum !== undefined || upstreams.length > 1;
 
   const baseHeaders = (): Record<string, string> => ({
     "x-rarext-runtime": RUNTIME_VERSION,
@@ -134,6 +175,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     upstreamResponse: unknown,
     usage: ReturnType<typeof usageFromOpenAi>,
     startedAt: string,
+    quorum?: RunQuorum,
   ): Promise<RecordedRun> {
     const completedAt = new Date().toISOString();
     const sampling = samplingFromRequest(payload);
@@ -152,6 +194,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         // A run is replayable only when the caller asked for deterministic
         // decoding; a sampled run can be re-hashed but not reproduced.
         replay: sampling.temperature === 0 && sampling.seed !== null,
+        ...(quorum === undefined ? {} : { quorum }),
       });
       record = ledger.append(body);
     } catch (error) {
@@ -193,6 +236,256 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     return headers;
   }
 
+  interface QuorumResult {
+    response: Record<string, unknown>;
+    quorum: RunQuorum;
+  }
+
+  type QuorumOutcome = QuorumResult | { error: string; status: number; details?: unknown };
+
+  /**
+   * Send the same request to every provider and group the answers by canonical
+   * digest. A run is recorded only when at least `quorumRequired` providers
+   * returned the same bytes — a disagreement is refused, not averaged away.
+   *
+   * `accept` is the header the shape expects; `shape` selects the URL. A native
+   * Anthropic deployment speaks /v1/messages, everything else /v1/chat/completions.
+   */
+  async function gather(
+    shape: ApiShape,
+    body: Record<string, unknown>,
+  ): Promise<QuorumOutcome> {
+    const operatorFor = (endpoint: string): string | null => options.operators?.[endpoint] ?? null;
+    const attempts = await Promise.all(
+      upstreams.map(async (endpoint) => {
+        const url = shape === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint);
+        try {
+          const response = await fetchImpl(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json",
+              ...upstreamHeaders,
+            },
+            body: JSON.stringify({ ...body, stream: false }),
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (!response.ok) {
+            return {
+              endpoint,
+              error: `HTTP ${response.status} ${(await response.text()).slice(0, 300)}`,
+            };
+          }
+          const json: unknown = await response.json();
+          if (!isRecord(json)) {
+            return { endpoint, error: "response is not a JSON object" };
+          }
+          const comparable = comparableResponse(json);
+          return {
+            endpoint,
+            operator: operatorFor(endpoint),
+            json: comparable,
+            digest: canonicalDigest(comparable),
+          };
+        } catch (error) {
+          return {
+            endpoint,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
+
+    const answered = attempts.filter(
+      (attempt): attempt is {
+        endpoint: string;
+        operator: string | null;
+        json: Record<string, unknown>;
+        digest: string;
+      } => "digest" in attempt,
+    );
+
+    const groups = new Map<string, typeof answered>();
+    for (const answer of answered) {
+      const group = groups.get(answer.digest) ?? [];
+      group.push(answer);
+      groups.set(answer.digest, group);
+    }
+    const ranked = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+    const [winner, winnerAnswers] = ranked[0] ?? ["", []];
+    const runnerUp = ranked[1]?.[1].length ?? 0;
+
+    // Agreement is counted over distinct operators when the deployment
+    // committed them: one operator running five endpoints is still one voice.
+    const operatorsSupplied =
+      options.operators !== undefined && Object.keys(options.operators).length > 0;
+    const agreedOperators = new Set(
+      winnerAnswers
+        .map((answer) => answer.operator)
+        .filter((operator): operator is string => typeof operator === "string" && operator !== ""),
+    );
+    const operatorsMet = !operatorsSupplied || agreedOperators.size >= quorumRequired;
+
+    if (
+      winnerAnswers.length < quorumRequired ||
+      (ranked.length > 1 && winnerAnswers.length === runnerUp) ||
+      !operatorsMet
+    ) {
+      const operatorNote = operatorsSupplied
+        ? `, ${agreedOperators.size} distinct operator(s)`
+        : "";
+      return {
+        error:
+          `provider quorum not met: ${quorumRequired} required, ${winnerAnswers.length} agreed` +
+          `${operatorNote}, ${answered.length}/${upstreams.length} answered`,
+        status: 503,
+        details: {
+          required: quorumRequired,
+          answered: answered.map((a) => ({
+            endpoint: a.endpoint,
+            operator: a.operator,
+            responseDigest: a.digest,
+          })),
+          failed: attempts.filter((a) => "error" in a).map((a) => ({ endpoint: a.endpoint, error: a.error })),
+        },
+      };
+    }
+
+    const agreed = answered.filter((answer) => answer.digest === winner);
+    return {
+      response: winnerAnswers[0]!.json,
+      quorum: {
+        required: quorumRequired,
+        responded: answered.length,
+        agreed: agreed.length,
+        // Every provider that answered is recorded, including dissent. A
+        // verifier can recompute `agreed` from these digests and count the
+        // distinct operators among them.
+        providers: answered.map((answer) => ({
+          endpoint: answer.endpoint,
+          responseDigest: answer.digest,
+          operator: answer.operator,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Emit an OpenAI chat-completion stream from an already-agreed complete
+   * response. A quorum deployment cannot stream from providers directly — it
+   * must compare complete answers first — so the caller gets a stream that is
+   * derived from the attested response instead of a pass-through. The run has
+   * already been recorded; its digest is in the headers.
+   */
+  function streamOpenAiAgreed(
+    response: ServerResponse,
+    agreed: Record<string, unknown>,
+    headers: Record<string, string>,
+  ): void {
+    const choices = Array.isArray(agreed.choices) ? agreed.choices : [];
+    const first = isRecord(choices[0]) ? choices[0] : {};
+    const message = isRecord(first.message) ? first.message : {};
+    const text = typeof message.content === "string" ? message.content : "";
+    const finish = typeof first.finish_reason === "string" ? first.finish_reason : "stop";
+    const id = `chatcmpl-${String(agreed.id ?? "quorum").toString().slice(0, 24)}`;
+    const created = Math.floor(Date.now() / 1000);
+    const chunk = (delta: Record<string, unknown>, finishReason: string | null) =>
+      JSON.stringify({
+        id,
+        object: "chat.completion.chunk",
+        created,
+        model: deployment.model.id,
+        choices: [{ index: 0, delta, finish_reason: finishReason }],
+      });
+
+    response.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      ...baseHeaders(),
+      ...headers,
+      "x-rarext-mode": "stream",
+      "x-rarext-stream": "quorum-agreed",
+    });
+    response.write(`data: ${chunk({ role: "assistant", content: text }, null)}\n\n`);
+    response.write(`data: ${chunk({}, finish)}\n\n`);
+    response.end("data: [DONE]\n\n");
+  }
+
+  /**
+   * The Anthropic shape of the same idea: the agreed message is re-emitted as
+   * message_start / content_block_delta / message_stop events. As with OpenAI,
+   * comparison happened on complete responses; the stream is a view of the
+   * attested answer, not a live provider connection.
+   */
+  function streamAnthropicAgreed(
+    response: ServerResponse,
+    agreed: Record<string, unknown>,
+    headers: Record<string, string>,
+  ): void {
+    const content = Array.isArray(agreed.content) ? agreed.content : [];
+    const parts = content.filter(isRecord);
+    const text = parts
+      .map((part) => (typeof part.text === "string" ? part.text : ""))
+      .join("");
+    const id = typeof agreed.id === "string" ? agreed.id : `msg_${canonicalDigest(agreed).slice(0, 24)}`;
+    const usage = isRecord(agreed.usage) ? agreed.usage : {};
+    const outputTokens =
+      typeof usage.output_tokens === "number"
+        ? usage.output_tokens
+        : Math.max(1, Math.ceil(text.length / 4));
+    const event = (name: string, data: unknown) =>
+      `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+
+    response.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      ...baseHeaders(),
+      ...headers,
+      "x-rarext-mode": "stream",
+      "x-rarext-stream": "quorum-agreed",
+    });
+    response.write(
+      event("message_start", {
+        type: "message_start",
+        message: {
+          id,
+          type: "message",
+          role: "assistant",
+          model: deployment.model.id,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: usage.input_tokens ?? 0, output_tokens: 0 },
+        },
+      }),
+    );
+    response.write(
+      event("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      }),
+    );
+    response.write(
+      event("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text },
+      }),
+    );
+    response.write(event("content_block_stop", { type: "content_block_stop", index: 0 }));
+    response.write(
+      event("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: outputTokens },
+      }),
+    );
+    response.end(event("message_stop", { type: "message_stop" }));
+  }
+
   async function handleOpenAi(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const raw = await readBody(request);
     let payload: Record<string, unknown>;
@@ -221,6 +514,40 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           "this deployment forwards to an Anthropic-compatible upstream; use /v1/messages. " +
           "OpenAI-shaped clients need an OpenAI-compatible engine.",
       });
+      return;
+    }
+
+    if (quorumEnabled) {
+      const startedAt = new Date().toISOString();
+      const outcome = await gather("openai", payload);
+      if ("error" in outcome) {
+        sendJson(response, outcome.status, {
+          error: outcome.error,
+          ...(outcome.details === undefined ? {} : { evidence: outcome.details }),
+        });
+        return;
+      }
+      const result = await record(
+        "openai",
+        payload,
+        outcome.response,
+        usageFromOpenAi(outcome.response),
+        startedAt,
+        outcome.quorum,
+      );
+      const headers = {
+        ...baseHeaders(),
+        ...runHeaders(result),
+        "x-rarext-quorum": `${outcome.quorum.agreed}/${outcome.quorum.required}`,
+      };
+      // Comparison already happened on complete responses. A caller that asked
+      // to stream gets the agreed answer replayed as SSE, with the same run and
+      // quorum evidence. It is never a pass-through of one provider's stream.
+      if (payload.stream === true) {
+        streamOpenAiAgreed(response, outcome.response, headers);
+        return;
+      }
+      sendJson(response, 200, outcome.response, headers);
       return;
     }
 
@@ -308,7 +635,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (payload.stream === true) {
+    // A non-quorum gateway has no way to attest a live Anthropic stream, so it
+    // still refuses one. A quorum deployment compares complete responses first
+    // and replays the agreed answer, which is attestable.
+    if (payload.stream === true && !quorumEnabled) {
       sendJson(response, 400, {
         type: "error",
         error: {
@@ -334,6 +664,50 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
     upstreamBody.model = model;
+
+    if (quorumEnabled) {
+      const startedAt = new Date().toISOString();
+      const outcome = await gather(nativeAnthropic ? "anthropic" : "openai", upstreamBody);
+      if ("error" in outcome) {
+        sendJson(response, outcome.status, {
+          type: "error",
+          error: { type: "api_error", message: outcome.error },
+          ...(outcome.details === undefined ? {} : { evidence: outcome.details }),
+        });
+        return;
+      }
+      const result = nativeAnthropic
+        ? await record(
+            "anthropic",
+            upstreamBody,
+            outcome.response,
+            usageFromAnthropic(outcome.response),
+            startedAt,
+            outcome.quorum,
+          )
+        : await record(
+            "openai",
+            upstreamBody,
+            outcome.response,
+            usageFromOpenAi(outcome.response),
+            startedAt,
+            outcome.quorum,
+          );
+      const anthropic = nativeAnthropic
+        ? outcome.response
+        : translateOpenAiResponse(outcome.response, deployment.model.id);
+      const headers = {
+        ...baseHeaders(),
+        ...runHeaders(result),
+        "x-rarext-quorum": `${outcome.quorum.agreed}/${outcome.quorum.required}`,
+      };
+      if (payload.stream === true) {
+        streamAnthropicAgreed(response, anthropic, headers);
+        return;
+      }
+      sendJson(response, 200, anthropic, headers);
+      return;
+    }
 
     const startedAt = new Date().toISOString();
     let upstream: Response;
@@ -412,6 +786,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           placement: deployment.placement ?? "local",
           engine: deployment.engine,
           model: deployment.model,
+          upstreams,
+          quorum: { required: quorumRequired, enabled: quorumEnabled },
           upstreamApi,
           auth: { gateway: gatewayToken !== null, upstream: Object.keys(upstreamHeaders).length > 0 },
           ledger: { head: ledger.head(), runs: ledger.records().length },

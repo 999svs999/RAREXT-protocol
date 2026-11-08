@@ -153,12 +153,13 @@ real provider; without it a deterministic remote fixture stands in and says so.
 See [the cloud runtime guide](docs/CLOUD-RUNTIME.md).
 
 `npm run demo:web4-model` removes the last third party. The model file is sharded
-into content-addressed RAREXT blobs; a provider node fetches every shard,
-verifies the committed digest, and only then serves inference. The runtime
-commits the bundle, forwards to the provider, publishes the run, and replays the
-native model from the bundle after deleting the source file. The default model is
-a deterministic `xorshift32`; set `RAREXT_WEB4_GGUF` to put a real GGUF through
-the same path. See [the web4 model guide](docs/WEB4-MODEL.md).
+into content-addressed RAREXT blobs; provider nodes fetch every shard, verify the
+committed digest, and only then serve inference. The runtime publishes a provider
+card for each, commits them as a quorum, records which providers agreed on the
+response, and can deploy from cards discovered in RAREXT instead of a URL. It
+replays the native model from the bundle after deleting the source file. The
+default model is a deterministic `xorshift32`; set `RAREXT_WEB4_GGUF` to put a
+real GGUF through the same path. See [the web4 model guide](docs/WEB4-MODEL.md).
 
 The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool. The same server exposes `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`, `rarext_storage_audit`, and `rarext_storage_pin`; configure `RAREXT_STORAGE_HOLDERS` (or `RAREXT_HOLDERS`) and `RAREXT_PIN_URL` first. The [MCP storage example](examples/mcp-storage) runs the whole path locally, including token-protected holders and a pin service; `apps/api/test/mcp-storage-agent.test.ts` runs that external-client path as part of `npm test`.
 

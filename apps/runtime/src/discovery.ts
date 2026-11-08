@@ -1,8 +1,13 @@
-import { verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
+import { verifyDeploymentBody, verifyProviderCardBody, verifyRunBody } from "./transcript.ts";
 import { commitDeployment, requireValidDeployment } from "./manifest.ts";
+import type { ProviderCard } from "./model-bundle.ts";
 import { runSpecFromChallenge } from "./verifier.ts";
-import type { DeploymentCommitment, ModelRunSpec } from "./types.ts";
-import { MODEL_DEPLOYMENT_ARTIFACT_KIND, MODEL_RUN_ARTIFACT_KIND } from "./types.ts";
+import type { DeploymentCommitment, ModelRunSpec, ProviderCardVerification } from "./types.ts";
+import {
+  MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_PROVIDER_ARTIFACT_KIND,
+  MODEL_RUN_ARTIFACT_KIND,
+} from "./types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,14 +41,72 @@ export interface DiscoveredRun {
   error: string | null;
 }
 
+export interface DiscoveredProvider {
+  publicationId: string;
+  providerCardDigest: string;
+  endpoint: string;
+  modelId: string;
+  bundleDigest: string;
+  bundleId: string;
+  shardCount: number;
+  totalBytes: number;
+  attested: boolean;
+  verified: boolean;
+  error: string | null;
+}
+
 export interface DiscoveryReport {
   root: string | null;
   leafVersion: number | null;
   cards: DiscoveredCard[];
+  providers: DiscoveredProvider[];
   runs: DiscoveredRun[];
-  /** Every card and run in the bundle was recomputed and attested. */
+  /** Every card, provider, and run in the bundle was recomputed and attested. */
   ok: boolean;
   error?: string;
+}
+
+/**
+ * Every anchored bundle a registry serves, newest first. An anchor covers the
+ * publications that were pending when it was made, so a provider card and a run
+ * published later can live in different batches. Discovery that read only
+ * `latest` would stop finding providers after the next anchor; this reads the
+ * anchor list and fetches each batch.
+ */
+export async function fetchAnchoredBundles(input: {
+  registry: string;
+  fetchImpl?: typeof fetch;
+}): Promise<unknown[]> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const registry = input.registry.replace(/\/+$/, "");
+  const response = await fetchImpl(`${registry}/v1/bundles/latest`);
+  if (!response.ok) {
+    throw new Error(`registry returned HTTP ${response.status} for ${registry}/v1/bundles/latest`);
+  }
+  const latest = (await response.json()) as unknown;
+  const bundles: unknown[] = [latest];
+  const seen = new Set<string>();
+
+  const rootOf = (value: unknown): string | null =>
+    isRecord(value) && isRecord(value.manifest) && typeof value.manifest.root === "string"
+      ? value.manifest.root
+      : null;
+  const latestRoot = rootOf(latest);
+  if (latestRoot !== null) seen.add(latestRoot);
+
+  const anchorsResponse = await fetchImpl(`${registry}/v1/anchors`);
+  if (anchorsResponse.ok) {
+    const anchors = (await anchorsResponse.json()) as unknown;
+    for (const anchor of Array.isArray(anchors) ? anchors : []) {
+      const root = isRecord(anchor) && typeof anchor.root === "string" ? anchor.root : null;
+      if (root === null || seen.has(root)) continue;
+      seen.add(root);
+      const bundleResponse = await fetchImpl(`${registry}/v1/bundles/${root}`);
+      if (bundleResponse.ok) bundles.push(await bundleResponse.json());
+    }
+  }
+
+  return bundles;
 }
 
 function attestationOf(publication: Record<string, unknown>): Record<string, unknown> | null {
@@ -89,7 +152,15 @@ function challengeFor(
  */
 export function discoverBundle(bundle: unknown): DiscoveryReport {
   if (!isRecord(bundle)) {
-    return { root: null, leafVersion: null, cards: [], runs: [], ok: false, error: "bundle must be an object" };
+    return {
+      root: null,
+      leafVersion: null,
+      cards: [],
+      providers: [],
+      runs: [],
+      ok: false,
+      error: "bundle must be an object",
+    };
   }
 
   const manifest = isRecord(bundle.manifest) ? bundle.manifest : {};
@@ -103,6 +174,7 @@ export function discoverBundle(bundle: unknown): DiscoveryReport {
   }
 
   const cards: DiscoveredCard[] = [];
+  const providers: DiscoveredProvider[] = [];
   const runs: DiscoveredRun[] = [];
 
   for (const raw of publications) {
@@ -139,6 +211,30 @@ export function discoverBundle(bundle: unknown): DiscoveryReport {
       continue;
     }
 
+    if (artifact.kind === MODEL_PROVIDER_ARTIFACT_KIND) {
+      const result: ProviderCardVerification | null = challenge.spec
+        ? verifyProviderCardBody(body, challenge.spec)
+        : null;
+      const record = isRecord(body) ? body : {};
+      const bundleRef = isRecord(record.bundle) ? record.bundle : {};
+      const model = isRecord(record.model) ? record.model : {};
+
+      providers.push({
+        publicationId: idOf(raw),
+        providerCardDigest: typeof record.digest === "string" ? record.digest : "",
+        endpoint: typeof record.endpoint === "string" ? record.endpoint : "",
+        modelId: typeof model.id === "string" ? model.id : "",
+        bundleDigest: typeof bundleRef.digest === "string" ? bundleRef.digest : "",
+        bundleId: typeof bundleRef.id === "string" ? bundleRef.id : "",
+        shardCount: typeof bundleRef.shardCount === "number" ? bundleRef.shardCount : 0,
+        totalBytes: typeof bundleRef.totalBytes === "number" ? bundleRef.totalBytes : 0,
+        attested: attested(attestation),
+        verified: result?.correct === true,
+        error: challenge.error ?? result?.error ?? null,
+      });
+      continue;
+    }
+
     if (artifact.kind === MODEL_RUN_ARTIFACT_KIND) {
       const result = challenge.spec ? verifyRunBody(body, challenge.spec) : null;
       const record = isRecord(body) ? body : {};
@@ -156,11 +252,12 @@ export function discoverBundle(bundle: unknown): DiscoveryReport {
     }
   }
 
-  const entries = [...cards, ...runs];
+  const entries = [...cards, ...providers, ...runs];
   return {
     root: typeof manifest.root === "string" ? manifest.root : null,
     leafVersion: typeof manifest.leafVersion === "number" ? manifest.leafVersion : null,
     cards,
+    providers,
     runs,
     ok: entries.length > 0 && entries.every((entry) => entry.verified && entry.attested),
   };
@@ -225,4 +322,97 @@ export function verifiedRemoteDeployments(bundle: unknown): VerifiedRemoteDeploy
     deployments,
     error: deployments.length === 0 ? "the bundle carries no verified remote model card" : null,
   };
+}
+
+export interface VerifiedProvider {
+  provider: DiscoveredProvider;
+  card: ProviderCard;
+}
+
+export interface VerifiedProviders {
+  providers: VerifiedProvider[];
+  error: string | null;
+}
+
+/**
+ * The provider cards a bundle actually proves. A card is returned only when
+ * this process recomputed it against the challenge and, when a bundle digest
+ * is supplied, it names that bundle. The attestation is not consulted: a
+ * provider is adopted because its bytes verify, not because a registry said so.
+ */
+export function verifiedProviders(bundle: unknown, bundleDigest?: string): VerifiedProviders {
+  const report = discoverBundle(bundle);
+  if (report.error) return { providers: [], error: report.error };
+
+  const publications =
+    isRecord(bundle) && Array.isArray(bundle.publications) ? bundle.publications : [];
+  const byPublication = new Map<string, Record<string, unknown>>();
+  for (const raw of publications) {
+    if (isRecord(raw)) byPublication.set(idOf(raw), raw);
+  }
+
+  const providers: VerifiedProvider[] = [];
+  for (const provider of report.providers) {
+    if (!provider.verified) continue;
+    if (bundleDigest !== undefined && provider.bundleDigest !== bundleDigest) continue;
+
+    const raw = byPublication.get(provider.publicationId);
+    const artifact = raw !== undefined && isRecord(raw.artifact) ? raw.artifact : null;
+    if (artifact === null || !isRecord(artifact.body)) continue;
+    providers.push({ provider, card: artifact.body as unknown as ProviderCard });
+  }
+
+  return {
+    providers,
+    error:
+      providers.length === 0
+        ? bundleDigest === undefined
+          ? "the bundle carries no verified provider card"
+          : `the bundle carries no verified provider for bundle ${bundleDigest}`
+        : null,
+  };
+}
+
+export interface RegistryDiscovery {
+  providers: VerifiedProvider[];
+  /** How many anchored bundles were checked across all registries. */
+  scanned: number;
+  /** Per-registry failures; one unreachable mirror does not hide the rest. */
+  errors: string[];
+}
+
+/**
+ * Find verified providers across several registries. A bundle is
+ * content-addressed, so two registries that carry the same anchor and cards
+ * produce the same answer; discovery unions them by provider card digest. An
+ * unreachable mirror is reported, not fatal: the point of naming more than one
+ * registry is that no single one is required.
+ */
+export async function fetchVerifiedProvidersAcrossRegistries(input: {
+  registries: string[];
+  bundleDigest?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<RegistryDiscovery> {
+  const registries = [...new Set(input.registries.map((entry) => entry.replace(/\/+$/, "")))];
+  const byDigest = new Map<string, VerifiedProvider>();
+  const errors: string[] = [];
+  let scanned = 0;
+
+  for (const registry of registries) {
+    try {
+      const bundles = await fetchAnchoredBundles({ registry, fetchImpl: input.fetchImpl });
+      for (const bundle of bundles) {
+        scanned += 1;
+        const found = verifiedProviders(bundle, input.bundleDigest);
+        for (const entry of found.providers) {
+          byDigest.set(`${entry.card.digest}:${entry.card.endpoint}`, entry);
+        }
+        if (found.providers.length === 0 && found.error) errors.push(`${registry}: ${found.error}`);
+      }
+    } catch (error) {
+      errors.push(`${registry}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return { providers: [...byDigest.values()], scanned, errors };
 }

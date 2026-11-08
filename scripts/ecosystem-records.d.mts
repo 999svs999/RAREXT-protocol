@@ -9,6 +9,14 @@ export declare const REGISTRY_URL: string;
 export declare const MIRROR_URL: string;
 export declare function sha256Hex(buf: Buffer | Uint8Array | string): string;
 
+export declare const LIVE_DATA_PAGES: Readonly<Record<string, readonly string[]>>;
+export declare function isLiveDataPage(brand: EcosystemBrand, path: string): boolean;
+export declare function pageDrift(
+  brand: EcosystemBrand,
+  pinned: PageEntry[],
+  live: FetchedPage,
+): string | null;
+
 export interface EcosystemBrand {
   handle: string;
   app: string;

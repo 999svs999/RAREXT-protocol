@@ -1,10 +1,11 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { verifyDeploymentBody, verifyRunBody } from "./transcript.ts";
+import { verifyDeploymentBody, verifyProviderCardBody, verifyRunBody } from "./transcript.ts";
 import type { ModelRunSpec } from "./types.ts";
 import {
   MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_PROVIDER_ARTIFACT_KIND,
   MODEL_RUN_APP,
   MODEL_RUN_ARTIFACT_KIND,
   RUNTIME_VERSION,
@@ -77,7 +78,32 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.bundleDigest === undefined ? {} : { bundleDigest: optionalHash("bundleDigest") }),
     ...(value.shardsRoot === undefined ? {} : { shardsRoot: optionalHash("shardsRoot") }),
     ...(value.manifestHash === undefined ? {} : { manifestHash: optionalHash("manifestHash") }),
+    ...(value.quorum === undefined ? {} : { quorum: quorumFromSpec(value.quorum) }),
+    ...(value.operators === undefined ? {} : { operators: operatorsFromSpec(value.operators) }),
   };
+}
+
+function operatorsFromSpec(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("challenge.spec.operators must be a non-empty array when present");
+  }
+  const operators = value.map((entry) => {
+    if (typeof entry !== "string" || entry.length === 0) {
+      throw new Error("challenge.spec.operators entries must be non-empty strings");
+    }
+    return entry;
+  });
+  if (new Set(operators).size !== operators.length) {
+    throw new Error("challenge.spec.operators must not repeat an operator");
+  }
+  return operators;
+}
+
+function quorumFromSpec(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error("challenge.spec.quorum must be a positive integer when present");
+  }
+  return value as number;
 }
 
 export interface VerificationReply {
@@ -114,10 +140,13 @@ export function verifyModelRunArtifact(artifact: unknown, challenge: unknown): V
   const record = artifact as Record<string, unknown>;
   if (
     record.app !== MODEL_RUN_APP ||
-    (record.kind !== MODEL_RUN_ARTIFACT_KIND && record.kind !== MODEL_DEPLOYMENT_ARTIFACT_KIND)
+    (record.kind !== MODEL_RUN_ARTIFACT_KIND &&
+      record.kind !== MODEL_DEPLOYMENT_ARTIFACT_KIND &&
+      record.kind !== MODEL_PROVIDER_ARTIFACT_KIND)
   ) {
     const message =
-      `expected app ${MODEL_RUN_APP} and kind ${MODEL_RUN_ARTIFACT_KIND} or ${MODEL_DEPLOYMENT_ARTIFACT_KIND}`;
+      `expected app ${MODEL_RUN_APP} and kind ${MODEL_RUN_ARTIFACT_KIND}, ` +
+      `${MODEL_DEPLOYMENT_ARTIFACT_KIND}, or ${MODEL_PROVIDER_ARTIFACT_KIND}`;
     return {
       correct: false,
       score: 0,
@@ -150,7 +179,9 @@ export function verifyModelRunArtifact(artifact: unknown, challenge: unknown): V
   const verification =
     record.kind === MODEL_DEPLOYMENT_ARTIFACT_KIND
       ? verifyDeploymentBody(record.body, spec)
-      : verifyRunBody(record.body, spec);
+      : record.kind === MODEL_PROVIDER_ARTIFACT_KIND
+        ? verifyProviderCardBody(record.body, spec)
+        : verifyRunBody(record.body, spec);
 
   return {
     correct: verification.correct,
@@ -235,7 +266,11 @@ export function verifierConfig(url: string) {
         description:
           "Recomputes a deployment manifest's digest or every digest in a model-run transcript, and checks it against the deployment the challenge committed.",
         url,
-        artifactKinds: [MODEL_RUN_ARTIFACT_KIND, MODEL_DEPLOYMENT_ARTIFACT_KIND],
+        artifactKinds: [
+          MODEL_RUN_ARTIFACT_KIND,
+          MODEL_DEPLOYMENT_ARTIFACT_KIND,
+          MODEL_PROVIDER_ARTIFACT_KIND,
+        ],
         manifest: RUNTIME_VERIFIER_MANIFEST,
       },
     ],

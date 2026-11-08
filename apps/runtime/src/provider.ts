@@ -6,6 +6,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  AgentSigner,
+  generateAgentKeypair,
+} from "../../../packages/agent-sdk/src/index.ts";
+import type { JsonWebKey as NodeJsonWebKey } from "node:crypto";
+
+import {
   MAX_GENERATIVE_OUTPUT_LENGTH,
   generate,
   isXorshiftModel,
@@ -158,6 +164,42 @@ function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 96) || "model";
 }
 
+interface ProviderIdentity {
+  kind: "rarext.provider-identity.v1";
+  handle: string | null;
+  privateKey: NodeJsonWebKey;
+  publicKey: NodeJsonWebKey;
+  createdAt: string;
+}
+
+/**
+ * A provider's own key. The card it serves is signed with this key, so the
+ * operator identity in a quorum is a key id that anyone can verify, not a
+ * string the provider asked to be called. The key persists in the provider's
+ * state directory; deleting it gives the provider a new identity.
+ */
+function loadProviderIdentity(stateDir: string, handle: string | null): ProviderIdentity {
+  const path = join(stateDir, "provider-identity.json");
+  if (existsSync(path)) {
+    return JSON.parse(readFileSync(path, "utf8")) as ProviderIdentity;
+  }
+
+  const { privateKey, publicKey } = generateAgentKeypair("ecdsa-p256");
+  // The SDK's JsonWebKey is structurally a JWK but does not carry Node's index
+  // signature; the bytes on disk are the same, so bridge the types here rather
+  // than widening the persisted identity to `unknown`.
+  const identity: ProviderIdentity = {
+    kind: "rarext.provider-identity.v1",
+    handle,
+    privateKey: privateKey as unknown as NodeJsonWebKey,
+    publicKey: publicKey as unknown as NodeJsonWebKey,
+    createdAt: new Date().toISOString(),
+  };
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(path, JSON.stringify(identity, null, 2));
+  return identity;
+}
+
 async function materializeEngineModel(input: {
   bundle: ModelBundle;
   bytes: Buffer;
@@ -290,6 +332,15 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   let card: ProviderCard | null = null;
   let boundUrl = "";
 
+  // The card is signed by the provider's own key. Its `keyId` is derived from
+  // that key, so a quorum that counts distinct operators is counting distinct
+  // signing keys, not labels.
+  const identity = loadProviderIdentity(
+    options.stateDir,
+    options.providerHandle ?? options.providerKeyId ?? null,
+  );
+  const signer = new AgentSigner(identity.privateKey as unknown as NodeJsonWebKey);
+
   function cardFor(): ProviderCard {
     if (card !== null) return card;
     card = buildProviderCard({
@@ -297,10 +348,13 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       manifestHash,
       endpoint: boundUrl,
       provider: {
-        handle: options.providerHandle ?? null,
-        keyId: options.providerKeyId ?? null,
+        handle: options.providerHandle ?? identity.handle ?? null,
+        keyId: signer.keyId,
+        publicKey: signer.publicKey,
+        suite: signer.suite,
       },
       apis: ["openai"] as ApiShape[],
+      sign: (payload) => signer.sign(payload),
     });
     return card;
   }

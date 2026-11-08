@@ -8,9 +8,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeJsonFile } from "./ledger.ts";
+import type { ProviderCard } from "./model-bundle.ts";
 import type { DeploymentCommitment, ModelRunBody } from "./types.ts";
 import {
   MODEL_DEPLOYMENT_ARTIFACT_KIND,
+  MODEL_PROVIDER_ARTIFACT_KIND,
   MODEL_RUN_APP,
   MODEL_RUN_ARTIFACT_KIND,
 } from "./types.ts";
@@ -52,6 +54,31 @@ function bundleSpec(labels: Record<string, string> | undefined): {
   };
 }
 
+/**
+ * The response-agreement threshold a web4 deployment commits in its labels.
+ * A missing label means one provider, which is the old behaviour; a run under
+ * a higher threshold must carry matching quorum evidence.
+ */
+function quorumSpec(labels: Record<string, string> | undefined): number | undefined {
+  if (labels?.quorum === undefined) return undefined;
+  const value = Number(labels.quorum);
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+}
+
+/**
+ * The distinct operator identities a deployment committed. When present, the
+ * challenge commits them too, so a run cannot claim agreement from several
+ * endpoints run by one operator.
+ */
+function operatorsSpec(labels: Record<string, string> | undefined): string[] | undefined {
+  if (labels?.operators === undefined) return undefined;
+  const operators = labels.operators
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  return operators.length === 0 ? undefined : operators;
+}
+
 export function challengeFor(manifest: DeploymentCommitment) {
   return {
     id: challengeIdFor(manifest),
@@ -70,6 +97,10 @@ export function challengeFor(manifest: DeploymentCommitment) {
       // A web4 deployment commits the bundle its provider fetched; the run and
       // card verifier checks the same three commitments.
       ...bundleSpec(manifest.labels),
+      ...(quorumSpec(manifest.labels) === undefined ? {} : { quorum: quorumSpec(manifest.labels) }),
+      ...(operatorsSpec(manifest.labels) === undefined
+        ? {}
+        : { operators: operatorsSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,
@@ -171,6 +202,29 @@ export class RuntimePublisher {
         version: 1,
         mediaType: "application/json",
         body: manifest,
+      },
+    });
+  }
+
+  /**
+   * Publish a provider card under the model challenge. The card says which
+   * bundle the provider fetched and where it serves it; deploy can then find
+   * providers through the bundle instead of being told each URL by hand.
+   */
+  async publishProviderCard(card: ProviderCard): Promise<Publication> {
+    return this.client.publishArtifactAs(this.signer, {
+      author: this.handle,
+      title: `Provider ${card.endpoint} — ${card.model.id}`,
+      body:
+        `serving bundle ${card.bundle.digest} (${card.bundle.shardCount} shards, ` +
+        `${card.bundle.totalBytes} bytes) for model ${card.model.id} at ${card.endpoint}.`,
+      challengeId: this.challengeId,
+      artifact: {
+        app: MODEL_RUN_APP,
+        kind: MODEL_PROVIDER_ARTIFACT_KIND,
+        version: 1,
+        mediaType: "application/json",
+        body: card,
       },
     });
   }

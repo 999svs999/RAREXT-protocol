@@ -13,13 +13,16 @@
  *   deploy    commit placement "web4" and the bundle digest with `deploy`
  *   registry  start a real RAREXT node with the run verifier and challenge
  *   card      publish the deployment as a model card and attest it
- *   serve     bind the gateway in front of the provider
- *   infer     run inference on the provider, not on this host
- *   publish   publish the run; the node recomputes it and attests exact
+ *   announce  publish each provider's card under the same challenge
+ *   serve     bind the gateway in front of the providers
+ *   infer     run inference through the providers, not on this host
+ *   publish   publish the run with its quorum evidence
+ *   compare   ask every provider the same question and compare answers
  *   weights   prove the source model file is gone and the bytes came from RAREXT
  *   replay    regenerate the output from the committed bundle and seed
- *   anchor    anchor the card and the run
- *   discover  recompute both offline, with no server
+ *   anchor    anchor the card, the provider cards, and the run together
+ *   discover-deploy  deploy from provider cards found in RAREXT, not a URL
+ *   discover  recompute all of them offline, with no server
  *   tamper    corrupt a shard; a fresh provider refuses to start
  *
  * The default model is a real, deterministic xorshift32 model: small enough to
@@ -63,6 +66,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const state = mkdtempSync(join(tmpdir(), "rarext-web4-model-"));
 const blobDir = join(state, "blobs");
 const providerState = mkdtempSync(join(tmpdir(), "rarext-web4-provider-"));
+const providerBState = mkdtempSync(join(tmpdir(), "rarext-web4-provider-b-"));
 const proofDir = join(root, ".ai-proof", "web4-model");
 
 const phases = [];
@@ -179,6 +183,7 @@ function modelFilesIn(dir) {
 
 let api = null;
 let provider = null;
+let providerB = null;
 let gateway = null;
 let verifier = null;
 
@@ -278,6 +283,8 @@ try {
       providerState,
       "--port",
       String(providerPort),
+      "--handle",
+      "provider-a",
       ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
     {},
@@ -288,22 +295,59 @@ try {
   );
   const providerUrl = await provider.ready;
   const card = await fetchProviderCard({ endpoint: providerUrl });
+
+  // The native model is cheap enough to run on a second independent provider,
+  // which is what makes the response-agreement phase meaningful. A real GGUF
+  // shares the host's Ollama, so the demo keeps one provider there.
+  let providerBUrl = null;
+  let cardB = null;
+  if (!real) {
+    const providerBPort = await freePort();
+    providerB = spawnProcess(
+      [
+        "apps/runtime/src/cli.ts",
+        "provider",
+        "--bundle",
+        join(state, "model-bundle.json"),
+        "--registry",
+        startBase,
+        "--state",
+        providerBState,
+        "--port",
+        String(providerBPort),
+        "--handle",
+        "provider-b",
+      ],
+      {},
+      (line) => {
+        const match = line.match(/rarext provider serving .* on (https?:\/\/[^\s]+)/);
+        return match ? match[1].replace(/\/$/, "") : null;
+      },
+    );
+    providerBUrl = await providerB.ready;
+    cardB = await fetchProviderCard({ endpoint: providerBUrl });
+  }
+  const providerUrls = [providerUrl, ...(providerBUrl === null ? [] : [providerBUrl])];
+  const providerCards = [card, ...(cardB === null ? [] : [cardB])];
+
   const health = await getJson(`${providerUrl}/health`);
   phase(
     "provider",
     health.ok === true &&
       health.bundle === bundle.digest &&
       health.weightsDigest === bundle.model.weightsDigest &&
-      card.bundle.manifestHash === manifestHash,
-    `provider fetched ${bundle.shards.length} shards from ${startBase} and serves ${modelId} at ${providerUrl}`,
+      card.bundle.manifestHash === manifestHash &&
+      (providerBUrl === null || cardB?.bundle.manifestHash === manifestHash),
+    `${providerUrls.length} provider(s) fetched ${bundle.shards.length} shards from ${startBase} and serve ${modelId}`,
   );
 
   // ── 4. Deploy placement "web4" through the real CLI ──────────────────────
   const deployed = await runCli([
     "deploy",
     "--web4",
-    "--provider",
-    providerUrl,
+    ...providerUrls.flatMap((url) => ["--provider", url]),
+    "--quorum",
+    String(providerUrls.length),
     "--registry",
     startBase,
     "--allow-loopback",
@@ -320,9 +364,15 @@ try {
       deployment.hardware.backend === "network" &&
       deployment.hardware.memoryBytes === null &&
       deployment.labels.bundle === bundle.digest &&
-      deployment.labels.shardsRoot === bundle.shardsRoot,
+      deployment.labels.shardsRoot === bundle.shardsRoot &&
+      deployment.labels.quorum === String(providerUrls.length) &&
+      deployment.labels.providers.split(",").length === providerUrls.length &&
+      deployment.labels.operators.split(",").length === providerUrls.length &&
+      new Set(deployment.labels.operators.split(",")).size === providerUrls.length,
     `${modelId} as ${deployment.digest.slice(0, 16)}…; bundle ${bundle.digest.slice(0, 16)}…, ` +
-      `hardware ${deployment.hardware.backend}, memory ${String(deployment.hardware.memoryBytes)}`,
+      `quorum ${deployment.labels.quorum}/${providerUrls.length}` +
+      (deployment.labels.operators ? ` over ${deployment.labels.operators.split(",").length} operator(s)` : "") +
+      `, memory ${String(deployment.hardware.memoryBytes)}`,
   );
 
   writeJsonFile(join(state, "challenge.json"), challengeFor(deployment));
@@ -374,7 +424,25 @@ try {
     `model card ${cardPublication.id.slice(0, 8)}… attests web4 placement and the RAREXT bundle`,
   );
 
-  // ── 7. Serve the attested gateway in front of the provider ───────────────
+  // ── 6b. Providers publish their own cards under the same challenge ───────
+  const providerPublications = [await publisher.publishProviderCard(card)];
+  if (cardB !== null) providerPublications.push(await publisher.publishProviderCard(cardB));
+  // Anchor the card and provider cards as their own batch, so the run that
+  // follows is a later anchor. Discovery must find both; the demo proves it
+  // by reading every anchored batch instead of only `latest`.
+  await publisher.client.anchor();
+  phase(
+    "announce",
+    providerPublications.length === providerUrls.length &&
+      providerPublications.every((entry) => entry.attestation?.correct === true) &&
+      providerUrls.every((url) =>
+        providerPublications.some((entry) => entry.artifact?.body?.endpoint === url),
+      ),
+    `${providerPublications.length} provider card(s) published under ${challenge.id}; ` +
+      `a reader can find them in the anchored bundle`,
+  );
+
+
   gateway = await startGateway({
     deployment,
     ledgerDir: state,
@@ -382,13 +450,27 @@ try {
     host: "127.0.0.1",
     port: 0,
     upstreamApi: "openai",
+    upstreams: providerUrls,
+    quorum: providerUrls.length,
+    // Each demo provider signs its card with its own key, so its operator
+    // identity is a key id anyone can verify; quorum is counted over those
+    // identities, not endpoints, so one operator cannot fill the threshold with
+    // two providers.
+    operators: Object.fromEntries(
+      providerUrls.map((url, index) => [
+        url,
+        providerCards[index].provider.keyId ?? providerCards[index].provider.handle ?? url,
+      ]),
+    ),
     log: (message) => console.log(`  [runtime] ${message}`),
   });
   const gatewayHealth = await getJson(`${gateway.url}/health`);
   phase(
     "serve",
-    gatewayHealth.placement === "web4" && gatewayHealth.model?.id === deployment.model.id,
-    `${gateway.url} forwards to ${providerUrl}; this process holds no weights and runs no model`,
+    gatewayHealth.placement === "web4" &&
+      gatewayHealth.model?.id === deployment.model.id &&
+      gatewayHealth.upstreams?.length === providerUrls.length,
+    `${gateway.url} fans out to ${providerUrls.length} provider(s); this process holds no weights and runs no model`,
   );
 
   // ── 8. Inference runs on the provider ────────────────────────────────────
@@ -410,10 +492,14 @@ try {
   const runDigest = completion.headers.get("x-rarext-run");
   const publicationId = completion.headers.get("x-rarext-publication");
   const attested = completion.headers.get("x-rarext-attested");
+  const quorumHeader = completion.headers.get("x-rarext-quorum");
   phase(
     "infer",
-    completion.ok && text.length > 0 && typeof runDigest === "string",
-    `${modelId} answered on ${providerUrl}: ${JSON.stringify(text.slice(0, 96))}`,
+    completion.ok &&
+      text.length > 0 &&
+      typeof runDigest === "string" &&
+      quorumHeader === `${providerUrls.length}/${providerUrls.length}`,
+    `${modelId} answered on ${providerUrls.length} provider(s), quorum ${quorumHeader}: ${JSON.stringify(text.slice(0, 88))}`,
   );
 
   // ── 9. The node recomputed and stored the run ────────────────────────────
@@ -428,13 +514,41 @@ try {
       storedDigest === runDigest &&
       localRecord?.digest === runDigest &&
       publishedBody?.bundle?.digest === bundle.digest &&
-      publishedBody?.bundle?.shardsRoot === bundle.shardsRoot,
+      publishedBody?.bundle?.shardsRoot === bundle.shardsRoot &&
+      publishedBody?.quorum?.agreed === providerUrls.length,
     publication
-      ? `publication ${publication.id.slice(0, 8)}… attested; the run names bundle ${String(publishedBody?.bundle?.digest).slice(0, 12)}…`
+      ? `publication ${publication.id.slice(0, 8)}… attested; the run names bundle ${String(publishedBody?.bundle?.digest).slice(0, 12)}… and quorum ${String(publishedBody?.quorum?.agreed)}/${String(publishedBody?.quorum?.required)}`
       : `attested=${String(attested)} publication=${String(publicationId)}`,
   );
 
-  // ── 10. The caller never held the model ──────────────────────────────────
+  // ── 9b. Ask every provider the same question and compare the answers ─────
+  const compared = await runCli([
+    "compare",
+    ...providerUrls.flatMap((url) => ["--provider", url]),
+    "--registry",
+    baseUrl,
+    "--prompt",
+    prompt,
+    "--max-tokens",
+    "24",
+    "--json",
+  ]);
+  const compareReport = compared.status === 0 ? JSON.parse(compared.stdout) : null;
+  const answerDigests = new Set(
+    (compareReport?.answers ?? []).map((answer) => answer.responseDigest).filter(Boolean),
+  );
+  phase(
+    "compare",
+    compareReport?.ok === true &&
+      compareReport?.providers?.every((entry) => entry.verified) === true &&
+      answerDigests.size === 1 &&
+      compareReport?.answers?.length === providerUrls.length,
+    compareReport
+      ? `${providerUrls.length} provider(s) returned the same canonical response ${String([...answerDigests][0]).slice(0, 16)}…`
+      : `compare failed: ${compared.stderr || compared.stdout}`,
+  );
+
+
   const runtimeStateFiles = modelFilesIn(state);
   const sourceGone = real || deletedSource;
   phase(
@@ -474,16 +588,61 @@ try {
   const anchorBundle = await getJson(`${baseUrl}/v1/bundles/latest`);
   writeJsonFile(join(state, "bundle.json"), anchorBundle);
   const discovery = discoverBundle(anchorBundle);
-  const offline = await runCli(["discover", "--bundle", join(state, "bundle.json"), "--json"]);
-  const offlineReport = offline.status === 0 ? JSON.parse(offline.stdout) : null;
+
+  // One anchor covered the card + provider cards; a later one covered the run.
+  // Read every batch, not just `latest`.
+  const allAnchors = await runCli([
+    "discover",
+    "--registry",
+    baseUrl,
+    "--all-anchors",
+    "--json",
+  ]);
+  const allAnchorsReport = allAnchors.status === 0 ? JSON.parse(allAnchors.stdout) : null;
+
+  // Deploy again with no provider URL on the command line: it finds them in
+  // the anchored batches and cross-checks each card against the manifest.
+  const discoveredDeploy = await runCli([
+    "deploy",
+    "--web4",
+    "--discover",
+    "--bundle-digest",
+    bundle.digest,
+    "--quorum",
+    String(providerUrls.length),
+    "--registry",
+    baseUrl,
+    "--allow-loopback",
+    "--out",
+    join(state, "discovered-deploy"),
+    "--json",
+  ]);
+  const discoveredDeployment =
+    discoveredDeploy.status === 0 ? JSON.parse(discoveredDeploy.stdout).deployment : null;
+  phase(
+    "discover-deploy",
+    allAnchorsReport?.providers?.length === providerUrls.length &&
+      discoveredDeployment !== null &&
+      discoveredDeployment.labels.providers.split(",").length === providerUrls.length &&
+      discoveredDeployment.labels.bundle === bundle.digest &&
+      discoveredDeployment.labels.quorum === String(providerUrls.length),
+    discoveredDeployment
+      ? `deploy found ${discoveredDeployment.labels.providers.split(",").length} provider(s) in RAREXT ` +
+        `and committed quorum ${discoveredDeployment.labels.quorum}`
+      : `deploy --discover failed: ${discoveredDeploy.stderr || discoveredDeploy.stdout}`,
+  );
+
   phase(
     "discover",
-    discovery.ok === true &&
-      discovery.cards.length === 1 &&
-      discovery.runs.length === 1 &&
-      discovery.cards[0]?.placement === "web4" &&
-      offlineReport?.ok === true,
-    `offline discovery recomputed 1 web4 card and 1 run from root ${String(discovery.root).slice(0, 16)}…`,
+    allAnchorsReport?.ok === true &&
+      allAnchorsReport.cards.length === 1 &&
+      allAnchorsReport.providers.length === providerUrls.length &&
+      allAnchorsReport.runs.length === 1 &&
+      allAnchorsReport.cards[0]?.placement === "web4" &&
+      discovery.providers.length === 0,
+    `discovery recomputed 1 web4 card, ${allAnchorsReport?.providers?.length ?? 0} provider(s), and ` +
+      `${allAnchorsReport?.runs?.length ?? 0} run across every anchored batch; the run-only ` +
+      `latest bundle alone proves no provider`,
   );
 
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
@@ -523,6 +682,8 @@ try {
     execution: real ? "engine" : "native",
     registry: baseUrl,
     provider: providerUrl,
+    providers: providerUrls,
+    quorum: providerUrls.length,
     bundle,
     manifestHash,
     deployment,
@@ -543,10 +704,12 @@ try {
   if (gateway !== null) await gateway.close().catch(() => {});
   if (verifier !== null) await new Promise((resolve) => verifier.close(resolve));
   if (provider !== null) provider.stop();
+  if (providerB !== null) providerB.stop();
   if (api !== null) api.stop();
   await sleep(100);
   if (process.env.RAREXT_KEEP_TEMP !== "1") {
     rmSync(state, { recursive: true, force: true });
     rmSync(providerState, { recursive: true, force: true });
+    rmSync(providerBState, { recursive: true, force: true });
   }
 }
