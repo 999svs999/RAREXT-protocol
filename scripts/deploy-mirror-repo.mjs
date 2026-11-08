@@ -40,6 +40,10 @@ for (const stale of readdirSafe(join(ROOT, ".data"))) {
     // a dir that vanished mid-scan is fine
   }
 }
+// Legacy fixed-name clone dir from the pre-pid code never matches the prefix
+// above, and a leftover one is what failed a run with "cannot copy
+// .../info/exclude: File exists". Sweep it unconditionally.
+rmSync(join(ROOT, ".data", "deploy-mirror-repo"), { recursive: true, force: true });
 const OWNER = "999svs999";
 const REPO = "RAREXT-mirror";
 const REPO_SLUG = `${OWNER}/${REPO}`;
