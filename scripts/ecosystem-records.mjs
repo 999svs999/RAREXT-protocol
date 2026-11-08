@@ -27,6 +27,32 @@ export const REGISTRY_URL = "https://999svs999.github.io/RAREXT-protocol/registr
 export const MIRROR_URL = "https://999svs999.github.io/RAREXT-protocol/mirror/";
 export const sha256Hex = (buf) => createHash("sha256").update(buf).digest("hex");
 
+/**
+ * Pages whose bytes track a LIVE data feed. They stay anchored — the record still
+ * says what the origin served, and "as published" is all it ever claimed — but
+ * byte-equality on them is not a drift signal. The APESDAILY launchpad page
+ * re-renders off the certified snapshot, so pinning it as if it were static ships
+ * a commit every cycle: 13 of 14 commits in one day were timestamp-only re-pins.
+ */
+export const LIVE_DATA_PAGES = Object.freeze({ apesdaily: ["/launchpad"] });
+
+export const isLiveDataPage = (brand, path) => (LIVE_DATA_PAGES[brand.handle] ?? []).includes(path);
+
+/**
+ * Drift verdict for ONE page, pure so it is testable offline. null means in sync
+ * (or a live feed, where byte churn is expected); otherwise the reason.
+ */
+export function pageDrift(brand, pinned, live) {
+  const was = pinned.find((x) => x.path === live.path);
+  if (!was) return `${brand.app}${live.path}: not anchored`;
+  if (isLiveDataPage(brand, live.path)) return null;
+  const digest = sha256Hex(live.body);
+  if (was.sha256 !== digest || was.bytes !== live.body.length) {
+    return `${brand.app}${live.path}: bytes differ from the pinned record`;
+  }
+  return null;
+}
+
 /** The brands that live on the protocol, and what their records cover. */
 export const ECOSYSTEM_BRANDS = [
   {

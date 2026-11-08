@@ -115,7 +115,7 @@ async function liveSiteDigests() {
 // Without this the check could only ever see FUTURISTIC: the ecosystem's records
 // were absent from the anchored bundle and the ship reported "in sync", because
 // an unanchored brand simply was not something it looked for.
-const { ECOSYSTEM_BRANDS, fetchBrandPages, sha256Hex, targetsFor } = await import(
+const { ECOSYSTEM_BRANDS, fetchBrandPages, pageDrift, targetsFor } = await import(
   new URL("./ecosystem-records.mjs", import.meta.url).href
 );
 
@@ -129,12 +129,8 @@ async function ecosystemDrift(pubs) {
       const pinned = rec.artifact?.body?.pages ?? [];
       try {
         for (const live of await fetchBrandPages(brand)) {
-          const digest = sha256Hex(live.body);
-          const was = pinned.find((x) => x.path === live.path);
-          if (!was) out.push(`${brand.app}${live.path}: not anchored`);
-          else if (was.sha256 !== digest || was.bytes !== live.body.length) {
-            out.push(`${brand.app}${live.path}: bytes differ from the pinned record`);
-          }
+          const why = pageDrift(brand, pinned, live);
+          if (why) out.push(why);
         }
       } catch (err) {
         out.push(`${brand.app}: live site unreadable (${err?.message ?? err})`);

@@ -13,6 +13,8 @@ import {
   pagesFrom,
   targetsFor,
   sha256Hex,
+  pageDrift,
+  isLiveDataPage,
 } from "../../../scripts/ecosystem-records.mjs";
 import { ecosystemSiteVerifiers, ECOSYSTEM_SITE_CONFIGS } from "../src/site-records.ts";
 import { rarextNameVerifier } from "../src/rarext-name.ts";
@@ -135,4 +137,25 @@ test("buildBrandRecords surfaces a dead origin as a skippable error, never a par
     (e: unknown) => isSkippableEcosystemError(e),
     "a 503 origin must classify as skippable",
   );
+});
+
+test("a live data page is anchored but never a drift signal", () => {
+  const brand = ECOSYSTEM_BRANDS.find((b) => b.handle === "apesdaily")!;
+  // It must stay IN the record: dropping it would silently stop covering the venue.
+  assert.ok(brand.pages.includes("/launchpad"));
+  assert.equal(isLiveDataPage(brand, "/launchpad"), true);
+  const pinned = [{ path: "/launchpad", sha256: "0".repeat(64), bytes: 1 }];
+  const live = { path: "/launchpad", body: Buffer.from("freshly rebuilt snapshot") };
+  assert.equal(pageDrift(brand, pinned, live), null);
+  // An unanchored live page is still a real failure — the record must claim it.
+  assert.match(pageDrift(brand, [], live) ?? "", /not anchored/);
+});
+
+test("a stable page still reports drift when its bytes move", () => {
+  const brand = ECOSYSTEM_BRANDS.find((b) => b.handle === "apesdaily")!;
+  const live = { path: "/robots.txt", body: Buffer.from("Disallow: /secret\n") };
+  const pinned = [{ path: "/robots.txt", sha256: sha256Hex(Buffer.from("Disallow:\n")), bytes: 11 }];
+  assert.match(pageDrift(brand, pinned, live) ?? "", /bytes differ/);
+  const same = [{ path: "/robots.txt", sha256: sha256Hex(live.body), bytes: live.body.length }];
+  assert.equal(pageDrift(brand, same, live), null);
 });
