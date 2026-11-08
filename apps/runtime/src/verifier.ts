@@ -93,7 +93,64 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
       ? {}
       : { engineFingerprint: optionalHash("engineFingerprint") }),
     ...(value.teeVendor === undefined ? {} : { teeVendor: optionalHash("teeVendor") }),
+    ...(value.teeChainDepth === undefined
+      ? {}
+      : { teeChainDepth: teeChainDepthFromSpec(value.teeChainDepth, value.teeVendor) }),
+    ...(value.teeBootStages === undefined
+      ? {}
+      : { teeBootStages: teeBootStagesFromSpec(value.teeBootStages, value.teeVendor) }),
+    ...(value.teeStageMeasurements === undefined
+      ? {}
+      : { teeStageMeasurements: teeStageMeasurementsFromSpec(value.teeStageMeasurements, value.teeBootStages) }),
   };
+}
+
+/** Approved stage measurements only mean something with named stages to pin. */
+function teeStageMeasurementsFromSpec(
+  measurements: unknown,
+  teeBootStages: unknown,
+): Record<string, string> {
+  if (typeof measurements !== "object" || measurements === null || Array.isArray(measurements)) {
+    throw new Error("challenge.spec.teeStageMeasurements must be an object when present");
+  }
+  if (!Array.isArray(teeBootStages) || teeBootStages.length === 0) {
+    throw new Error("challenge.spec.teeStageMeasurements requires challenge.spec.teeBootStages");
+  }
+  const record: Record<string, string> = {};
+  for (const [stage, measurement] of Object.entries(measurements as Record<string, unknown>)) {
+    if (typeof measurement !== "string" || !/^[0-9a-f]{64}$/.test(measurement)) {
+      throw new Error("challenge.spec.teeStageMeasurements values must be sha256 hex digests");
+    }
+    record[stage] = measurement;
+  }
+  return record;
+}
+
+/** Required boot stages only mean something with a pinned root to chain to. */
+function teeBootStagesFromSpec(stages: unknown, teeVendor: unknown): string[] {
+  if (!Array.isArray(stages) || stages.length === 0) {
+    throw new Error("challenge.spec.teeBootStages must be a non-empty array when present");
+  }
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeBootStages requires challenge.spec.teeVendor");
+  }
+  return stages.map((stage) => {
+    if (typeof stage !== "string" || stage.length === 0) {
+      throw new Error("challenge.spec.teeBootStages entries must be non-empty strings");
+    }
+    return stage;
+  });
+}
+
+/** A minimum chain depth only means something with a pinned root to chain to. */
+function teeChainDepthFromSpec(depth: unknown, teeVendor: unknown): number {
+  if (!Number.isSafeInteger(depth) || (depth as number) < 1) {
+    throw new Error("challenge.spec.teeChainDepth must be a positive integer when present");
+  }
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeChainDepth requires challenge.spec.teeVendor");
+  }
+  return depth as number;
 }
 
 /**

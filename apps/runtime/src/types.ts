@@ -364,6 +364,26 @@ export interface ModelRunSpec {
    * this id, so a forged or unverifiable quote is refused.
    */
   teeVendor?: string;
+  /**
+   * The minimum certificate-chain depth a hardware-rooted deployment requires.
+   * A bare leaf is depth 0; a leaf certified by a platform key certified by the
+   * vendor root is depth 2. Committed only with `teeVendor`.
+   */
+  teeChainDepth?: number;
+  /**
+   * The measured-boot stages a deployment requires the chain to extend through
+   * ("firmware", "os", "app"). A quote whose chain omits any of them is refused,
+   * so a leaf signed outside the measured boot cannot pass. Committed only with
+   * `teeVendor`.
+   */
+  teeBootStages?: string[];
+  /**
+   * The measurement the deployment approves for each named boot stage. When
+   * committed, each agreeing provider's chain must carry exactly these values,
+   * so the stage names are checked, not merely present. Committed only with
+   * `teeBootStages`.
+   */
+  teeStageMeasurements?: Record<string, string>;
 }
 
 export interface ProviderCardVerification {

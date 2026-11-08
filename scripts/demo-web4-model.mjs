@@ -20,9 +20,12 @@
  *   publish   publish the run with its quorum evidence
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
+ *   redeem    a key cashes credits out of the ledger against an external reference
  *   measure   a deployment approves provider measurements, or is refused
  *   quote     a provider's machine claim is vendor-signed and checked against a pin
  *   engine-pin  the run pins the serving engine; a replay refuses a changed one
+ *   enclave   the serving process holds ciphertext; an enclave unwraps and answers
+ *             a sealed prompt (the forwarder never sees the plaintext)
  *   compare   ask every provider the same question and compare answers
  *   weights   prove the source model file is gone and the bytes came from RAREXT
  *   replay    regenerate the output from the committed bundle and seed
@@ -52,7 +55,7 @@
  * from RAREXT; the engine is the provider's, not the caller's.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   mkdtempSync,
@@ -79,11 +82,22 @@ import {
   fetchBundleChunks,
   fetchBundleManifest,
   fetchProviderCard,
+  issueProviderCertificate,
+  providerBootStages,
+  providerChainDepth,
+  providerStageMeasurements,
   verifyModelBundle,
+  verifyProviderChain,
   verifyProviderQuote,
 } from "../apps/runtime/src/model-bundle.ts";
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
+import { openResponse, sealRequest } from "../apps/runtime/src/confidential.ts";
+import {
+  HARDWARE_ROOT_KEY_ID,
+  issueHardwareChain,
+  issueMeasuredBootChain,
+} from "../apps/runtime/src/hardware-root.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import { AgentSigner, RarextClient, generateAgentKeypair } from "../packages/agent-sdk/src/index.ts";
@@ -229,15 +243,22 @@ try {
     throw new Error(`RAREXT_WEB4_BOUNTY must be a positive integer, got ${process.env.RAREXT_WEB4_BOUNTY}`);
   }
 
-  // A vendor/attestation key: it signs each provider's machine quote, and the
-  // deployment pins its key id. In a real TEE this key lives in the chip.
-  const teeKeypair = generateAgentKeypair("ecdsa-p256");
-  const teeVendor = new AgentSigner(teeKeypair.privateKey);
-  const teeKeyPath = join(state, "tee-vendor.json");
-  writeJsonFile(teeKeyPath, {
-    privateKey: teeKeypair.privateKey,
-    publicKey: teeKeypair.publicKey,
-  });
+  // A measured-boot chain: each provider's leaf (app) key is certified by the OS,
+  // the OS by firmware, firmware by the SHIPPED vendor hardware root. Each link
+  // names its stage, so the deployment can require the chain to extend through
+  // the boot it trusts. The root is a fixed key shipped with the protocol — the
+  // shape of a fused root, but still a file.
+  const teeLeaves = [];
+  for (let index = 0; index < 2; index += 1) {
+    const leafKeypair = generateAgentKeypair("ecdsa-p256");
+    const leaf = new AgentSigner(leafKeypair.privateKey);
+    const { chain, stages, measurements } = issueMeasuredBootChain(leafKeypair.publicKey);
+    const leafPath = join(state, `tee-leaf-${index}.json`);
+    const certPath = join(state, `tee-cert-${index}.json`);
+    writeJsonFile(leafPath, { privateKey: leafKeypair.privateKey, publicKey: leafKeypair.publicKey });
+    writeJsonFile(certPath, { chain });
+    teeLeaves.push({ leaf, leafPath, certPath, keyId: leaf.keyId, stages, measurements });
+  }
 
   // ── 1. A RAREXT node that holds bytes ────────────────────────────────────
   api = spawnApi({
@@ -372,7 +393,9 @@ try {
       "--handle",
       "provider-a",
       "--tee-key-file",
-      teeKeyPath,
+      teeLeaves[0].leafPath,
+      "--tee-cert-file",
+      teeLeaves[0].certPath,
       ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
@@ -407,7 +430,9 @@ try {
         "--handle",
         "provider-b",
         "--tee-key-file",
-        teeKeyPath,
+        teeLeaves[1].leafPath,
+        "--tee-cert-file",
+        teeLeaves[1].certPath,
         ...(seal ? ["--seal-key-file", sealKeyPath] : []),
       ],
       {},
@@ -443,7 +468,13 @@ try {
     "--bounty",
     String(bounty),
     "--tee-vendor",
-    teeVendor.keyId,
+    HARDWARE_ROOT_KEY_ID,
+    "--tee-chain-depth",
+    "3",
+    "--tee-boot-stages",
+    "firmware,os,app",
+    "--tee-boot-measurements",
+    `firmware=${teeLeaves[0].measurements.firmware},os=${teeLeaves[0].measurements.os},app=${teeLeaves[0].measurements.app}`,
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -467,7 +498,7 @@ try {
       deployment.labels.operators.split(",").length === providerUrls.length &&
       new Set(deployment.labels.operators.split(",")).size === providerUrls.length &&
       deployment.labels.bounty === String(bounty) &&
-      deployment.labels.teeVendor === teeVendor.keyId,
+      deployment.labels.teeVendor === HARDWARE_ROOT_KEY_ID,
     `${modelId} as ${deployment.digest.slice(0, 16)}…; bundle ${bundle.digest.slice(0, 16)}…, ` +
       `quorum ${deployment.labels.quorum}/${providerUrls.length}` +
       (deployment.labels.operators ? ` over ${deployment.labels.operators.split(",").length} operator(s)` : "") +
@@ -864,6 +895,8 @@ try {
 
   let settleOk = true;
   let settleDetail = "";
+  let settledPayerKeyId = null;
+  let settledRecipientKeyId = null;
   try {
     const paid = [];
     for (const [index, cardEntry] of providerCards.entries()) {
@@ -882,6 +915,8 @@ try {
     if (earned !== bounty) throw new Error(`operator 0 earned ${earned}, expected ${bounty}`);
 
     const recipient = await registerIdentity("web4-treasury", transferRecipient);
+    settledPayerKeyId = paid[0];
+    settledRecipientKeyId = recipient.keyId;
     const amount = 5;
     const instruction = {
       kind: "rarext.credit-transfer.v1",
@@ -943,6 +978,75 @@ try {
     settleDetail = error instanceof Error ? error.message : String(error);
   }
   phase("settle", settleOk, settleDetail);
+
+  // ── 12g. Off-ledger settlement: credits leave the ledger for a reference ─
+  // A redemption removes credits from the ledger against a committed external
+  // reference — the ledger-side half of a cash-out. It is a debit with no
+  // matching credit, so the ledger total drops; the same credits cannot be
+  // redeemed twice, and the receipt proves against the whole-ledger root.
+  let redeemOk = false;
+  let redeemDetail = "";
+  try {
+    if (settledRecipientKeyId === null) throw new Error("no settled key to redeem from");
+    const reference = `chain:tx:0x${canonicalDigest({ run: runDigest, at: Date.now() }).slice(0, 40)}`;
+    const amount = 5;
+    const instruction = {
+      kind: "rarext.credit-redemption.v1",
+      from: settledRecipientKeyId,
+      amount,
+      reference,
+      nonce: `redeem-${Date.now()}`,
+      at: new Date().toISOString(),
+    };
+    const redeem = (body) =>
+      fetch(`${baseUrl}/v1/work/redeem`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, signature: transferRecipient.sign(body) }),
+      });
+    const redeemed = await redeem(instruction);
+    const redeemText = await redeemed.text();
+    if (redeemed.status !== 201) throw new Error(`redeem: HTTP ${redeemed.status} ${redeemText}`);
+    const redemption = JSON.parse(redeemText);
+    const receipt = redemption.receipts[0];
+    const proofOk =
+      receipt?.ledger != null &&
+      verifyProof(
+        creditLeaf(
+          {
+            keyId: receipt.keyId,
+            action: receipt.action,
+            bounty: receipt.bounty,
+            challengeId: receipt.challengeId,
+            artifactHash: receipt.artifactHash,
+            at: receipt.at,
+          },
+          sha256Hex,
+        ),
+        receipt.ledger.proof,
+        receipt.ledger.root,
+        receipt.ledger.index,
+        bytesSha256,
+      ) === true;
+
+    const after = await statementFor(settledRecipientKeyId);
+    const again = { ...instruction, reference: `${reference}-again`, nonce: `redeem-${Date.now()}-2` };
+    const refused = await redeem(again);
+
+    redeemOk =
+      redemption.balance === 0 &&
+      redemption.redemption.reference === reference &&
+      after.credits.net === 0 &&
+      proofOk &&
+      refused.status === 402;
+    redeemDetail =
+      `redeemed ${amount} credit(s) against ${reference.slice(0, 22)}… (net ${after.credits.net}, ` +
+      `ledger supply ${redemption.supply}); proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
+  } catch (error) {
+    redeemOk = false;
+    redeemDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("redeem", redeemOk, redeemDetail);
 
   // ── 12c. Machine independence: one box is not two ────────────────────────
   // Each provider card attests a machine, signed by the operator's own key. A
@@ -1076,16 +1180,59 @@ try {
   let quoteOk = false;
   let quoteDetail = "";
   try {
-    const vendorKeyId = teeVendor.keyId;
+    const anchorKeyId = HARDWARE_ROOT_KEY_ID;
     const runBody = publishedBody ?? localRecord?.body ?? null;
+    const requiredStages = ["firmware", "os", "app"];
+    // Each leaf signs its own quote; each leaf -> os -> firmware -> vendor-root
+    // chain reaches the SHIPPED hardware root, depth three, naming every stage.
     const cardsQuote = providerCards.every(
-      (entry) =>
+      (entry, index) =>
         entry.independence?.quote !== undefined &&
-        verifyProviderQuote(entry.independence) === vendorKeyId,
+        verifyProviderQuote(entry.independence) === teeLeaves[index].keyId &&
+        verifyProviderChain(entry.independence) === anchorKeyId &&
+        providerChainDepth(entry.independence) === 3 &&
+        requiredStages.every((stage) => providerBootStages(entry.independence).includes(stage)),
     );
-    // A forged quote: the measurement changes, the vendor signature does not.
-    const forged = { ...providerCards[0].independence, measurement: "0".repeat(64) };
-    const forgedRefused = verifyProviderQuote(forged) === null;
+    // A chain rooted somewhere else: the leaf is genuine, but certified by an
+    // attacker that is not the hardware root — refused.
+    const attacker = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const wrongCert = issueProviderCertificate({
+      subject: providerCards[0].independence.quote.publicKey,
+      issuerSigner: attacker,
+    });
+    const wrongChain = {
+      ...providerCards[0].independence,
+      quote: { ...providerCards[0].independence.quote, chain: [wrongCert] },
+    };
+    const chainRefused = verifyProviderChain(wrongChain) !== anchorKeyId;
+    // A chain that reaches the vendor root but never measured the boot: it has no
+    // stage names, so the measured-boot requirement refuses it.
+    const { chain: stagelessChain } = issueHardwareChain(providerCards[0].independence.quote.publicKey);
+    const stageless = {
+      ...providerCards[0].independence,
+      quote: { ...providerCards[0].independence.quote, chain: stagelessChain },
+    };
+    const stagelessRefused =
+      verifyProviderChain(stageless) === anchorKeyId &&
+      !providerBootStages(stageless).includes("firmware");
+    // Each stage's measurement matches the approved one; a chain running
+    // different firmware carries a different firmware measurement.
+    const measurementsPinned = providerCards.every(
+      (entry, index) =>
+        providerStageMeasurements(entry.independence).firmware === teeLeaves[index].measurements.firmware &&
+        providerStageMeasurements(entry.independence).os === teeLeaves[index].measurements.os &&
+        providerStageMeasurements(entry.independence).app === teeLeaves[index].measurements.app,
+    );
+    const { chain: otherFirmware } = issueMeasuredBootChain(
+      providerCards[0].independence.quote.publicKey,
+      { firmware: "0".repeat(64) },
+    );
+    const wrongMeasure = {
+      ...providerCards[0].independence,
+      quote: { ...providerCards[0].independence.quote, chain: otherFirmware },
+    };
+    const wrongMeasurementRefused =
+      providerStageMeasurements(wrongMeasure).firmware !== teeLeaves[0].measurements.firmware;
     // A vendor pin the providers cannot satisfy is refused at deploy time.
     const wrongPin = await runCli([
       "deploy",
@@ -1107,16 +1254,24 @@ try {
       runBody.quorum.providers.every((entry) => entry.attestation !== undefined);
 
     quoteOk =
-      deployment.labels.teeVendor === vendorKeyId &&
-      spec.teeVendor === vendorKeyId &&
+      deployment.labels.teeVendor === anchorKeyId &&
+      spec.teeVendor === anchorKeyId &&
+      spec.teeChainDepth === 3 &&
+      Array.isArray(spec.teeBootStages) &&
+      requiredStages.every((stage) => spec.teeBootStages.includes(stage)) &&
       cardsQuote &&
-      forgedRefused &&
+      chainRefused &&
+      stagelessRefused &&
+      measurementsPinned &&
+      spec.teeStageMeasurements?.firmware === teeLeaves[0].measurements.firmware &&
+      wrongMeasurementRefused &&
       runAttested &&
       wrongPin.status !== 0 &&
       /machine quote/.test((wrongPin.stderr || "") + (wrongPin.stdout || ""));
     quoteDetail =
-      `vendor ${vendorKeyId.slice(0, 16)}… pinned; every provider quote verifies under it; a forged ` +
-      `quote and a pin the providers could not satisfy were refused`;
+      `vendor root ${anchorKeyId.slice(0, 14)}… pinned at depth 3; each provider's leaf -> os -> firmware -> root ` +
+      `chain measures every stage to the approved value; a chain rooted elsewhere, a chain with no boot stages, and a ` +
+      `chain running unapproved firmware were refused`;
   } catch (error) {
     quoteOk = false;
     quoteDetail = error instanceof Error ? error.message : String(error);
@@ -1210,6 +1365,162 @@ try {
     if (badEngineProvider !== null) badEngineProvider.stop();
   }
   phase("engine-pin", enginePinOk, enginePinDetail);
+
+  // ── 12h. Enclave: the process on the wire never holds the plaintext ──────
+  // The model is sealed to an enclave's public key. A forwarding provider holds
+  // only the committed ciphertext and forwards inference to the enclave, which
+  // alone unwraps and decrypts. No plaintext key file is written by the bundle.
+  let enclaveOk = false;
+  let enclaveDetail = "";
+  let enclaveProc = null;
+  let forwarderProc = null;
+  try {
+    const enclavePubPath = join(state, "enclave-pub.pem");
+    const enclaveKeyPath = join(state, "enclave-key.pem");
+    const enclaveKeys = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    writeFileSync(enclavePubPath, enclaveKeys.publicKey);
+    writeFileSync(enclaveKeyPath, enclaveKeys.privateKey, { mode: 0o600 });
+
+    const enclaveOut = join(state, "enclave-bundle");
+    const sealed = await runCli([
+      "bundle",
+      "--native",
+      "--model",
+      "enclave-proof",
+      "--vocab",
+      "RAREXT,enclave,sealed,weights,never,plaintext",
+      "--steps",
+      "8",
+      "--seal-to",
+      enclavePubPath,
+      "--registry",
+      baseUrl,
+      "--out",
+      enclaveOut,
+      "--chunk-bytes",
+      "97",
+      "--json",
+    ]);
+    if (sealed.status !== 0) throw new Error(`enclave bundle failed: ${sealed.stderr || sealed.stdout}`);
+    const sealedReport = JSON.parse(sealed.stdout);
+    const enclaveBundle = sealedReport.bundle;
+    const bundleJson = join(enclaveOut, "model-bundle.json");
+
+    const readyUrl = (line) => {
+      const match = line.match(/rarext provider serving .* on (https?:\/\/[^\s]+)/);
+      return match ? match[1].replace(/\/$/, "") : null;
+    };
+    enclaveProc = spawnProcess(
+      [
+        "apps/runtime/src/cli.ts",
+        "provider",
+        "--bundle",
+        bundleJson,
+        "--registry",
+        baseUrl,
+        "--state",
+        join(state, "enclave-state"),
+        "--port",
+        String(await freePort()),
+        "--enclave-key-file",
+        enclaveKeyPath,
+        "--tee-key-file",
+        teeLeaves[0].leafPath,
+        "--tee-cert-file",
+        teeLeaves[0].certPath,
+      ],
+      {},
+      readyUrl,
+    );
+    const enclaveUrl = await enclaveProc.ready;
+
+    forwarderProc = spawnProcess(
+      [
+        "apps/runtime/src/cli.ts",
+        "provider",
+        "--bundle",
+        bundleJson,
+        "--registry",
+        baseUrl,
+        "--state",
+        join(state, "forwarder-state"),
+        "--port",
+        String(await freePort()),
+        "--enclave-endpoint",
+        enclaveUrl,
+      ],
+      {},
+      readyUrl,
+    );
+    const forwarderUrl = await forwarderProc.ready;
+
+    const forwarderHealth = await getJson(`${forwarderUrl}/health`);
+    const forwarderCard = await getJson(`${forwarderUrl}/v1/provider-card`);
+    const answer = await fetch(`${forwarderUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: enclaveBundle.model.id,
+        messages: [{ role: "user", content: "who holds the key?" }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    const answerBody = await answer.json();
+    const text = String(answerBody?.choices?.[0]?.message?.content ?? "");
+
+    // A confidential prompt: the caller seals it to the enclave's public key and
+    // posts CIPHERTEXT to the forwarder, which never sees the plaintext.
+    const attestation = await getJson(`${enclaveUrl}/v1/attestation`);
+    const secret = "the operator must never read this prompt";
+    const request = {
+      model: enclaveBundle.model.id,
+      messages: [{ role: "user", content: secret }],
+      max_tokens: 8,
+      temperature: 0,
+    };
+    const sealedPrompt = sealRequest(attestation.enclavePublicKey, request);
+    const sealedAnswer = await fetch(`${forwarderUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: enclaveBundle.model.id, confidential: sealedPrompt.sealed }),
+    });
+    const sealedJson = await sealedAnswer.json();
+    const opened = openResponse(sealedPrompt.key, sealedJson.confidential);
+    const openedText = String(opened?.choices?.[0]?.message?.content ?? "");
+    const plainAnswer = await fetch(`${enclaveUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const plainText = String((await plainAnswer.json())?.choices?.[0]?.message?.content ?? "");
+    const ciphertextOnly = !JSON.stringify(sealedPrompt.sealed).includes(secret);
+
+    enclaveOk =
+      sealedReport.sealKeyPath === null &&
+      enclaveBundle.sealing?.wrap?.scheme === "rsa-oaep-sha256" &&
+      forwarderHealth.holdsKey === false &&
+      forwarderHealth.bundle === enclaveBundle.digest &&
+      forwarderCard.bundle?.sealed === true &&
+      text.length > 0 &&
+      ciphertextOnly &&
+      openedText.length > 0 &&
+      openedText === plainText;
+    enclaveDetail =
+      `the bundle is sealed to an enclave key; the forwarder holds ciphertext (holdsKey=${String(forwarderHealth.holdsKey)}); ` +
+      `a sealed prompt matched the plaintext answer with the prompt never on the wire: ${JSON.stringify(openedText.slice(0, 40))}`;
+  } catch (error) {
+    enclaveOk = false;
+    enclaveDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (forwarderProc !== null) forwarderProc.stop();
+    if (enclaveProc !== null) enclaveProc.stop();
+  }
+  phase("enclave", enclaveOk, enclaveDetail);
 
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
   const victim = bundle.shards[0].hash;

@@ -5,7 +5,13 @@ import {
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
 import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
-import { verifyProviderCard, verifyProviderQuote } from "./model-bundle.ts";
+import {
+  providerBootStages,
+  providerChainDepth,
+  providerStageMeasurements,
+  verifyProviderCard,
+  verifyProviderChain,
+} from "./model-bundle.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -377,10 +383,22 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     // verifier checks the quote itself, so a forged or unverifiable quote is
     // caught here and not merely at the gateway.
     const committedVendor = spec.teeVendor;
+    const committedDepth = spec.teeChainDepth ?? 0;
+    const committedStages = spec.teeBootStages ?? [];
+    const committedMeasurements = Object.entries(spec.teeStageMeasurements ?? {});
     const quotesMet =
       committedVendor === undefined
         ? true
-        : agreeing.every((entry) => verifyProviderQuote(entry.attestation) === committedVendor);
+        : agreeing.every(
+            (entry) =>
+              verifyProviderChain(entry.attestation) === committedVendor &&
+              providerChainDepth(entry.attestation) >= committedDepth &&
+              committedStages.every((stage) => providerBootStages(entry.attestation).includes(stage)) &&
+              committedMeasurements.every(
+                ([stage, measurement]) =>
+                  providerStageMeasurements(entry.attestation)[stage] === measurement,
+              ),
+          );
 
     check(
       checks,

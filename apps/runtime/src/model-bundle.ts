@@ -1,10 +1,13 @@
 import {
+  constants,
   createCipheriv,
   createDecipheriv,
   createHash,
+  privateDecrypt,
+  publicEncrypt,
   randomBytes,
 } from "node:crypto";
-import type { JsonWebKey } from "node:crypto";
+import type { KeyObject, JsonWebKey } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
@@ -60,10 +63,24 @@ export const SEAL_SCHEME = "aes-256-gcm";
  * them. `keyCommitment` lets a provider check it was given the right key
  * without the key ever appearing in the manifest.
  */
+/** How the data key is wrapped to an enclave's public key, when it is. */
+export interface BundleKeyWrap {
+  scheme: "rsa-oaep-sha256";
+  /** Base64 RSA-OAEP(data key). Only the enclave's private key unwraps it. */
+  wrappedKey: string;
+}
+
 export interface BundleSealing {
   scheme: typeof SEAL_SCHEME;
   /** sha256 of the 32-byte key. */
   keyCommitment: string;
+  /**
+   * Present when the data key is wrapped to an enclave's public key. Then the
+   * RAREXT blobs AND the manifest are useless to anyone but the enclave: the
+   * serving provider holds ciphertext and a wrapped key it cannot open, and the
+   * enclave decrypts in its own process, so the operator never sees plaintext.
+   */
+  wrap?: BundleKeyWrap;
 }
 
 export interface ModelBundle {
@@ -95,12 +112,43 @@ export const PROVIDER_MACHINE_KIND = "rarext.provider-machine.v1";
  * trustworthy as the key that signs the card — it proves the OPERATOR claims
  * these machines are distinct, not that they are physically so.
  */
-export interface ProviderQuote {
-  /** Base64 signature over the covered fields, by the vendor/attestation key. */
+/**
+ * A certificate in the quote's chain of trust: a statement, signed by `issuer`,
+ * that `subject`'s key is vouched for by `issuer`. A chain ends at a trust
+ * anchor; a deployment pins that anchor's key id, so an operator-supplied leaf
+ * key is not enough on its own — the chain must terminate at the pinned root.
+ */
+export interface ProviderCertificate {
+  subject: unknown;
+  issuer: unknown;
+  /**
+   * What the subject IS: the boot stage it represents ("firmware", "os",
+   * "app"/"enclave"). A measured-boot chain names each stage, so a deployment can
+   * require the chain to extend through every stage it trusts.
+   */
+  stage?: string;
+  /**
+   * The measured value of that stage (a digest of the firmware/OS/app image). A
+   * deployment pins the measurements it approves, so the stage names become
+   * checked values, not claims: a chain carrying the wrong firmware measurement
+   * is refused.
+   */
+  measurement?: string;
   signature: string;
-  /** The vendor key that made the quote; a deployment pins its key id. */
+  suite: string;
+}
+
+export interface ProviderQuote {
+  /** Base64 signature over the covered fields, by the leaf/attestation key. */
+  signature: string;
+  /** The leaf key that made the quote. */
   publicKey: unknown;
   suite: string;
+  /**
+   * Certificates from the leaf up to (but not including) the trust anchor. The
+   * last certificate's issuer is the root; a deployment pins the root's key id.
+   */
+  chain?: ProviderCertificate[];
 }
 
 export interface ProviderIndependence {
@@ -165,6 +213,151 @@ export function verifyProviderQuote(independence: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** The exact fields a certificate covers. `stage`/`measurement` only when present. */
+export function providerCertificatePayload(cert: ProviderCertificate): {
+  subject: unknown;
+  issuer: unknown;
+  stage?: string;
+  measurement?: string;
+} {
+  return {
+    subject: cert.subject,
+    issuer: cert.issuer,
+    ...(cert.stage === undefined ? {} : { stage: cert.stage }),
+    ...(cert.measurement === undefined ? {} : { measurement: cert.measurement }),
+  };
+}
+
+/** Issue a certificate: `issuerSigner` vouches for `subject`'s key. */
+export function issueProviderCertificate(input: {
+  subject: unknown;
+  issuerSigner: { sign(payload: unknown): string; publicKey: unknown; suite: string };
+  stage?: string;
+  measurement?: string;
+}): ProviderCertificate {
+  const subject = input.subject;
+  const issuer = input.issuerSigner.publicKey;
+  const cert: ProviderCertificate = {
+    subject,
+    issuer,
+    ...(input.stage === undefined ? {} : { stage: input.stage }),
+    ...(input.measurement === undefined ? {} : { measurement: input.measurement }),
+    signature: "",
+    suite: input.issuerSigner.suite,
+  };
+  cert.signature = input.issuerSigner.sign(providerCertificatePayload(cert));
+  return cert;
+}
+
+/**
+ * Verify a quote AND its chain of trust, returning the ROOT key id the chain
+ * terminates at. Verifying the leaf's signature is not enough: each certificate
+ * must be signed by its issuer, each subject must be the key below it, and the
+ * top of the chain is the trust anchor. A deployment pins that anchor's id, so a
+ * chain that does not reach the pinned root is refused. A quote with no chain is
+ * its own root (the leaf is the anchor), which is the pre-chain behaviour.
+ */
+export function verifyProviderChain(independence: unknown): string | null {
+  if (!isRecord(independence)) return null;
+  const quote = independence.quote;
+  if (!isRecord(quote) || typeof quote.signature !== "string" || !isRecord(quote.publicKey)) {
+    return null;
+  }
+  const payload = providerQuotePayload(independence as unknown as ProviderIndependence);
+  let current = quote.publicKey as unknown as JsonWebKey;
+  try {
+    if (
+      !verifyPayload(
+        current,
+        payload,
+        quote.signature,
+        typeof quote.suite === "string" ? (quote.suite as SignatureSuite) : undefined,
+      )
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const chain = Array.isArray(quote.chain) ? quote.chain : [];
+  for (const raw of chain) {
+    if (
+      !isRecord(raw) ||
+      !isRecord(raw.subject) ||
+      !isRecord(raw.issuer) ||
+      typeof raw.signature !== "string"
+    ) {
+      return null;
+    }
+    const cert = raw as unknown as ProviderCertificate;
+    try {
+      // The certificate must be ABOUT the key below it...
+      if (publicKeyId(cert.subject as unknown as JsonWebKey) !== publicKeyId(current)) return null;
+      // ... and signed by the issuer above it.
+      if (
+        !verifyPayload(
+          cert.issuer as unknown as JsonWebKey,
+          providerCertificatePayload(cert),
+          cert.signature,
+          typeof cert.suite === "string" ? (cert.suite as SignatureSuite) : undefined,
+        )
+      ) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+    current = cert.issuer as unknown as JsonWebKey;
+  }
+
+  return publicKeyId(current);
+}
+
+/**
+ * The length of a quote's certificate chain, or -1 if the chain does not verify.
+ * A chain of zero means the leaf is its own root; a deployment that requires a
+ * hardware-rooted attestation demands a minimum depth so a bare leaf cannot pass.
+ */
+export function providerChainDepth(independence: unknown): number {
+  if (verifyProviderChain(independence) === null) return -1;
+  const quote = (independence as { quote?: { chain?: unknown[] } }).quote;
+  return Array.isArray(quote?.chain) ? quote.chain.length : 0;
+}
+
+/**
+ * The boot stages a VALID certificate chain names, from the leaf up. A
+ * measured-boot chain records "app" → "os" → "firmware"; a deployment that
+ * requires those stages refuses a quote whose chain omits any of them, so a leaf
+ * signed outside the measured boot cannot pass as hardware-rooted.
+ */
+export function providerBootStages(independence: unknown): string[] {
+  if (verifyProviderChain(independence) === null) return [];
+  const quote = (independence as { quote?: { chain?: unknown[] } }).quote;
+  const chain = Array.isArray(quote?.chain) ? quote.chain : [];
+  return chain
+    .map((entry) => (isRecord(entry) && typeof entry.stage === "string" ? entry.stage : null))
+    .filter((stage): stage is string => stage !== null);
+}
+
+/**
+ * The measured value each boot stage carries, from a VALID chain. A deployment
+ * pins the measurements it approves; a chain whose firmware/OS/app measurement is
+ * not the pinned one is refused, so the stage NAMES become checked values.
+ */
+export function providerStageMeasurements(independence: unknown): Record<string, string> {
+  if (verifyProviderChain(independence) === null) return {};
+  const quote = (independence as { quote?: { chain?: unknown[] } }).quote;
+  const chain = Array.isArray(quote?.chain) ? quote.chain : [];
+  const measurements: Record<string, string> = {};
+  for (const entry of chain) {
+    if (isRecord(entry) && typeof entry.stage === "string" && typeof entry.measurement === "string") {
+      measurements[entry.stage] = entry.measurement;
+    }
+  }
+  return measurements;
 }
 
 export interface ProviderCard {
@@ -317,6 +510,11 @@ export interface BuildBundleInput {
   chunkBytes?: number;
   /** When given (32 bytes), the shards are ciphertext and the bundle is sealed. */
   sealKey?: Uint8Array;
+  /**
+   * When given with `sealKey`, the data key is wrapped to this RSA public key
+   * (an enclave's), so only the enclave can open the model.
+   */
+  wrapPublicKey?: KeyObject | string;
 }
 
 /**
@@ -351,6 +549,15 @@ export function buildModelBundle(input: BuildBundleInput): {
       throw new Error(`a seal key must be ${SEAL_KEY_BYTES} bytes`);
     }
     sealing = { scheme: SEAL_SCHEME, keyCommitment: sealKeyCommitment(input.sealKey) };
+    if (input.wrapPublicKey !== undefined) {
+      // Wrap the data key to the enclave: only its private key can open the
+      // model, so a provider with the manifest holds ciphertext it cannot read.
+      const wrappedKey = publicEncrypt(
+        { key: input.wrapPublicKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+        input.sealKey,
+      ).toString("base64");
+      sealing = { ...sealing, wrap: { scheme: "rsa-oaep-sha256", wrappedKey } };
+    }
     chunks = plaintextChunks.map((chunk) => sealChunk(chunk, input.sealKey!));
   }
 
@@ -485,6 +692,21 @@ export function verifyModelBundle(value: unknown): string[] {
       }
       if (typeof value.sealing.keyCommitment !== "string" || !HEX64.test(value.sealing.keyCommitment)) {
         errors.push("bundle.sealing.keyCommitment must be a sha256 hex digest");
+      }
+      if (value.sealing.wrap !== undefined) {
+        if (!isRecord(value.sealing.wrap)) {
+          errors.push("bundle.sealing.wrap must be an object");
+        } else {
+          if (value.sealing.wrap.scheme !== "rsa-oaep-sha256") {
+            errors.push('bundle.sealing.wrap.scheme must be "rsa-oaep-sha256"');
+          }
+          if (
+            typeof value.sealing.wrap.wrappedKey !== "string" ||
+            value.sealing.wrap.wrappedKey.length === 0
+          ) {
+            errors.push("bundle.sealing.wrap.wrappedKey must be a base64 string");
+          }
+        }
       }
       // A sealed bundle's shards are ciphertext, so each holds at least a nonce
       // and a tag more than its plaintext; a "sealed" bundle that is not bigger
@@ -749,6 +971,68 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
   return { bytes: plaintext };
 }
 
+/**
+ * Open the data key of a bundle sealed to an enclave, using the enclave's RSA
+ * private key. Enforces the bundle's key commitment, so a wrapped key that does
+ * not unwrap to the committed key is refused.
+ */
+export function unwrapSealKey(bundle: ModelBundle, privateKey: KeyObject | string): Buffer {
+  const wrap = bundle.sealing?.wrap;
+  if (wrap === undefined) {
+    throw new Error("this bundle is not sealed to an enclave key; there is nothing to unwrap");
+  }
+  let key: Buffer;
+  try {
+    key = privateDecrypt(
+      { key: privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+      Buffer.from(wrap.wrappedKey, "base64"),
+    );
+  } catch {
+    throw new Error("the enclave key does not unwrap this bundle's data key");
+  }
+  if (key.length !== SEAL_KEY_BYTES || sealKeyCommitment(key) !== bundle.sealing!.keyCommitment) {
+    throw new Error("the unwrapped data key does not match the bundle's key commitment");
+  }
+  return key;
+}
+
+/**
+ * Fetch a sealed bundle's shards as CIPHERTEXT and verify them against the
+ * commitment, WITHOUT a key. This is what a forwarding provider can prove: it
+ * holds and serves the committed ciphertext, but cannot open it.
+ */
+export async function fetchBundleCiphertext(input: {
+  registry: string;
+  bundle: ModelBundle;
+  fetchImpl?: typeof fetch;
+  onShard?: (index: number, size: number) => void;
+}): Promise<{ bytes: Buffer }> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const registry = normalizeBase(input.registry);
+  if (input.bundle.sealing === undefined) {
+    throw new Error("fetchBundleCiphertext is only for a sealed bundle");
+  }
+  const chunks: Buffer[] = [];
+  for (const shard of input.bundle.shards) {
+    const response = await fetchImpl(`${registry}/v1/blobs/${shard.hash}/raw`);
+    if (!response.ok) {
+      throw new Error(`shard ${shard.index} (${shard.hash}) is missing: HTTP ${response.status}`);
+    }
+    const chunk = Buffer.from(await response.arrayBuffer());
+    if (chunk.length !== shard.size || sha256Hex(chunk) !== shard.hash) {
+      throw new Error(
+        `shard ${shard.index} does not match its commitment ` +
+          `(${chunk.length} bytes, sha256 ${sha256Hex(chunk)})`,
+      );
+    }
+    chunks.push(chunk);
+    input.onShard?.(shard.index, chunk.length);
+  }
+  const check = verifyBundleChunks(input.bundle, chunks);
+  if (!check.ok) throw new Error(check.errors.join("; "));
+  return { bytes: check.bytes };
+}
+
 /** Fetch the bundle manifest by its content address and verify it. */
 export async function fetchBundleManifest(input: {
   registry: string;
@@ -979,8 +1263,8 @@ export function verifyProviderCard(value: unknown): string[] {
           errors.push(
             "provider card independence.quote must carry a signature, a publicKey, and a suite",
           );
-        } else if (verifyProviderQuote(value.independence) === null) {
-          errors.push("provider card independence.quote does not verify under its own key");
+        } else if (verifyProviderChain(value.independence) === null) {
+          errors.push("provider card independence.quote does not verify, or its chain of trust is broken");
         }
       }
     }

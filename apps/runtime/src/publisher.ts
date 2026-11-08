@@ -141,6 +141,42 @@ function teeVendorSpec(labels: Record<string, string> | undefined): string | und
   return raw;
 }
 
+/**
+ * The minimum certificate-chain depth a hardware-rooted deployment requires.
+ * Only meaningful with a pinned vendor root, so it is committed beside one.
+ */
+function teeChainDepthSpec(labels: Record<string, string> | undefined): number | undefined {
+  if (labels?.teeChainDepth === undefined) return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  const value = Number(labels.teeChainDepth);
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+}
+
+/** The measured-boot stages a hardware-rooted deployment requires. */
+function teeBootStagesSpec(labels: Record<string, string> | undefined): string[] | undefined {
+  if (labels?.teeBootStages === undefined) return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  const stages = labels.teeBootStages.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  return stages.length === 0 ? undefined : stages;
+}
+
+/** The measurement a deployment approves for each boot stage. */
+function teeStageMeasurementsSpec(
+  labels: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (labels?.teeStageMeasurements === undefined) return undefined;
+  if (teeBootStagesSpec(labels) === undefined) return undefined;
+  const record: Record<string, string> = {};
+  for (const entry of labels.teeStageMeasurements.split(",")) {
+    const [stage, measurement] = entry.split("=").map((part) => part.trim());
+    if (stage === undefined || stage === "" || measurement === undefined || !/^[0-9a-f]{64}$/.test(measurement)) {
+      return undefined;
+    }
+    record[stage] = measurement;
+  }
+  return Object.keys(record).length === 0 ? undefined : record;
+}
+
 function inferenceBountySpec(labels: Record<string, string> | undefined): number | undefined {
   if (labels?.bounty === undefined) return undefined;
   if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
@@ -199,6 +235,15 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(teeVendorSpec(manifest.labels) === undefined
         ? {}
         : { teeVendor: teeVendorSpec(manifest.labels) }),
+      ...(teeChainDepthSpec(manifest.labels) === undefined
+        ? {}
+        : { teeChainDepth: teeChainDepthSpec(manifest.labels) }),
+      ...(teeBootStagesSpec(manifest.labels) === undefined
+        ? {}
+        : { teeBootStages: teeBootStagesSpec(manifest.labels) }),
+      ...(teeStageMeasurementsSpec(manifest.labels) === undefined
+        ? {}
+        : { teeStageMeasurements: teeStageMeasurementsSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

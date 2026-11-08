@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
@@ -30,11 +30,18 @@ import {
   buildProviderCard,
   crossCheckProviderCard,
   fetchBundleChunks,
+  fetchBundleCiphertext,
   fetchBundleManifest,
   fetchProviderCard,
   generateSealKey,
+  unwrapSealKey,
+  issueProviderCertificate,
+  providerBootStages,
   providerCardDigest,
+  providerChainDepth,
+  providerStageMeasurements,
   sealKeyCommitment,
+  verifyProviderChain,
   verifyProviderQuote,
   uploadBundle,
   verifyModelBundle,
@@ -50,6 +57,12 @@ import {
 } from "../src/manifest.ts";
 import { startProvider } from "../src/provider.ts";
 import { replayEngineRun } from "../src/replay.ts";
+import { openResponse, sealRequest } from "../src/confidential.ts";
+import {
+  HARDWARE_ROOT_KEY_ID,
+  issueHardwareChain,
+  issueMeasuredBootChain,
+} from "../src/hardware-root.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../src/verifier.ts";
 import type { EngineProbe, ModelRef } from "../src/types.ts";
@@ -1912,6 +1925,785 @@ test("a machine quote is checked against a pinned vendor key", async () => {
         ...body.quorum!,
         providers: body.quorum!.providers.map((entry, index) =>
           index === 0 ? { ...entry, attestation: forged } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a machine quote's chain of trust must terminate at the pinned anchor", async () => {
+  const anchor = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const attacker = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  // The anchor vouches for the leaf key.
+  const certificate = issueProviderCertificate({ subject: leaf.publicKey, issuerSigner: anchor });
+
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "a"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: [certificate],
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "b"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: [certificate],
+    });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+
+    // The leaf signs the quote; the certificate chains it to the anchor.
+    assert.equal(cardA.independence?.quote?.chain?.length, 1);
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(verifyProviderQuote(cardA.independence), leaf.keyId, "the quote is the leaf's");
+    assert.equal(verifyProviderChain(cardA.independence), anchor.keyId, "and its root is the anchor");
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          // The deployment pins the ANCHOR, not the leaf.
+          teeVendor: anchor.keyId,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeVendor, anchor.keyId);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "chained?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // A chain that does not reach the anchor: the leaf is certified by an
+    // attacker's key, not the pinned anchor. The quote is genuine, the trust is
+    // not — and it is refused.
+    const wrongAnchorCert = issueProviderCertificate({ subject: leaf.publicKey, issuerSigner: attacker });
+    const wrongAnchor = {
+      ...cardA.independence!,
+      quote: { ...cardA.independence!.quote!, chain: [wrongAnchorCert] },
+    };
+    assert.equal(verifyProviderChain(wrongAnchor), attacker.keyId);
+    assert.notEqual(verifyProviderChain(wrongAnchor), anchor.keyId);
+
+    // A certificate whose signature does not match its issuer is broken.
+    const brokenCert = { ...certificate, signature: attacker.sign({ subject: certificate.subject, issuer: certificate.issuer }) };
+    const broken = {
+      ...cardA.independence!,
+      quote: { ...cardA.independence!.quote!, chain: [brokenCert] },
+    };
+    assert.equal(verifyProviderChain(broken), null);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-wrong"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: wrongAnchor, [second.url]: cardB.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    await gateway.close();
+    gateway = null;
+
+    // With the chain reaching the pinned anchor, the run is met and verifies.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-ok"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-ok")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the chain: swapping in the attacker-rooted chain
+    // fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: wrongAnchor } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("an enclave serves a bundle sealed to it, and a forwarder never holds the key", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const otherKey = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  }).privateKey;
+  const sealKey = generateSealKey();
+  const anchor = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const certificate = issueProviderCertificate({ subject: leaf.publicKey, issuerSigner: anchor });
+
+  const reg = await registry();
+  let enclave: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let forwarder: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+      wrapPublicKey: publicKey,
+    });
+    assert.equal(bundle.sealing?.wrap?.scheme, "rsa-oaep-sha256");
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    // The enclave unwraps the data key with its private key; a different key cannot.
+    assert.equal(unwrapSealKey(bundle, privateKey).equals(sealKey), true);
+    assert.throws(() => unwrapSealKey(bundle, otherKey), /does not unwrap/);
+
+    // A forwarding provider can verify the committed ciphertext but not open it.
+    const ciphertext = await fetchBundleCiphertext({ registry: reg.base, bundle });
+    assert.notDeepEqual(ciphertext.bytes, NATIVE_BYTES);
+    assert.equal(ciphertext.bytes.length, bundle.totalBytes);
+
+    enclave = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "enclave"),
+      port: 0,
+      enclaveKey: privateKey,
+      teeSigner: leaf,
+      teeChain: [certificate],
+    });
+
+    forwarder = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "forwarder"),
+      port: 0,
+      enclaveEndpoint: enclave.url,
+    });
+
+    // The forwarder holds ciphertext and no key; its card names the bundle but
+    // carries the ENCLAVE's attestation.
+    const forwarderHealth = (await (await fetch(`${forwarder.url}/health`)).json()) as {
+      holdsKey: boolean;
+      bundle: string;
+    };
+    assert.equal(forwarderHealth.holdsKey, false);
+    assert.equal(forwarderHealth.bundle, bundle.digest);
+    assert.equal(forwarder.card.bundle.sealed, true);
+    assert.equal(verifyProviderChain(forwarder.card.independence), anchor.keyId);
+    assert.equal(verifyProviderQuote(forwarder.card.independence), leaf.keyId);
+
+    // Inference through the forwarder is the enclave's inference.
+    const ask = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "who sees the weights?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+    const viaEnclave = (await (await ask(enclave.url)).json()) as { choices: Array<{ message: { content: string } }> };
+    const viaForwarder = (await (await ask(forwarder.url)).json()) as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    assert.equal(viaForwarder.choices[0]!.message.content, viaEnclave.choices[0]!.message.content);
+    assert.ok(viaForwarder.choices[0]!.message.content.length > 0);
+
+    // An enclave started with the wrong key refuses the bundle.
+    await assert.rejects(
+      startProvider({
+        bundle,
+        registry: reg.base,
+        stateDir: join(reg.root, "wrong-enclave"),
+        port: 0,
+        enclaveKey: otherKey,
+      }),
+      /does not unwrap/,
+    );
+  } finally {
+    if (forwarder !== null) await forwarder.close();
+    if (enclave !== null) await enclave.close();
+    await reg.close();
+  }
+});
+
+test("a sealed prompt is answered without the forwarder ever seeing plaintext", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const sealKey = generateSealKey();
+  const reg = await registry();
+  let enclave: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let forwarder: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let plain: Awaited<ReturnType<typeof startProvider>> | null = null;
+  const forwardedBodies: string[] = [];
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+      wrapPublicKey: publicKey,
+    });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    enclave = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "enclave"),
+      port: 0,
+      enclaveKey: privateKey,
+    });
+
+    // A fetch seam that records exactly what the forwarder relays to the enclave.
+    const capturingFetch: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/v1/chat/completions") && typeof init?.body === "string") {
+        forwardedBodies.push(init.body);
+      }
+      return fetch(input, init);
+    };
+    forwarder = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "forwarder"),
+      port: 0,
+      enclaveEndpoint: enclave.url,
+      fetchImpl: capturingFetch,
+    });
+
+    // The enclave publishes the key a caller seals to.
+    const attestation = (await (await fetch(`${enclave.url}/v1/attestation`)).json()) as {
+      enclavePublicKey: string;
+    };
+    assert.match(attestation.enclavePublicKey, /BEGIN PUBLIC KEY/);
+
+    const secret = "TOP SECRET PROMPT";
+    const request = {
+      model: bundle.model.id,
+      messages: [{ role: "user", content: secret }],
+      max_tokens: 8,
+      temperature: 0,
+    };
+    const { sealed, key } = sealRequest(attestation.enclavePublicKey, request);
+
+    // The caller posts ciphertext to the FORWARDER, which holds no key.
+    const response = await fetch(`${forwarder.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: bundle.model.id, confidential: sealed }),
+    });
+    assert.equal(response.status, 200);
+    const sealedResponse = (await response.json()) as { confidential: { nonce: string; ciphertext: string } };
+    assert.ok(sealedResponse.confidential, "the answer comes back sealed");
+    const answer = openResponse(key, sealedResponse.confidential) as {
+      choices: Array<{ message: { content: string } }>;
+    };
+
+    // The same prompt asked in the clear yields the same answer...
+    const plainResponse = await fetch(`${enclave.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const plainJson = (await plainResponse.json()) as { choices: Array<{ message: { content: string } }> };
+    assert.equal(answer.choices[0]!.message.content, plainJson.choices[0]!.message.content);
+
+    // ... and what the forwarder relayed never contained the secret.
+    assert.equal(forwardedBodies.length, 1);
+    assert.equal(forwardedBodies[0]!.includes(secret), false, "the forwarder never sees the prompt");
+    assert.match(forwardedBodies[0]!, /"confidential"/);
+
+    // A provider with no enclave key refuses a confidential request by name.
+    const plainBundle = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+    });
+    await uploadBundle({ registry: reg.base, bundle: plainBundle.bundle, chunks: plainBundle.chunks });
+    plain = await startProvider({
+      bundle: plainBundle.bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "plain"),
+      port: 0,
+    });
+    const refused = await fetch(`${plain.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: plainBundle.bundle.model.id, confidential: sealed }),
+    });
+    assert.equal(refused.status, 400);
+    assert.match(((await refused.json()) as { error: string }).error, /no enclave key/);
+  } finally {
+    if (plain !== null) await plain.close();
+    if (forwarder !== null) await forwarder.close();
+    if (enclave !== null) await enclave.close();
+    await reg.close();
+  }
+});
+
+test("a machine quote must chain from a hardware (vendor) root of trust", async () => {
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain } = issueHardwareChain(leaf.publicKey);
+  assert.equal(chain.length, 2, "leaf -> platform -> vendor root");
+
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "a"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: chain,
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "b"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: chain,
+    });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+
+    // The leaf signs; the chain reaches the SHIPPED vendor root, depth two.
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(verifyProviderChain(cardA.independence), HARDWARE_ROOT_KEY_ID);
+    assert.equal(providerChainDepth(cardA.independence), 2);
+
+    // A leaf-only attestation is valid but NOT hardware-rooted: depth zero, and
+    // its root is the leaf, not the vendor.
+    const leafOnly = {
+      ...cardA.independence!,
+      quote: {
+        signature: cardA.independence!.quote!.signature,
+        publicKey: cardA.independence!.quote!.publicKey,
+        suite: cardA.independence!.quote!.suite,
+      },
+    };
+    assert.equal(providerChainDepth(leafOnly), 0);
+    assert.notEqual(verifyProviderChain(leafOnly), HARDWARE_ROOT_KEY_ID);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          // Pinned to the vendor hardware root, requiring a depth-2 chain.
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "2",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeVendor, HARDWARE_ROOT_KEY_ID);
+    assert.equal(spec.teeChainDepth, 2);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "hardware rooted?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // A leaf-only attestation cannot meet a hardware-rooted quorum.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-leaf"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: leafOnly, [second.url]: cardB.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    await gateway.close();
+    gateway = null;
+
+    // The vendor-rooted chain satisfies it.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-ok"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-ok")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the depth rule: a leaf-only attestation fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: leafOnly } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a quote must extend a measured-boot chain through every required stage", async () => {
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain, stages } = issueMeasuredBootChain(leaf.publicKey);
+  assert.equal(chain.length, 3, "app -> os -> firmware -> vendor root");
+  assert.deepEqual(stages, ["app", "os", "firmware"]);
+
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0, teeSigner: leaf, teeChain: chain,
+    });
+    second = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0, teeSigner: leaf, teeChain: chain,
+    });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(verifyProviderChain(cardA.independence), HARDWARE_ROOT_KEY_ID);
+    assert.equal(providerChainDepth(cardA.independence), 3);
+    assert.deepEqual(providerBootStages(cardA.independence).sort(), ["app", "firmware", "os"]);
+
+    // A chain with no stages at all: it reaches the vendor root but never
+    // measured the boot.
+    const { chain: stagelessChain } = issueHardwareChain(leaf.publicKey);
+    const stageless = {
+      ...cardA.independence!,
+      quote: { ...cardA.independence!.quote!, chain: stagelessChain },
+    };
+    assert.equal(providerBootStages(stageless).includes("firmware"), false);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "3",
+          teeBootStages: "firmware,os,app",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.deepEqual(spec.teeBootStages, ["firmware", "os", "app"]);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "measured boot?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // A chain that omits the boot stages cannot meet the quorum.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-stageless"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: stageless, [second.url]: cardB.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    await gateway.close();
+    gateway = null;
+
+    // The measured-boot chain satisfies it.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-ok"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-ok")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the stage rule: a stageless chain fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: stageless } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a deployment pins per-stage measurements, refusing unapproved firmware/os/app", async () => {
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  for (const value of Object.values(measurements)) assert.match(value, /^[0-9a-f]{64}$/);
+
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0, teeSigner: leaf, teeChain: chain,
+    });
+    second = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0, teeSigner: leaf, teeChain: chain,
+    });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+    assert.deepEqual(providerStageMeasurements(cardA.independence), {
+      app: measurements.app,
+      os: measurements.os,
+      firmware: measurements.firmware,
+    });
+
+    // A chain running different firmware: its firmware measurement is not approved.
+    const { chain: otherFirmware } = issueMeasuredBootChain(leaf.publicKey, {
+      firmware: "0".repeat(64),
+    });
+    const wrongMeasure = {
+      ...cardA.independence!,
+      quote: { ...cardA.independence!.quote!, chain: otherFirmware },
+    };
+    assert.equal(providerStageMeasurements(wrongMeasure).firmware, "0".repeat(64));
+    assert.notEqual(providerStageMeasurements(wrongMeasure).firmware, measurements.firmware);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "3",
+          teeBootStages: "firmware,os,app",
+          teeStageMeasurements: `firmware=${measurements.firmware},os=${measurements.os},app=${measurements.app}`,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeStageMeasurements!.firmware, measurements.firmware);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "measured?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-wrong"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: wrongMeasure, [second.url]: cardB.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    await gateway.close();
+    gateway = null;
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-ok"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-ok")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: wrongMeasure } : entry,
         ),
       },
     };

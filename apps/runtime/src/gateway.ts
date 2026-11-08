@@ -24,7 +24,12 @@ import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
-import { verifyProviderQuote } from "./model-bundle.ts";
+import {
+  providerBootStages,
+  providerChainDepth,
+  providerStageMeasurements,
+  verifyProviderChain,
+} from "./model-bundle.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
@@ -199,6 +204,33 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const allowedVendor = (() => {
     const raw = deployment.labels?.teeVendor;
     return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
+  })();
+  // A hardware-rooted deployment also demands a minimum chain depth, so a bare
+  // leaf key cannot stand in for a vendor-rooted attestation.
+  const allowedChainDepth = (() => {
+    if (allowedVendor === null) return 0;
+    const value = Number(deployment.labels?.teeChainDepth);
+    return Number.isSafeInteger(value) && value >= 1 ? value : 0;
+  })();
+  // A measured-boot deployment requires the chain to extend through named stages.
+  const allowedBootStages = (() => {
+    if (allowedVendor === null) return [] as string[];
+    const raw = deployment.labels?.teeBootStages;
+    if (raw === undefined) return [] as string[];
+    return raw.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  })();
+  // The measurement the deployment approves per stage: the stage names are then
+  // checked values, not claims.
+  const allowedStageMeasurements = (() => {
+    const record: Record<string, string> = {};
+    if (allowedVendor === null) return record;
+    const raw = deployment.labels?.teeStageMeasurements;
+    if (raw === undefined) return record;
+    for (const entry of raw.split(",")) {
+      const [stage, measurement] = entry.split("=").map((part) => part.trim());
+      if (stage !== undefined && stage !== "" && measurement !== undefined) record[stage] = measurement;
+    }
+    return record;
   })();
 
   // The bounty the deployment committed, if any. Payment is a commitment the
@@ -494,7 +526,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     // quote cannot count toward the quorum.
     const quotesMet =
       allowedVendor === null ||
-      winnerAnswers.every((answer) => verifyProviderQuote(answer.attestation) === allowedVendor);
+      winnerAnswers.every(
+        (answer) =>
+          verifyProviderChain(answer.attestation) === allowedVendor &&
+          providerChainDepth(answer.attestation) >= allowedChainDepth &&
+          allowedBootStages.every((stage) => providerBootStages(answer.attestation).includes(stage)) &&
+          Object.entries(allowedStageMeasurements).every(
+            ([stage, measurement]) => providerStageMeasurements(answer.attestation)[stage] === measurement,
+          ),
+      );
 
     if (
       winnerAnswers.length < quorumRequired ||
@@ -524,7 +564,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             operator: a.operator,
             machine: a.machine,
             measurement: a.measurement,
-            quoteVendor: verifyProviderQuote(a.attestation),
+            quoteVendor: verifyProviderChain(a.attestation),
             responseDigest: a.digest,
           })),
           failed: attempts.filter((a) => "error" in a).map((a) => ({ endpoint: a.endpoint, error: a.error })),

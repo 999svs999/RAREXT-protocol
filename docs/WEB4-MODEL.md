@@ -114,10 +114,56 @@ provider's state directory therefore never holds the model, which the demo check
 for a sealed GGUF.
 
 Sealing hides the weights from the RAREXT store, from mirrors, and from the
-wire; it does **not** hide them from the provider: the provider holds the key,
-opens the weights to run them, and for an engine briefly places them on the OS
-temp filesystem to load. Prompts remain visible to the provider. Hiding the
-weights from the operator needs a TEE or MPC, which is not implemented.
+wire. Whether it hides them from the **operator** depends on where the key lives:
+
+- With `--seal-key-file`, the operator's provider holds the key and opens the
+  weights to run them (and for an engine briefly places them on the OS temp
+  filesystem). The operator sees the weights, and prompts.
+- With an **enclave**, the operator's serving process never holds the key.
+
+### The enclave path
+
+`bundle --seal --seal-to <enclave-public-key>` seals the model and **wraps the
+data key to the enclave's RSA public key** (`sealing.wrap`), writing no plaintext
+key file. Now the blobs *and* the manifest are useless to anyone but the enclave:
+the manifest carries a wrapped key that only the enclave's private key opens.
+
+A provider started with `--enclave-endpoint <url>` is a **forwarding provider**:
+it verifies the committed CIPHERTEXT (`fetchBundleCiphertext`) and proxies
+inference to the enclave, holding ciphertext and no key — `/health` reports
+`holdsKey: false`. The enclave is a provider started with `--enclave-key-file`,
+which unwraps the data key with its private key, decrypts in its own process, and
+answers. The forwarder's card carries the **enclave's** attestation (quote and
+chain), so the trust machinery pins the enclave's anchor, not the forwarder's.
+
+This is a **software enclave**: a separate trust domain in a separate process, not
+a hardware TEE. The protocol shape is real — the process on the wire holds no key,
+the weights are encrypted to the enclave, and only an enclave whose attestation
+chains to the pinned anchor is trusted — but an operator with root on the enclave's
+host can still read its memory. A hardware TEE (SGX/SEV-SNP) is what makes the
+enclave itself private; the `scheme` field and the attestation chain are shaped
+for it, but no hardware root is wired in.
+
+### Confidential prompts
+
+The same idea hides the prompt. A caller seals its request to the enclave's public
+key (`GET /v1/attestation` returns `enclavePublicKey`): a random data key is
+wrapped to the enclave, and the request is AES-256-GCM under it. The body posted to
+the forwarding provider is
+
+```json
+{ "model": "…", "confidential": { "wrappedKey": "…", "nonce": "…", "ciphertext": "…" } }
+```
+
+The forwarder relays it verbatim — it never sees the prompt. The enclave unwraps the
+data key, opens the request, runs it, and seals the response under the same key,
+which the caller kept. So the prompt and the answer are ciphertext everywhere
+except inside the enclave, and the forwarder's logs, a gateway, or a relay see only
+sealed bytes. A provider with no enclave key refuses a confidential request by name.
+
+This protects prompts from the *relaying* process and from the operator of the
+path. It does not protect them from an operator with root on the enclave's own host
+— the same software-enclave caveat as above; a hardware TEE closes it.
 
 A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
 `rarext.provider-identity.v1`). The card it serves is signed with that key, and
@@ -319,6 +365,105 @@ This is what turns the machine claim from a self-declaration into something the
 deployment enforces: the provider still produces the value, but a value the
 deployment did not approve does not count.
 
+### Signed machine quotes
+
+An allowlist checks the VALUE; a signed, chained quote checks the CLAIM. A
+provider signs its machine attestation with a **leaf key**, and the leaf is
+certified by a **trust anchor** the deployment pins. A quote whose chain does
+not terminate at the pinned anchor is refused:
+
+```json
+"independence": {
+  "kind": "rarext.provider-machine.v1", "scheme": "tee",
+  "machine": "…", "measurement": "…", "issuedAt": "…",
+  "quote": {
+    "signature": "…", "publicKey": { "kty": "EC", … }, "suite": "ecdsa-p256",
+    "chain": [ { "subject": { …leaf… }, "issuer": { …anchor… },
+                 "signature": "…", "suite": "ecdsa-p256" } ]
+  }
+}
+```
+
+The quote signature covers the attestation fields (not the quote itself); each
+certificate is signed by its issuer over `{subject, issuer}`, so the chain binds
+the leaf up to the anchor. A provider supplies its leaf key and chain with
+`--tee-key-file` and `--tee-cert-file`. A deployment pins the **anchor** by key
+id:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <anchor-key-id> \
+  --registry https://registry.example
+```
+
+`deploy --tee-vendor` commits `labels.teeVendor`, and it REFUSES a pin that any
+adopted provider's chain does not terminate at. The challenge commits
+`spec.teeVendor`; the gateway refuses a run in which any agreeing provider's
+chain does not reach the pinned anchor; and the verifier recomputes every quote
+and certificate from the run's recorded attestations, so a gateway cannot
+substitute one. A forged quote (fields changed, signature stale), a broken
+certificate (signature not matching its issuer), or a chain rooted somewhere else
+is refused by name. The verifier's check is `verifyProviderChain` — the same
+function the provider's own card validation uses — and it returns the chain's
+ROOT key id, which must equal the pin.
+
+The honest boundary: this proves the quote chains to the pinned anchor without
+the operator holding the anchor's key, so a provider cannot mint its own trust.
+
+### Hardware root of trust
+
+A deployment can go further and require the chain to terminate at the **vendor's
+hardware root**, not an anchor it chose. The protocol ships a simulated root of
+trust (`hardware-root.ts`) — the silicon vendor's key, fixed the way a chip's root
+key is fused into the die — and a depth-two chain: the leaf is certified by a
+**platform** key, and the platform key by the vendor root.
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <vendor-root-key-id> --tee-chain-depth 2 \
+  --registry https://registry.example
+```
+
+`deploy --tee-chain-depth 2` commits `labels.teeChainDepth` and REFUSES unless every
+adopted provider's chain reaches the pinned vendor root at that depth. The challenge
+commits `spec.teeChainDepth`; the gateway refuses a run whose agreeing providers'
+chains are shorter or root elsewhere, and the verifier recomputes the same rule. A
+bare leaf key (depth zero) is valid attestation but **not hardware-rooted**, and is
+refused by name.
+
+### Measured boot
+
+Depth alone is not enough: a chain can reach the vendor root without measuring
+what booted. The vendor root can instead certify a **measured-boot chain** —
+firmware, then the OS, then the app (the enclave's leaf key) — where each link
+names its stage (`"firmware"`, `"os"`, `"app"`). A deployment requires the stages
+it trusts:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --tee-vendor <vendor-root-key-id> \
+  --tee-chain-depth 3 --tee-boot-stages firmware,os,app \
+  --registry https://registry.example
+```
+
+`deploy --tee-boot-stages` commits `labels.teeBootStages` and REFUSES unless every
+adopted provider's chain names the stages it requires. The challenge commits
+`spec.teeBootStages`; the gateway refuses a run whose agreeing providers' chains
+omit any required stage, and the verifier recomputes it. So a leaf signed outside
+the measured boot — even one chained to the vendor root — cannot count: the chain
+must extend through firmware and the OS the deployment trusts.
+
+The honest boundary: the root is a fixed key shipped with the protocol, so this is
+the *shape* of a hardware root — a deployment pins a vendor root it did not choose,
+a chain must extend through the stages it trusts, and a leaf cannot stand in for
+either — but the root is still a file, not a fuse, and the stage names are claims
+the chain carries, not values a silicon fuses. A real TEE (SGX/SEV-SNP) records the
+measurements in hardware and holds the root in silicon; the chain, the stages, and
+the `scheme` field are built for it, but no hardware root is wired in.
+
 The digest is over the comparable completion: `id`, `created`, and
 `system_fingerprint` are transport metadata and are removed before comparison.
 If two providers disagree, or fewer than `required` answer, the gateway returns
@@ -490,28 +635,45 @@ why a large file is sharded rather than sent as one object.
 
 ## Honest limits
 
-- **A quorum is over signed operators, distinct machines, and allowlisted
-  measurements — but the measurement is only as strong as what produced it.** A
-  signed provider card names a key id, a machine, and a measurement, all covered
-  by the card's own signature; the deployment and challenge commit the operators,
-  the operator-aligned machines, and a measurement allowlist. A quorum then needs
-  that many distinct keys, that many distinct machines, and every agreeing
-  provider on the approved list — enforced by the gateway and recomputed by the
-  verifier. What it still does not prove is that the machine ids name physically
-  separate boxes or that the measurements come from real hardware: the provider
-  produces its own measurement, and `scheme: "software-image"` is a digest of a
-  declared image. Only a TEE that signs its own measurement (`scheme: "sgx"`,
-  `"sev-snp"`, …) makes the value unforgeable; the field is shaped for it, but no
-  TEE is wired in. The bundled demo's two providers are co-located, which is why
-  a machine-independent quorum refuses them.
-- **Sealed weights hide the model from the store and the wire, not the operator.**
-  A sealed bundle's shards are AES-256-GCM ciphertext, so the RAREXT node, a
-  mirror, and anyone reading the blobs hold only ciphertext. A native provider
-  opens them in memory; an engine provider opens them into a short-lived mode-0600
-  temp file outside its state dir and removes it after the engine loads — the
-  provider's state never holds the model. But the provider holds the key and sees
-  the weights as it runs them, and prompts are still visible to it. Privacy from
-  the operator needs a TEE or MPC, which is not implemented.
+- **A quorum can require signed operators, distinct machines, allowlisted
+  measurements, and machine quotes chained from the VENDOR hardware root through a
+  measured boot — but the shipped root is a file, not a fuse, and the stage names
+  are claims, not fuses.** The card names a key id, machine, and measurement under
+  the operator's signature, plus a leaf-signed quote chained up through firmware and
+  the OS to the vendor root the protocol ships (`hardware-root.ts`); the deployment
+  commits the operators, operator-aligned machines, a measurement allowlist, and
+  (with `--tee-vendor` + `--tee-chain-depth` + `--tee-boot-stages`) the vendor root,
+  minimum depth, and required boot stages. A quorum then needs that many distinct
+  keys and machines, every agreeing provider on the approved list, and every
+  agreeing quote's chain reaching the pinned vendor root at that depth AND naming
+  every required stage — enforced by the gateway and recomputed by the verifier. The
+  operator supplies only a LEAF key and cannot mint its own trust: a bare leaf
+  (depth zero), a chain ending at an operator anchor, a chain rooted elsewhere, or a
+  chain that reaches the root without measuring the boot is refused by name. What it
+  still does not prove is that the machine ids name physically separate boxes, that
+  the stage names reflect a real boot, or that the vendor root is real silicon: the
+  root is a fixed key the protocol ships and the stages are claims the chain carries,
+  so it is hardware-*shaped* but a file. A TEE that records the measurements in
+  hardware and fuses the root into the chip is what closes that last gap; the
+  `scheme` field, the chain, and the stages are built for it, but no hardware root is
+  wired in. The bundled demo's two providers are co-located, which is why a
+  machine-independent quorum refuses them.
+- **Sealed weights hide the model from the store and the wire, and — through an
+  enclave — from the serving process; only a hardware TEE hides them from the
+  operator's host.** A sealed bundle's shards are AES-256-GCM ciphertext, so the
+  RAREXT node, a mirror, and anyone reading the blobs hold only ciphertext. With
+  `--seal-key-file` the operator's provider holds the key and sees the weights as
+  it runs them (an engine provider opens them into a short-lived temp file). With
+  `--seal-to` + `--enclave-endpoint`, the data key is wrapped to an enclave's
+  public key, the forwarding provider holds ciphertext and no key (`holdsKey:
+  false`), and only the enclave process opens the model. A confidential request
+  (`{ confidential: { wrappedKey, nonce, ciphertext } }`) is sealed to the enclave
+  too, so the prompt and the answer are ciphertext everywhere but inside the
+  enclave — the forwarder, a gateway, or a relay never sees them. But a software
+  enclave is not silicon: an operator with root on the enclave's host can read its
+  memory and, with it, the prompt. A hardware-rooted TEE (SGX/SEV-SNP) is what
+  closes that; the attestation chain and `scheme` field are shaped for it, but no
+  hardware root is wired in.
 - **Inference is not cryptographically proven.** The run transcript proves the
   bytes exchanged; a deterministic native model can be replayed from the bundle.
   An arbitrary GGUF is still not reproduced bit-for-bit by the protocol alone —
@@ -519,13 +681,16 @@ why a large file is sharded rather than sent as one object.
   pin the engine (`engine.fingerprint`), record it in the run, and refuse a replay
   whose provider runs a different engine, so a replay is a checked re-execution
   under a named engine rather than a claim.
-- **Credits move on the ledger, not off it.** A committed bounty is recorded and
-  settled in RAREXT's credit ledger; the run commits who was paid, the verifier
-  recomputes it, and an operator proves its receipt against the ledger root. A key
-  can then move credits it holds to another key with a signed transfer
-  (`/v1/work/transfer`): a zero-sum debit/credit pair, refused if it would overdraw
-  the payer, proved against the same whole-ledger root. There is still no cash-out —
-  no bank to withdraw from — and a bounty is only as good as the accounts behind it.
+- **Credits move on the ledger, and can leave it against an external
+  reference — but the protocol does not move real value.** A committed bounty is
+  recorded and settled in RAREXT's credit ledger; the run commits who was paid, the
+  verifier recomputes it, and an operator proves its receipt against the ledger
+  root. A key can move credits to another key with a signed transfer
+  (`/v1/work/transfer`, a zero-sum pair) or take them out with a signed redemption
+  (`/v1/work/redeem`, a debit with no credit that lowers the ledger supply),
+  refused if it would overdraw the payer and proved against the same whole-ledger
+  root. What no protocol can do is hand over cash: the redemption commits an
+  external reference and a bounty is only as good as the accounts behind it.
 - **The engine is the provider's.** With `execution.kind: "engine"` the provider
   must have Ollama (today) and reproduces the model locally from the verified
   file. The weights still come from RAREXT; the compute is the provider's.

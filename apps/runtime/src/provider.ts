@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createPublicKey } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,14 +23,18 @@ import { sha256Hex } from "./digest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   fetchBundleChunks,
+  fetchBundleCiphertext,
   fetchBundleManifest,
   buildProviderCard,
   bundleManifestHash,
   PROVIDER_MACHINE_KIND,
   providerQuotePayload,
+  unwrapSealKey,
   verifyModelBundle,
 } from "./model-bundle.ts";
-import type { ProviderIndependence } from "./model-bundle.ts";
+import type { ProviderCertificate, ProviderIndependence } from "./model-bundle.ts";
+import { openRequest, sealResponse } from "./confidential.ts";
+import type { SealedRequest } from "./confidential.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";
 import { normalizeEndpoint } from "./manifest.ts";
 import type { ApiShape } from "./types.ts";
@@ -79,6 +84,23 @@ export interface ProviderOptions {
    * claim (allowlist-checkable, but not quote-verifiable).
    */
   teeSigner?: { sign(payload: unknown): string; publicKey: unknown; suite: string };
+  /**
+   * Certificates from the teeSigner's leaf key up to the trust anchor, so the
+   * quote's chain of trust can be checked against a pinned root.
+   */
+  teeChain?: ProviderCertificate[];
+  /**
+   * The enclave's RSA private key. With it, a bundle sealed to that enclave is
+   * unwrapped and served inside this process (the enclave). Without it the
+   * process cannot open the model.
+   */
+  enclaveKey?: import("node:crypto").KeyObject | string;
+  /**
+   * Forward inference to an enclave instead of loading the model. The provider
+   * verifies the committed CIPHERTEXT and proxies to the enclave, so the
+   * operator's serving process never holds the plaintext weights.
+   */
+  enclaveEndpoint?: string;
   /** How the engine loads a verified file. Injected in tests; Ollama in production. */
   engineCreate?: EngineCreate;
   fetchImpl?: typeof fetch;
@@ -352,6 +374,179 @@ async function materializeEngineModel(input: {
  * load the model, and serve an OpenAI-compatible endpoint. The original model
  * file is never read; only RAREXT storage supplies the bytes.
  */
+/**
+ * A forwarding provider: it verifies the committed CIPHERTEXT of a sealed
+ * bundle and proxies inference to an enclave, holding no key and loading no
+ * model. This is the operator-privacy path — the serving process the network
+ * talks to never sees plaintext weights; only the enclave, whose attestation the
+ * card carries, can open them.
+ */
+async function startEnclaveProxy(options: ProviderOptions, enclaveEndpoint: string): Promise<Provider> {
+  const log = options.log ?? (() => {});
+  const fetchImpl = options.fetchImpl ?? fetch;
+  if (options.bundle.sealing === undefined) {
+    throw new Error("a forwarding provider needs a sealed bundle");
+  }
+
+  const manifestHash = bundleManifestHash(options.bundle);
+  const manifest = await fetchBundleManifest({ registry: options.registry, manifestHash, fetchImpl });
+  if (manifest.digest !== options.bundle.digest) {
+    throw new Error(`registry returned bundle ${manifest.digest}, expected ${options.bundle.digest}`);
+  }
+  // Prove the committed ciphertext is served — without any key.
+  const { bytes: ciphertext } = await fetchBundleCiphertext({
+    registry: options.registry,
+    bundle: options.bundle,
+    fetchImpl,
+    onShard: (index, size) => log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`),
+  });
+  log(`verified ${ciphertext.length} bytes of ciphertext; this process holds no key`);
+
+  const enclave = normalizeEndpoint(enclaveEndpoint);
+  const enclaveHealth = await fetchImpl(`${enclave}/health`, { signal: AbortSignal.timeout(15_000) });
+  if (!enclaveHealth.ok) {
+    throw new Error(`the enclave at ${enclave} is not healthy: HTTP ${enclaveHealth.status}`);
+  }
+  const health = (await enclaveHealth.json()) as {
+    bundle?: unknown;
+    weightsDigest?: unknown;
+  };
+  if (health.bundle !== options.bundle.digest || health.weightsDigest !== options.bundle.model.weightsDigest) {
+    throw new Error(`the enclave at ${enclave} does not serve this bundle`);
+  }
+  let enclaveAttestation: ProviderIndependence | undefined;
+  try {
+    const response = await fetchImpl(`${enclave}/v1/attestation`, { signal: AbortSignal.timeout(15_000) });
+    if (response.ok) {
+      const body = (await response.json()) as { attestation?: ProviderIndependence | null };
+      enclaveAttestation = body.attestation ?? undefined;
+    }
+  } catch {
+    enclaveAttestation = undefined;
+  }
+
+  const identity = loadProviderIdentity(options.stateDir, options.providerHandle ?? null);
+  const signer = new AgentSigner(identity.privateKey as unknown as NodeJsonWebKey);
+  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? 0;
+  let card: ProviderCard | null = null;
+  let boundUrl = "";
+
+  function cardFor(): ProviderCard {
+    if (card !== null) return card;
+    card = buildProviderCard({
+      bundle: options.bundle,
+      manifestHash,
+      endpoint: boundUrl,
+      provider: {
+        handle: options.providerHandle ?? identity.handle ?? null,
+        keyId: signer.keyId,
+        publicKey: signer.publicKey,
+        suite: signer.suite,
+      },
+      ...(enclaveAttestation === undefined ? {} : { independence: enclaveAttestation }),
+      apis: ["openai"] as ApiShape[],
+      sign: (payload) => signer.sign(payload),
+    });
+    return card;
+  }
+
+  const server = createServer(async (request, response) => {
+    try {
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (request.method === "GET" && url.pathname === "/health") {
+        sendJson(response, 200, {
+          ok: true,
+          bundle: options.bundle.digest,
+          weightsDigest: options.bundle.model.weightsDigest,
+          execution: options.bundle.execution.kind,
+          enclave,
+          holdsKey: false,
+        });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/provider-card") {
+        sendJson(response, 200, cardFor());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/attestation") {
+        sendJson(response, 200, {
+          role: "forwarder",
+          bundle: options.bundle.digest,
+          attestation: enclaveAttestation ?? null,
+        });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/bundle") {
+        sendJson(response, 200, options.bundle);
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/models") {
+        sendJson(response, 200, {
+          object: "list",
+          data: [
+            {
+              id: options.bundle.model.id,
+              object: "model",
+              created: Math.floor(Date.parse(options.bundle.createdAt) / 1000),
+              owned_by: "rarext-enclave-forwarder",
+              digest: options.bundle.model.weightsDigest?.replace(/^sha256:/, "") ?? null,
+            },
+          ],
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        (url.pathname === "/v1/chat/completions" || url.pathname === "/v1/completions")
+      ) {
+        const raw = await readBody(request);
+        const upstream = await fetchImpl(`${enclave}${url.pathname}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: raw,
+          signal: AbortSignal.timeout(120_000),
+        });
+        const text = await upstream.text();
+        response.writeHead(upstream.status, {
+          "content-type": upstream.headers.get("content-type") ?? "application/json",
+          "x-rarext-enclave": "forwarded",
+        });
+        response.end(text);
+        return;
+      }
+      sendJson(response, 404, { error: "not found" });
+    } catch (error) {
+      if (!response.headersSent) {
+        sendJson(response, 502, { error: error instanceof Error ? error.message : String(error) });
+      } else {
+        response.end();
+      }
+    }
+  });
+
+  await new Promise<void>((resolve) => server.listen(port, host, resolve));
+  const address = server.address();
+  const actualPort = address !== null && typeof address === "object" ? address.port : port;
+  const dialHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+  boundUrl = options.publicUrl ?? `http://${dialHost}:${actualPort}`;
+  log(`forwarding to enclave ${enclave}; this process holds ciphertext and no key`);
+
+  return {
+    server,
+    port: actualPort,
+    url: boundUrl,
+    card: cardFor(),
+    bundle: options.bundle,
+    // The forwarder's "model bytes" are the verified CIPHERTEXT, never plaintext.
+    modelBytes: ciphertext,
+    close: async () => {
+      server.closeAllConnections?.();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
 export async function startProvider(options: ProviderOptions): Promise<Provider> {
   const log = options.log ?? (() => {});
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -360,6 +555,19 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   if (bundleErrors.length > 0) {
     throw new Error(`refusing to serve an invalid model bundle: ${bundleErrors.join("; ")}`);
   }
+
+  // A forwarding provider holds no key and loads no model; it verifies the
+  // committed ciphertext and proxies to an enclave that alone can open it.
+  if (options.enclaveEndpoint !== undefined) {
+    return startEnclaveProxy(options, options.enclaveEndpoint);
+  }
+
+  // The enclave opens a bundle sealed to it: the data key is unwrapped with the
+  // enclave's private key, and never leaves this process.
+  const sealKey =
+    options.enclaveKey !== undefined && options.bundle.sealing?.wrap !== undefined
+      ? unwrapSealKey(options.bundle, options.enclaveKey)
+      : options.sealKey;
 
   const manifestHash = bundleManifestHash(options.bundle);
   // The manifest must be in RAREXT too, so a reader can fetch the same list of
@@ -384,7 +592,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     registry: options.registry,
     bundle: options.bundle,
     fetchImpl,
-    ...(options.sealKey === undefined ? {} : { sealKey: options.sealKey }),
+    ...(sealKey === undefined ? {} : { sealKey }),
     onShard: (index, size) => log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`),
   });
   log(
@@ -470,6 +678,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             signature: options.teeSigner.sign(providerQuotePayload(body)),
             publicKey: options.teeSigner.publicKey,
             suite: options.teeSigner.suite,
+            ...(options.teeChain === undefined ? {} : { chain: options.teeChain }),
           },
         };
       })(),
@@ -548,6 +757,22 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         return;
       }
 
+      // The machine attestation on its own, so a forwarding provider can adopt
+      // the enclave's identity (quote and chain included) without the card.
+      if (request.method === "GET" && url.pathname === "/v1/attestation") {
+        sendJson(response, 200, {
+          role: "enclave",
+          bundle: options.bundle.digest,
+          attestation: cardFor().independence ?? null,
+          // The enclave's public key, so a caller can seal a prompt to it.
+          enclavePublicKey:
+            options.enclaveKey === undefined
+              ? null
+              : createPublicKey(options.enclaveKey).export({ type: "spki", format: "pem" }),
+        });
+        return;
+      }
+
       if (request.method === "GET" && url.pathname === "/v1/bundle") {
         sendJson(response, 200, options.bundle);
         return;
@@ -571,8 +796,56 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
       if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
         const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
-        const result = await complete(body);
         const modelId = options.bundle.model.id;
+
+        // A sealed prompt: only the enclave opens it, runs it, and seals the
+        // answer under the caller's key. Anything relaying this request — a
+        // forwarding provider, a gateway, a log — sees ciphertext.
+        if (isRecord(body.confidential)) {
+          if (options.enclaveKey === undefined) {
+            sendJson(response, 400, {
+              error: "this provider holds no enclave key; it cannot open a confidential request",
+            });
+            return;
+          }
+          let opened: { body: unknown; key: Buffer };
+          try {
+            opened = openRequest(options.enclaveKey, body.confidential as unknown as SealedRequest);
+          } catch (error) {
+            sendJson(response, 400, {
+              error: error instanceof Error ? error.message : "cannot open the confidential request",
+            });
+            return;
+          }
+          const inner = isRecord(opened.body) ? opened.body : {};
+          const result = await complete(inner);
+          const created = Math.floor(Date.now() / 1000);
+          const promptWords = lastUserText(inner).split(/\s+/).filter(Boolean).length;
+          sendJson(response, 200, {
+            model: modelId,
+            confidential: sealResponse(opened.key, {
+              id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
+              object: "chat.completion",
+              created,
+              model: modelId,
+              choices: [
+                {
+                  index: 0,
+                  message: { role: "assistant", content: result.text },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: promptWords,
+                completion_tokens: result.steps,
+                total_tokens: promptWords + result.steps,
+              },
+            }),
+          });
+          return;
+        }
+
+        const result = await complete(body);
         const created = Math.floor(Date.now() / 1000);
 
         if (body.stream === true) {

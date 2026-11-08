@@ -55,11 +55,14 @@ import {
   fetchBundleManifest,
   fetchProviderCard,
   generateSealKey,
+  providerBootStages,
+  providerChainDepth,
+  providerStageMeasurements,
   uploadBundle,
-  verifyProviderQuote,
   verifyModelBundle,
+  verifyProviderChain,
 } from "./model-bundle.ts";
-import type { ExecutionRef, ModelBundle } from "./model-bundle.ts";
+import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bundle.ts";
 import { loadProviderBundle, startProvider } from "./provider.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
 import { AgentSigner, RarextClient } from "../../../packages/agent-sdk/src/index.ts";
@@ -142,13 +145,20 @@ Common options:
   --chunk-bytes <n>     shard size for bundle (default 8 MiB)
   --seal                store the shards as ciphertext; write the key beside the bundle
   --seal-key-file <p>   read a seal key (64 hex chars or 32 bytes) for bundle/provider/deploy
+  --seal-to <pem>       seal to an enclave: wrap the key to its public key, write no key file
+  --enclave-key-file <pem>  this process is the enclave: unwrap the model with its private key
+  --enclave-endpoint <url>  forward inference to an enclave; hold ciphertext and no key
   --machine <id>        the machine identity a provider attests (default: host fingerprint)
   --measurement <hex>   the software/image measurement a provider attests (default: machine digest)
   --measure <hex,...>   deploy: allowlist of measurements a provider must match
   --engine-version <v>  the serving engine's version, pinned by its fingerprint
   --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
-  --tee-key-file <p>    the vendor/attestation key that signs a provider's machine quote
-  --tee-vendor <keyId>  deploy: the vendor key id whose machine quotes are accepted
+  --tee-key-file <p>    the leaf/attestation key that signs a provider's machine quote
+  --tee-cert-file <p>   certificates chaining the leaf key up to the trust anchor
+  --tee-vendor <keyId>  deploy: the trust-anchor key id a quote's chain must terminate at
+  --tee-chain-depth <n> deploy: minimum chain depth (2 = leaf -> platform -> vendor root)
+  --tee-boot-stages <list> deploy: measured-boot stages the chain must name (e.g. firmware,os,app)
+  --tee-boot-measurements <list> deploy: per-stage measurements (e.g. firmware=<hex>,os=<hex>,app=<hex>)
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -236,6 +246,16 @@ function readTeeSigner(path: string): { sign(payload: unknown): string; publicKe
   } catch (error) {
     throw new Error(`tee key at ${path} is not a usable private key: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/** Read a certificate chain file: a JSON array, or `{ "chain": [...] }`. */
+function readTeeChain(path: string): ProviderCertificate[] {
+  const value = readJson(path) as unknown;
+  if (Array.isArray(value)) return value as ProviderCertificate[];
+  if (value !== null && typeof value === "object" && Array.isArray((value as { chain?: unknown }).chain)) {
+    return (value as { chain: ProviderCertificate[] }).chain;
+  }
+  throw new Error(`tee certificate chain at ${path} must be an array or { "chain": [ ... ] }`);
 }
 
 function readSealKeyFile(path: string): Buffer {
@@ -599,15 +619,21 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   // 0600) for the provider, and only its hash is committed in the manifest.
   const sealRequested = bool(values, "seal");
   const sealKeyFlag = flag(values, "seal-key-file");
+  const sealTo = flag(values, "seal-to");
+  // Sealing to an enclave wraps the data key to the enclave's public key, so NO
+  // plaintext key file is written: only the enclave can open the model.
+  const wrapPublicKey = sealTo === undefined ? undefined : readFileSync(resolve(sealTo), "utf8");
   let sealKey: Buffer | undefined;
   let sealKeyPath: string | null = null;
   if (sealKeyFlag !== undefined) {
     sealKey = readSealKeyFile(resolve(sealKeyFlag));
     sealKeyPath = resolve(sealKeyFlag);
-  } else if (sealRequested) {
+  } else if (sealRequested || sealTo !== undefined) {
     sealKey = generateSealKey();
-    sealKeyPath = join(out, "seal.key");
-    writeFileSync(sealKeyPath, `${sealKey.toString("hex")}\n`, { mode: 0o600 });
+    if (sealTo === undefined) {
+      sealKeyPath = join(out, "seal.key");
+      writeFileSync(sealKeyPath, `${sealKey.toString("hex")}\n`, { mode: 0o600 });
+    }
   }
 
   const chunkBytes = Number(flag(values, "chunk-bytes") ?? 8 * 1024 * 1024);
@@ -617,6 +643,7 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
     execution,
     chunkBytes,
     ...(sealKey === undefined ? {} : { sealKey }),
+    ...(wrapPublicKey === undefined ? {} : { wrapPublicKey }),
   });
   const errors = verifyModelBundle(bundle);
   if (errors.length > 0) {
@@ -700,6 +727,15 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "tee-key-file") === undefined
       ? {}
       : { teeSigner: readTeeSigner(resolve(flag(values, "tee-key-file")!)) }),
+    ...(flag(values, "tee-cert-file") === undefined
+      ? {}
+      : { teeChain: readTeeChain(resolve(flag(values, "tee-cert-file")!)) }),
+    ...(flag(values, "enclave-key-file") === undefined
+      ? {}
+      : { enclaveKey: readFileSync(resolve(flag(values, "enclave-key-file")!), "utf8") }),
+    ...(flag(values, "enclave-endpoint") === undefined
+      ? {}
+      : { enclaveEndpoint: flag(values, "enclave-endpoint") }),
     ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
   });
@@ -963,7 +999,7 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     if (!operatorsCommitted) {
       throw new Error("--tee-vendor requires every provider card to name an operator identity");
     }
-    const vendors = cards.map((entry) => verifyProviderQuote(entry.independence));
+    const vendors = cards.map((entry) => verifyProviderChain(entry.independence));
     if (vendors.some((vendor) => vendor !== teeVendorFlag)) {
       throw new Error(
         `--tee-vendor ${teeVendorFlag} does not match every provider's machine quote ` +
@@ -971,6 +1007,71 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
       );
     }
     teeVendor = teeVendorFlag;
+  }
+
+  // A hardware-rooted attestation: the chain must reach the pinned vendor root
+  // AND be at least this deep, so a bare leaf is refused by name.
+  const teeChainDepthFlag = flag(values, "tee-chain-depth");
+  let teeChainDepth: number | null = null;
+  if (teeChainDepthFlag !== undefined) {
+    const depth = Number(teeChainDepthFlag);
+    if (!Number.isSafeInteger(depth) || depth < 1) {
+      throw new Error("--tee-chain-depth must be a positive integer");
+    }
+    if (teeVendor === null) {
+      throw new Error("--tee-chain-depth requires --tee-vendor");
+    }
+    const depths = cards.map((entry) => providerChainDepth(entry.independence));
+    if (depths.some((value) => value < depth)) {
+      throw new Error(
+        `--tee-chain-depth ${depth} does not hold for every provider chain (${depths.join(", ")})`,
+      );
+    }
+    teeChainDepth = depth;
+  }
+
+  // A measured-boot requirement: the chain must name every stage the deployment
+  // trusts, so a leaf signed outside the measured boot cannot count.
+  const teeBootStagesFlag = flag(values, "tee-boot-stages");
+  let teeBootStages: string[] | null = null;
+  if (teeBootStagesFlag !== undefined) {
+    const stages = teeBootStagesFlag.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+    if (stages.length === 0) throw new Error("--tee-boot-stages needs at least one stage name");
+    if (teeVendor === null) throw new Error("--tee-boot-stages requires --tee-vendor");
+    const missing = stages.filter((stage) =>
+      cards.some((entry) => !providerBootStages(entry.independence).includes(stage)),
+    );
+    if (missing.length > 0) {
+      throw new Error(`--tee-boot-stages not present in every provider chain: ${missing.join(", ")}`);
+    }
+    teeBootStages = stages;
+  }
+
+  // Per-stage measurements the deployment approves: the stage names become
+  // checked values. A provider whose chain carries a different firmware/OS/app
+  // measurement is refused here and at every later layer.
+  const teeBootMeasurementsFlag = flag(values, "tee-boot-measurements");
+  let teeStageMeasurements: Record<string, string> | null = null;
+  if (teeBootMeasurementsFlag !== undefined) {
+    const record: Record<string, string> = {};
+    for (const entry of teeBootMeasurementsFlag.split(",")) {
+      const [stage, measurement] = entry.split("=").map((part) => part.trim());
+      if (stage === undefined || stage === "" || measurement === undefined || !/^[0-9a-f]{64}$/.test(measurement)) {
+        throw new Error("--tee-boot-measurements entries must be stage=sha256hex");
+      }
+      record[stage] = measurement;
+    }
+    if (Object.keys(record).length === 0) throw new Error("--tee-boot-measurements needs at least one stage");
+    if (teeBootStages === null) throw new Error("--tee-boot-measurements requires --tee-boot-stages");
+    const mismatched = Object.entries(record).filter(([stage, measurement]) =>
+      cards.some((entry) => providerStageMeasurements(entry.independence)[stage] !== measurement),
+    );
+    if (mismatched.length > 0) {
+      throw new Error(
+        `--tee-boot-measurements not matched by every provider chain: ${mismatched.map(([stage]) => stage).join(", ")}`,
+      );
+    }
+    teeStageMeasurements = record;
   }
 
   const primary = endpoints[0]!;
@@ -1016,6 +1117,15 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         ...(enginePin === null ? {} : { engineFingerprint: enginePin }),
         // The pinned vendor key whose machine quotes the deployment accepts.
         ...(teeVendor === null ? {} : { teeVendor }),
+        ...(teeChainDepth === null ? {} : { teeChainDepth: String(teeChainDepth) }),
+        ...(teeBootStages === null ? {} : { teeBootStages: teeBootStages.join(",") }),
+        ...(teeStageMeasurements === null
+          ? {}
+          : {
+              teeStageMeasurements: Object.entries(teeStageMeasurements)
+                .map(([stage, measurement]) => `${stage}=${measurement}`)
+                .join(","),
+            }),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -1951,13 +2061,20 @@ async function main(): Promise<number> {
       "verify-shards": { type: "boolean" },
       seal: { type: "boolean" },
       "seal-key-file": { type: "string" },
+      "seal-to": { type: "string" },
+      "enclave-key-file": { type: "string" },
+      "enclave-endpoint": { type: "string" },
       machine: { type: "string" },
       measurement: { type: "string" },
       measure: { type: "string" },
       "engine-version": { type: "string" },
       "engine-digest": { type: "string" },
       "tee-key-file": { type: "string" },
+      "tee-cert-file": { type: "string" },
       "tee-vendor": { type: "string" },
+      "tee-chain-depth": { type: "string" },
+      "tee-boot-stages": { type: "string" },
+      "tee-boot-measurements": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },

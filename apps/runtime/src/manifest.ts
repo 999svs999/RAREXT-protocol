@@ -559,6 +559,45 @@ export function validateDeployment(value: unknown): string[] {
         errors.push("manifest.labels.teeVendor requires labels.quorum and labels.operators");
       }
     }
+    if (labels.teeChainDepth !== undefined) {
+      const depth = Number(labels.teeChainDepth);
+      if (!Number.isSafeInteger(depth) || depth < 1) {
+        errors.push("manifest.labels.teeChainDepth must be a positive integer");
+      }
+      if (labels.teeVendor === undefined) {
+        errors.push("manifest.labels.teeChainDepth requires labels.teeVendor");
+      }
+    }
+    if (labels.teeBootStages !== undefined) {
+      if (typeof labels.teeBootStages !== "string" || labels.teeBootStages.trim() === "") {
+        errors.push("manifest.labels.teeBootStages must be a comma-separated list of stage names");
+      } else {
+        const stages = labels.teeBootStages.split(",").map((entry) => entry.trim());
+        if (stages.some((entry) => entry === "")) {
+          errors.push("manifest.labels.teeBootStages must not contain an empty stage");
+        }
+        if (labels.teeVendor === undefined) {
+          errors.push("manifest.labels.teeBootStages requires labels.teeVendor");
+        }
+      }
+    }
+    if (labels.teeStageMeasurements !== undefined) {
+      if (typeof labels.teeStageMeasurements !== "string" || labels.teeStageMeasurements.trim() === "") {
+        errors.push("manifest.labels.teeStageMeasurements must be a comma-separated list of stage=sha256hex");
+      } else {
+        const entries = labels.teeStageMeasurements.split(",").map((entry) => entry.trim());
+        const malformed = entries.some((entry) => {
+          const [stage, measurement] = entry.split("=");
+          return !stage || !measurement || !/^[0-9a-f]{64}$/.test(measurement);
+        });
+        if (malformed) {
+          errors.push("manifest.labels.teeStageMeasurements entries must be stage=sha256hex");
+        }
+        if (labels.teeBootStages === undefined) {
+          errors.push("manifest.labels.teeStageMeasurements requires labels.teeBootStages");
+        }
+      }
+    }
   }
 
   return errors;

@@ -179,6 +179,16 @@ export {
   creditLedgerProblems,
 } from "./transfers.ts";
 export type { TransferInstruction } from "./transfers.ts";
+export {
+  REDEMPTION_KIND,
+  REDEEM_ACTION,
+  REDEMPTION_ROOT_DOMAIN,
+  redemptionRoot,
+  redemptionRecords,
+  redemptionProblems,
+  creditSupply,
+} from "./redemptions.ts";
+export type { RedemptionInstruction } from "./redemptions.ts";
 export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";

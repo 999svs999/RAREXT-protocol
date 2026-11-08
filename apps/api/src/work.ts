@@ -38,6 +38,13 @@ export type ActionId =
    */
   | "transfer"
   /**
+   * A REDEMPTION: credits removed from the ledger against a committed external
+   * reference — the ledger-side half of a cash-out. Unlike a transfer it is a
+   * debit with no matching credit, so it lowers the ledger total; the
+   * no-overdraft rule is what stops the same credits being redeemed twice.
+   */
+  | "redeem"
+  /**
    * A GOVERNANCE payment: the debit and credit a decided budget becomes. It is recorded in the same
    * ledger and covered by the same commitment as work, but the board does not offer it as a job —
    * nobody earns it by doing work, and it exists because a community can fund what it decides.

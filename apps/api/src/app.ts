@@ -177,7 +177,13 @@ import {
   transferRecords,
   transferRoot,
   creditBalances,
+  creditSupply,
+  REDEMPTION_KIND,
+  redemptionProblems,
+  redemptionRecords,
+  redemptionRoot,
   type TransferInstruction,
+  type RedemptionInstruction,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
 import {
@@ -2564,6 +2570,89 @@ export function createApp(options: AppOptions = {}): AppServer {
         send(res, 201, {
           transfer: { id, from, to, amount, nonce: instruction.nonce, at: instruction.at },
           balances: { from: after[from] ?? 0, to: after[to] ?? 0 },
+          receipts: records.map((record) => ({
+            ...record,
+            root: creditRoot(record, recordRootHash),
+            ledger: {
+              root: creditLedgerRoot(all, recordRootHash),
+              ...creditLedgerProof(all, record, recordRootHash),
+            },
+          })),
+        });
+        return;
+      }
+
+      // Cashing out. A redemption removes credits from the ledger against a
+      // committed external reference — the ledger-side half of a settlement the
+      // protocol cannot itself move. It is a debit with NO matching credit, so it
+      // lowers the ledger total; the same no-overdraft rule that stops a doubled
+      // transfer stops the same credits being redeemed twice, and the receipt
+      // proves against the whole-ledger root.
+      if (req.method === "POST" && pathname === "/v1/work/redeem") {
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== REDEMPTION_KIND) {
+          send(res, 400, { error: `payload must be a ${REDEMPTION_KIND} instruction` });
+          return;
+        }
+        const instruction: RedemptionInstruction = {
+          kind: REDEMPTION_KIND,
+          from: typeof payload.from === "string" ? payload.from : "",
+          amount: typeof payload.amount === "number" ? payload.amount : 0,
+          reference: typeof payload.reference === "string" ? payload.reference : "",
+          nonce: typeof payload.nonce === "string" ? payload.nonce : "",
+          at: typeof payload.at === "string" ? payload.at : "",
+        };
+        const problems = redemptionProblems(instruction);
+        if (problems.length > 0) {
+          send(res, 400, { error: problems.join("; ") });
+          return;
+        }
+        const redeemer = store.resolveKey(instruction.from);
+        if (!redeemer) {
+          send(res, 403, { error: "the redeeming key is not registered: a redemption binds a real identity" });
+          return;
+        }
+        if (typeof payload.signature !== "string" || payload.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        if (!verifyPayload(redeemer.publicKey as unknown as RarextJsonWebKey, instruction, payload.signature)) {
+          send(res, 401, { error: "the redemption is not signed by the redeeming key" });
+          return;
+        }
+
+        const id = redemptionRoot(instruction, recordRootHash);
+        const already = store
+          .listCredits()
+          .some((credit) => credit.action === "redeem" && credit.artifactHash === id);
+        if (already) {
+          send(res, 409, { error: "this redemption has already been applied" });
+          return;
+        }
+
+        const before = creditBalances(store.listCredits());
+        const available = before[instruction.from] ?? 0;
+        if (available < instruction.amount) {
+          send(res, 402, {
+            error: `insufficient credits: ${instruction.from} holds ${available}, the redemption is ${instruction.amount}`,
+          });
+          return;
+        }
+
+        const records = redemptionRecords(instruction, recordRootHash);
+        for (const record of records) store.addCredit(record as unknown as CreditRecord);
+        const all = store.listCredits();
+        send(res, 201, {
+          redemption: {
+            id,
+            from: instruction.from,
+            amount: instruction.amount,
+            reference: instruction.reference,
+            nonce: instruction.nonce,
+            at: instruction.at,
+          },
+          balance: creditBalances(all)[instruction.from] ?? 0,
+          supply: creditSupply(all),
           receipts: records.map((record) => ({
             ...record,
             root: creditRoot(record, recordRootHash),

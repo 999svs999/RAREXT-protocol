@@ -137,6 +137,31 @@ rides), so a payee can prove it was paid against a commitment anyone can recompu
 `credits.earned`, `credits.spent`, `credits.net` — so a transferred balance is visible
 as a spend and a net, not hidden in one total.
 
+## Leaving the ledger: redemption against an external reference
+
+A transfer keeps value inside the ledger. A **redemption** takes it out:
+
+```
+POST /v1/work/redeem
+{"kind":"rarext.credit-redemption.v1","from":"<keyId>","amount":5,
+ "reference":"chain:tx:0x…","nonce":"<unique>","at":"<now>",
+ "signature":"<base64 over the instruction>"}
+```
+
+Unlike a transfer, a redemption is a debit with **no matching credit**: it lowers the
+ledger total by exactly the amount removed, which is what "off the ledger" means,
+stated as a number (`creditSupply`) anyone can recompute. The `reference` is a
+commitment to the off-ledger settlement — a chain transaction id, an escrow id, a
+bank reference — so the ledger binds the removal to the thing that paid out. The
+same no-overdraft rule that stops a doubled transfer is the double-spend check
+here: you can only remove credits you hold, and the first removal is already in
+your balance. The receipt proves against the whole-ledger root, so the redeemer
+can show the removal happened against that reference.
+
+The ledger does not move real value — it cannot, and the protocol does not pretend
+otherwise. It records, with the same guarantees as every other rail, that these
+credits left circulation against that reference.
+
 ## Participation receipts
 
 The actions above pay for work. One more act happens every day and is worth recording even
