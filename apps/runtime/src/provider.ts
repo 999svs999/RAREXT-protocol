@@ -42,6 +42,12 @@ export interface ProviderOptions {
   /** URL clients should use when the bind host is not dialable. */
   publicUrl?: string;
   providerHandle?: string | null;
+  /**
+   * The key that opens a sealed bundle. The provider decrypts the shards in
+   * memory and never writes plaintext weights to disk; without the key a sealed
+   * bundle is refused before any model is loaded.
+   */
+  sealKey?: Uint8Array;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
 }
@@ -297,17 +303,33 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     );
   }
 
+  // A sealed bundle may only be served natively: the engine path materializes
+  // the weights to a file for the engine's own loader, which would put plaintext
+  // on disk. That would defeat the point of sealing, so it is refused rather
+  // than silently leaked.
+  if (options.bundle.sealing !== undefined && options.bundle.execution.kind === "engine") {
+    throw new Error(
+      "an engine bundle cannot serve sealed weights: the engine loads from a file. " +
+        "Sealed inference is native-only today.",
+    );
+  }
+
   log(
     `fetching ${options.bundle.shards.length} shard(s) / ${options.bundle.totalBytes} bytes ` +
-      `for ${options.bundle.model.id} from ${options.registry}`,
+      `for ${options.bundle.model.id} from ${options.registry}` +
+      (options.bundle.sealing === undefined ? "" : ` (sealed, ${options.bundle.sealing.scheme})`),
   );
   const { bytes } = await fetchBundleChunks({
     registry: options.registry,
     bundle: options.bundle,
     fetchImpl,
+    ...(options.sealKey === undefined ? {} : { sealKey: options.sealKey }),
     onShard: (index, size) => log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`),
   });
-  log(`verified ${bytes.length} bytes against ${options.bundle.model.weightsDigest}`);
+  log(
+    `verified ${bytes.length} bytes against ${options.bundle.model.weightsDigest}` +
+      (options.bundle.sealing === undefined ? "" : " (opened in memory; no plaintext on disk)"),
+  );
 
   let native: XorshiftModel | null = null;
   let engineModel: string | null = null;

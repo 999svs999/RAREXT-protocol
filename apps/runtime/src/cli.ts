@@ -10,7 +10,7 @@
  *   node apps/runtime/src/cli.ts verify  --transcript run.json --challenge challenges.json
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -57,6 +57,7 @@ import {
   fetchBundleChunks,
   fetchBundleManifest,
   fetchProviderCard,
+  generateSealKey,
   uploadBundle,
   verifyModelBundle,
 } from "./model-bundle.ts";
@@ -140,6 +141,8 @@ Common options:
   --execution <kind>    native | engine for a bundle (default engine)
   --engine-model <id>   engine-native name a provider creates (default bundle id)
   --chunk-bytes <n>     shard size for bundle (default 8 MiB)
+  --seal                store the shards as ciphertext; write the key beside the bundle
+  --seal-key-file <p>   read a seal key (64 hex chars or 32 bytes) for bundle/provider/deploy
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
   --allow-loopback      permit --remote/--web4 against 127.0.0.1 (test fixtures only)
@@ -205,6 +208,18 @@ function registryList(values: Record<string, unknown>, primary: string): string[
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+/**
+ * Read a seal key file: 64 hex characters (what `bundle --seal` writes) or the
+ * raw 32 bytes. Anything else is refused rather than hashed into a wrong key.
+ */
+function readSealKeyFile(path: string): Buffer {
+  const raw = readFileSync(path);
+  const text = raw.toString("utf8").trim();
+  if (/^[0-9a-fA-F]{64}$/.test(text)) return Buffer.from(text, "hex");
+  if (raw.length === 32) return Buffer.from(raw);
+  throw new Error(`seal key at ${path} must be 64 hex characters or 32 raw bytes`);
 }
 
 function specFromChallengeFile(path: string): ModelRunSpec {
@@ -555,12 +570,29 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
           };
   }
 
+  // Sealing: the shards stored on RAREXT are AES-256-GCM ciphertext, so the
+  // store never holds the weights. The key is written beside the bundle (mode
+  // 0600) for the provider, and only its hash is committed in the manifest.
+  const sealRequested = bool(values, "seal");
+  const sealKeyFlag = flag(values, "seal-key-file");
+  let sealKey: Buffer | undefined;
+  let sealKeyPath: string | null = null;
+  if (sealKeyFlag !== undefined) {
+    sealKey = readSealKeyFile(resolve(sealKeyFlag));
+    sealKeyPath = resolve(sealKeyFlag);
+  } else if (sealRequested) {
+    sealKey = generateSealKey();
+    sealKeyPath = join(out, "seal.key");
+    writeFileSync(sealKeyPath, `${sealKey.toString("hex")}\n`, { mode: 0o600 });
+  }
+
   const chunkBytes = Number(flag(values, "chunk-bytes") ?? 8 * 1024 * 1024);
   const { bundle, chunks } = buildModelBundle({
     bytes,
     model: modelRefFromFlags(values, overrides),
     execution,
     chunkBytes,
+    ...(sealKey === undefined ? {} : { sealKey }),
   });
   const errors = verifyModelBundle(bundle);
   if (errors.length > 0) {
@@ -584,9 +616,16 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   console.log(`  shardsRoot  ${bundle.shardsRoot}`);
   console.log(`  manifest    ${uploaded.manifestHash}`);
   console.log(`  execution   ${bundle.execution.kind}`);
+  if (bundle.sealing !== undefined) {
+    console.log(`  sealed      ${bundle.sealing.scheme} (keyCommitment ${bundle.sealing.keyCommitment.slice(0, 16)}…)`);
+  }
   console.log(`\nwrote ${bundlePath}`);
+  if (sealKeyPath !== null) console.log(`      ${sealKeyPath}  (seal key — deliver to providers out of band)`);
   console.log(`\nnext:`);
-  console.log(`  node apps/runtime/src/cli.ts provider --bundle ${bundlePath} --registry ${registry} --port 8791`);
+  console.log(
+    `  node apps/runtime/src/cli.ts provider --bundle ${bundlePath} --registry ${registry} --port 8791` +
+      (sealKeyPath === null ? "" : ` --seal-key-file ${sealKeyPath}`),
+  );
   return 0;
 }
 
@@ -608,6 +647,8 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     flag(values, "engine-endpoint") ??
     (bundle.execution.kind === "engine" ? "http://127.0.0.1:11434" : undefined);
   const out = flag(values, "out") === undefined ? null : resolve(flag(values, "out")!);
+  const sealKeyFlag = flag(values, "seal-key-file");
+  const sealKey = sealKeyFlag === undefined ? undefined : readSealKeyFile(resolve(sealKeyFlag));
 
   const provider = await startProvider({
     bundle,
@@ -618,6 +659,7 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
     ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
     providerHandle: flag(values, "handle") ?? null,
+    ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
   });
 
@@ -736,10 +778,16 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
   }
 
   if (bool(values, "verify-shards")) {
+    // For a sealed bundle this opens the shards with the key when one is given;
+    // without a key it still verifies the ciphertext against the commitment.
+    const deploySealFlag = flag(values, "seal-key-file");
+    const deploySealKey =
+      deploySealFlag === undefined ? undefined : readSealKeyFile(resolve(deploySealFlag));
     console.error(`[runtime] downloading ${bundle.shards.length} shard(s) from ${registry}`);
     await fetchBundleChunks({
       registry,
       bundle,
+      ...(deploySealKey === undefined ? {} : { sealKey: deploySealKey }),
       onShard: (index, size) =>
         console.error(`[runtime]   shard ${index + 1}/${bundle.shards.length} ${size} bytes`),
     });
@@ -1694,6 +1742,8 @@ async function main(): Promise<number> {
       "chunk-bytes": { type: "string" },
       "manifest-hash": { type: "string" },
       "verify-shards": { type: "boolean" },
+      seal: { type: "boolean" },
+      "seal-key-file": { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },
       parameters: { type: "string" },

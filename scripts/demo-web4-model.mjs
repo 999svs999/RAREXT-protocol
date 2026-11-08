@@ -201,7 +201,7 @@ try {
   // Credits each distinct agreeing operator earns for the run. Payment is a
   // commitment the deployment (and therefore the challenge) names, not a
   // gateway setting.
-  const bounty = Number(process.env.RAREXT_WEB4_BOUNTY ?? "5");
+  const bounty = Number(process.env.RAREXT_WEB4_BOUNTY ?? "12");
   if (!Number.isSafeInteger(bounty) || bounty <= 0) {
     throw new Error(`RAREXT_WEB4_BOUNTY must be a positive integer, got ${process.env.RAREXT_WEB4_BOUNTY}`);
   }

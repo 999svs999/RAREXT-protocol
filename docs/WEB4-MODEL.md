@@ -256,6 +256,45 @@ node apps/runtime/src/cli.ts compare \
 It verifies every card against the bundle, asks every provider the same question,
 and prints the canonical response digests and their agreement.
 
+## Payment
+
+A web4 deployment can commit a bounty (`labels.bounty`), and the challenge commits
+it too. When a quorum run completes, the gateway pays each **distinct agreeing
+operator** that amount and records the payment in the run:
+
+```json
+"credits": { "action": "infer", "bounty": 12, "paid": 2, "ledgerRoot": "…" }
+```
+
+Each operator's receipt is a RAREXT credit record — `keyId`, `action` (`infer`),
+`bounty`, `challengeId` (the deployment), `artifactHash` (the agreed answer), and
+`at` (when the run completed) — and `ledgerRoot` is the commitment over them.
+Nothing is taken on faith: `verify` recomputes the records from the quorum evidence
+and the committed bounty, so paying a dissenter, changing the amount, or editing
+the root makes the run fail. A dissent is evidence, not a payee, and a provider
+with no operator key cannot be paid.
+
+The gateway exposes the ledger as a view of its runs, with Merkle inclusion proofs:
+
+```bash
+curl http://gateway/v1/rarext/credits
+curl http://gateway/v1/rarext/credits/<operator-key-id>
+```
+
+And the node settles it in RAREXT's own credit ledger. A provider submits a signed
+`rarext.inference-work.v1` claim naming the run; the node — which attested and
+anchored that run — recomputes the payment from the run's own evidence (never from
+the claim) and records the operator's receipt, with an inclusion proof against the
+whole-ledger root:
+
+```bash
+curl -X POST https://registry.example/v1/work/inference \
+  -d '{"kind":"rarext.inference-work.v1","operator":"…","runDigest":"…","signature":"…"}'
+```
+
+`deploy --bounty <n>` commits the amount. The node's action board prices the same
+act (`infer`) at its own base; the run pays the amount the buyer committed.
+
 ## The verification chain
 
 ```
@@ -350,8 +389,11 @@ why a large file is sharded rather than sent as one object.
 - **Inference is not cryptographically proven.** The run transcript proves the
   bytes exchanged; a deterministic native model can be replayed from the bundle;
   an arbitrary GGUF cannot be reproduced bit-for-bit by the protocol alone.
-- **Payment is not wired.** A provider serves because an operator runs it, not
-  because the protocol pays for the work yet.
+- **Payment is per run, not a currency.** A committed bounty is recorded and
+  settled in RAREXT's credit ledger: the run commits who was paid, the verifier
+  recomputes it, and an operator proves its receipt against the ledger root. What
+  is not implemented is moving value off the ledger — there is no cash-out, and a
+  bounty is only as good as the accounts behind it.
 - **The engine is the provider's.** With `execution.kind: "engine"` the provider
   must have Ollama (today) and reproduces the model locally from the verified
   file. The weights still come from RAREXT; the compute is the provider's.

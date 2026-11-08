@@ -1,4 +1,9 @@
-import { createHash } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 import type { JsonWebKey } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
@@ -44,6 +49,23 @@ export interface BundleShard {
   size: number;
 }
 
+/** The one sealed-shard scheme: AES-256-GCM, one key per bundle. */
+export const SEAL_SCHEME = "aes-256-gcm";
+
+/**
+ * A sealed bundle. The shards on RAREXT are ciphertext, so the store — and
+ * anyone reading the blobs — never holds the weights. The plaintext model
+ * identity is still committed: `model.weightsDigest` and `model.sizeBytes` are
+ * the plaintext's, and only a holder of the key can produce bytes that match
+ * them. `keyCommitment` lets a provider check it was given the right key
+ * without the key ever appearing in the manifest.
+ */
+export interface BundleSealing {
+  scheme: typeof SEAL_SCHEME;
+  /** sha256 of the 32-byte key. */
+  keyCommitment: string;
+}
+
 export interface ModelBundle {
   kind: typeof MODEL_BUNDLE_KIND;
   version: 1;
@@ -52,9 +74,12 @@ export interface ModelBundle {
   execution: ExecutionRef;
   /** Every shard, in file order. */
   shards: BundleShard[];
+  /** Sum of the SHARD bytes: plaintext size for an open bundle, ciphertext for a sealed one. */
   totalBytes: number;
   /** Commitment over the shard list (index, hash, size). */
   shardsRoot: string;
+  /** Present when the shards are ciphertext and the model is opened with a key. */
+  sealing?: BundleSealing;
   createdAt: string;
   /** sha256 over the canonical bundle with this field absent. */
   digest: string;
@@ -73,6 +98,8 @@ export interface ProviderCard {
     weightsDigest: string;
     shardCount: number;
     totalBytes: number;
+    /** True when the shards are ciphertext and the provider opened them with a key. */
+    sealed?: boolean;
     /** sha256 of the canonical bundle bytes, so a reader can fetch the manifest itself. */
     manifestHash: string;
   };
@@ -154,6 +181,44 @@ export function chunkModelBytes(bytes: Uint8Array, chunkBytes = DEFAULT_CHUNK_BY
   return chunks;
 }
 
+const SEAL_KEY_BYTES = 32;
+const SEAL_NONCE_BYTES = 12;
+const SEAL_TAG_BYTES = 16;
+
+/** A fresh 32-byte seal key. The caller is responsible for delivering it. */
+export function generateSealKey(): Buffer {
+  return randomBytes(SEAL_KEY_BYTES);
+}
+
+export function sealKeyCommitment(key: Uint8Array): string {
+  return sha256Hex(key);
+}
+
+/**
+ * One shard: a random 96-bit nonce, the AES-256-GCM ciphertext, and the tag.
+ * Sealing each shard independently means a provider opens the shards it holds
+ * rather than the whole file at once, and a corrupted shard fails its own tag
+ * before any plaintext is trusted.
+ */
+function sealChunk(plain: Uint8Array, key: Uint8Array): Buffer {
+  const nonce = randomBytes(SEAL_NONCE_BYTES);
+  const cipher = createCipheriv(SEAL_SCHEME, key, nonce);
+  const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([nonce, ciphertext, cipher.getAuthTag()]);
+}
+
+function openChunk(sealed: Uint8Array, key: Uint8Array): Buffer {
+  if (sealed.length < SEAL_NONCE_BYTES + SEAL_TAG_BYTES) {
+    throw new Error("a sealed shard is shorter than its nonce and tag");
+  }
+  const nonce = sealed.subarray(0, SEAL_NONCE_BYTES);
+  const tag = sealed.subarray(sealed.length - SEAL_TAG_BYTES);
+  const ciphertext = sealed.subarray(SEAL_NONCE_BYTES, sealed.length - SEAL_TAG_BYTES);
+  const decipher = createDecipheriv(SEAL_SCHEME, key, nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
 export interface BuildBundleInput {
   bytes: Uint8Array;
   model: ModelRef;
@@ -161,6 +226,8 @@ export interface BuildBundleInput {
   id?: string;
   createdAt?: string;
   chunkBytes?: number;
+  /** When given (32 bytes), the shards are ciphertext and the bundle is sealed. */
+  sealKey?: Uint8Array;
 }
 
 /**
@@ -187,7 +254,17 @@ export function buildModelBundle(input: BuildBundleInput): {
     );
   }
 
-  const chunks = chunkModelBytes(input.bytes, input.chunkBytes ?? DEFAULT_CHUNK_BYTES);
+  const plaintextChunks = chunkModelBytes(input.bytes, input.chunkBytes ?? DEFAULT_CHUNK_BYTES);
+  let sealing: BundleSealing | undefined;
+  let chunks = plaintextChunks;
+  if (input.sealKey !== undefined) {
+    if (input.sealKey.length !== SEAL_KEY_BYTES) {
+      throw new Error(`a seal key must be ${SEAL_KEY_BYTES} bytes`);
+    }
+    sealing = { scheme: SEAL_SCHEME, keyCommitment: sealKeyCommitment(input.sealKey) };
+    chunks = plaintextChunks.map((chunk) => sealChunk(chunk, input.sealKey!));
+  }
+
   const shards: BundleShard[] = chunks.map((chunk, index) => ({
     index,
     hash: sha256Hex(chunk),
@@ -199,6 +276,8 @@ export function buildModelBundle(input: BuildBundleInput): {
     kind: MODEL_BUNDLE_KIND,
     version: 1,
     id,
+    // The model identity is the PLAINTEXT's: sizeBytes and weightsDigest describe
+    // the file a holder of the key reconstructs, not the ciphertext on the wire.
     model: {
       ...input.model,
       sizeBytes: input.bytes.length,
@@ -206,8 +285,9 @@ export function buildModelBundle(input: BuildBundleInput): {
     },
     execution: input.execution,
     shards,
-    totalBytes: input.bytes.length,
+    totalBytes: chunks.reduce((total, chunk) => total + chunk.length, 0),
     shardsRoot: bundleShardsRoot(shards),
+    ...(sealing === undefined ? {} : { sealing }),
     createdAt: input.createdAt ?? new Date().toISOString(),
   } satisfies Omit<ModelBundle, "digest">;
 
@@ -307,6 +387,32 @@ export function verifyModelBundle(value: unknown): string[] {
     }
   }
 
+  if (value.sealing !== undefined) {
+    if (!isRecord(value.sealing)) {
+      errors.push("bundle.sealing must be an object");
+    } else {
+      if (value.sealing.scheme !== SEAL_SCHEME) {
+        errors.push(`bundle.sealing.scheme must be "${SEAL_SCHEME}"`);
+      }
+      if (typeof value.sealing.keyCommitment !== "string" || !HEX64.test(value.sealing.keyCommitment)) {
+        errors.push("bundle.sealing.keyCommitment must be a sha256 hex digest");
+      }
+      // A sealed bundle's shards are ciphertext, so each holds at least a nonce
+      // and a tag more than its plaintext; a "sealed" bundle that is not bigger
+      // than its plaintext cannot be a real ciphertext.
+      if (isRecord(value.model) && Number.isSafeInteger(value.model.sizeBytes)) {
+        const shardCount = Array.isArray(value.shards) ? value.shards.length : 0;
+        const cipherOverhead = shardCount * (SEAL_NONCE_BYTES + SEAL_TAG_BYTES);
+        if (
+          Number.isSafeInteger(value.totalBytes) &&
+          (value.totalBytes as number) < (value.model.sizeBytes as number) + cipherOverhead
+        ) {
+          errors.push("bundle.totalBytes is too small for a sealed bundle of that model");
+        }
+      }
+    }
+  }
+
   if (typeof value.digest !== "string" || !HEX64.test(value.digest)) {
     errors.push("bundle.digest must be a sha256 hex digest");
   } else if (value.digest !== bundleDigest(value as unknown as ModelBundle)) {
@@ -316,10 +422,19 @@ export function verifyModelBundle(value: unknown): string[] {
   return unique(errors);
 }
 
-/** Verify fetched shard bytes against the shard list and the whole-file digest. */
+/**
+ * Verify fetched shard bytes against the shard list and the model identity.
+ *
+ * For an open bundle the shards ARE the file, so the whole-file digest is
+ * checked directly. For a sealed bundle the shards are ciphertext: their
+ * hashes and sizes are checked against the commitment, and the plaintext
+ * digest is checked only when a key is supplied — a reader without the key can
+ * still prove the ciphertext is the committed ciphertext.
+ */
 export function verifyBundleChunks(
   bundle: ModelBundle,
   chunks: Uint8Array[],
+  sealKey?: Uint8Array,
 ): { ok: boolean; errors: string[]; bytes: Buffer } {
   const errors: string[] = [];
 
@@ -339,16 +454,44 @@ export function verifyBundleChunks(
     }
   }
 
-  const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-  if (bytes.length !== bundle.totalBytes) {
-    errors.push(`reassembled ${bytes.length} bytes, expected ${bundle.totalBytes}`);
+  const ciphertext = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+  if (ciphertext.length !== bundle.totalBytes) {
+    errors.push(`reassembled ${ciphertext.length} bytes, expected ${bundle.totalBytes}`);
   }
-  const digest = modelWeightsDigest(bytes);
+
+  if (bundle.sealing !== undefined) {
+    if (sealKey === undefined) {
+      return { ok: errors.length === 0, errors, bytes: ciphertext };
+    }
+    if (sealKeyCommitment(sealKey) !== bundle.sealing.keyCommitment) {
+      errors.push("the seal key does not match the bundle's key commitment");
+      return { ok: false, errors, bytes: ciphertext };
+    }
+    let plaintext: Buffer;
+    try {
+      plaintext = Buffer.concat(
+        chunks.map((chunk) => openChunk(Buffer.from(chunk), sealKey)),
+      );
+    } catch {
+      errors.push("a sealed shard did not authenticate under the key");
+      return { ok: false, errors, bytes: ciphertext };
+    }
+    if (plaintext.length !== bundle.model.sizeBytes) {
+      errors.push(`opened ${plaintext.length} bytes, expected ${bundle.model.sizeBytes}`);
+    }
+    const digest = modelWeightsDigest(plaintext);
+    if (digest !== bundle.model.weightsDigest) {
+      errors.push(`opened model hashes to ${digest}, expected ${bundle.model.weightsDigest}`);
+    }
+    return { ok: errors.length === 0, errors, bytes: plaintext };
+  }
+
+  const digest = modelWeightsDigest(ciphertext);
   if (digest !== bundle.model.weightsDigest) {
     errors.push(`reassembled model hashes to ${digest}, expected ${bundle.model.weightsDigest}`);
   }
 
-  return { ok: errors.length === 0, errors, bytes };
+  return { ok: errors.length === 0, errors, bytes: ciphertext };
 }
 
 export function reassembleChunks(chunks: Uint8Array[]): Buffer {
@@ -432,6 +575,8 @@ export interface FetchBundleInput {
   bundle: ModelBundle;
   fetchImpl?: typeof fetch;
   onShard?: (index: number, size: number) => void;
+  /** Required to open a sealed bundle; ignored for an open one. */
+  sealKey?: Uint8Array;
 }
 
 /**
@@ -446,7 +591,9 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
 }> {
   const fetchImpl = input.fetchImpl ?? fetch;
   const registry = normalizeBase(input.registry);
-  const bytes = Buffer.allocUnsafe(input.bundle.totalBytes);
+  const sealed = input.bundle.sealing !== undefined;
+  const chunks: Buffer[] = [];
+  const bytes = sealed ? null : Buffer.allocUnsafe(input.bundle.totalBytes);
   const whole = createHash("sha256");
   let offset = 0;
 
@@ -462,26 +609,55 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
           `(${chunk.length} bytes, sha256 ${sha256Hex(chunk)})`,
       );
     }
-    if (offset + chunk.length > bytes.length) {
-      throw new Error(`shard ${shard.index} overruns the committed total of ${bytes.length} bytes`);
+    if (offset + chunk.length > input.bundle.totalBytes) {
+      throw new Error(
+        `shard ${shard.index} overruns the committed total of ${input.bundle.totalBytes} bytes`,
+      );
     }
-    chunk.copy(bytes, offset);
+    if (bytes === null) chunks.push(chunk);
+    else chunk.copy(bytes, offset);
     offset += chunk.length;
     whole.update(chunk);
     input.onShard?.(shard.index, chunk.length);
   }
 
-  if (offset !== bytes.length) {
-    throw new Error(`reassembled ${offset} bytes, expected ${bytes.length}`);
+  if (offset !== input.bundle.totalBytes) {
+    throw new Error(`reassembled ${offset} bytes, expected ${input.bundle.totalBytes}`);
   }
-  const digest = `sha256:${whole.digest("hex")}`;
+
+  // An open bundle's shards ARE the file; verify the whole-file digest directly.
+  if (bytes !== null) {
+    const digest = `sha256:${whole.digest("hex")}`;
+    if (digest !== input.bundle.model.weightsDigest) {
+      throw new Error(
+        `reassembled model hashes to ${digest}, expected ${input.bundle.model.weightsDigest}`,
+      );
+    }
+    return { bytes };
+  }
+
+  // A sealed bundle's shards are ciphertext. Opening happens here, in memory, and
+  // the plaintext is verified against the committed model identity before it is
+  // returned — the caller never has to trust the key or the transport.
+  const sealKey = input.sealKey;
+  if (sealKey === undefined) {
+    throw new Error("this model bundle is sealed; a seal key is required to open it");
+  }
+  if (sealKeyCommitment(sealKey) !== input.bundle.sealing!.keyCommitment) {
+    throw new Error("the seal key does not match the bundle's key commitment");
+  }
+  const plaintext = Buffer.concat(chunks.map((chunk) => openChunk(chunk, sealKey)));
+  if (plaintext.length !== input.bundle.model.sizeBytes) {
+    throw new Error(`opened ${plaintext.length} bytes, expected ${input.bundle.model.sizeBytes}`);
+  }
+  const digest = modelWeightsDigest(plaintext);
   if (digest !== input.bundle.model.weightsDigest) {
     throw new Error(
-      `reassembled model hashes to ${digest}, expected ${input.bundle.model.weightsDigest}`,
+      `opened model hashes to ${digest}, expected ${input.bundle.model.weightsDigest}`,
     );
   }
 
-  return { bytes };
+  return { bytes: plaintext };
 }
 
 /** Fetch the bundle manifest by its content address and verify it. */
@@ -555,6 +731,7 @@ export function buildProviderCard(input: BuildProviderCardInput): ProviderCard {
       weightsDigest: input.bundle.model.weightsDigest!,
       shardCount: input.bundle.shards.length,
       totalBytes: input.bundle.totalBytes,
+      ...(input.bundle.sealing === undefined ? {} : { sealed: true }),
       manifestHash: input.manifestHash,
     },
     model: input.bundle.model,
@@ -601,6 +778,9 @@ export function verifyProviderCard(value: unknown): string[] {
     }
     if (!Number.isSafeInteger(bundle.totalBytes) || (bundle.totalBytes as number) < 1) {
       errors.push("bundle.totalBytes must be a positive integer");
+    }
+    if (bundle.sealed !== undefined && typeof bundle.sealed !== "boolean") {
+      errors.push("bundle.sealed must be a boolean when present");
     }
   }
 

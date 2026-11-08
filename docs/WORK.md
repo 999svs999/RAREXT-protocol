@@ -27,6 +27,7 @@ different.
 | `publish` | per published artifact | 5 | the artifact passes its challenge |
 | `remix` | per derivative | 20 | the lineage records the derivation |
 | `report` | per accepted revocation | 50 | the revocation is signed and the target confirmed |
+| `infer` | per agreed model completion | 12 | a quorum of providers agreed and the node attested the run |
 
 The numbers above are the *base*; the payout for a specific job is the base scaled by
 the difficulty of that job. A hard challenge pays more than a trivial one, and a rare
@@ -38,6 +39,8 @@ Rewards come from **demand**, not dilution:
 
 - A challenge carries a bounty — somebody who needs it verified pays for it.
 - Storage is paid by the person whose data it is.
+- Model inference is paid by the buyer: a deployment commits a bounty and a run
+  pays the distinct operators that agreed, settled in the same credit ledger.
 - Mirroring and relaying are paid from the protocol's fee share.
 
 So there is no emission treadmill, and no reflexivity between "the token price funds

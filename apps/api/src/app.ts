@@ -2453,11 +2453,19 @@ export function createApp(options: AppOptions = {}): AppServer {
           send(res, 403, { error: "the run did not pay this operator" });
           return;
         }
+        // The same run is never paid twice: the record is a function of the run
+        // (its agreed response and completion time), so a second claim for the
+        // SAME run recomputes the SAME receipt. A later run with the same answer
+        // completes at a different time and is a different payment.
         const alreadyPaid = store
           .listCredits()
           .some(
             (credit) =>
-              credit.keyId === operator && credit.action === "infer" && credit.artifactHash === runDigest,
+              credit.keyId === record.keyId &&
+              credit.action === record.action &&
+              credit.artifactHash === record.artifactHash &&
+              credit.challengeId === record.challengeId &&
+              credit.at === record.at,
           );
         if (alreadyPaid) {
           send(res, 409, { error: "this run has already been paid to this operator" });
