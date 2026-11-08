@@ -22,6 +22,14 @@ export type ActionId =
   | "remix"
   | "report"
   /**
+   * A MODEL-RUN payment: the compute a provider did to answer a quorum run. It
+   * is a PAID action — the buyer's demand (the run) is the bounty — unlike the
+   * zero-bounty receipt classes. The deployment commits the amount in its
+   * labels, the run commits who was paid as a ledger root, and the node records
+   * the credit when an operator claims it against the anchored, attested run.
+   */
+  | "infer"
+  /**
    * A GOVERNANCE payment: the debit and credit a decided budget becomes. It is recorded in the same
    * ledger and covered by the same commitment as work, but the board does not offer it as a job —
    * nobody earns it by doing work, and it exists because a community can fund what it decides.
@@ -117,6 +125,15 @@ export const ACTIONS: ActionDefinition[] = [
     difficulty: 3,
     description:
       "Submit a signed revocation for a leaked capability or a compromised verifier.",
+  },
+  {
+    id: "infer",
+    label: "Answer a model run",
+    unit: "per agreed model completion",
+    base: 12,
+    difficulty: 1,
+    description:
+      "Serve inference for a run a challenge attests, so the network answers without a cloud model vendor.",
   },
 ];
 

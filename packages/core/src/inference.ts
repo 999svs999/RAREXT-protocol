@@ -16,6 +16,8 @@ export const INFER_ACTION = "infer";
  * for the same run by running several endpoints.
  */
 export interface InferenceQuorumProvider {
+  /** Where the provider answered, when known. Not part of the payment. */
+  endpoint?: string;
   /** canonical sha256 of the response this provider returned. */
   responseDigest: string;
   /** The operator identity the provider committed in its card, if any. */

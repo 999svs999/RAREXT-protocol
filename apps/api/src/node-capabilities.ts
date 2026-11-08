@@ -88,6 +88,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/work", note: "the action board and the work queue" },
     { path: "/v1/work/anchor", note: "the operator's anchoring receipt — the work ledger's mining analog" },
     { path: "/v1/work/earnings", note: "a participant's receipts with inclusion proofs" },
+    { path: "/v1/work/inference", note: "a provider's model-run payment: the compute a run attested and the node anchored" },
     { path: "/v1/work/ledger", note: "the whole-ledger commitment" },
     { path: "/v1/work/participation", note: "the participation receipt rail" },
     { path: "/v1/work/statement", note: "the ledger read from the earner's side: holds, credits, weight" },

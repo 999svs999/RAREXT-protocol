@@ -785,6 +785,18 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     );
   }
 
+  // A per-run bounty pays the distinct operators that agreed. It is only
+  // meaningful when there are operator identities to pay, so refuse a bounty
+  // that would pay nobody.
+  const bountyFlag = flag(values, "bounty");
+  const bounty = bountyFlag === undefined ? null : Number(bountyFlag);
+  if (bounty !== null && (!Number.isSafeInteger(bounty) || bounty <= 0)) {
+    throw new Error("--bounty must be a positive integer number of credits");
+  }
+  if (bounty !== null && !operatorsCommitted) {
+    throw new Error("--bounty requires every provider card to name a distinct operator identity");
+  }
+
   const primary = endpoints[0]!;
   const card = cards[0]!;
   const probe = {
@@ -817,6 +829,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         // Commit it when every card names one; the challenge then requires
         // agreement across distinct operators, not just distinct endpoints.
         ...(operatorsCommitted ? { operators: operatorIds.join(",") } : {}),
+        // A bounty makes the run pay the operators that agreed; the challenge
+        // commits the amount, so a run cannot invent its own price.
+        ...(bounty === null ? {} : { bounty: String(bounty) }),
         ...(endpoints.some((endpoint) => isLoopbackEndpoint(endpoint))
           ? { fixture: "loopback" }
           : {}),
@@ -1666,6 +1681,7 @@ async function main(): Promise<number> {
       "all-anchors": { type: "boolean" },
       "bundle-digest": { type: "string" },
       quorum: { type: "string" },
+      bounty: { type: "string" },
       prompt: { type: "string" },
       "max-tokens": { type: "string" },
       file: { type: "string" },

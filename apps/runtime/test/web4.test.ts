@@ -7,6 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import {
+  creditLeaf,
+  creditLedgerRoot,
+  inferenceCreditRecords,
+  verifyProof,
+} from "../../../packages/core/src/index.ts";
+import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { createApp } from "../../api/src/app.ts";
 import { createVerifierRegistry } from "../../api/src/verifiers.ts";
 import { PlacementRegistry } from "../../api/src/placements.ts";
@@ -726,6 +733,203 @@ test("providers are discovered across independent registries; a dead mirror is n
     await one.close();
     await two.close();
   }
+});
+
+test("a committed bounty pays every distinct agreeing operator, verifiably", async () => {
+  const bytesSha256 = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "provider-a"),
+      port: 0,
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "provider-b"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: first.url });
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          bounty: "5",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.inferenceBounty, 5);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+    });
+
+    const response = await fetch(`${gateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: deployment.model.id,
+        messages: [{ role: "user", content: "who gets paid?" }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    assert.ok(body.credits, "the run commits the payment it made");
+    assert.equal(body.credits!.action, "infer");
+    assert.equal(body.credits!.bounty, 5);
+    assert.equal(body.credits!.paid, 2);
+    assert.match(body.credits!.ledgerRoot, /^[0-9a-f]{64}$/);
+
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true, verified.error);
+    assert.ok(verified.details.checks.includes("credits"));
+
+    // The payment is not taken on faith: editing the root, the bounty, or the
+    // paid count moves the run away from what the quorum evidence implies.
+    const tamperedRoot = { ...body, credits: { ...body.credits!, ledgerRoot: "0".repeat(64) } };
+    assert.equal(verifyRunBody(tamperedRoot, spec).correct, false);
+    const tamperedBounty = { ...body, credits: { ...body.credits!, bounty: 6 } };
+    assert.equal(verifyRunBody(tamperedBounty, spec).correct, false);
+    const tamperedPaid = { ...body, credits: { ...body.credits!, paid: 9 } };
+    assert.equal(verifyRunBody(tamperedPaid, spec).correct, false);
+    // Paying a dissenter is a different ledger too.
+    const payingDissent = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry) => ({ ...entry, operator: "operator-a" })),
+      },
+      credits: body.credits!,
+    };
+    assert.equal(verifyRunBody(payingDissent, spec).correct, false);
+
+    // An operator can read its own receipts with a Merkle inclusion proof.
+    const ledgerView = (await (
+      await fetch(`${gateway.url}/v1/rarext/credits`)
+    ).json()) as { ledgerRoot: string; count: number; byOperator: Record<string, { credits: number }> };
+    assert.equal(ledgerView.ledgerRoot, body.credits!.ledgerRoot);
+    assert.equal(ledgerView.count, 2);
+    assert.equal(ledgerView.byOperator["operator-a"]!.credits, 5);
+
+    const mine = (await (
+      await fetch(`${gateway.url}/v1/rarext/credits/operator-a`)
+    ).json()) as {
+      statement: { credits: { earned: number } };
+      ledgerRoot: string;
+      receipts: Array<CreditRecordFields & { ledger: { root: string; index: number; proof: string[] } }>;
+    };
+    assert.equal(mine.statement.credits.earned, 5);
+    assert.equal(mine.receipts.length, 1);
+    const receipt = mine.receipts[0]!;
+    assert.equal(receipt.keyId, "operator-a");
+    assert.equal(receipt.bounty, 5);
+    assert.equal(receipt.action, "infer");
+    assert.equal(
+      verifyProof(
+        creditLeaf(receipt, (value) =>
+          createHash("sha256")
+            .update(typeof value === "string" ? Buffer.from(value, "utf8") : value)
+            .digest("hex"),
+        ),
+        receipt.ledger.proof,
+        mine.ledgerRoot,
+        receipt.ledger.index,
+        bytesSha256,
+      ),
+      true,
+      "the operator's receipt proves against the published root",
+    );
+
+    // The commitment the gateway published is exactly the one a reader derives
+    // from the run alone.
+    const derived = creditLedgerRoot(
+      inferenceCreditRecords({
+        providers: body.quorum!.providers.map((entry) => ({
+          responseDigest: entry.responseDigest,
+          operator: entry.operator ?? null,
+        })),
+        responseDigest: body.response.digest,
+        deploymentDigest: body.deployment.digest,
+        completedAt: body.completedAt,
+        bounty: 5,
+      }),
+      (value) =>
+        createHash("sha256")
+          .update(typeof value === "string" ? Buffer.from(value, "utf8") : value)
+          .digest("hex"),
+    );
+    assert.equal(derived, body.credits!.ledgerRoot);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a run under a bounty with no committed operators cannot be verified", () => {
+  // The deployment refuses to commit a bounty without operators to pay, so the
+  // challenge never names one and the run cannot invent a payment.
+  const probe: EngineProbe = {
+    engine: { name: "openai-compatible", version: "web4", endpoint: "https://provider.example" },
+    model: { ...NATIVE_REF, weightsDigest: `sha256:${"a".repeat(64)}` },
+    apis: ["openai"],
+    models: [],
+  };
+  const deployment = commitDeployment(
+    buildDeployment({
+      probe,
+      hardware: hardwareFromNetwork("https://provider.example"),
+      placement: "web4",
+      labels: {
+        execution: "web4",
+        bundle: "a".repeat(64),
+        shardsRoot: "b".repeat(64),
+        manifestHash: "c".repeat(64),
+        providers: "https://provider.example",
+        quorum: "1",
+        bounty: "5",
+      },
+    }),
+  );
+  assert.ok(
+    validateDeployment(deployment).some((error) => error.includes("labels.bounty requires")),
+    "a bounty without operators is refused before it can pay nobody",
+  );
 });
 
 test("two providers must agree, and the run records the quorum evidence", async () => {

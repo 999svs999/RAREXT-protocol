@@ -17,6 +17,7 @@
  *   serve     bind the gateway in front of the providers
  *   infer     run inference through the providers, not on this host
  *   publish   publish the run with its quorum evidence
+ *   pay       pay each agreeing operator and prove it against the ledger root
  *   compare   ask every provider the same question and compare answers
  *   weights   prove the source model file is gone and the bytes came from RAREXT
  *   replay    regenerate the output from the committed bundle and seed
@@ -38,6 +39,7 @@
  * from RAREXT; the engine is the provider's, not the caller's.
  */
 
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
@@ -46,7 +48,9 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isXorshiftModel } from "../packages/core/src/ai.ts";
-import { canonicalDigest } from "../apps/runtime/src/digest.ts";
+import { creditLeaf } from "../packages/core/src/credits.ts";
+import { verifyProof } from "../packages/core/src/merkle.ts";
+import { canonicalDigest, sha256Hex } from "../apps/runtime/src/digest.ts";
 import { discoverBundle } from "../apps/runtime/src/discovery.ts";
 import { startGateway } from "../apps/runtime/src/gateway.ts";
 import { RunLedger, writeJsonFile } from "../apps/runtime/src/ledger.ts";
@@ -194,6 +198,13 @@ try {
   const real = typeof gguf === "string" && gguf !== "";
   const modelId = process.env.RAREXT_WEB4_MODEL ?? (real ? "rarext-web4-model" : "rarext-native-proof");
   const engineModel = process.env.RAREXT_WEB4_ENGINE_MODEL ?? "rarext-web4-model";
+  // Credits each distinct agreeing operator earns for the run. Payment is a
+  // commitment the deployment (and therefore the challenge) names, not a
+  // gateway setting.
+  const bounty = Number(process.env.RAREXT_WEB4_BOUNTY ?? "5");
+  if (!Number.isSafeInteger(bounty) || bounty <= 0) {
+    throw new Error(`RAREXT_WEB4_BOUNTY must be a positive integer, got ${process.env.RAREXT_WEB4_BOUNTY}`);
+  }
 
   // ── 1. A RAREXT node that holds bytes ────────────────────────────────────
   api = spawnApi({
@@ -348,6 +359,8 @@ try {
     ...providerUrls.flatMap((url) => ["--provider", url]),
     "--quorum",
     String(providerUrls.length),
+    "--bounty",
+    String(bounty),
     "--registry",
     startBase,
     "--allow-loopback",
@@ -368,7 +381,8 @@ try {
       deployment.labels.quorum === String(providerUrls.length) &&
       deployment.labels.providers.split(",").length === providerUrls.length &&
       deployment.labels.operators.split(",").length === providerUrls.length &&
-      new Set(deployment.labels.operators.split(",")).size === providerUrls.length,
+      new Set(deployment.labels.operators.split(",")).size === providerUrls.length &&
+      deployment.labels.bounty === String(bounty),
     `${modelId} as ${deployment.digest.slice(0, 16)}…; bundle ${bundle.digest.slice(0, 16)}…, ` +
       `quorum ${deployment.labels.quorum}/${providerUrls.length}` +
       (deployment.labels.operators ? ` over ${deployment.labels.operators.split(",").length} operator(s)` : "") +
@@ -519,6 +533,69 @@ try {
     publication
       ? `publication ${publication.id.slice(0, 8)}… attested; the run names bundle ${String(publishedBody?.bundle?.digest).slice(0, 12)}… and quorum ${String(publishedBody?.quorum?.agreed)}/${String(publishedBody?.quorum?.required)}`
       : `attested=${String(attested)} publication=${String(publicationId)}`,
+  );
+
+  // ── 9a. The run paid every agreeing operator, and each can prove it ──────
+  // The gateway derived the payment from the quorum evidence and the committed
+  // bounty; the run commits a ledger root over one receipt per distinct
+  // operator. This asks the gateway for the ledger and for one operator's
+  // receipts, then checks each receipt against the published root with the same
+  // Merkle rule a stranger would use.
+  const bytesSha256 = (bytes) => new Uint8Array(createHash("sha256").update(bytes).digest());
+  const creditsView = await getJson(`${gateway.url}/v1/rarext/credits`);
+  let proofsOk = true;
+  let proofDetail = "";
+  for (const entry of providerCards) {
+    const keyId = entry.provider.keyId;
+    if (typeof keyId !== "string" || keyId === "") {
+      proofsOk = false;
+      proofDetail = "a paid provider named no operator key";
+      break;
+    }
+    const mine = await getJson(`${gateway.url}/v1/rarext/credits/${encodeURIComponent(keyId)}`);
+    const receipt = mine.receipts?.[0];
+    if (!receipt || !receipt.ledger) {
+      proofsOk = false;
+      proofDetail = `operator ${keyId.slice(0, 10)}… carries no receipt`;
+      break;
+    }
+    const leaf = creditLeaf(
+      {
+        keyId: receipt.keyId,
+        action: receipt.action,
+        bounty: receipt.bounty,
+        challengeId: receipt.challengeId,
+        artifactHash: receipt.artifactHash,
+        at: receipt.at,
+      },
+      sha256Hex,
+    );
+    const ok = verifyProof(
+      leaf,
+      receipt.ledger.proof,
+      mine.ledgerRoot,
+      receipt.ledger.index,
+      bytesSha256,
+    );
+    if (!ok) {
+      proofsOk = false;
+      proofDetail = `operator ${keyId.slice(0, 10)}…'s receipt does not prove against the root`;
+      break;
+    }
+  }
+  phase(
+    "pay",
+    publishedBody?.credits?.action === "infer" &&
+      publishedBody?.credits?.bounty === bounty &&
+      publishedBody?.credits?.paid === providerUrls.length &&
+      creditsView.ledgerRoot === publishedBody?.credits?.ledgerRoot &&
+      creditsView.count === providerUrls.length &&
+      creditsView.byOperator &&
+      Object.keys(creditsView.byOperator).length === providerUrls.length &&
+      proofsOk,
+    proofsOk
+      ? `${providerUrls.length} operator(s) paid ${bounty} credit(s) each; every receipt proves against ledger ${String(creditsView.ledgerRoot).slice(0, 12)}…`
+      : proofDetail,
   );
 
   // ── 9b. Ask every provider the same question and compare the answers ─────

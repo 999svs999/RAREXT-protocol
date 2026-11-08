@@ -170,6 +170,8 @@ import {
   admissionEntry,
   admissionProblems,
   budgetPaymentRecords,
+  canonicalize,
+  inferenceCreditRecords,
 } from "../../../packages/core/src/index.ts";
 import { nodeSha256 } from "./digest.ts";
 import {
@@ -2358,6 +2360,119 @@ export function createApp(options: AppOptions = {}): AppServer {
             ledger: {
               root: creditLedgerRoot(anchorLedger, recordRootHash),
               ...creditLedgerProof(anchorLedger, anchorRecord, recordRootHash),
+            },
+          },
+        });
+        return;
+      }
+
+      // A MODEL-RUN payment: the provider's side of inference. A run that a
+      // challenge attested and this node anchored commits a ledger root over one
+      // receipt per distinct agreeing operator. An operator submits a signed
+      // claim naming the run; the node finds that anchored, attested run,
+      // recomputes the payment from the run's own evidence — never from the
+      // claim — and records the operator's credit. The node pays only what the
+      // run already committed, and only to an operator the run paid.
+      if (req.method === "POST" && pathname === "/v1/work/inference") {
+        const payload = asRecord(await readJson(req));
+        if (payload.kind !== "rarext.inference-work.v1") {
+          send(res, 400, { error: "payload must be a rarext.inference-work.v1 claim" });
+          return;
+        }
+        const operator = payload.operator;
+        if (typeof operator !== "string" || operator.length === 0) {
+          send(res, 400, { error: "an inference claim needs the key that will hold the receipt" });
+          return;
+        }
+        const runDigest = payload.runDigest;
+        if (typeof runDigest !== "string" || !/^[0-9a-f]{64}$/.test(runDigest)) {
+          send(res, 400, { error: "an inference claim's runDigest must be the 64-hex run digest" });
+          return;
+        }
+        const registeredOperator = store.resolveKey(operator);
+        if (!registeredOperator) {
+          send(res, 403, { error: "the operator key is not registered: a receipt binds a real identity" });
+          return;
+        }
+        if (typeof payload.signature !== "string" || payload.signature.length === 0) {
+          send(res, 400, { error: "signature must be a base64 string" });
+          return;
+        }
+        const { signature: inferenceSignature, ...inferenceClaim } = payload;
+        if (!verifyPayload(registeredOperator.publicKey as unknown as RarextJsonWebKey, inferenceClaim, inferenceSignature)) {
+          send(res, 401, { error: "the claim's signature does not match the operator key" });
+          return;
+        }
+
+        // Corroboration: this node attested the run against its challenge and
+        // anchored it. A run it never accepted is one it cannot pay for.
+        const runPublication = store.listPublications().find((entry) => {
+          const artifact = asRecord(entry.artifact);
+          const body = artifact.body;
+          if (body === undefined) return false;
+          return (
+            toHex(nodeSha256(new TextEncoder().encode(canonicalize(body)))) === runDigest &&
+            entry.attestation?.correct === true &&
+            store.isAnchored(entry.id)
+          );
+        });
+        if (!runPublication) {
+          send(res, 404, {
+            error: `no anchored, attested run with digest ${runDigest.slice(0, 16)}…: this node cannot pay for it`,
+          });
+          return;
+        }
+
+        // Recompute the payment from the run itself, not from the claim. The
+        // run's bundling of credits.bounty is untrusted here; the records come
+        // from the quorum evidence and the committed amount.
+        const runBody = asRecord(asRecord(runPublication.artifact).body);
+        const quorum = asRecord(runBody.quorum);
+        const credits = asRecord(runBody.credits);
+        const response = asRecord(runBody.response);
+        const deploymentRef = asRecord(runBody.deployment);
+        const bounty = typeof credits.bounty === "number" ? credits.bounty : 0;
+        const providers = Array.isArray(quorum.providers) ? quorum.providers.map(asRecord) : [];
+        let records: ReturnType<typeof inferenceCreditRecords> = [];
+        try {
+          records = inferenceCreditRecords({
+            providers: providers.map((entry) => ({
+              responseDigest: typeof entry.responseDigest === "string" ? entry.responseDigest : "",
+              operator: typeof entry.operator === "string" ? entry.operator : null,
+            })),
+            responseDigest: typeof response.digest === "string" ? response.digest : "",
+            deploymentDigest: typeof deploymentRef.digest === "string" ? deploymentRef.digest : "",
+            completedAt: typeof runBody.completedAt === "string" ? runBody.completedAt : "",
+            bounty,
+          });
+        } catch {
+          records = [];
+        }
+        const record = records.find((entry) => entry.keyId === operator);
+        if (!record) {
+          send(res, 403, { error: "the run did not pay this operator" });
+          return;
+        }
+        const alreadyPaid = store
+          .listCredits()
+          .some(
+            (credit) =>
+              credit.keyId === operator && credit.action === "infer" && credit.artifactHash === runDigest,
+          );
+        if (alreadyPaid) {
+          send(res, 409, { error: "this run has already been paid to this operator" });
+          return;
+        }
+
+        store.addCredit(record as unknown as CreditRecord);
+        const all = store.listCredits();
+        send(res, 201, {
+          receipt: {
+            ...record,
+            root: creditRoot(record, recordRootHash),
+            ledger: {
+              root: creditLedgerRoot(all, recordRootHash),
+              ...creditLedgerProof(all, record, recordRootHash),
             },
           },
         });
