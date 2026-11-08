@@ -85,6 +85,36 @@ function operatorsSpec(labels: Record<string, string> | undefined): string[] | u
  * beside the quorum and operator commitments; a bounty without them pays nobody
  * and is not committed.
  */
+/**
+ * The machine identities a deployment committed, aligned index-for-index with
+ * its operators. Machine independence needs both, so the set is only committed
+ * when the label names them.
+ */
+function machinesSpec(labels: Record<string, string> | undefined): string[] | undefined {
+  if (labels?.machines === undefined) return undefined;
+  const machines = labels.machines
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  return machines.length === 0 ? undefined : machines;
+}
+
+/**
+ * Whether a deployment requires its quorum over distinct machines. Only
+ * meaningful with committed operators and machines of matching length, so a
+ * half-committed request is treated as absent rather than enforced vacuously.
+ */
+function independenceSpec(labels: Record<string, string> | undefined): "machine" | undefined {
+  if (labels?.independence !== "machine") return undefined;
+  const operators = operatorsSpec(labels);
+  const machines = machinesSpec(labels);
+  if (quorumSpec(labels) === undefined || operators === undefined || machines === undefined) {
+    return undefined;
+  }
+  if (operators.length !== machines.length) return undefined;
+  return "machine";
+}
+
 function inferenceBountySpec(labels: Record<string, string> | undefined): number | undefined {
   if (labels?.bounty === undefined) return undefined;
   if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
@@ -117,6 +147,12 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(inferenceBountySpec(manifest.labels) === undefined
         ? {}
         : { inferenceBounty: inferenceBountySpec(manifest.labels) }),
+      ...(independenceSpec(manifest.labels) === undefined
+        ? {}
+        : {
+            independence: independenceSpec(manifest.labels),
+            machines: machinesSpec(manifest.labels),
+          }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

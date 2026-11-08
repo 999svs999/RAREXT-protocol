@@ -470,6 +470,40 @@ export function validateDeployment(value: unknown): string[] {
         errors.push("manifest.labels.bounty requires labels.quorum and labels.operators");
       }
     }
+
+    // Machine independence counts the quorum over distinct machines. It needs
+    // the operators and the operator-aligned machines to check, and enough
+    // distinct machines to actually meet the quorum.
+    if (labels.independence !== undefined) {
+      if (labels.independence !== "machine") {
+        errors.push('manifest.labels.independence must be "machine" when present');
+      } else if (
+        labels.quorum === undefined ||
+        labels.operators === undefined ||
+        labels.machines === undefined
+      ) {
+        errors.push(
+          "manifest.labels.independence requires labels.quorum, labels.operators, and labels.machines",
+        );
+      } else if (typeof labels.operators !== "string" || typeof labels.machines !== "string") {
+        errors.push(
+          "manifest.labels.independence requires comma-separated labels.operators and labels.machines",
+        );
+      } else {
+        const operators = labels.operators.split(",").map((entry) => entry.trim());
+        const machines = labels.machines.split(",").map((entry) => entry.trim());
+        if (machines.some((entry) => entry === "")) {
+          errors.push("manifest.labels.machines must not contain an empty machine id");
+        }
+        if (machines.length !== operators.length) {
+          errors.push("manifest.labels.machines must be aligned index-for-index with labels.operators");
+        }
+        const quorum = Number(labels.quorum);
+        if (Number.isSafeInteger(quorum) && new Set(machines).size < quorum) {
+          errors.push("manifest.labels.independence needs at least quorum distinct machines");
+        }
+      }
+    }
   }
 
   return errors;

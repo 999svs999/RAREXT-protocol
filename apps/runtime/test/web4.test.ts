@@ -1401,6 +1401,169 @@ test("the gateway refuses a quorum met by one operator across two endpoints", as
   }
 });
 
+test("a machine-independent quorum refuses keys that attest the same machine", async () => {
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0 });
+    second = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0 });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+
+    // Each card attests a machine, bound to its operator key; co-located
+    // providers attest the same host by default.
+    assert.equal(cardA.independence?.kind, "rarext.provider-machine.v1");
+    assert.match(cardA.independence!.measurement, /^[0-9a-f]{64}$/);
+    assert.equal(cardA.independence!.machine, cardB.independence!.machine);
+
+    // The deployment commits distinct machines (from cards that attested
+    // distinct hosts). A run must then be met by distinct machines.
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          machines: "machine-a,machine-b",
+          independence: "machine",
+          quorum: "2",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.independence, "machine");
+    assert.deepEqual(spec.machines, ["machine-a", "machine-b"]);
+
+    // The gateway is pointed at two endpoints that both attest machine-a: two
+    // operator keys, one box. The run must not be written.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      machines: { [first.url]: "machine-a", [second.url]: "machine-a" },
+    });
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "one box?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /distinct machine/);
+    assert.equal(new RunLedger(join(reg.root, "gateway")).records().length, 0);
+    await gateway.close();
+    gateway = null;
+
+    // With distinct machines the same quorum is met and the run verifies.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-b"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      machines: { [first.url]: "machine-a", [second.url]: "machine-b" },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-b")).records()[0]!.body;
+    assert.deepEqual(
+      body.quorum!.providers.map((entry) => entry.machine),
+      ["machine-a", "machine-b"],
+    );
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true, verified.error);
+
+    // The verifier does not take the machines on faith: a run that claims the
+    // quorum with one machine, or a machine the deployment never committed, is
+    // refused.
+    const collapsed = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry) => ({ ...entry, machine: "machine-a" })),
+      },
+    };
+    assert.equal(verifyRunBody(collapsed, spec).correct, false);
+    const invented = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) => ({
+          ...entry,
+          machine: index === 0 ? "machine-z" : entry.machine,
+        })),
+      },
+    };
+    assert.equal(verifyRunBody(invented, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a machine-independent deployment needs distinct machines, or it is invalid", () => {
+  const probe: EngineProbe = {
+    engine: { name: "openai-compatible", version: "web4", endpoint: "https://provider.example" },
+    model: { ...NATIVE_REF, weightsDigest: `sha256:${"a".repeat(64)}` },
+    apis: ["openai"],
+    models: [],
+  };
+  const deployment = commitDeployment(
+    buildDeployment({
+      probe,
+      hardware: hardwareFromNetwork("https://provider.example"),
+      placement: "web4",
+      labels: {
+        execution: "web4",
+        bundle: "a".repeat(64),
+        shardsRoot: "b".repeat(64),
+        manifestHash: "c".repeat(64),
+        providers: "https://p1.example,https://p2.example",
+        operators: "op-1,op-2",
+        machines: "machine-a,machine-a",
+        independence: "machine",
+        quorum: "2",
+      },
+    }),
+  );
+  assert.ok(
+    validateDeployment(deployment).some((error) => error.includes("quorum distinct machines")),
+    "two operators on one machine cannot satisfy a machine-independent quorum",
+  );
+});
+
 test("a disagreeing provider blocks the run instead of averaging it away", async () => {
   const reg = await registry();
   let first: Awaited<ReturnType<typeof startProvider>> | null = null;

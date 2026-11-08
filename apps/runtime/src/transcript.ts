@@ -327,6 +327,27 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
               .filter((operator): operator is string => typeof operator === "string"),
           ).size >= spec.quorum;
 
+    // A machine-independent deployment counts the quorum over distinct
+    // machines. The machines are committed per operator, so a gateway cannot
+    // invent one: each agreeing provider's (operator, machine) pair must be one
+    // the deployment named at the same index, and there must be `quorum` of them.
+    const committedMachines = spec.machines;
+    const machinesMet =
+      spec.independence !== "machine" || committedMachines === undefined
+        ? true
+        : committedOperators !== undefined &&
+          committedMachines.length === committedOperators.length &&
+          agreeing.every((entry) => {
+            if (typeof entry.operator !== "string" || typeof entry.machine !== "string") return false;
+            const index = committedOperators.indexOf(entry.operator);
+            return index !== -1 && committedMachines[index] === entry.machine;
+          }) &&
+          new Set(
+            agreeing
+              .map((entry) => entry.machine)
+              .filter((machine): machine is string => typeof machine === "string"),
+          ).size >= spec.quorum;
+
     check(
       checks,
       failures,
@@ -344,7 +365,8 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         uniqueEndpoints &&
         providers.length === responded &&
         agreed === recomputedAgreed &&
-        operatorsMet,
+        operatorsMet &&
+        machinesMet,
     );
     check(
       checks,

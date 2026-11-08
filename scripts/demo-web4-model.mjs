@@ -912,6 +912,89 @@ try {
   }
   phase("settle", settleOk, settleDetail);
 
+  // ── 12c. Machine independence: one box is not two ────────────────────────
+  // Each provider card attests a machine, signed by the operator's own key. A
+  // deployment can demand its quorum over distinct machines. The two demo
+  // providers run on one host, so they attest the same machine — and a
+  // machine-independent quorum over them is refused. A single-machine quorum is
+  // still satisfiable.
+  let independenceOk = false;
+  let independenceDetail = "";
+  try {
+    const providerAlive = await getJson(`${providerUrls[0]}/health`).then(() => true).catch(() => false);
+    if (!providerAlive) throw new Error("provider A is not answering at the independence phase");
+    const machines = providerCards.map((entry) => entry.independence?.machine);
+    const attestationsPresent = providerCards.every(
+      (entry) =>
+        typeof entry.independence?.machine === "string" &&
+        /^[0-9a-f]{64}$/.test(entry.independence.measurement),
+    );
+    if (!attestationsPresent) throw new Error("a provider card attests no machine identity");
+
+    const refuseArgs = [
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--independence",
+      "machine",
+      "--registry",
+      startBase,
+      "--allow-loopback",
+      "--out",
+      join(state, "machine-deploy"),
+      "--json",
+    ];
+    const refusedDeploy = providerUrls.length >= 2 ? await runCli(refuseArgs) : null;
+
+    // A quorum of one machine is satisfied: the rule is about distinctness, not
+    // about forbidding a small deployment.
+    const single = await runCli([
+      "deploy",
+      "--web4",
+      "--provider",
+      providerUrls[0],
+      "--quorum",
+      "1",
+      "--independence",
+      "machine",
+      "--registry",
+      startBase,
+      "--allow-loopback",
+      "--out",
+      join(state, "machine-deploy-single"),
+      "--json",
+    ]);
+    const singleDeployment =
+      single.status === 0 ? JSON.parse(single.stdout).deployment : null;
+
+    if (providerUrls.length >= 2) {
+      const collided = machines[0] === machines[1];
+      const refused =
+        refusedDeploy.status !== 0 &&
+        /distinct machines/.test((refusedDeploy.stderr || "") + (refusedDeploy.stdout || ""));
+      independenceOk =
+        collided &&
+        refused &&
+        singleDeployment?.labels.independence === "machine" &&
+        singleDeployment.labels.machines.split(",").length === 1;
+      independenceDetail =
+        `both providers attest machine ${String(machines[0]).slice(0, 20)}…; a 2-machine quorum was refused, ` +
+        `a 1-machine quorum committed` +
+        ` [refusedOut=${((refusedDeploy?.stderr || refusedDeploy?.stdout || "")).slice(0, 240)} | singleOut=${(single.stderr || single.stdout || "").slice(0, 240)}]`;
+    } else {
+      independenceOk =
+        singleDeployment?.labels.independence === "machine" &&
+        singleDeployment.labels.machines.split(",").length === 1;
+      independenceDetail = `the provider attests machine ${String(machines[0]).slice(0, 20)}…; the quorum is met`;
+    }
+  } catch (error) {
+    independenceOk = false;
+    independenceDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("independence", independenceOk, independenceDetail);
+
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
   const victim = bundle.shards[0].hash;
   writeFileSync(join(blobDir, victim), Buffer.from("not the committed bytes"));

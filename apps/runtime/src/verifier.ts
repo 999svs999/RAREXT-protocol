@@ -83,7 +83,49 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.inferenceBounty === undefined
       ? {}
       : { inferenceBounty: inferenceBountyFromSpec(value.inferenceBounty, value.quorum, value.operators) }),
+    ...(value.independence === undefined
+      ? {}
+      : independenceFromSpec(value.independence, value.quorum, value.operators, value.machines)),
   };
+}
+
+/**
+ * A machine-independence commitment only means something with the operators and
+ * the operator-aligned machines to check it against: the run must show that its
+ * agreeing providers sat on that many DISTINCT machines. A half-committed spec
+ * is refused rather than enforced vacuously.
+ */
+function independenceFromSpec(
+  independence: unknown,
+  quorum: unknown,
+  operators: unknown,
+  machines: unknown,
+): { independence: "machine"; machines: string[] } {
+  if (independence !== "machine") {
+    throw new Error('challenge.spec.independence must be "machine" when present');
+  }
+  if (!Number.isSafeInteger(quorum) || (quorum as number) < 1) {
+    throw new Error("challenge.spec.independence requires a committed quorum");
+  }
+  if (!Array.isArray(operators) || operators.length === 0) {
+    throw new Error("challenge.spec.independence requires committed operators");
+  }
+  if (!Array.isArray(machines) || machines.length === 0) {
+    throw new Error("challenge.spec.independence requires committed machines");
+  }
+  const list = machines.map((entry) => {
+    if (typeof entry !== "string" || entry.length === 0) {
+      throw new Error("challenge.spec.machines entries must be non-empty strings");
+    }
+    return entry;
+  });
+  if (list.length !== operators.length) {
+    throw new Error("challenge.spec.machines must be aligned index-for-index with operators");
+  }
+  if (new Set(list).size < (quorum as number)) {
+    throw new Error("challenge.spec.machines cannot meet the quorum with fewer distinct machines");
+  }
+  return { independence: "machine", machines: list };
 }
 
 /**

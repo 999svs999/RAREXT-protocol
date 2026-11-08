@@ -6,8 +6,6 @@ import { arch, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { sha256Hex } from "./digest.ts";
-
 import {
   AgentSigner,
   generateAgentKeypair,
@@ -46,6 +44,13 @@ export interface ProviderOptions {
   /** URL clients should use when the bind host is not dialable. */
   publicUrl?: string;
   providerHandle?: string | null;
+  /**
+   * The machine identity this provider attests. Defaults to a host fingerprint,
+   * so two providers on one box attest the same machine and a deployment that
+   * requires distinct machines refuses them. An operator on its own hardware
+   * passes a stable id; a TEE deployment would derive it from the enclave.
+   */
+  machine?: string | null;
   /**
    * The key that opens a sealed bundle. The provider decrypts the shards in
    * memory and never writes plaintext weights to disk; without the key a sealed
@@ -363,6 +368,13 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   const identity = loadProviderIdentity(options.stateDir, options.providerHandle ?? null);
   const signer = new AgentSigner(identity.privateKey as unknown as NodeJsonWebKey);
 
+  // The machine this provider attests, bound to the key that signs the card. The
+  // default is the host, so co-located providers collide and a machine-independent
+  // challenge can tell they are one box.
+  const machine =
+    options.machine ?? `host:${hostname()}:${platform()}:${arch()}`;
+  const measurement = sha256Hex(`rarext.machine.v1\n${machine}`);
+
   function cardFor(): ProviderCard {
     if (card !== null) return card;
     card = buildProviderCard({
@@ -374,6 +386,12 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         keyId: signer.keyId,
         publicKey: signer.publicKey,
         suite: signer.suite,
+      },
+      independence: {
+        kind: PROVIDER_MACHINE_KIND,
+        machine,
+        measurement,
+        issuedAt: new Date().toISOString(),
       },
       apis: ["openai"] as ApiShape[],
       sign: (payload) => signer.sign(payload),

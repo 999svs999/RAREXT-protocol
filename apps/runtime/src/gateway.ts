@@ -64,6 +64,12 @@ export interface GatewayOptions {
    * one operator running several providers is still one voice.
    */
   operators?: Record<string, string>;
+  /**
+   * Machine identity per endpoint, when the deployment requires distinct
+   * machines. Two agreeing providers that attest the same machine are one
+   * answer, so the run is refused instead of written.
+   */
+  machines?: Record<string, string>;
   upstreamTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
@@ -162,6 +168,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       : [deployment.engine.endpoint];
   const quorumRequired = options.quorum ?? upstreams.length;
   const quorumEnabled = options.quorum !== undefined || upstreams.length > 1;
+  // A machine-independent deployment counts the quorum over distinct machines,
+  // so a run whose agreeing providers sit on one box is refused before it is
+  // written. The requirement is the deployment's, not a gateway switch.
+  const requireDistinctMachines = deployment.labels?.independence === "machine";
 
   // The bounty the deployment committed, if any. Payment is a commitment the
   // challenge enforces, not a gateway setting: a run only records credits when
@@ -351,6 +361,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     body: Record<string, unknown>,
   ): Promise<QuorumOutcome> {
     const operatorFor = (endpoint: string): string | null => options.operators?.[endpoint] ?? null;
+    const machineFor = (endpoint: string): string | null => options.machines?.[endpoint] ?? null;
     const attempts = await Promise.all(
       upstreams.map(async (endpoint) => {
         const url = shape === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint);
@@ -379,6 +390,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           return {
             endpoint,
             operator: operatorFor(endpoint),
+            machine: machineFor(endpoint),
             json: comparable,
             digest: canonicalDigest(comparable),
           };
@@ -395,6 +407,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       (attempt): attempt is {
         endpoint: string;
         operator: string | null;
+        machine: string | null;
         json: Record<string, unknown>;
         digest: string;
       } => "digest" in attempt,
@@ -421,24 +434,38 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     );
     const operatorsMet = !operatorsSupplied || agreedOperators.size >= quorumRequired;
 
+    // ... and over distinct machines when the deployment demands it: several
+    // keys on one box are several answers but one machine.
+    const agreedMachines = new Set(
+      winnerAnswers
+        .map((answer) => answer.machine)
+        .filter((machine): machine is string => typeof machine === "string" && machine !== ""),
+    );
+    const machinesMet = !requireDistinctMachines || agreedMachines.size >= quorumRequired;
+
     if (
       winnerAnswers.length < quorumRequired ||
       (ranked.length > 1 && winnerAnswers.length === runnerUp) ||
-      !operatorsMet
+      !operatorsMet ||
+      !machinesMet
     ) {
       const operatorNote = operatorsSupplied
         ? `, ${agreedOperators.size} distinct operator(s)`
         : "";
+      const machineNote = requireDistinctMachines
+        ? `, ${agreedMachines.size} distinct machine(s)`
+        : "";
       return {
         error:
           `provider quorum not met: ${quorumRequired} required, ${winnerAnswers.length} agreed` +
-          `${operatorNote}, ${answered.length}/${upstreams.length} answered`,
+          `${operatorNote}${machineNote}, ${answered.length}/${upstreams.length} answered`,
         status: 503,
         details: {
           required: quorumRequired,
           answered: answered.map((a) => ({
             endpoint: a.endpoint,
             operator: a.operator,
+            machine: a.machine,
             responseDigest: a.digest,
           })),
           failed: attempts.filter((a) => "error" in a).map((a) => ({ endpoint: a.endpoint, error: a.error })),
@@ -460,6 +487,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           endpoint: answer.endpoint,
           responseDigest: answer.digest,
           operator: answer.operator,
+          machine: answer.machine,
         })),
       },
     };

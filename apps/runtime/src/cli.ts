@@ -143,6 +143,8 @@ Common options:
   --chunk-bytes <n>     shard size for bundle (default 8 MiB)
   --seal                store the shards as ciphertext; write the key beside the bundle
   --seal-key-file <p>   read a seal key (64 hex chars or 32 bytes) for bundle/provider/deploy
+  --machine <id>        the machine identity a provider attests (default: host fingerprint)
+  --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
   --allow-loopback      permit --remote/--web4 against 127.0.0.1 (test fixtures only)
@@ -665,6 +667,7 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
     ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
     providerHandle: flag(values, "handle") ?? null,
+    ...(flag(values, "machine") === undefined ? {} : { machine: flag(values, "machine") }),
     ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
   });
@@ -851,6 +854,30 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     throw new Error("--bounty requires every provider card to name a distinct operator identity");
   }
 
+  // Machine independence: the quorum must be met by agreeing providers that
+  // attested distinct machines. The machine ids come from the signed cards, so
+  // they are the operators' own claims, committed operator-aligned.
+  const independenceFlag = flag(values, "independence");
+  if (independenceFlag !== undefined && independenceFlag !== "machine") {
+    throw new Error('--independence must be "machine"');
+  }
+  const independence = independenceFlag === "machine";
+  const machineIds = cards.map((entry) => entry.independence?.machine ?? null);
+  if (independence) {
+    if (!operatorsCommitted) {
+      throw new Error("--independence machine requires every provider card to name an operator identity");
+    }
+    if (!machineIds.every((id): id is string => typeof id === "string" && id !== "")) {
+      throw new Error("--independence machine requires every provider card to attest a machine identity");
+    }
+    if (new Set(machineIds).size < quorum) {
+      throw new Error(
+        `--independence machine needs ${quorum} distinct machines, but the providers attest only ` +
+          `${new Set(machineIds).size}: ${machineIds.join(", ")}`,
+      );
+    }
+  }
+
   const primary = endpoints[0]!;
   const card = cards[0]!;
   const probe = {
@@ -883,6 +910,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         // Commit it when every card names one; the challenge then requires
         // agreement across distinct operators, not just distinct endpoints.
         ...(operatorsCommitted ? { operators: operatorIds.join(",") } : {}),
+        // Machine independence commits the operator-aligned machine ids, so a
+        // run cannot invent a machine to pass the distinctness rule.
+        ...(independence ? { independence: "machine", machines: machineIds.join(",") } : {}),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -1320,6 +1350,18 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
       ? Object.fromEntries(upstreams.map((endpoint, index) => [endpoint, committedOperators[index]!]))
       : undefined;
 
+  // The machine ids are committed operator-aligned, so the gateway can attach
+  // each endpoint's machine and count the quorum over distinct machines when the
+  // deployment demands it.
+  const committedMachines = (labels.machines ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  const machines =
+    committedMachines.length === upstreams.length
+      ? Object.fromEntries(upstreams.map((endpoint, index) => [endpoint, committedMachines[index]!]))
+      : undefined;
+
   const publisher = publish
     ? await RuntimePublisher.open({ baseUrl: registry, handle, stateDir: state, challengeId })
     : null;
@@ -1343,6 +1385,7 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     upstreamHeaders: upstream.headers,
     ...(commitsQuorum ? { upstreams, quorum } : {}),
     ...(commitsQuorum && operators !== undefined ? { operators } : {}),
+    ...(commitsQuorum && machines !== undefined ? { machines } : {}),
     log: (message) => console.error(`[runtime] ${message}`),
   });
 
@@ -1750,6 +1793,8 @@ async function main(): Promise<number> {
       "verify-shards": { type: "boolean" },
       seal: { type: "boolean" },
       "seal-key-file": { type: "string" },
+      machine: { type: "string" },
+      independence: { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },
       parameters: { type: "string" },
