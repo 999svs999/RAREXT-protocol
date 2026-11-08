@@ -80,7 +80,29 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.manifestHash === undefined ? {} : { manifestHash: optionalHash("manifestHash") }),
     ...(value.quorum === undefined ? {} : { quorum: quorumFromSpec(value.quorum) }),
     ...(value.operators === undefined ? {} : { operators: operatorsFromSpec(value.operators) }),
+    ...(value.inferenceBounty === undefined
+      ? {}
+      : { inferenceBounty: inferenceBountyFromSpec(value.inferenceBounty, value.quorum, value.operators) }),
   };
+}
+
+/**
+ * A payment commitment is only meaningful with the two things it pays over: a
+ * quorum to agree on, and operator identities to pay. A challenge that names a
+ * bounty without both would let a run claim payments nobody can be held to, so
+ * the pair is required together.
+ */
+function inferenceBountyFromSpec(bounty: unknown, quorum: unknown, operators: unknown): number {
+  if (!Number.isSafeInteger(bounty) || (bounty as number) <= 0) {
+    throw new Error("challenge.spec.inferenceBounty must be a positive integer when present");
+  }
+  if (!Number.isSafeInteger(quorum) || (quorum as number) < 1) {
+    throw new Error("challenge.spec.inferenceBounty requires a committed quorum");
+  }
+  if (!Array.isArray(operators) || operators.length === 0) {
+    throw new Error("challenge.spec.inferenceBounty requires committed operators");
+  }
+  return bounty as number;
 }
 
 function operatorsFromSpec(value: unknown): string[] {

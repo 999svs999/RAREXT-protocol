@@ -217,16 +217,20 @@ evidence, not a tally. The verifier recomputes `agreed` as the number of recorde
 providers whose digest equals the response the run carries, so a gateway cannot
 claim agreement it did not get, and a repeated endpoint cannot count twice.
 
-A provider card may name the operator that runs it (`provider.keyId` or
-`provider.handle`). When every provider does, `deploy` commits those identities as
-`labels.operators` and the challenge commits them too. Agreement is then counted
-over **distinct operators**, not endpoints: two endpoints run by one operator are
-one voice, and a gateway configured that way refuses the run instead of writing it.
-A deployment whose quorum exceeds its distinct operator count is invalid.
+Every signed provider card names the operator that runs it: `provider.keyId` is
+the key id of the provider's own signing key, and `provider.publicKey` is the key
+itself. `deploy` commits those identities as `labels.operators` (falling back to
+`provider.handle` only for an unsigned card), and the challenge commits them too.
+Agreement is then counted over **distinct operators**, not endpoints: two endpoints
+run by one operator are one voice, and a gateway configured that way refuses the
+run instead of writing it. A deployment whose quorum exceeds its distinct operator
+count is invalid.
 
 ```bash
+# The operator identity is derived from the provider's persisted key; --handle is
+# only a human-readable label.
 node apps/runtime/src/cli.ts provider --bundle model-bundle.json \
-  --registry https://registry.example --handle provider-a --key-id did:rarext:alice
+  --registry https://registry.example --handle provider-a
 ```
 
 The digest is over the comparable completion: `id`, `created`, and
@@ -333,12 +337,14 @@ why a large file is sharded rather than sent as one object.
 
 ## Honest limits
 
-- **A quorum is over declared operators, not proven machines.** When provider
-  cards name an operator, the deployment and challenge commit those identities and
-  a quorum requires that many *distinct* operators; a gateway configured to collapse
-  two endpoints onto one operator refuses the run. What the protocol still cannot
-  prove is that two declared operators use unrelated hardware or upstream engines.
-  The bundled demo's two operators are separate processes on one machine.
+- **A quorum is over signed operators, not proven machines.** A signed provider
+  card names a key id anyone can verify, and the deployment and challenge commit
+  those identities, so a quorum requires that many *distinct* signing keys; a
+  gateway configured to collapse two endpoints onto one operator refuses the run.
+  What the protocol still cannot prove is that two keys are held by independent
+  people or run on unrelated hardware or upstream engines — one party can hold
+  many keys. The bundled demo's two operators are separate processes, and keys,
+  on one machine.
 - **The provider sees the weights and the prompts.** Encryption at rest is the
   sealed storage tier; inference over sealed weights is not implemented.
 - **Inference is not cryptographically proven.** The run transcript proves the

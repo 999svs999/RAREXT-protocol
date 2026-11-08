@@ -12,10 +12,25 @@ import {
   usageFromAnthropic,
   usageFromOpenAi,
 } from "./engines.ts";
+import {
+  creditLedgerProof,
+  creditLedgerRoot,
+  creditRoot,
+  creditStatement,
+  inferenceCreditLedgerRoot,
+  inferenceCreditRecords,
+} from "../../../packages/core/src/index.ts";
+import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
-import { canonicalDigest } from "./digest.ts";
+import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
-import type { ApiShape, DeploymentCommitment, RunQuorum, RunRecord } from "./types.ts";
+import type {
+  ApiShape,
+  DeploymentCommitment,
+  RunInferenceCredits,
+  RunQuorum,
+  RunRecord,
+} from "./types.ts";
 import { MAX_REQUEST_BYTES, RUNTIME_VERSION } from "./types.ts";
 
 export interface GatewayOptions {
@@ -148,6 +163,84 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const quorumRequired = options.quorum ?? upstreams.length;
   const quorumEnabled = options.quorum !== undefined || upstreams.length > 1;
 
+  // The bounty the deployment committed, if any. Payment is a commitment the
+  // challenge enforces, not a gateway setting: a run only records credits when
+  // the deployment that a verifier checks against names the amount.
+  const inferenceBounty = (() => {
+    const raw = deployment.labels?.bounty;
+    if (raw === undefined) return null;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  })();
+
+  function creditInputFor(
+    quorum: RunQuorum,
+    responseDigest: string,
+    completedAt: string,
+  ): Parameters<typeof inferenceCreditRecords>[0] {
+    return {
+      providers: quorum.providers.map((provider) => ({
+        responseDigest: provider.responseDigest,
+        operator: provider.operator ?? null,
+      })),
+      responseDigest,
+      deploymentDigest: deployment.digest,
+      completedAt,
+      bounty: inferenceBounty ?? 0,
+    };
+  }
+
+  /**
+   * The payment a quorum run made: one receipt per distinct agreeing operator,
+   * committed as a ledger root. Absent when the deployment committed no bounty,
+   * or when there is no quorum evidence to pay over.
+   */
+  function runCredits(
+    quorum: RunQuorum | undefined,
+    responseDigest: string,
+    completedAt: string,
+  ): RunInferenceCredits | undefined {
+    if (quorum === undefined || inferenceBounty === null) return undefined;
+    const input = creditInputFor(quorum, responseDigest, completedAt);
+    return {
+      action: "infer",
+      bounty: inferenceBounty,
+      paid: inferenceCreditRecords(input).length,
+      ledgerRoot: inferenceCreditLedgerRoot(input, sha256Hex),
+    };
+  }
+
+  /**
+   * Every credit record this node's recorded runs produced, recomputed from the
+   * transcripts themselves. The ledger is not a separate book a node can edit:
+   * it is a view of the runs, so an operator can recompute it too.
+   */
+  function allCreditRecords(): CreditRecordFields[] {
+    const records: CreditRecordFields[] = [];
+    for (const entry of ledger.records()) {
+      const body = entry.body;
+      if (body.credits === undefined || body.quorum === undefined) continue;
+      try {
+        records.push(
+          ...inferenceCreditRecords({
+            providers: body.quorum.providers.map((provider) => ({
+              responseDigest: provider.responseDigest,
+              operator: provider.operator ?? null,
+            })),
+            responseDigest: body.response.digest,
+            deploymentDigest: body.deployment.digest,
+            completedAt: body.completedAt,
+            bounty: body.credits.bounty,
+          }),
+        );
+      } catch {
+        // A malformed record is skipped rather than breaking the ledger view;
+        // the verifier is what rejects it, not this read.
+      }
+    }
+    return records;
+  }
+
   const baseHeaders = (): Record<string, string> => ({
     "x-rarext-runtime": RUNTIME_VERSION,
     "x-rarext-deployment": deployment.digest,
@@ -179,6 +272,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   ): Promise<RecordedRun> {
     const completedAt = new Date().toISOString();
     const sampling = samplingFromRequest(payload);
+    const credits = runCredits(quorum, canonicalDigest(upstreamResponse), completedAt);
     let record: RunRecord;
     try {
       const body = createRunBody({
@@ -195,6 +289,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         // decoding; a sampled run can be re-hashed but not reproduced.
         replay: sampling.temperature === 0 && sampling.seed !== null,
         ...(quorum === undefined ? {} : { quorum }),
+        ...(credits === undefined ? {} : { credits }),
       });
       record = ledger.append(body);
     } catch (error) {
@@ -788,6 +883,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           model: deployment.model,
           upstreams,
           quorum: { required: quorumRequired, enabled: quorumEnabled },
+          bounty: inferenceBounty,
           upstreamApi,
           auth: { gateway: gatewayToken !== null, upstream: Object.keys(upstreamHeaders).length > 0 },
           ledger: { head: ledger.head(), runs: ledger.records().length },
@@ -842,6 +938,61 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
       if (request.method === "GET" && path === "/v1/rarext/ledger") {
         sendJson(response, 200, ledger.verify(), baseHeaders());
+        return;
+      }
+
+      // The inference ledger, read from the runs. It is a view, not a book: a
+      // reader recomputes the same records from the same transcripts. The root
+      // is what a receipt is proved against; the per-operator view hands each
+      // operator its own receipts with Merkle inclusion proofs.
+      if (request.method === "GET" && path === "/v1/rarext/credits") {
+        const records = allCreditRecords();
+        const byOperator: Record<string, { credits: number; receipts: number }> = {};
+        for (const record of records) {
+          const entry = byOperator[record.keyId] ?? { credits: 0, receipts: 0 };
+          entry.credits += record.bounty;
+          entry.receipts += 1;
+          byOperator[record.keyId] = entry;
+        }
+        sendJson(
+          response,
+          200,
+          {
+            action: "infer",
+            bounty: inferenceBounty,
+            ledgerRoot: creditLedgerRoot(records, sha256Hex),
+            count: records.length,
+            byOperator,
+          },
+          baseHeaders(),
+        );
+        return;
+      }
+
+      if (request.method === "GET" && path.startsWith("/v1/rarext/credits/")) {
+        const keyId = decodeURIComponent(path.slice("/v1/rarext/credits/".length));
+        const records = allCreditRecords();
+        const ledgerRoot = creditLedgerRoot(records, sha256Hex);
+        const mine = records.filter((record) => record.keyId === keyId);
+        sendJson(
+          response,
+          200,
+          {
+            keyId,
+            ledgerRoot,
+            statement: creditStatement(keyId, records),
+            receipts: mine.map((record) => {
+              const inclusion = creditLedgerProof(records, record, sha256Hex);
+              return {
+                ...record,
+                root: creditRoot(record, sha256Hex),
+                ledger:
+                  inclusion === null ? null : { root: ledgerRoot, index: inclusion.index, proof: inclusion.proof },
+              };
+            }),
+          },
+          baseHeaders(),
+        );
         return;
       }
 

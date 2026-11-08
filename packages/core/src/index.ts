@@ -162,6 +162,12 @@ export {
   type CreditRecordFields,
   type CreditStatement,
 } from "./credits.ts";
+export {
+  INFER_ACTION,
+  inferenceCreditRecords,
+  inferenceCreditLedgerRoot,
+} from "./inference.ts";
+export type { InferenceCreditInput, InferenceQuorumProvider } from "./inference.ts";
 export { matchRecordRoot, recordRootPreimages } from "./records.ts";
 export type { AttestationBinding } from "./attest.ts";
 export { canonicalize } from "./canonical.ts";

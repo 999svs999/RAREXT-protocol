@@ -215,6 +215,23 @@ export interface RunQuorum {
   providers: RunQuorumProvider[];
 }
 
+/**
+ * What a completed quorum run pays. The gateway derives it from the quorum
+ * evidence and the bounty the deployment committed; the verifier recomputes it.
+ * The ledger root is over {@link CreditRecordFields} records, one per distinct
+ * operator whose answer the run carries — so the payment is a fact about the
+ * transcript, not the recorder's word.
+ */
+export interface RunInferenceCredits {
+  action: "infer";
+  /** Credits each distinct agreeing operator earned. */
+  bounty: number;
+  /** How many distinct operators were paid. */
+  paid: number;
+  /** Commitment over the run's credit records. */
+  ledgerRoot: string;
+}
+
 export interface ModelRunBody {
   kind: typeof RUN_KIND;
   deployment: { id: string; digest: string };
@@ -224,6 +241,8 @@ export interface ModelRunBody {
   bundle?: RunBundleRef;
   /** Present when the deployment required agreement across providers. */
   quorum?: RunQuorum;
+  /** Present when the deployment committed a bounty and a quorum agreed. */
+  credits?: RunInferenceCredits;
   /** The upstream API shape the transcript records. Absent on older records. */
   api?: ApiShape;
   request: TranscriptRequest;
@@ -271,6 +290,12 @@ export interface ModelRunSpec {
    * operators among the providers that agreed, not just that many endpoints.
    */
   operators?: string[];
+  /**
+   * The credits each distinct agreeing operator earns for a run, when the
+   * deployment commits a bounty. When set, the verifier requires every run to
+   * carry matching `credits`, recomputed from the quorum evidence.
+   */
+  inferenceBounty?: number;
 }
 
 export interface ProviderCardVerification {

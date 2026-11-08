@@ -618,7 +618,6 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
     ...(flag(values, "public-url") === undefined ? {} : { publicUrl: flag(values, "public-url")! }),
     providerHandle: flag(values, "handle") ?? null,
-    providerKeyId: flag(values, "key-id") ?? flag(values, "operator") ?? null,
     log: (message) => console.error(`[provider] ${message}`),
   });
 
@@ -1699,8 +1698,6 @@ async function main(): Promise<number> {
       registry: { type: "string" },
       "mirror-registry": { type: "string", multiple: true },
       handle: { type: "string" },
-      "key-id": { type: "string" },
-      operator: { type: "string" },
       challenge: { type: "string" },
       transcript: { type: "string" },
       bundle: { type: "string" },

@@ -79,6 +79,19 @@ function operatorsSpec(labels: Record<string, string> | undefined): string[] | u
   return operators.length === 0 ? undefined : operators;
 }
 
+/**
+ * The credits each agreeing operator earns, when the deployment commits a
+ * bounty. Payment is over distinct operators, so a bounty only makes sense
+ * beside the quorum and operator commitments; a bounty without them pays nobody
+ * and is not committed.
+ */
+function inferenceBountySpec(labels: Record<string, string> | undefined): number | undefined {
+  if (labels?.bounty === undefined) return undefined;
+  if (quorumSpec(labels) === undefined || operatorsSpec(labels) === undefined) return undefined;
+  const value = Number(labels.bounty);
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 export function challengeFor(manifest: DeploymentCommitment) {
   return {
     id: challengeIdFor(manifest),
@@ -101,6 +114,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(operatorsSpec(manifest.labels) === undefined
         ? {}
         : { operators: operatorsSpec(manifest.labels) }),
+      ...(inferenceBountySpec(manifest.labels) === undefined
+        ? {}
+        : { inferenceBounty: inferenceBountySpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

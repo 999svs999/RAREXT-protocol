@@ -458,6 +458,18 @@ export function validateDeployment(value: unknown): string[] {
       }
     }
     void operatorCount;
+
+    // A per-run bounty pays the distinct operators that agreed. It needs a
+    // quorum to agree on and operator identities to pay, so committing one
+    // without the other is almost always a mistake that would pay nobody.
+    if (labels.bounty !== undefined) {
+      const bounty = Number(labels.bounty);
+      if (!Number.isSafeInteger(bounty) || bounty <= 0) {
+        errors.push("manifest.labels.bounty must be a positive integer");
+      } else if (labels.quorum === undefined || labels.operators === undefined) {
+        errors.push("manifest.labels.bounty requires labels.quorum and labels.operators");
+      }
+    }
   }
 
   return errors;

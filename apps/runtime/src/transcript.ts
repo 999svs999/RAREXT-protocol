@@ -1,3 +1,7 @@
+import {
+  inferenceCreditLedgerRoot,
+  inferenceCreditRecords,
+} from "../../../packages/core/src/index.ts";
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
 import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
@@ -15,6 +19,7 @@ import type {
   ProviderCardVerification,
   ReplayEnvelope,
   RunBundleRef,
+  RunInferenceCredits,
   RunQuorum,
   RunRecord,
   SamplingParams,
@@ -107,6 +112,8 @@ export interface CreateRunInput {
   replay?: boolean;
   /** Present when the deployment required agreement across providers. */
   quorum?: RunQuorum;
+  /** Present when the deployment committed a bounty and the run pays operators. */
+  credits?: RunInferenceCredits;
 }
 
 /**
@@ -132,6 +139,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
     },
     ...(bundle === null ? {} : { bundle }),
     ...(input.quorum === undefined ? {} : { quorum: input.quorum }),
+    ...(input.credits === undefined ? {} : { credits: input.credits }),
     api: input.api,
     request: { body: input.request, digest: request.digest, bytes: request.bytes },
     response: {
@@ -346,6 +354,54 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         providers.some(
           (entry) => isRecord(entry) && entry.responseDigest === responseDigest,
         ),
+    );
+  }
+
+  // When the deployment committed a bounty, the run must carry the payment it
+  // made — and the payment is not taken on faith: the verifier recomputes the
+  // ledger from the quorum evidence and the committed bounty. Paying a
+  // dissenter, changing the bounty, or editing the root all move the recomputed
+  // commitment away from the recorded one.
+  if (spec.inferenceBounty === undefined) {
+    check(checks, failures, "credits.absent", body.credits === undefined);
+  } else {
+    const credits = isRecord(body.credits) ? body.credits : null;
+    const quorum = isRecord(body.quorum) ? body.quorum : null;
+    const providers = quorum !== null && Array.isArray(quorum.providers) ? quorum.providers : [];
+    const completedAt = typeof body.completedAt === "string" ? body.completedAt : "";
+    const deploymentDigest = typeof deployment.digest === "string" ? deployment.digest : "";
+    let recomputed: { root: string; paid: number } | null = null;
+    try {
+      const input = {
+        providers: providers.filter(isRecord).map((entry) => ({
+          responseDigest: typeof entry.responseDigest === "string" ? entry.responseDigest : "",
+          operator: typeof entry.operator === "string" ? entry.operator : null,
+        })),
+        responseDigest,
+        deploymentDigest,
+        completedAt,
+        bounty: spec.inferenceBounty,
+      };
+      recomputed = {
+        root: inferenceCreditLedgerRoot(input, sha256Hex),
+        paid: inferenceCreditRecords(input).length,
+      };
+    } catch {
+      recomputed = null;
+    }
+
+    check(
+      checks,
+      failures,
+      "credits",
+      credits !== null &&
+        credits.action === "infer" &&
+        credits.bounty === spec.inferenceBounty &&
+        typeof credits.ledgerRoot === "string" &&
+        typeof credits.paid === "number" &&
+        recomputed !== null &&
+        credits.ledgerRoot === recomputed.root &&
+        credits.paid === recomputed.paid,
     );
   }
 

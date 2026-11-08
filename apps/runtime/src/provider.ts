@@ -42,7 +42,6 @@ export interface ProviderOptions {
   /** URL clients should use when the bind host is not dialable. */
   publicUrl?: string;
   providerHandle?: string | null;
-  providerKeyId?: string | null;
   fetchImpl?: typeof fetch;
   log?: (message: string) => void;
 }
@@ -335,10 +334,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   // The card is signed by the provider's own key. Its `keyId` is derived from
   // that key, so a quorum that counts distinct operators is counting distinct
   // signing keys, not labels.
-  const identity = loadProviderIdentity(
-    options.stateDir,
-    options.providerHandle ?? options.providerKeyId ?? null,
-  );
+  const identity = loadProviderIdentity(options.stateDir, options.providerHandle ?? null);
   const signer = new AgentSigner(identity.privateKey as unknown as NodeJsonWebKey);
 
   function cardFor(): ProviderCard {
