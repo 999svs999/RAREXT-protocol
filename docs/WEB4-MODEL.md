@@ -794,6 +794,28 @@ GGUF run is checked at the token/logprob level, not only at the text level. An
 engine that exposes neither token ids nor logprobs records no trace, honestly;
 `--engine-logprobs` is opt-in because not every engine supports it.
 
+### Requiring a trace
+
+The trace is opt-in from the provider's side, so a deployment can make it a
+requirement of its own:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --require-trace \
+  --registry https://registry.example
+```
+
+`deploy --require-trace` commits `labels.trace = "required"`, and the challenge
+commits `spec.requireTrace`. Then every run must carry a **valid** decode trace —
+the native token ids or an engine judgment — and the verifier adds a
+`response.decodeTraceRequired` check, so a run whose response omits the trace fails
+even if everything else is consistent. The gateway refuses the run *before* writing
+it: a provider (or engine) whose response carries no trace, and a pass-through SSE
+stream that has no complete body to commit a trace over, are both refused `503`.
+So a deployment can insist on the decode-level evidence rather than trusting that
+the provider happens to emit it.
+
 ## Commands
 
 ```bash
@@ -902,12 +924,15 @@ why a large file is sharded rather than sent as one object.
   a replay is refused when the decode diverges — not just when the text does. An
   engine run can be checked at the same level when the engine exposes per-token
   logprobs: `--engine-logprobs` records a **judgment** (tokens + logprobs + digest),
-  and a replay of it is refused when the judgment diverges. What is still not proven
-  is that the engine's arithmetic IS the model's — an arbitrary GGUF is not
-  reproduced bit-for-bit by the protocol alone, and an engine that exposes neither
-  tokens nor logprobs records no trace. For such an engine the protocol pins the
-  engine (`engine.fingerprint`) and refuses a replay whose provider runs a different
-  engine: a checked re-execution under a named engine, not a proof of determinism.
+  and a replay of it is refused when the judgment diverges. A deployment can even
+  REQUIRE a trace (`--require-trace`): then a run whose response carries none is
+  refused by the gateway and fails verification. What is still not proven is that
+  the engine's arithmetic IS the model's — an arbitrary GGUF is not reproduced
+  bit-for-bit by the protocol alone, and an engine that exposes neither tokens nor
+  logprobs can only record a trace if `--engine-logprobs` is set and the engine
+  honors it. For such an engine the protocol pins the engine (`engine.fingerprint`)
+  and refuses a replay whose provider runs a different engine: a checked
+  re-execution under a named engine, not a proof of determinism.
 - **Credits move on the ledger, and can leave it against an external
   reference — but the protocol does not move real value.** A committed bounty is
   recorded and settled in RAREXT's credit ledger; the run commits who was paid, the
