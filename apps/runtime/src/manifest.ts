@@ -634,6 +634,9 @@ export function validateDeployment(value: unknown): string[] {
     if (labels.trace !== undefined && labels.trace !== "required") {
       errors.push('manifest.labels.trace must be "required" when present');
     }
+    if (labels.replay !== undefined && labels.replay !== "required") {
+      errors.push('manifest.labels.replay must be "required" when present');
+    }
   }
 
   return errors;

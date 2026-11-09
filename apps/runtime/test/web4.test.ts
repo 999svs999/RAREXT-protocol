@@ -70,6 +70,8 @@ import {
   issueMeasuredBootChain,
 } from "../src/hardware-root.ts";
 import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
+import { attestationForReceipt } from "../src/certificates.ts";
+import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../src/verifier.ts";
@@ -3260,7 +3262,8 @@ test("an enclave's image is bound to a vendor-signed manifest", async () => {
   assert.equal(verifyImageManifest(manifest)?.vendorKeyId, HARDWARE_ROOT_KEY_ID);
 
   const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
-  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  // The measured boot's app stage IS the signed image, so the two attestations agree.
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey, { app: code });
   const reg = await registry();
   let first: Awaited<ReturnType<typeof startProvider>> | null = null;
   let second: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -3408,7 +3411,8 @@ test("an image manifest's chain must terminate at the pinned hardware root", asy
   assert.notEqual(bareInfo.rootKeyId, HARDWARE_ROOT_KEY_ID);
 
   const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
-  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  // The app stage must equal the signed image for these attestations to cohere.
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey, { app: code });
   const reg = await registry();
   let first: Awaited<ReturnType<typeof startProvider>> | null = null;
   let second: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -3543,7 +3547,7 @@ test("a pinned image-chain depth refuses a manifest signed directly by the root"
   assert.equal(verifyImageManifest(chained)!.chainDepth, 2, "the certified leaf presents a chain");
 
   const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
-  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey, { app: code });
   const reg = await registry();
   let first: Awaited<ReturnType<typeof startProvider>> | null = null;
   let second: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -3659,6 +3663,135 @@ test("a pinned image-chain depth refuses a manifest signed directly by the root"
     if (first !== null) await first.close();
     if (second !== null) await second.close();
     if (rootProvider !== null) await rootProvider.close();
+    await reg.close();
+  }
+});
+
+test("the measured boot's app stage must equal the signed image", async () => {
+  const code = runtimeCodeMeasurement();
+  // A signed image for `code`, chained to the shipped hardware root.
+  const manifestLeaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain: manifestChain } = issueHardwareChain(manifestLeaf.publicKey);
+  const manifest = signImageManifest({ image: code, runtime: "rarext-runtime" }, manifestLeaf, manifestChain);
+
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  // A coherent boot chain: its app stage IS the signed image.
+  const { chain: coherentChain } = issueMeasuredBootChain(leaf.publicKey, { app: code });
+  // An incoherent one: the app stage is some OTHER measurement.
+  const { chain: incoherentChain } = issueMeasuredBootChain(leaf.publicKey, { app: "0".repeat(64) });
+
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let incoherent: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0, teeSigner: leaf, teeChain: coherentChain, imageManifest: manifest });
+    second = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0, teeSigner: leaf, teeChain: coherentChain, imageManifest: manifest });
+    incoherent = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "c"), port: 0, teeSigner: leaf, teeChain: incoherentChain, imageManifest: manifest });
+
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+    const cardC = await fetchProviderCard({ endpoint: incoherent.url });
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(providerStageMeasurements(cardA.independence).app, code);
+    assert.equal(providerStageMeasurements(cardC.independence).app, "0".repeat(64));
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "3",
+          teeBootStages: "firmware,os,app",
+          teeCodeMeasurement: code,
+          teeSignedImage: HARDWARE_ROOT_KEY_ID,
+          teeSignedImageDepth: "2",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "app == image?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // The incoherent chain measures a different app than the signed image.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-incoherent"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, incoherent.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [incoherent.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [incoherent.url]: cardC.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    assert.equal(new RunLedger(join(reg.root, "gateway-incoherent")).records().length, 0);
+    await gateway.close();
+    gateway = null;
+
+    // The coherent chain (app == image) satisfies it.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-coherent"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-coherent")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the binding: swapping in the incoherent chain fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: cardC.independence! } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    if (incoherent !== null) await incoherent.close();
     await reg.close();
   }
 });
@@ -3789,6 +3922,96 @@ test("a deployment that requires a decode trace refuses a run without one", asyn
   }
 });
 
+test("a deployment that requires a replayable run refuses a sampled request", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "p"), port: 0 });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: "operator-a",
+          quorum: "1",
+          replay: "required",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.requireReplay, true);
+
+    const ask = (url: string, extra: Record<string, unknown>) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "reproducible?" }],
+          max_tokens: 8,
+          ...extra,
+        }),
+      });
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: "operator-a" },
+    });
+
+    // A sampled request (temperature > 0, or no seed) is refused before a run.
+    const sampled = await ask(gateway.url, { temperature: 0.7, seed: 5 });
+    assert.equal(sampled.status, 422);
+    assert.match(((await sampled.json()) as { error: string }).error, /replayable run/);
+    const unseeded = await ask(gateway.url, { temperature: 0 });
+    assert.equal(unseeded.status, 422);
+    assert.equal(new RunLedger(join(reg.root, "gateway")).records().length, 0);
+
+    // A deterministic request is recorded with a replay envelope and verifies.
+    const ok = await ask(gateway.url, { temperature: 0, seed: 5 });
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    assert.ok(body.replay, "the run carries a replay envelope");
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true);
+    assert.ok(verified.details.checks.includes("replay.required"));
+    assert.equal((verified.proof as { replayable: boolean }).replayable, true);
+    await gateway.close();
+    gateway = null;
+
+    // A run without the envelope fails the required-replay check.
+    const sampledBody = { ...body, replay: null };
+    const strippedVerdict = verifyRunBody(sampledBody, spec);
+    assert.equal(strippedVerdict.correct, false);
+    assert.ok((strippedVerdict.proof as { failures: string[] }).failures.includes("replay.required"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 test("a provider's signed receipt binds the answer, catching a lying gateway", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -3882,6 +4105,106 @@ test("a provider's signed receipt binds the answer, catching a lying gateway", a
     assert.equal((await request(gateway.url)).status, 200);
     const liedBody = new RunLedger(join(reg.root, "gateway-lie")).records()[0]!.body;
     assert.equal(verifyRunBody(liedBody, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a provider's receipt binds its own attestation, not just the answer", async () => {
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain } = issueMeasuredBootChain(leaf.publicKey, { app: runtimeCodeMeasurement() });
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "p"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: chain,
+    });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const operatorKeyId = card.provider.keyId!;
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: operatorKeyId,
+          quorum: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: operatorKeyId },
+      // The gateway records the provider's attestation, so the receipt binds it.
+      attestations: { [provider.url]: card.independence! },
+    });
+    const response = await fetch(`${gateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: deployment.model.id,
+        messages: [{ role: "user", content: "which enclave?" }],
+        max_tokens: 8,
+        temperature: 0,
+        seed: 3,
+      }),
+    });
+    assert.equal(response.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    const entry = body.quorum!.providers[0]!;
+    const receipt = entry.receipt as { attestation: string; response: string };
+    assert.ok(entry.attestation, "the run records the provider's attestation");
+    assert.equal(
+      receipt.attestation,
+      canonicalDigest(attestationForReceipt(entry.attestation)),
+      "the receipt binds the attestation",
+    );
+    assert.equal(verifyRunBody(body, spec).correct, true);
+    await gateway.close();
+    gateway = null;
+
+    // Pairing the genuine answer with a DIFFERENT attestation is caught: the
+    // receipt's attestation digest no longer matches what the run records.
+    const forged = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((p, index) =>
+          index === 0 ? { ...p, attestation: { ...p.attestation, measurement: "0".repeat(64) } } : p,
+        ),
+      },
+    };
+    const forgedVerdict = verifyRunBody(forged, spec);
+    assert.equal(forgedVerdict.correct, false);
+    assert.ok((forgedVerdict.proof as { failures: string[] }).failures.includes("quorum"));
   } finally {
     if (gateway !== null) await gateway.close();
     if (provider !== null) await provider.close();

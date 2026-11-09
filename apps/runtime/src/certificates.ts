@@ -70,6 +70,29 @@ export function issueProviderCertificate(input: {
 }
 
 /**
+ * The stable identity a response receipt binds: the provider's machine/code/image
+ * claim, WITHOUT the volatile parts — the per-run `challenge` nonce, the `issuedAt`
+ * timestamp, and the `quote` (which is re-signed for each nonce). The operator then
+ * signs "this answer came from THIS enclave", and the digest is the same whether
+ * the run recorded the static card or a freshly-challenged attestation, so the
+ * verifier recomputes it from what the run holds.
+ */
+export function attestationForReceipt(independence: unknown): unknown {
+  if (typeof independence !== "object" || independence === null || Array.isArray(independence)) {
+    return {};
+  }
+  const source = independence as Record<string, unknown>;
+  return {
+    kind: source.kind ?? null,
+    scheme: source.scheme ?? null,
+    machine: source.machine ?? null,
+    measurement: source.measurement ?? null,
+    code: source.code ?? null,
+    image: source.image ?? null,
+  };
+}
+
+/**
  * Verify a leaf signature and its chain of trust, returning the ROOT key id the
  * chain terminates at. Verifying the leaf's signature is not enough: each
  * certificate must be signed by its issuer, each subject must be the key below

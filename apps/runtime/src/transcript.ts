@@ -13,6 +13,7 @@ import {
   verifyProviderChain,
 } from "./model-bundle.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
+import { attestationForReceipt } from "./certificates.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import type {
   ApiShape,
@@ -432,9 +433,10 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       agreeing.every(
         (entry) => isRecord(entry.attestation) && entry.attestation.code === spec.teeCodeMeasurement,
       );
-    // A provider's OWN receipt: its operator key over the request digest and the
-    // response it returned. When present, it must bind to the recorded operator
-    // and to the exact bytes, so a gateway cannot fabricate a provider's answer.
+    // A provider's OWN receipt: its operator key over the request digest, the
+    // response it returned, and its attestation. When present, it must bind to
+    // the recorded operator, the exact bytes, and the recorded enclave, so a
+    // gateway cannot fabricate a provider's answer OR pair it with another one.
     const receiptsMet = providers
       .filter((entry): entry is Record<string, unknown> => isRecord(entry) && entry.receipt !== undefined)
       .every((entry) => {
@@ -442,7 +444,18 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         if (!isRecord(receipt) || receipt.kind !== "rarext.response-receipt.v1") return false;
         if (receipt.request !== requestDigest || receipt.response !== entry.responseDigest) return false;
         if (!isRecord(receipt.publicKey) || typeof receipt.signature !== "string") return false;
-        const payload = { kind: receipt.kind, request: receipt.request, response: receipt.response };
+        // When the run records the provider's attestation, the receipt must carry
+        // its digest: the answer is tied to the measured enclave it came from.
+        if (isRecord(entry.attestation)) {
+          const expected = canonicalDigest(attestationForReceipt(entry.attestation));
+          if (receipt.attestation !== expected) return false;
+        }
+        const payload = {
+          kind: receipt.kind,
+          request: receipt.request,
+          response: receipt.response,
+          ...(receipt.attestation === undefined ? {} : { attestation: receipt.attestation }),
+        };
         let ok = false;
         try {
           ok = verifyPayload(
@@ -474,10 +487,16 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       spec.teeSignedImage === undefined ||
       agreeing.every((entry) => {
         const info = verifyImageManifest(isRecord(entry.attestation) ? entry.attestation.image : undefined);
+        // The measured boot's final stage must BE the signed image: two
+        // attestations about "the code" that disagree are refused.
+        const appStage = isRecord(entry.attestation)
+          ? providerStageMeasurements(entry.attestation).app
+          : undefined;
         return (
           info !== null &&
           info.rootKeyId === spec.teeSignedImage &&
           info.chainDepth >= committedSignedImageDepth &&
+          (appStage === undefined || appStage === info.image) &&
           (spec.teeCodeMeasurement === undefined || info.image === spec.teeCodeMeasurement)
         );
       });
@@ -671,6 +690,12 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     // A transcript without replay metadata is still an exact record; it is
     // simply not independently reproducible.
     replayable = false;
+  }
+
+  // A deployment can REQUIRE a replayable run: then a sampled run (no replay
+  // envelope) is refused, so a reader can always re-derive the bytes.
+  if (spec.requireReplay === true) {
+    check(checks, failures, "replay.required", replayable);
   }
 
   const correct = failures.length === 0;

@@ -182,6 +182,11 @@ function requireTraceSpec(labels: Record<string, string> | undefined): true | un
   return labels?.trace === "required" ? true : undefined;
 }
 
+/** Whether a deployment requires every run to be replayable. */
+function requireReplaySpec(labels: Record<string, string> | undefined): true | undefined {
+  return labels?.replay === "required" ? true : undefined;
+}
+
 /** The measurement of the enclave's own code a deployment approves. */
 function teeCodeMeasurementSpec(labels: Record<string, string> | undefined): string | undefined {
   const raw = labels?.teeCodeMeasurement;
@@ -295,6 +300,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(requireTraceSpec(manifest.labels) === undefined
         ? {}
         : { requireTrace: requireTraceSpec(manifest.labels) }),
+      ...(requireReplaySpec(manifest.labels) === undefined
+        ? {}
+        : { requireReplay: requireReplaySpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

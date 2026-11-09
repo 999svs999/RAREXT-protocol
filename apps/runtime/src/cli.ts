@@ -168,6 +168,7 @@ Common options:
   --tee-signed-image <keyId>  deploy: the vendor root the image manifest's chain must reach
   --tee-signed-image-depth <n> deploy: minimum image-manifest chain depth (1 = certified by the root)
   --require-trace       deploy: require every run to carry a decode trace (native tokens or engine logprobs)
+  --require-replay      deploy: require every run to be replayable (temperature 0 + seed, committed envelope)
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -1228,6 +1229,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         // A deployment can require every run to carry a decode trace, so a
         // provider or engine cannot silently omit it.
         ...(bool(values, "require-trace") ? { trace: "required" } : {}),
+        // A deployment can require every run to be replayable, so a reader can
+        // always re-derive the bytes.
+        ...(bool(values, "require-replay") ? { replay: "required" } : {}),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -2184,6 +2188,7 @@ async function main(): Promise<number> {
       "tee-signed-image": { type: "string" },
       "tee-signed-image-depth": { type: "string" },
       "require-trace": { type: "boolean" },
+      "require-replay": { type: "boolean" },
       "image-manifest": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },

@@ -317,12 +317,13 @@ claim agreement it did not get, and a repeated endpoint cannot count twice.
 
 The quorum evidence above is what the GATEWAY recorded. So each provider also
 signs a **receipt** over the exact exchange — its operator key over the request
-digest and the comparable response digest — and returns it in an
-`x-rarext-receipt` header:
+digest, the comparable response digest, **and its own attestation** — and returns
+it in an `x-rarext-receipt` header:
 
 ```json
 { "kind": "rarext.response-receipt.v1",
   "request": "<request digest>", "response": "<comparable response digest>",
+  "attestation": "<digest of the machine/code/image identity>",
   "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
 ```
 
@@ -331,9 +332,20 @@ checks that the `request` matches the run's request digest, the `response` match
 that provider's recorded `responseDigest`, the signature verifies, and the signing
 key is the operator the run names. A gateway that rewrites a provider's answer — or
 fabricates one — cannot produce a matching receipt, so the transcript proves what
-each provider said, not just what the gateway claims. A stream carries no receipt
-(there is no complete body to sign), and an env-var label operator is not a key, so
-the binding is enforced whenever the operator is a key id.
+each provider said, not just what the gateway claims.
+
+The receipt also binds the provider's **attestation** — its machine, code, and
+signed image, minus the volatile parts (the freshness nonce, the timestamp, and the
+per-nonce quote). So an answer cannot be paired with a different enclave: if a
+gateway records a run whose attestation is not the one the provider signed, the
+receipt's `attestation` digest no longer matches what the run holds and the run
+fails. The operator signs "this answer came from THIS enclave", and the same
+binding holds whether the run recorded the static card or a freshly-challenged
+attestation.
+
+A stream carries no receipt (there is no complete body to sign), and an env-var
+label operator is not a key, so the binding is enforced whenever the operator is a
+key id.
 
 Every signed provider card names the operator that runs it: `provider.keyId` is
 the key id of the provider's own signing key, and `provider.publicKey` is the key
@@ -595,6 +607,16 @@ must reach the minimum. A manifest signed by a bare, self-rooted operator key, o
 signed directly by the root, one signed by another vendor, or one whose measured
 image is not the signed one is refused. The code digest is bound to the pinned trust
 anchor, not the running source's word.
+
+#### App stage = signed image
+
+The measured boot and the image manifest are two claims about "the code": the boot
+chain's final (`app`) stage measurement, and the manifest's `image`. When a
+deployment commits `--tee-signed-image`, the two must **agree** — a provider whose
+boot chain measures one thing and whose signed image vouches for another is refused,
+even though each attestation is individually valid. So `app` is not a free-floating
+measurement: it must BE the image the vendor signed. This is checked at the gateway
+and recomputed by the verifier alongside the root and depth checks.
 
 The honest boundary: the root is a fixed key shipped with the protocol, so this is
 the *shape* of a hardware root — a deployment pins a vendor root it did not choose,
@@ -905,11 +927,13 @@ why a large file is sharded rather than sent as one object.
   too, so the prompt and the answer are ciphertext everywhere but inside the
   enclave — the forwarder, a gateway, or a relay never sees them. The enclave's own
   code is pinned and the digest is bound to an image manifest whose certificate
-  chain must reach the pinned hardware root, at a minimum depth (`--tee-code` +
-  `--tee-signed-image` + `--tee-signed-image-depth`), so an enclave running
-  different code, an image signed by another vendor, a manifest signed by a bare
-  self-rooted key, or one signed directly by the anchor with no chain is refused —
-  the code identity is checked and its trust anchor and depth are pinned, not merely
+  chain must reach the pinned hardware root, at a minimum depth, and the boot chain's
+  `app` stage must equal that signed image (`--tee-code` + `--tee-signed-image` +
+  `--tee-signed-image-depth`), so an enclave running different code, an image signed
+  by another vendor, a manifest signed by a bare self-rooted key, one signed directly
+  by the anchor with no chain, or a boot chain whose app stage disagrees with the
+  signed image is refused — the code identity is checked and its trust anchor, depth,
+  and its own measured stage are pinned, not merely
   claimed. But a software enclave
   is not silicon: an operator with root on the enclave's host can read its memory
   and, with it, the prompt, and the root the manifest chain terminates at is a key

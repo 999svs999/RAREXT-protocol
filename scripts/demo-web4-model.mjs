@@ -20,6 +20,7 @@
  *   publish   publish the run with its quorum evidence
  *   receipt   each provider signs what it said; the gateway cannot fabricate it
  *   trace     a required decode trace: a run without one is refused
+ *   deterministic  a required replayable run: a sampled request is refused
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
  *   redeem    a key cashes credits out of the ledger against an external reference
@@ -105,6 +106,7 @@ import {
 } from "../apps/runtime/src/hardware-root.ts";
 import { runtimeCodeMeasurement } from "../apps/runtime/src/code-measurement.ts";
 import { signImageManifest, verifyImageManifest } from "../apps/runtime/src/image-manifest.ts";
+import { attestationForReceipt } from "../apps/runtime/src/certificates.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import {
@@ -264,7 +266,12 @@ try {
   for (let index = 0; index < 2; index += 1) {
     const leafKeypair = generateAgentKeypair("ecdsa-p256");
     const leaf = new AgentSigner(leafKeypair.privateKey);
-    const { chain, stages, measurements } = issueMeasuredBootChain(leafKeypair.publicKey);
+    // The measured boot's final (app) stage IS the running code, so it equals the
+    // signing-image measurement the manifest will carry: the two attestations
+    // about "the code" must agree.
+    const { chain, stages, measurements } = issueMeasuredBootChain(leafKeypair.publicKey, {
+      app: runtimeCodeMeasurement(),
+    });
     const leafPath = join(state, `tee-leaf-${index}.json`);
     const certPath = join(state, `tee-cert-${index}.json`);
     writeJsonFile(leafPath, { privateKey: leafKeypair.privateKey, publicKey: leafKeypair.publicKey });
@@ -521,6 +528,7 @@ try {
     "--tee-signed-image-depth",
     "2",
     "--require-trace",
+    "--require-replay",
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -705,10 +713,10 @@ try {
       : `attested=${String(attested)} publication=${String(publicationId)}`,
   );
 
-  // ── 9r. Provider receipts: each provider signed what it said ─────────────
-  // The transcript carries the provider's OWN signature over the request and the
-  // response it returned, so the run proves what it said rather than trusting the
-  // gateway that relayed it.
+  // ── 9r. Provider receipts: each provider signed what it said, from where ──
+  // The transcript carries the provider's OWN signature over the request, the
+  // response it returned, AND its attestation, so the run proves what it said and
+  // which enclave it said it from — pairing the answer with another enclave fails.
   const receipts = publishedBody?.quorum?.providers ?? [];
   const receiptOk =
     receipts.length === providerUrls.length &&
@@ -718,16 +726,32 @@ try {
         receipt?.kind === "rarext.response-receipt.v1" &&
         receipt.response === entry.responseDigest &&
         receipt.request === publishedBody?.request?.digest &&
+        entry.attestation !== undefined &&
+        receipt.attestation === canonicalDigest(attestationForReceipt(entry.attestation)) &&
         publicKeyId(receipt.publicKey) === entry.operator
       );
     }) &&
     verifyRunBody(publishedBody, spec).correct === true;
+  // Swapping in a different attestation under the genuine receipt is caught.
+  const forgedReceiptBody = {
+    ...publishedBody,
+    quorum: {
+      ...publishedBody.quorum,
+      providers: (publishedBody.quorum?.providers ?? []).map((entry, index) =>
+        index === 0
+          ? { ...entry, attestation: { ...entry.attestation, measurement: "0".repeat(64) } }
+          : entry,
+      ),
+    },
+  };
+  const forgedReceiptRefused =
+    publishedBody !== undefined && verifyRunBody(forgedReceiptBody, spec).correct === false;
   phase(
     "receipt",
-    receiptOk,
-    receiptOk
-      ? `${providerUrls.length} provider receipt(s) signed by their operators bound to the run's request/response; the run verifies with them`
-      : "a provider receipt is missing or does not bind to the run",
+    receiptOk && forgedReceiptRefused,
+    receiptOk && forgedReceiptRefused
+      ? `${providerUrls.length} provider receipt(s) bind their operator, the run's request/response, and their own attestation; a run paired with a different attestation was refused`
+      : `receiptOk=${String(receiptOk)} forgedRefused=${String(forgedReceiptRefused)}`,
   );
 
   // ── 9t. A required decode trace: missing it is refused ──────────────────
@@ -770,6 +794,51 @@ try {
     traceDetail = error instanceof Error ? error.message : String(error);
   }
   phase("trace", traceOk, traceDetail);
+
+  // ── 9d. A required replayable run: sampling is refused ──────────────────
+  // The deployment committed `replay: "required"`, so the gateway refuses a
+  // sampled request (temperature > 0 or no seed) and the run must carry a replay
+  // envelope a reader can reproduce.
+  let deterministicOk = false;
+  let deterministicDetail = "";
+  try {
+    const ask = (extra) =>
+      fetch(`${gateway.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "reproducible?" }],
+          max_tokens: 8,
+          ...extra,
+        }),
+      });
+    const sampled = await ask({ temperature: 0.7, seed: 1 });
+    const unseeded = await ask({ temperature: 0 });
+    const runHasEnvelope = publishedBody?.replay != null;
+    const verified = verifyRunBody(publishedBody, spec);
+    const replayable = verified.proof?.replayable === true;
+    const requiredCheck = verified.details.checks.includes("replay.required");
+    // A run that dropped its replay envelope fails the required-replay check.
+    const noEnvelopeRefused =
+      verifyRunBody({ ...publishedBody, replay: null }, spec).proof?.failures?.includes("replay.required") ===
+      true;
+    deterministicOk =
+      spec.requireReplay === true &&
+      sampled.status === 422 &&
+      unseeded.status === 422 &&
+      runHasEnvelope &&
+      replayable &&
+      requiredCheck &&
+      noEnvelopeRefused;
+    deterministicDetail = deterministicOk
+      ? `the deployment required a replayable run; a sampled request and an unseeded request were refused (422), the run carries a replay envelope, and a run without one fails the required-replay check`
+      : `required=${String(spec.requireReplay)} sampled=${sampled.status} unseeded=${unseeded.status} envelope=${String(runHasEnvelope)} replayable=${String(replayable)}`;
+  } catch (error) {
+    deterministicOk = false;
+    deterministicDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("deterministic", deterministicOk, deterministicDetail);
 
   // ── 9a. The run paid every agreeing operator, and each can prove it ──────
   // The gateway derived the payment from the quorum evidence and the committed
@@ -1453,12 +1522,19 @@ try {
           info.rootKeyId === HARDWARE_ROOT_KEY_ID &&
           info.vendorKeyId === manifestLeaf.keyId &&
           info.chainDepth >= 2 &&
-          info.image === providerCards[0].independence.code
+          info.image === providerCards[0].independence.code &&
+          // The measured boot's app stage IS the signed image.
+          providerStageMeasurements(entry.independence).app === info.image
         );
       }) &&
       (runBody?.quorum?.providers ?? []).every((entry) => {
         const info = verifyImageManifest(entry.attestation?.image);
-        return info !== null && info.rootKeyId === HARDWARE_ROOT_KEY_ID && info.chainDepth >= 2;
+        return (
+          info !== null &&
+          info.rootKeyId === HARDWARE_ROOT_KEY_ID &&
+          info.chainDepth >= 2 &&
+          providerStageMeasurements(entry.attestation).app === info.image
+        );
       });
     // The same leaf key with no chain: a real signature, but self-rooted, so its
     // root is the leaf and not the pinned hardware root.
@@ -1478,6 +1554,32 @@ try {
       rootSignedInfo !== null &&
       rootSignedInfo.rootKeyId === HARDWARE_ROOT_KEY_ID &&
       rootSignedInfo.chainDepth === 0;
+    // A boot chain whose app stage is NOT the signed image: both attestations are
+    // individually valid, but they disagree about the code, so the run is refused.
+    const { chain: incoherentChain } = issueMeasuredBootChain(
+      providerCards[0].independence.quote.publicKey,
+      { app: "0".repeat(64) },
+    );
+    const incoherentAttestation = {
+      ...providerCards[0].independence,
+      quote: { ...providerCards[0].independence.quote, chain: incoherentChain },
+    };
+    const appMismatchRefused =
+      verifyProviderChain(incoherentAttestation) === HARDWARE_ROOT_KEY_ID &&
+      providerStageMeasurements(incoherentAttestation).app !==
+        verifyImageManifest(incoherentAttestation.image).image &&
+      verifyRunBody(
+        {
+          ...runBody,
+          quorum: {
+            ...runBody.quorum,
+            providers: (runBody.quorum?.providers ?? []).map((entry, index) =>
+              index === 0 ? { ...entry, attestation: incoherentAttestation } : entry,
+            ),
+          },
+        },
+        spec,
+      ).correct === false;
     const wrongSignedImage = await runCli([
       "deploy",
       "--web4",
@@ -1562,6 +1664,7 @@ try {
       bareRefused &&
       depthRefused &&
       depthCliRefused &&
+      appMismatchRefused &&
       signedImageRefused &&
       runAttested &&
       wrongPin.status !== 0 &&
@@ -1569,8 +1672,9 @@ try {
     quoteDetail =
       `vendor root ${anchorKeyId.slice(0, 14)}… pinned at depth 3; each provider's leaf -> os -> firmware -> root ` +
       `chain measures every stage to the approved value; a nonce-freshness challenge bound one nonce across the run; ` +
-      `the enclave's code digest is bound to an image manifest whose chain reaches the hardware root at depth 2; a ` +
-      `manifest signed directly by the root, a chain rooted elsewhere, a chain with no boot stages, a chain running ` +
+      `the enclave's code digest is bound to an image manifest whose chain reaches the hardware root at depth 2, and ` +
+      `the boot chain's app stage equals that signed image; a manifest signed directly by the root, a boot chain whose ` +
+      `app stage is not the signed image, a chain rooted elsewhere, a chain with no boot stages, a chain running ` +
       `unapproved firmware, a replayed (stale) attestation, unapproved enclave code, and a manifest whose chain never ` +
       `reaches the root were refused`;
   } catch (error) {

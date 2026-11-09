@@ -117,7 +117,18 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.requireTrace === undefined
       ? {}
       : { requireTrace: requireTraceFromSpec(value.requireTrace) }),
+    ...(value.requireReplay === undefined
+      ? {}
+      : { requireReplay: requireReplayFromSpec(value.requireReplay) }),
   };
+}
+
+/** A required replay envelope is a boolean the challenge either commits or not. */
+function requireReplayFromSpec(requireReplay: unknown): true {
+  if (requireReplay !== true) {
+    throw new Error("challenge.spec.requireReplay must be true when present");
+  }
+  return true;
 }
 
 /** A required decode trace is a boolean the challenge either commits or does not. */

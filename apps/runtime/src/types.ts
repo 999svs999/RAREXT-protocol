@@ -432,6 +432,13 @@ export interface ModelRunSpec {
    * "required".
    */
   requireTrace?: boolean;
+  /**
+   * When true, the deployment requires every run to be REPLAYABLE: deterministic
+   * decoding (temperature 0 and a seed) with a committed replay envelope. The
+   * gateway refuses a sampled request, and the verifier requires the run to carry
+   * a valid replay envelope. Committed when `labels.replay` is "required".
+   */
+  requireReplay?: boolean;
 }
 
 export interface ProviderCardVerification {

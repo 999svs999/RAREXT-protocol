@@ -182,6 +182,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   // A deployment can require every run to carry a decode trace: a response with
   // none is refused before a run is written.
   const requiresTrace = deployment.labels?.trace === "required";
+  // A deployment can require every run to be replayable: a sampled request
+  // (temperature > 0, or no seed) is refused before it is forwarded.
+  const requiresReplay = deployment.labels?.replay === "required";
+  const deterministic = (payload: Record<string, unknown>): boolean => {
+    const sampling = samplingFromRequest(payload);
+    return sampling.temperature === 0 && sampling.seed !== null;
+  };
   // A machine-independent deployment counts the quorum over distinct machines,
   // so a run whose agreeing providers sit on one box is refused before it is
   // written. The requirement is the deployment's, not a gateway switch.
@@ -598,10 +605,14 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
               // be at least the required depth, so a manifest signed by a bare
               // operator key — or directly by the anchor with no chain — is refused.
               const info = verifyImageManifest(answer.attestation?.image);
+              // The measured boot's final stage must BE the signed image: two
+              // attestations about "the code" that disagree are refused.
+              const appStage = providerStageMeasurements(answer.attestation).app;
               return (
                 info !== null &&
                 info.rootKeyId === allowedSignedImage &&
                 info.chainDepth >= allowedSignedImageDepth &&
+                (appStage === undefined || appStage === info.image) &&
                 (allowedCode === null || info.image === allowedCode)
               );
             })()),
@@ -805,6 +816,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     payload.model = model;
     if (payload.stream !== undefined) payload.stream = payload.stream === true;
 
+    if (requiresReplay && !deterministic(payload)) {
+      sendJson(response, 422, {
+        error:
+          "the deployment requires a replayable run: set temperature 0 and a seed, " +
+          "so a reader can re-derive the bytes",
+      });
+      return;
+    }
+
     if (upstreamApi !== "openai") {
       sendJson(response, 501, {
         error:
@@ -983,6 +1003,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
     upstreamBody.model = model;
+
+    if (requiresReplay && !deterministic(upstreamBody)) {
+      sendJson(response, 422, {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "the deployment requires a replayable run: set temperature 0 and a seed",
+        },
+      });
+      return;
+    }
 
     if (quorumEnabled) {
       const startedAt = new Date().toISOString();
