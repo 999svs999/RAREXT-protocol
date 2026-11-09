@@ -24,7 +24,7 @@ import { comparableCompletion } from "./completion.ts";
 import { runtimeCodeMeasurement } from "./code-measurement.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
-import type { ImageManifest } from "./image-manifest.ts";
+import type { ImageManifest, IsolationClass } from "./image-manifest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   fetchBundleChunks,
@@ -83,6 +83,14 @@ export interface ProviderOptions {
    * process actually runs, then binds that manifest into its attestation.
    */
   imageManifest?: ImageManifest;
+  /**
+   * The memory-isolation capability this provider claims for its running image.
+   * `host-root-excluded` asserts the host root cannot read this process's memory;
+   * a software-only process must NOT set it. The claim is covered by the signed
+   * quote, and the vendor image manifest must certify it too, so a deployment
+   * that demands isolation refuses a host-readable enclave.
+   */
+  isolation?: IsolationClass | null;
   /**
    * The key that opens a sealed bundle. The provider decrypts the shards in
    * memory and never writes plaintext weights to disk; without the key a sealed
@@ -832,6 +840,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           machine,
           measurement,
           code: codeMeasurement,
+          ...(options.isolation === undefined || options.isolation === null
+            ? {}
+            : { isolation: options.isolation }),
           ...(imageManifest === undefined ? {} : { image: imageManifest }),
           // Bind the enclave's encryption key into the signed attestation, so a
           // caller can verify the key it seals to belongs to this enclave.
@@ -979,6 +990,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             scheme: base.scheme,
             machine: base.machine,
             measurement: base.measurement,
+            ...(base.isolation === undefined ? {} : { isolation: base.isolation }),
             ...(base.code === undefined ? {} : { code: base.code }),
             ...(base.image === undefined ? {} : { image: base.image }),
             ...(base.enclaveKey === undefined ? {} : { enclaveKey: base.enclaveKey }),

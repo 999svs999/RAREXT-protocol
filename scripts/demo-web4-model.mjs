@@ -27,6 +27,7 @@
  *   redeem    a key cashes credits out of the ledger against an external reference
  *   measure   a deployment approves provider measurements, or is refused
  *   quote     a provider's machine claim is vendor-signed and checked against a pin
+ *   isolation a deployment demands vendor-certified host-root-excluded memory
  *   engine-pin  the run pins the serving engine; a replay refuses a changed one
  *   mirror    a provider serves from a mirror when its primary registry is down
  *   enclave   the serving process holds ciphertext; an enclave unwraps and answers
@@ -1750,6 +1751,127 @@ try {
         singleDeployment.labels.machines.split(",").length === 1;
       independenceDetail = `the provider attests machine ${String(machines[0]).slice(0, 20)}…; the quorum is met`;
     }
+
+    // The machine is not just a label. A machine-independent run must present
+    // each provider's OWN signed machine quote, and the machine the run records
+    // must be the one that quote binds. Run a single-machine quorum with the
+    // vendor pinned, then show an unsigned gateway and a stripped quote are both
+    // refused.
+    let machineGateway = null;
+    let machineOk = false;
+    let machineDetail = "";
+    try {
+      const machineQuoteDeployment = commitDeployment(
+        buildDeployment({
+          probe: {
+            engine: { ...deployment.engine, endpoint: providerUrls[0] },
+            model: deployment.model,
+            apis: ["openai"],
+            models: [deployment.model],
+          },
+          hardware: deployment.hardware,
+          placement: "web4",
+          labels: {
+            execution: "web4",
+            bundle: deployment.labels.bundle,
+            shardsRoot: deployment.labels.shardsRoot,
+            manifestHash: deployment.labels.manifestHash,
+            providers: providerUrls[0],
+            operators: providerCards[0].provider.keyId,
+            machines: providerCards[0].independence.machine,
+            independence: "machine",
+            quorum: "1",
+            teeVendor: HARDWARE_ROOT_KEY_ID,
+            fixture: "loopback",
+          },
+          createdAt: "2026-11-07T00:00:00.000Z",
+        }),
+      );
+      const machineQuoteSpec = runSpecFromChallenge(challengeFor(machineQuoteDeployment));
+      const askMachine = (url) =>
+        fetch(`${url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: machineQuoteDeployment.model.id,
+            messages: [{ role: "user", content: "signed machine?" }],
+            max_tokens: 8,
+            temperature: 0,
+          }),
+        });
+
+      machineGateway = await startGateway({
+        deployment: machineQuoteDeployment,
+        ledgerDir: join(state, "gateway-machine"),
+        port: 0,
+        upstreamApi: "openai",
+        upstreams: [providerUrls[0]],
+        quorum: 1,
+        operators: { [providerUrls[0]]: providerCards[0].provider.keyId },
+        machines: { [providerUrls[0]]: providerCards[0].independence.machine },
+        attestations: { [providerUrls[0]]: providerCards[0].independence },
+      });
+      const accepted = await askMachine(machineGateway.url);
+      const machineBody = new RunLedger(join(state, "gateway-machine")).records()[0]?.body ?? null;
+      const entry = machineBody?.quorum?.providers?.[0] ?? null;
+      const signedMachine =
+        entry !== null &&
+        verifyProviderQuote(entry.attestation) !== null &&
+        entry.attestation?.machine === entry.machine &&
+        entry.attestation?.machine === providerCards[0].independence.machine;
+      const verified = machineBody ? verifyRunBody(machineBody, machineQuoteSpec).correct : false;
+      // A run whose agreeing provider presents no signed quote cannot attest a
+      // machine, so it fails the same quorum check.
+      const stripped =
+        machineBody !== null
+          ? verifyRunBody(
+              {
+                ...machineBody,
+                quorum: {
+                  ...machineBody.quorum,
+                  providers: machineBody.quorum.providers.map((provider) => ({
+                    ...provider,
+                    attestation: undefined,
+                  })),
+                },
+              },
+              machineQuoteSpec,
+            ).correct
+          : null;
+
+      // A gateway given no signed attestations cannot meet the quorum at all.
+      await machineGateway.close();
+      machineGateway = await startGateway({
+        deployment: machineQuoteDeployment,
+        ledgerDir: join(state, "gateway-machine-unsigned"),
+        port: 0,
+        upstreamApi: "openai",
+        upstreams: [providerUrls[0]],
+        quorum: 1,
+        operators: { [providerUrls[0]]: providerCards[0].provider.keyId },
+        machines: { [providerUrls[0]]: providerCards[0].independence.machine },
+      });
+      const unsigned = await askMachine(machineGateway.url);
+
+      machineOk =
+        accepted.status === 200 &&
+        signedMachine &&
+        verified &&
+        stripped === false &&
+        unsigned.status === 503;
+      machineDetail =
+        `the run's machine ${String(entry?.machine).slice(0, 18)}… is bound by the provider's signed quote ` +
+        `(verified=${String(signedMachine)}); a run whose quote is stripped was refused by the verifier, ` +
+        `and a gateway with no signed attestations was refused (${unsigned.status})`;
+    } catch (error) {
+      machineOk = false;
+      machineDetail = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (machineGateway !== null) await machineGateway.close().catch(() => {});
+    }
+
+    independenceOk = independenceOk && machineOk;
+    independenceDetail = `${independenceDetail}; ${machineDetail}`;
   } catch (error) {
     independenceOk = false;
     independenceDetail = error instanceof Error ? error.message : String(error);
@@ -2086,6 +2208,124 @@ try {
     quoteDetail = error instanceof Error ? error.message : String(error);
   }
   phase("quote", quoteOk, quoteDetail);
+
+  // ── 12d1b. Memory isolation: a host-readable enclave is refused ──────────
+  // The software-only enclave's own host root can read its memory. A deployment
+  // can demand that its provider's VENDOR-SIGNED image certify the host root is
+  // excluded; a provider whose signed image does not carry the capability is
+  // refused, so memory isolation is a checked, vendor-certified capability rather
+  // than an assumption about the operator's box.
+  let isolationOk = false;
+  let isolationDetail = "";
+  let isolationGateway = null;
+  try {
+    const isolationDeployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { ...deployment.engine, endpoint: providerUrls[0] },
+          model: deployment.model,
+          apis: ["openai"],
+          models: [deployment.model],
+        },
+        hardware: deployment.hardware,
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: deployment.labels.bundle,
+          shardsRoot: deployment.labels.shardsRoot,
+          manifestHash: deployment.labels.manifestHash,
+          providers: providerUrls[0],
+          operators: providerCards[0].provider.keyId,
+          machines: providerCards[0].independence.machine,
+          independence: "machine",
+          quorum: "1",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeSignedImage: HARDWARE_ROOT_KEY_ID,
+          teeSignedImageDepth: "2",
+          teeCodeMeasurement: providerCards[0].independence.code,
+          teeIsolation: "host-root-excluded",
+          ...(deployment.labels.engineFingerprint
+            ? { engineFingerprint: deployment.labels.engineFingerprint }
+            : {}),
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const isolationSpec = runSpecFromChallenge(challengeFor(isolationDeployment));
+    const manifestIsolated =
+      verifyImageManifest(providerCards[0].independence.image)?.isolation === "host-root-excluded";
+
+    // The deploy CLI refuses a host-readable fleet before any run happens.
+    const refusedDeploy = await runCli([
+      "deploy",
+      "--web4",
+      "--provider",
+      providerUrls[0],
+      "--quorum",
+      "1",
+      "--tee-vendor",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-signed-image",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-signed-image-depth",
+      "2",
+      "--tee-isolation",
+      "host-root-excluded",
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "isolation-deploy"),
+      "--json",
+    ]);
+    const deployRefused =
+      refusedDeploy.status !== 0 &&
+      /--tee-isolation is not certified/.test(
+        (refusedDeploy.stderr || "") + (refusedDeploy.stdout || ""),
+      );
+
+    isolationGateway = await startGateway({
+      deployment: isolationDeployment,
+      ledgerDir: join(state, "gateway-isolation"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [providerUrls[0]],
+      quorum: 1,
+      operators: { [providerUrls[0]]: providerCards[0].provider.keyId },
+      machines: { [providerUrls[0]]: providerCards[0].independence.machine },
+      attestations: { [providerUrls[0]]: providerCards[0].independence },
+    });
+    const refusedRun = await fetch(`${isolationGateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: isolationDeployment.model.id,
+        messages: [{ role: "user", content: "can the host read this?" }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+
+    isolationOk =
+      isolationSpec.teeIsolation === "host-root-excluded" &&
+      !manifestIsolated &&
+      deployRefused &&
+      refusedRun.status === 503 &&
+      new RunLedger(join(state, "gateway-isolation")).records().length === 0;
+    isolationDetail = isolationOk
+      ? `the deployment demanded vendor-certified memory isolation ("host-root-excluded"); the providers' signed ` +
+        `images do not certify it, so deploy --tee-isolation refused the fleet and the gateway refused the run ` +
+        `(${refusedRun.status}) rather than treat a host-readable box as confidential`
+      : `spec=${String(isolationSpec.teeIsolation)} manifestIsolated=${String(manifestIsolated)} ` +
+        `deployRefused=${String(deployRefused)} run=${refusedRun.status}`;
+  } catch (error) {
+    isolationOk = false;
+    isolationDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (isolationGateway !== null) await isolationGateway.close().catch(() => {});
+  }
+  phase("isolation", isolationOk, isolationDetail);
 
   // ── 12d2. Root rotation: the trust root can move, and stale roots are refused
   // The trust anchor is a shipped key, but it is not static forever: each

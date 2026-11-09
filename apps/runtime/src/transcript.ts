@@ -12,6 +12,7 @@ import {
   providerStageMeasurements,
   verifyProviderCard,
   verifyProviderChain,
+  verifyProviderQuote,
 } from "./model-bundle.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
@@ -508,6 +509,26 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
               .filter((machine): machine is string => typeof machine === "string"),
           ).size >= spec.quorum;
 
+    // A machine-independent quorum is not over machine STRINGS the recorder
+    // typed: each agreeing provider's machine must be the machine its OWN signed
+    // quote binds. The quote covers `machine` (provider.ts signs it with the
+    // leaf key), so a run that records one machine while presenting a quote for
+    // another is refused, and a provider with no signed machine quote cannot
+    // count toward the quorum at all. With a pinned vendor, `quotesMet` below
+    // additionally chains that quote to the vendor root, so the machine is
+    // vendor-rooted rather than self-declared.
+    const machineQuotesMet =
+      spec.independence !== "machine"
+        ? true
+        : agreeing.every((entry) => {
+            const attestation = isRecord(entry.attestation) ? entry.attestation : null;
+            if (attestation === null) return false;
+            if (typeof attestation.machine !== "string" || attestation.machine !== entry.machine) {
+              return false;
+            }
+            return verifyProviderQuote(attestation) !== null;
+          });
+
     // A committed measurement allowlist is checked, not taken on faith: every
     // agreeing provider must attest a measurement the deployment approved.
     const allowedMeasurements = spec.measurements;
@@ -592,9 +613,31 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
           info.rootKeyId === spec.teeSignedImage &&
           info.chainDepth >= committedSignedImageDepth &&
           (appStage === undefined || appStage === info.image) &&
-          (spec.teeCodeMeasurement === undefined || info.image === spec.teeCodeMeasurement)
+          (spec.teeCodeMeasurement === undefined || info.image === spec.teeCodeMeasurement) &&
+          // The manifest must CERTIFY the isolation the deployment demands: a
+          // host-readable image never carries it, so it is refused here.
+          (spec.teeIsolation === undefined || info.isolation === spec.teeIsolation)
         );
       });
+
+    // Memory isolation is a vendor-certified capability, not a label: each
+    // agreeing provider must attest `host-root-excluded` in its signed quote AND
+    // publish the enclave encryption key digest inside that same quote, so the key
+    // a caller seals weights/prompts to is bound to the vendor-attested
+    // isolation. The signedImageMet check above requires the vendor manifest to
+    // certify the same capability, so a software-only enclave cannot pass.
+    const isolationMet =
+      spec.teeIsolation === undefined
+        ? true
+        : agreeing.every((entry) => {
+            const attestation = isRecord(entry.attestation) ? entry.attestation : null;
+            return (
+              attestation !== null &&
+              attestation.isolation === spec.teeIsolation &&
+              typeof attestation.enclaveKey === "string" &&
+              HEX64.test(attestation.enclaveKey)
+            );
+          });
     const quotesMet =
       committedVendor === undefined
         ? true
@@ -628,11 +671,13 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         agreed === recomputedAgreed &&
         operatorsMet &&
         machinesMet &&
+        machineQuotesMet &&
         measurementsMet &&
         quotesMet &&
         freshnessMet &&
         codeMet &&
         signedImageMet &&
+        isolationMet &&
         receiptsMet,
     );
     check(

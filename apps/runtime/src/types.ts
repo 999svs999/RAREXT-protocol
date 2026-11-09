@@ -204,6 +204,12 @@ export interface ReplayWitness {
     /** The signing provider's key id (the operator), when known. */
     operator?: string | null;
     machine?: string | null;
+    /**
+     * The witness provider's own signed machine quote, when it claims a machine.
+     * The machine is only independent if it is attested by the witness's quote,
+     * not a string the gateway typed.
+     */
+    attestation?: RunProviderAttestation;
   };
   /** The exact request the witness sent; it must equal the run's request. */
   request: unknown;
@@ -290,6 +296,12 @@ export interface RunProviderAttestation {
   issuedAt?: string;
   /** The measurement of the code the enclave runs, when it attested one. */
   code?: string;
+  /**
+   * The memory-isolation capability the provider attested. `host-root-excluded`
+   * means the host root cannot read the running image's memory; a software-only
+   * enclave leaves it unset.
+   */
+  isolation?: string;
   /** The vendor-signed image manifest vouching for that code, when present. */
   image?: unknown;
   /** The digest of the enclave's encryption public key, when it serves one. */
@@ -472,6 +484,14 @@ export interface ModelRunSpec {
    * enclave running other code is refused. Committed only with `teeVendor`.
    */
   teeCodeMeasurement?: string;
+  /**
+   * The memory-isolation capability the deployment demands. When
+   * "host-root-excluded", every agreeing provider must attest that capability in
+   * its signed quote AND present a vendor-signed image manifest that certifies
+   * it, so a software-only enclave whose host root can read its memory is
+   * refused. Committed only with `teeVendor` and a signed-image root.
+   */
+  teeIsolation?: "host-root-excluded";
   /**
    * The vendor ROOT key id the enclave IMAGE manifest's certificate chain must
    * terminate at. When committed, every agreeing provider must present a manifest

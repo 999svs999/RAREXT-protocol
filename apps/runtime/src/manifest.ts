@@ -640,6 +640,16 @@ export function validateDeployment(value: unknown): string[] {
         errors.push("manifest.labels.teeSignedImageDepth requires labels.teeSignedImage");
       }
     }
+    if (labels.teeIsolation !== undefined) {
+      if (labels.teeIsolation !== "host-root-excluded") {
+        errors.push('manifest.labels.teeIsolation must be "host-root-excluded" when present');
+      }
+      if (labels.teeVendor === undefined || labels.teeSignedImage === undefined) {
+        errors.push(
+          "manifest.labels.teeIsolation requires labels.teeVendor and labels.teeSignedImage",
+        );
+      }
+    }
     if (labels.trace !== undefined && labels.trace !== "required") {
       errors.push('manifest.labels.trace must be "required" when present');
     }

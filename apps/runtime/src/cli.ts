@@ -62,6 +62,7 @@ import {
   uploadBundle,
   verifyModelBundle,
   verifyProviderChain,
+  verifyProviderQuote,
 } from "./model-bundle.ts";
 import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bundle.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
@@ -169,8 +170,10 @@ Common options:
   --tee-code <hex>      deploy: the enclave code measurement providers must attest
   --code-measurement <hex>  provider: override the measured code digest (default: this runtime)
   --image-manifest <p>      provider: a vendor-signed image manifest vouching for the running code
+  --isolation <k>           provider: "host-root-excluded" — attest the host root cannot read memory
   --tee-signed-image <keyId>  deploy: the vendor root the image manifest's chain must reach
   --tee-signed-image-depth <n> deploy: minimum image-manifest chain depth (1 = certified by the root)
+  --tee-isolation <k>       deploy: require vendor-certified "host-root-excluded" memory isolation
   --require-trace       deploy: require every run to carry a decode trace (native tokens or engine logprobs)
   --require-replay      deploy: require every run to be replayable (temperature 0 + seed, committed envelope)
   --determinism <class> deploy: "deterministic-replay" — require an independent witness whose trace matches
@@ -225,6 +228,14 @@ function flags(values: Record<string, unknown>, name: string): string[] {
 
 function bool(values: Record<string, unknown>, name: string): boolean {
   return values[name] === true;
+}
+
+/** `--isolation` takes exactly one capability: host-root-excluded. */
+function isolationFlagFrom(value: string | undefined): "host-root-excluded" {
+  if (value !== "host-root-excluded") {
+    throw new Error('--isolation must be "host-root-excluded"');
+  }
+  return "host-root-excluded";
 }
 
 /**
@@ -753,6 +764,9 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "image-manifest") === undefined
       ? {}
       : { imageManifest: readJson(resolve(flag(values, "image-manifest")!)) as never }),
+    ...(flag(values, "isolation") === undefined
+      ? {}
+      : { isolation: isolationFlagFrom(flag(values, "isolation")) }),
     ...(flag(values, "engine-version") === undefined
       ? {}
       : { engineVersion: flag(values, "engine-version") }),
@@ -1005,6 +1019,22 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     if (!machineIds.every((id): id is string => typeof id === "string" && id !== "")) {
       throw new Error("--independence machine requires every provider card to attest a machine identity");
     }
+    // The machine must be SIGNED, not a label: every card must carry a quote
+    // that verifies and binds the machine, so a run cannot pass distinct strings
+    // the gateway typed. With --tee-vendor pinned the same quote must also chain
+    // to the vendor root, so the machine is vendor-rooted.
+    const quoted = cards.every(
+      (entry) =>
+        entry.independence !== undefined &&
+        typeof entry.independence.machine === "string" &&
+        entry.independence.machine !== "" &&
+        verifyProviderQuote(entry.independence) !== null,
+    );
+    if (!quoted) {
+      throw new Error(
+        "--independence machine requires every provider card to carry a signed machine quote",
+      );
+    }
     if (new Set(machineIds).size < quorum) {
       throw new Error(
         `--independence machine needs ${quorum} distinct machines, but the providers attest only ` +
@@ -1221,6 +1251,34 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     teeSignedImageDepth = depth;
   }
 
+  // Memory isolation must be a vendor-CERTIFIED capability: every adopted
+  // provider's signed quote and vendor-signed image manifest must both carry
+  // "host-root-excluded", so a software-only (host-readable) enclave is refused.
+  const teeIsolationFlag = flag(values, "tee-isolation");
+  let teeIsolation: "host-root-excluded" | null = null;
+  if (teeIsolationFlag !== undefined) {
+    if (teeIsolationFlag !== "host-root-excluded") {
+      throw new Error('--tee-isolation must be "host-root-excluded"');
+    }
+    if (teeVendor === null || teeSignedImage === null) {
+      throw new Error("--tee-isolation requires --tee-vendor and --tee-signed-image");
+    }
+    const certified = cards.every((entry) => {
+      const info = verifyImageManifest(entry.independence?.image);
+      return (
+        entry.independence?.isolation === "host-root-excluded" &&
+        info !== null &&
+        info.isolation === "host-root-excluded"
+      );
+    });
+    if (!certified) {
+      throw new Error(
+        "--tee-isolation is not certified by every provider's signed machine quote and image manifest",
+      );
+    }
+    teeIsolation = "host-root-excluded";
+  }
+
   const primary = endpoints[0]!;
   const card = cards[0]!;
   const probe = {
@@ -1280,6 +1338,7 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         ...(teeSignedImageDepth === null
           ? {}
           : { teeSignedImageDepth: String(teeSignedImageDepth) }),
+        ...(teeIsolation === null ? {} : { teeIsolation }),
         // A determinism class is a claim about the engine's arithmetic. It is
         // built on a trace (something to compare token-for-token) and a replay
         // envelope (something to reproduce), so asking for the class asks for
@@ -1759,10 +1818,11 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     measurements = Object.fromEntries(pairs);
   }
 
-  // When the deployment pins a vendor key, the gateway needs each provider's
-  // full quote to verify it, so it fetches the cards' independence blocks.
+  // When the deployment pins a vendor key OR requires distinct machines, the
+  // gateway needs each provider's full signed quote — to chain it to the vendor
+  // root, and to bind a machine-independent quorum to SIGNED machines.
   let attestations: Record<string, RunProviderAttestation> | undefined;
-  if (labels.teeVendor !== undefined) {
+  if (labels.teeVendor !== undefined || labels.independence === "machine") {
     const pairs = await Promise.all(
       upstreams.map(async (endpoint) => {
         try {
@@ -2265,6 +2325,8 @@ async function main(): Promise<number> {
       determinism: { type: "string" },
       witness: { type: "string", multiple: true },
       "image-manifest": { type: "string" },
+      isolation: { type: "string" },
+      "tee-isolation": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
       family: { type: "string" },

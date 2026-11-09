@@ -12,7 +12,7 @@ import type { KeyObject, JsonWebKey } from "node:crypto";
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
-import type { ImageManifest } from "./image-manifest.ts";
+import type { ImageManifest, IsolationClass } from "./image-manifest.ts";
 import type { RootChain } from "./root-chain.ts";
 import type { SignatureSuite } from "../../../packages/core/src/types.ts";
 import {
@@ -172,6 +172,13 @@ export interface ProviderIndependence {
    */
   image?: ImageManifest;
   /**
+   * The memory-isolation capability the provider claims for its running image.
+   * `host-root-excluded` asserts the host root cannot read the process's memory;
+   * a software-only process must NOT claim it. Covered by the quote, so the
+   * capability is signed by the leaf key, and a deployment can require it.
+   */
+  isolation?: IsolationClass;
+  /**
    * The digest of the enclave's ENCRYPTION public key, when the provider serves
    * one. Bound by the quote, so a caller can check that the key it seals a prompt
    * to is the key the attested enclave holds — a substituted key is refused.
@@ -199,6 +206,7 @@ export function providerQuotePayload(independence: ProviderIndependence): {
   machine: string;
   measurement: string;
   issuedAt: string;
+  isolation?: IsolationClass;
   code?: string;
   image?: ImageManifest;
   enclaveKey?: string;
@@ -210,6 +218,7 @@ export function providerQuotePayload(independence: ProviderIndependence): {
     machine: independence.machine,
     measurement: independence.measurement,
     issuedAt: independence.issuedAt,
+    ...(independence.isolation === undefined ? {} : { isolation: independence.isolation }),
     ...(independence.code === undefined ? {} : { code: independence.code }),
     ...(independence.image === undefined ? {} : { image: independence.image }),
     ...(independence.enclaveKey === undefined ? {} : { enclaveKey: independence.enclaveKey }),
@@ -1250,6 +1259,14 @@ export function verifyProviderCard(value: unknown): string[] {
         errors.push("provider card independence.scheme must be a non-empty string when present");
       }
       if (
+        value.independence.isolation !== undefined &&
+        value.independence.isolation !== "host-root-excluded"
+      ) {
+        errors.push(
+          'provider card independence.isolation must be "host-root-excluded" when present',
+        );
+      }
+      if (
         typeof value.independence.issuedAt !== "string" ||
         Number.isNaN(Date.parse(value.independence.issuedAt))
       ) {
@@ -1276,6 +1293,13 @@ export function verifyProviderCard(value: unknown): string[] {
           info.image !== value.independence.code
         ) {
           errors.push("provider card independence.image does not vouch for the attested code");
+        } else if (
+          info.isolation !== null &&
+          value.independence.isolation !== info.isolation
+        ) {
+          errors.push(
+            "provider card independence.isolation does not match its vendor-signed image manifest",
+          );
         }
       }
       if (value.independence.quote !== undefined) {

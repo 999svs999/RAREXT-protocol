@@ -15,12 +15,32 @@ export const IMAGE_MANIFEST_KIND = "rarext.image-manifest.v1";
  * deployment pins the root, so an operator cannot mint a manifest under its own
  * key and have it accepted — the chain must terminate at the pinned root.
  */
+/**
+ * The memory-isolation capability an image is certified to provide. A
+ * software-only process cannot claim `host-root-excluded`: its memory is the
+ * host's to read. A vendor that certifies an image as `host-root-excluded` is
+ * asserting the image runs in a mode (an enclave, a confidential VM) whose
+ * memory the host root cannot read — the claim the protocol checks, but cannot
+ * itself create.
+ */
+export type IsolationClass = "host-root-excluded";
+
+export function isIsolationClass(value: unknown): value is IsolationClass {
+  return value === "host-root-excluded";
+}
+
 export interface ImageManifest {
   kind: typeof IMAGE_MANIFEST_KIND;
   /** The code measurement this manifest vouches for. */
   image: string;
   /** What the image is, for a reader. */
   runtime: string;
+  /**
+   * The memory-isolation capability the vendor certifies for this image, when
+   * any. `host-root-excluded` is the strong claim: the host root cannot read the
+   * running image's memory. Absent/`software-image` means host-readable.
+   */
+  isolation?: IsolationClass;
   publishedAt: string;
   signature: string;
   publicKey: unknown;
@@ -38,19 +58,21 @@ export function imageManifestPayload(manifest: ImageManifest): {
   kind: string;
   image: string;
   runtime: string;
+  isolation?: IsolationClass;
   publishedAt: string;
 } {
   return {
     kind: manifest.kind,
     image: manifest.image,
     runtime: manifest.runtime,
+    ...(manifest.isolation === undefined ? {} : { isolation: manifest.isolation }),
     publishedAt: manifest.publishedAt,
   };
 }
 
 /** Sign an image manifest with a vendor key, optionally chained to an anchor. */
 export function signImageManifest(
-  input: { image: string; runtime: string; publishedAt?: string },
+  input: { image: string; runtime: string; isolation?: IsolationClass; publishedAt?: string },
   signer: { sign(payload: unknown): string; publicKey: unknown; suite: string },
   chain?: ProviderCertificate[],
 ): ImageManifest {
@@ -58,6 +80,7 @@ export function signImageManifest(
     kind: IMAGE_MANIFEST_KIND,
     image: input.image,
     runtime: input.runtime,
+    ...(input.isolation === undefined ? {} : { isolation: input.isolation }),
     publishedAt: input.publishedAt ?? new Date().toISOString(),
   } as const;
   return {
@@ -78,11 +101,18 @@ export function signImageManifest(
  */
 export function verifyImageManifest(
   value: unknown,
-): { image: string; vendorKeyId: string; rootKeyId: string; chainDepth: number } | null {
+): {
+  image: string;
+  isolation: IsolationClass | null;
+  vendorKeyId: string;
+  rootKeyId: string;
+  chainDepth: number;
+} | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const manifest = value as Record<string, unknown>;
   if (manifest.kind !== IMAGE_MANIFEST_KIND) return null;
   if (typeof manifest.image !== "string" || !/^[0-9a-f]{64}$/.test(manifest.image)) return null;
+  if (manifest.isolation !== undefined && manifest.isolation !== "host-root-excluded") return null;
   if (typeof manifest.signature !== "string") return null;
   if (typeof manifest.publicKey !== "object" || manifest.publicKey === null) return null;
 
@@ -96,6 +126,7 @@ export function verifyImageManifest(
   if (rootKeyId === null) return null;
   return {
     image: manifest.image,
+    isolation: manifest.isolation === "host-root-excluded" ? "host-root-excluded" : null,
     vendorKeyId: publicKeyId(manifest.publicKey as never),
     rootKeyId,
     chainDepth: Array.isArray(manifest.chain) ? manifest.chain.length : 0,

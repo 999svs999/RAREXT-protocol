@@ -10,6 +10,33 @@ There is no OpenAI, no Anthropic, and no model file on the machine asking the
 question. The provider is a network participant; the model is content-addressed
 data.
 
+### Where the AI actually runs
+
+`placement: "web4"` means the asking machine runs **no model and no inference**. The
+demo proves it: `storage` shards the weights into RAREXT blobs, the source file is
+deleted, a provider fetches and verifies every shard from RAREXT, and the `weights`
+phase asserts the caller's state contains no model file. The caller's deployment
+records `hardware.backend: "network"` and `memoryBytes: null` — it names compute it
+does not own.
+
+The **engine** (the process that turns tokens) runs on the RAREXT provider node, not
+on the caller. It is pinned end-to-end: the deployment commits an
+`engineFingerprint` (over the engine's name, version, and image digest), every run
+records it, and a replay refuses a provider whose present engine differs — so "the
+same model on a different engine build" is a different run, refused by name. The
+model weights live purely on RAREXT; the engine is the provider's, named and pinned
+by a commitment, never the caller's.
+
+Making the engine **bytes** themselves a fetched-and-executed RAREXT artifact (so a
+provider runs only an engine image content-addressed on RAREXT, rather than one the
+box already has) additionally needs containerized execution: the engine binary/
+container would be sharded into RAREXT like the weights and the provider would run
+only the verified image. The `bundle`/provider plumbing and the engine fingerprint
+are shaped for that, but executing an arbitrary fetched binary is not done in this
+demo (no container runtime is assumed). What is demonstrated is the invariant the
+objective names: **the AI — weights and inference — lives on the RAREXT network,
+and the machine that asks runs nothing.**
+
 ```bash
 npm run demo:web4-model
 ```
@@ -158,10 +185,13 @@ chain), so the trust machinery pins the enclave's anchor, not the forwarder's.
 This is a **software enclave**: a separate trust domain in a separate process, not
 a hardware TEE. The protocol shape is real — the process on the wire holds no key,
 the weights are encrypted to the enclave, and only an enclave whose attestation
-chains to the pinned anchor is trusted — but an operator with root on the enclave's
-host can still read its memory. A hardware TEE (SGX/SEV-SNP) is what makes the
-enclave itself private; the `scheme` field and the attestation chain are shaped
-for it, but no hardware root is wired in.
+chains to the pinned anchor is trusted — but by default an operator with root on the
+enclave's host can still read its memory. A hardware TEE (SGX/SEV-SNP) is what makes
+the enclave itself private; the `scheme` field and the attestation chain are shaped
+for it, but no hardware root is wired in. A deployment that will not accept a
+host-readable box can demand vendor-certified isolation (see *Memory isolation*
+below): `--tee-isolation host-root-excluded` refuses any enclave whose signed quote
+and vendor-signed image do not certify that the host root is excluded.
 
 ### Confidential prompts
 
@@ -192,7 +222,9 @@ stable identity includes `enclaveKey`).
 This protects prompts from the *relaying* process and from the operator of the
 path, and the key binding protects the caller from sealing to the wrong key. It does
 not protect them from an operator with root on the enclave's own host — the same
-software-enclave caveat as above; a hardware TEE closes it.
+software-enclave caveat as above; a hardware TEE closes it, and a deployment can at
+least demand a vendor-certified `host-root-excluded` capability so a host-readable
+enclave is refused rather than assumed confidential.
 
 A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
 `rarext.provider-identity.v1`). The card it serves is signed with that key, and
@@ -432,10 +464,22 @@ committed list, so a gateway cannot invent a machine to pass the rule. A
 deployment whose committed machines cannot meet the quorum is invalid before any
 run happens.
 
-The machine id is only as trustworthy as the operator's key: this proves the
-operators CLAIM distinct machines, not that the boxes are physically separate. A
-TEE deployment would put an enclave measurement in `independence.measurement`;
-today it is a hash of the declared id.
+The machine is not a label the recorder types: it must be the machine the
+provider's **own signed quote** binds. Each agreeing provider's attestation must
+carry a `quote` that verifies (`verifyProviderQuote`) and whose covered `machine`
+equals the machine the run records; a provider with no valid machine quote has no
+machine and cannot count toward a machine-distinct quorum. `deploy
+--independence machine` refuses a card with no signed machine quote, and a
+gateway that is given no signed attestations refuses the run (`503`). With
+`--tee-vendor` pinned the same quote must additionally chain to the vendor root,
+so the machine is vendor-rooted rather than self-declared.
+
+The honest boundary that remains: even a vendor-rooted quote proves the machine
+id the leaf ATTESTED, not that two leaves are on physically separate boxes — a
+vendor that certifies both leaves can be lied to, and `independence.measurement`
+is a hash of the declared id (a real TEE would put the enclave measurement
+there). The protocol makes the machine claim signed and, when pinned,
+vendor-rooted; it cannot make the vendor's certification honest.
 
 ### Measurement allowlist: checking the claim
 
@@ -710,6 +754,49 @@ records the measurements in hardware, holds the root in silicon, and signs the n
 with a key that never leaves the chip; the chain, the stages, the measurements, the
 code digest, the signed image manifest, the nonce challenge, and the `scheme` field
 are built for it, but no hardware root is wired in.
+
+#### Memory isolation: refusing a host-readable enclave
+
+A software-only enclave's own host root can read its memory, so sealing weights and
+prompts to it hides them from the wire and the store but not from the operator. The
+protocol cannot create memory isolation — only a TEE can — but it can refuse to call
+a host-readable process confidential. An image manifest can carry a
+**memory-isolation capability**:
+
+```json
+{ "kind": "rarext.image-manifest.v1", "image": "<code digest>", "runtime": "…",
+  "isolation": "host-root-excluded", "signature": "…", "chain": [ … ] }
+```
+
+`isolation` is covered by the vendor signature, so it is a certified capability, not
+a running process's word. A provider attests the same capability with
+`--isolation host-root-excluded` (covered by its machine quote), and a deployment
+demands it with:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --quorum 1 \
+  --tee-vendor <root> --tee-signed-image <root> --tee-isolation host-root-excluded \
+  --registry https://registry.example
+```
+
+`deploy --tee-isolation` commits `labels.teeIsolation` (which requires
+`--tee-vendor` and `--tee-signed-image`) and REFUSES unless every adopted provider's
+signed quote AND vendor-signed image manifest both certify
+`host-root-excluded`. The challenge commits `spec.teeIsolation`; the gateway refuses
+a run in which any agreeing provider's quote or vendor-signed manifest does not carry
+the capability, and the verifier recomputes the same rule. The enclave's encryption
+key is bound into the same signed quote (`enclaveKey`), so the key a caller seals
+weights or prompts to is inside the vendor-attested isolation claim — a substituted
+key, a quote without the capability, or a signed image without it is refused.
+
+The honest boundary: this makes memory isolation a **checked, vendor-certified
+capability** that a host-readable enclave cannot satisfy — but the protocol cannot
+manufacture the isolation itself. The vendor that signs `host-root-excluded` is
+asserting the image runs in a mode whose memory the host root cannot read, and the
+root that certifies it is still a shipped key, not fused silicon. The capability
+closes the *policy* gap (a deployment need not trust the operator's box); the
+*hardware* gap needs a real enclave.
 
 The digest is over the comparable completion: `id`, `created`, and
 `system_fingerprint` are transport metadata and are removed before comparison.
@@ -1094,7 +1181,15 @@ why a large file is sharded rather than sent as one object.
   agreeing provider on the approved list, and every agreeing quote's chain reaching
   the pinned vendor root at that depth, naming every required stage, carrying the
   approved measurement per stage, AND bound to one fresh nonce for the run — enforced
-  by the gateway and recomputed by the verifier. The operator supplies only a LEAF
+  by the gateway and recomputed by the verifier. A machine-independent quorum counts
+  SIGNED machines only: each agreeing provider's recorded machine must be the machine
+  its own verifying quote binds, so a run cannot pass distinct strings the gateway
+  typed, and with a vendor pinned that quote is also chained to the vendor root. A
+  deployment can additionally demand vendor-certified memory isolation
+  (`--tee-isolation host-root-excluded`): every agreeing provider's signed quote AND
+  vendor-signed image must certify that the host root cannot read its memory, so a
+  host-readable software enclave is refused — but the protocol cannot manufacture the
+  isolation, only refuse to call the absence of it confidential. The operator supplies only a LEAF
   key and cannot mint its own trust: a bare leaf (depth zero), a chain ending at an
   operator anchor, a chain rooted elsewhere, a chain that skips the boot stages, a
   chain running unapproved firmware/OS/app, a REPLAYED (stale) attestation, a quote

@@ -2,6 +2,7 @@ import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/inde
 
 import { comparableCompletion } from "./completion.ts";
 import { canonicalDigest } from "./digest.ts";
+import { verifyProviderQuote } from "./model-bundle.ts";
 import type { DeterminismClaim, ModelRunSpec, ReplayWitness } from "./types.ts";
 
 /**
@@ -202,12 +203,21 @@ export function replayWitnessProblem(context: WitnessContext, witness: unknown):
   if (context.operators.includes(signer)) {
     return "the witness signer is one of the run's own operators, not independent";
   }
-  if (
-    typeof provider.machine === "string" &&
-    provider.machine !== "" &&
-    context.machines.includes(provider.machine)
-  ) {
-    return "the witness machine is one of the run's own machines, not independent";
+  if (typeof provider.machine === "string" && provider.machine !== "") {
+    if (context.machines.includes(provider.machine)) {
+      return "the witness machine is one of the run's own machines, not independent";
+    }
+    // A witness that claims a machine must back it with its OWN signed quote —
+    // the machine is only independent if it is attested, not typed.
+    const attestation = provider.attestation;
+    if (
+      !isRecord(attestation) ||
+      typeof attestation.machine !== "string" ||
+      attestation.machine !== provider.machine ||
+      verifyProviderQuote(attestation) === null
+    ) {
+      return "the witness claims a machine its own signed quote does not attest";
+    }
   }
 
   return null;
@@ -218,6 +228,7 @@ export function makeReplayWitness(input: {
   endpoint: string;
   operator?: string | null;
   machine?: string | null;
+  attestation?: unknown;
   request: unknown;
   response: unknown;
   receipt: unknown;
@@ -234,6 +245,9 @@ export function makeReplayWitness(input: {
       endpoint: input.endpoint,
       operator: input.operator ?? derived,
       machine: input.machine ?? null,
+      ...(input.attestation === undefined || input.attestation === null
+        ? {}
+        : { attestation: input.attestation as never }),
     },
     request: input.request,
     response: input.response,

@@ -30,6 +30,7 @@ import {
   providerChainDepth,
   providerStageMeasurements,
   verifyProviderChain,
+  verifyProviderQuote,
 } from "./model-bundle.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
@@ -267,6 +268,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const raw = deployment.labels?.teeSignedImage;
     return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
   })();
+  // The memory-isolation capability the deployment demands, when it pinned one.
+  // Only meaningful with a vendor root and a signed-image root; a software-only
+  // enclave cannot satisfy it.
+  const allowedIsolation = (() => {
+    if (allowedVendor === null || allowedSignedImage === null) return null;
+    return deployment.labels?.teeIsolation === "host-root-excluded" ? "host-root-excluded" : null;
+  })();
   // The root-rotation epoch the deployment has learned. A quote whose root chain
   // does not reach this epoch is stale.
   const allowedRootEpoch = (() => {
@@ -481,10 +489,23 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           continue;
         }
         const json: unknown = await response.json();
+        // The witness's machine, when it claims one, must come from its OWN
+        // signed quote — the witness is only independent if its machine is
+        // attested, not typed.
+        const attestation = options.attestations?.[endpoint];
+        const witnessMachine = requireDistinctMachines
+          ? attestation !== undefined &&
+            typeof attestation.machine === "string" &&
+            attestation.machine !== "" &&
+            verifyProviderQuote(attestation) !== null
+            ? attestation.machine
+            : null
+          : (options.machines?.[endpoint] ?? null);
         const witness = makeReplayWitness({
           endpoint,
           operator: options.operators?.[endpoint] ?? null,
-          machine: options.machines?.[endpoint] ?? null,
+          machine: witnessMachine,
+          attestation: attestation ?? null,
           request: requestBody,
           response: json,
           receipt: receiptFromHeaders(response.headers),
@@ -642,7 +663,25 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     body: Record<string, unknown>,
   ): Promise<QuorumOutcome> {
     const operatorFor = (endpoint: string): string | null => options.operators?.[endpoint] ?? null;
-    const machineFor = (endpoint: string): string | null => options.machines?.[endpoint] ?? null;
+    // For a machine-independent deployment the recorded machine must be the one
+    // the provider's OWN signed quote binds — not a string the serve operator
+    // typed. A provider with no verifiable machine quote has no machine, so it
+    // cannot count toward a machine-distinct quorum.
+    const machineFor = (endpoint: string): string | null => {
+      const expected = options.machines?.[endpoint] ?? null;
+      if (!requireDistinctMachines) return expected;
+      const attestation = attestationFor(endpoint);
+      if (
+        attestation === null ||
+        typeof attestation.machine !== "string" ||
+        attestation.machine === "" ||
+        verifyProviderQuote(attestation) === null
+      ) {
+        return null;
+      }
+      if (expected !== null && expected !== attestation.machine) return null;
+      return attestation.machine;
+    };
     const measurementFor = (endpoint: string): string | null =>
       options.measurements?.[endpoint] ?? null;
 
@@ -771,7 +810,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         .map((answer) => answer.machine)
         .filter((machine): machine is string => typeof machine === "string" && machine !== ""),
     );
-    const machinesMet = !requireDistinctMachines || agreedMachines.size >= quorumRequired;
+    const machinesMet =
+      !requireDistinctMachines ||
+      // Every agreeing provider must have a SIGNED machine (a null machine means
+      // its quote did not verify or did not match), and there must be `quorum`
+      // distinct ones.
+      (winnerAnswers.every(
+        (answer) => typeof answer.machine === "string" && answer.machine !== "",
+      ) &&
+        agreedMachines.size >= quorumRequired);
 
     // Every agreeing provider must run an approved image when the deployment
     // committed a measurement allowlist. This is the check that makes the
@@ -798,6 +845,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             ([stage, measurement]) => providerStageMeasurements(answer.attestation)[stage] === measurement,
           ) &&
           (allowedCode === null || answer.attestation?.code === allowedCode) &&
+          // A demanded isolation capability must be in the signed quote AND its
+          // vendor-signed manifest, and the enclave key must be bound into the
+          // same attestation, so a host-readable enclave is refused.
+          (allowedIsolation === null ||
+            (answer.attestation?.isolation === allowedIsolation &&
+              typeof answer.attestation?.enclaveKey === "string")) &&
           (allowedSignedImage === null ||
             (() => {
               // The manifest's chain must terminate at the pinned vendor ROOT and
@@ -812,7 +865,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
                 info.rootKeyId === allowedSignedImage &&
                 info.chainDepth >= allowedSignedImageDepth &&
                 (appStage === undefined || appStage === info.image) &&
-                (allowedCode === null || info.image === allowedCode)
+                (allowedCode === null || info.image === allowedCode) &&
+                (allowedIsolation === null || info.isolation === allowedIsolation)
               );
             })()),
       );

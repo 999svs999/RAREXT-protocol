@@ -111,6 +111,9 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.teeCodeMeasurement === undefined
       ? {}
       : { teeCodeMeasurement: teeCodeMeasurementFromSpec(value.teeCodeMeasurement, value.teeVendor) }),
+    ...(value.teeIsolation === undefined
+      ? {}
+      : { teeIsolation: teeIsolationFromSpec(value.teeIsolation, value.teeVendor, value.teeSignedImage) }),
     ...(value.teeSignedImage === undefined
       ? {}
       : { teeSignedImage: teeCodeMeasurementFromSpec(value.teeSignedImage, value.teeVendor) }),
@@ -192,6 +195,28 @@ function teeCodeMeasurementFromSpec(code: unknown, teeVendor: unknown): string {
     throw new Error("challenge.spec.teeCodeMeasurement requires challenge.spec.teeVendor");
   }
   return code;
+}
+
+/**
+ * A demanded isolation capability only means something with a pinned vendor root
+ * and a signed-image root: the capability must be certified by a vendor-signed
+ * image manifest, so a bare claim by a running process cannot satisfy it.
+ */
+function teeIsolationFromSpec(
+  isolation: unknown,
+  teeVendor: unknown,
+  teeSignedImage: unknown,
+): "host-root-excluded" {
+  if (isolation !== "host-root-excluded") {
+    throw new Error('challenge.spec.teeIsolation must be "host-root-excluded" when present');
+  }
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeIsolation requires challenge.spec.teeVendor");
+  }
+  if (typeof teeSignedImage !== "string" || !/^[0-9a-f]{64}$/.test(teeSignedImage)) {
+    throw new Error("challenge.spec.teeIsolation requires challenge.spec.teeSignedImage");
+  }
+  return "host-root-excluded";
 }
 
 /** Freshness only means something with a pinned root to bind the quote to. */

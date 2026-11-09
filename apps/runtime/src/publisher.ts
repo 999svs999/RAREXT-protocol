@@ -201,6 +201,21 @@ function determinismSpec(
   return "deterministic-replay";
 }
 
+/**
+ * The memory-isolation capability a deployment demands. Only meaningful with a
+ * pinned vendor root AND a signed-image root: the capability must be certified by
+ * a vendor-signed image manifest, not merely claimed by a running process.
+ */
+function teeIsolationSpec(
+  labels: Record<string, string> | undefined,
+): "host-root-excluded" | undefined {
+  if (labels?.teeIsolation !== "host-root-excluded") return undefined;
+  if (teeVendorSpec(labels) === undefined || teeSignedImageSpec(labels) === undefined) {
+    return undefined;
+  }
+  return "host-root-excluded";
+}
+
 /** The measurement of the enclave's own code a deployment approves. */
 function teeCodeMeasurementSpec(labels: Record<string, string> | undefined): string | undefined {
   const raw = labels?.teeCodeMeasurement;
@@ -326,6 +341,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(teeSignedImageDepthSpec(manifest.labels) === undefined
         ? {}
         : { teeSignedImageDepth: teeSignedImageDepthSpec(manifest.labels) }),
+      ...(teeIsolationSpec(manifest.labels) === undefined
+        ? {}
+        : { teeIsolation: teeIsolationSpec(manifest.labels) }),
       ...(requireTraceSpec(manifest.labels) === undefined
         ? {}
         : { requireTrace: requireTraceSpec(manifest.labels) }),

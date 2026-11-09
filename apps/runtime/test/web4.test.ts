@@ -87,7 +87,7 @@ import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../src/verifier.ts";
-import type { EngineProbe, ModelRef } from "../src/types.ts";
+import type { EngineProbe, ModelRef, RunProviderAttestation } from "../src/types.ts";
 
 const NATIVE_MODEL = {
   kind: "xorshift32" as const,
@@ -1490,16 +1490,37 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
   let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
   try {
     const { bundle, manifestHash } = await publishNative({ base: reg.base });
-    first = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0 });
-    second = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0 });
+    // Each provider signs its machine with its own leaf key, so the machine is a
+    // signed claim, not a label. One provider attests machine-a, the other
+    // machine-b.
+    const signerA = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const signerB = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "a"),
+      port: 0,
+      machine: "machine-a",
+      teeSigner: signerA,
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "b"),
+      port: 0,
+      machine: "machine-b",
+      teeSigner: signerB,
+    });
     const cardA = await fetchProviderCard({ endpoint: first.url });
     const cardB = await fetchProviderCard({ endpoint: second.url });
 
-    // Each card attests a machine, bound to its operator key; co-located
-    // providers attest the same host by default.
+    // Each card attests a machine, bound by its own signed quote.
     assert.equal(cardA.independence?.kind, "rarext.provider-machine.v1");
     assert.match(cardA.independence!.measurement, /^[0-9a-f]{64}$/);
-    assert.equal(cardA.independence!.machine, cardB.independence!.machine);
+    assert.equal(cardA.independence!.machine, "machine-a");
+    assert.equal(cardB.independence!.machine, "machine-b");
+    assert.equal(verifyProviderQuote(cardA.independence), signerA.keyId);
+    assert.equal(verifyProviderQuote(cardB.independence), signerB.keyId);
 
     // The deployment commits distinct machines (from cards that attested
     // distinct hosts). A run must then be met by distinct machines.
@@ -1534,7 +1555,9 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
     assert.deepEqual(spec.machines, ["machine-a", "machine-b"]);
 
     // The gateway is pointed at two endpoints that both attest machine-a: two
-    // operator keys, one box. The run must not be written.
+    // operator keys, one box. The second's signed quote is swapped for the
+    // first's, so both MACHINES (from the quotes) are machine-a and the run must
+    // not be written.
     gateway = await startGateway({
       deployment,
       ledgerDir: join(reg.root, "gateway"),
@@ -1544,6 +1567,7 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
       quorum: 2,
       operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
       machines: { [first.url]: "machine-a", [second.url]: "machine-a" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardA.independence! },
     });
     const request = (url: string) =>
       fetch(`${url}/v1/chat/completions`, {
@@ -1564,7 +1588,7 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
     await gateway.close();
     gateway = null;
 
-    // With distinct machines the same quorum is met and the run verifies.
+    // With distinct SIGNED machines the same quorum is met and the run verifies.
     gateway = await startGateway({
       deployment,
       ledgerDir: join(reg.root, "gateway-b"),
@@ -1574,6 +1598,7 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
       quorum: 2,
       operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
       machines: { [first.url]: "machine-a", [second.url]: "machine-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
     });
     const ok = await request(gateway.url);
     assert.equal(ok.status, 200);
@@ -1607,10 +1632,130 @@ test("a machine-independent quorum refuses keys that attest the same machine", a
       },
     };
     assert.equal(verifyRunBody(invented, spec).correct, false);
+
+    // A run whose RECORDED machine disagrees with the machine its own signed
+    // quote binds is refused, even when both strings are ones the deployment
+    // committed: the machine must be attested, not typed.
+    const swappedQuote = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 1 ? { ...entry, attestation: cardA.independence! } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swappedQuote, spec).correct, false);
+    assert.match(
+      verifyRunBody(swappedQuote, spec).error ?? "",
+      /quorum/,
+    );
+
+    // An agreeing provider with no signed machine quote cannot count.
+    const noQuote = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 1 ? { ...entry, attestation: undefined } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(noQuote, spec).correct, false);
   } finally {
     if (gateway !== null) await gateway.close();
     if (first !== null) await first.close();
     if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a machine-independent quorum refuses a machine whose quote does not verify", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    // A provider that NAMES a machine but whose quote does not verify: the leaf
+    // key signs garbage, so the machine claim is not backed by a valid signature.
+    const keypair = generateAgentKeypair("ecdsa-p256");
+    const brokenSigner = {
+      sign: () => "A".repeat(88),
+      publicKey: keypair.publicKey,
+      suite: "ecdsa-p256",
+    };
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "provider"),
+      port: 0,
+      machine: "solo-machine",
+      teeSigner: brokenSigner,
+    });
+    // fetchProviderCard refuses an invalid card, so read the raw card to show the
+    // machine is NAMED but its quote does not verify.
+    const card = (await (await fetch(`${provider.url}/v1/provider-card`)).json()) as {
+      independence: RunProviderAttestation;
+      provider: { keyId: string | null };
+      model: ModelRef;
+    };
+    assert.equal(card.independence.machine, "solo-machine");
+    assert.equal(verifyProviderQuote(card.independence), null, "the quote does not verify");
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: card.provider.keyId!,
+          machines: "solo-machine",
+          independence: "machine",
+          quorum: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: card.provider.keyId! },
+      machines: { [provider.url]: "solo-machine" },
+      attestations: { [provider.url]: card.independence! },
+    });
+    const response = await fetch(`${gateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: deployment.model.id,
+        messages: [{ role: "user", content: "signed?" }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    assert.equal(response.status, 503);
+    assert.match(((await response.json()) as { error: string }).error, /distinct machine/);
+    assert.equal(new RunLedger(join(reg.root, "gateway")).records().length, 0);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
     await reg.close();
   }
 });
@@ -2296,6 +2441,184 @@ test("an enclave's attestation binds the encryption key a caller seals to", asyn
     assert.equal(attestationBindsEnclaveKey(card.independence, impostor.publicKey), false);
   } finally {
     if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a deployment can demand vendor-certified memory isolation, refusing a host-readable enclave", async () => {
+  const reg = await registry();
+  let isolated: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let plain: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    const code = runtimeCodeMeasurement();
+
+    // A vendor-signed image manifest that CERTIFIES host-root-excluded isolation,
+    // and one that does not. Both chain to the shipped hardware root.
+    const manifestLeaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const manifestChain = issueHardwareChain(manifestLeaf.publicKey).chain;
+    const isolatedManifest = signImageManifest(
+      { image: code, runtime: "rarext-runtime", isolation: "host-root-excluded" },
+      manifestLeaf,
+      manifestChain,
+    );
+    const hostReadableManifest = signImageManifest(
+      { image: code, runtime: "rarext-runtime" },
+      manifestLeaf,
+      manifestChain,
+    );
+    assert.equal(verifyImageManifest(isolatedManifest)?.isolation, "host-root-excluded");
+    assert.equal(verifyImageManifest(hostReadableManifest)?.isolation, null);
+
+    const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const teeChain = issueHardwareChain(leaf.publicKey).chain;
+    const rsa = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+
+    isolated = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "isolated"),
+      port: 0,
+      machine: "iso-machine",
+      isolation: "host-root-excluded",
+      codeMeasurement: code,
+      imageManifest: isolatedManifest,
+      enclaveKey: rsa.privateKey,
+      teeSigner: leaf,
+      teeChain,
+    });
+    const card = await fetchProviderCard({ endpoint: isolated.url });
+    assert.deepEqual(verifyProviderCard(card), []);
+    assert.equal(card.independence?.isolation, "host-root-excluded");
+    assert.equal(verifyProviderQuote(card.independence), leaf.keyId);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: isolated.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(isolated.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: isolated.url,
+          operators: card.provider.keyId!,
+          machines: "iso-machine",
+          independence: "machine",
+          quorum: "1",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeSignedImage: HARDWARE_ROOT_KEY_ID,
+          teeSignedImageDepth: "2",
+          teeCodeMeasurement: code,
+          teeIsolation: "host-root-excluded",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeIsolation, "host-root-excluded");
+
+    const ask = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "isolated?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [isolated.url],
+      quorum: 1,
+      operators: { [isolated.url]: card.provider.keyId! },
+      machines: { [isolated.url]: "iso-machine" },
+      attestations: { [isolated.url]: card.independence! },
+    });
+    const ok = await ask(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true, verified.error);
+    assert.equal(body.quorum!.providers[0]!.attestation!.isolation, "host-root-excluded");
+    assert.ok(verified.details.checks.includes("quorum"));
+
+    // A recorded attestation that drops the isolation capability is refused: the
+    // deployment demanded a vendor-certified host-root-excluded memory.
+    const dropped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry) => ({
+          ...entry,
+          attestation: { ...entry.attestation!, isolation: undefined },
+        })),
+      },
+    };
+    assert.equal(verifyRunBody(dropped, spec).correct, false);
+
+    await gateway.close();
+    gateway = null;
+
+    // A software-only provider — a vendor-signed image WITHOUT the isolation
+    // capability — cannot satisfy the demand, even though its quote chains to the
+    // pinned root.
+    plain = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "plain"),
+      port: 0,
+      machine: "plain-machine",
+      codeMeasurement: code,
+      imageManifest: hostReadableManifest,
+      teeSigner: leaf,
+      teeChain,
+    });
+    const plainCard = await fetchProviderCard({ endpoint: plain.url });
+    assert.equal(verifyProviderQuote(plainCard.independence), leaf.keyId);
+    assert.equal(plainCard.independence?.isolation, undefined);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-plain"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [plain.url],
+      quorum: 1,
+      operators: { [plain.url]: plainCard.provider.keyId! },
+      machines: { [plain.url]: "plain-machine" },
+      attestations: { [plain.url]: plainCard.independence! },
+    });
+    const refused = await ask(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(
+      ((await refused.json()) as { error: string }).error,
+      /unverifiable machine quote/,
+    );
+    assert.equal(new RunLedger(join(reg.root, "gateway-plain")).records().length, 0);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (isolated !== null) await isolated.close();
+    if (plain !== null) await plain.close();
     await reg.close();
   }
 });
