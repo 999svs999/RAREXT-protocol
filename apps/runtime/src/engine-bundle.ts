@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import vm from "node:vm";
 
+import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { bundleShardsRoot } from "./model-bundle.ts";
 import type { BundleShard } from "./model-bundle.ts";
@@ -228,7 +229,8 @@ export function loadEngine(source: Uint8Array): NativeEngine {
     JSON,
   };
   try {
-    vm.runInNewContext(source.toString("utf8"), sandbox, { timeout: 10_000, filename: "rarext-engine.js" });
+    const code = new TextDecoder().decode(source);
+    vm.runInNewContext(code, sandbox, { timeout: 10_000, filename: "rarext-engine.js" });
   } catch (error) {
     throw new Error(`the engine artifact failed to load: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -242,4 +244,53 @@ export function loadEngine(source: Uint8Array): NativeEngine {
 /** A stable id for an engine bundle, for logging and pinning. */
 export function engineBundleId(bundle: EngineBundle): string {
   return `${bundle.name}@${bundle.engineVersion}:${bundle.artifactDigest.slice(0, 18)}`;
+}
+
+/**
+ * Store every engine shard and the bundle manifest itself as RAREXT blobs. The
+ * shard hash is sent with the bytes, so the node checks the content address
+ * rather than believing the uploader.
+ */
+export async function uploadEngineBundle(input: {
+  registry: string;
+  bundle: EngineBundle;
+  chunks: Uint8Array[];
+  fetchImpl?: typeof fetch;
+}): Promise<{ manifestHash: string }> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const registry = input.registry.replace(/\/+$/, "");
+  for (let index = 0; index < input.chunks.length; index += 1) {
+    const shard = input.bundle.shards[index]!;
+    const response = await fetchImpl(`${registry}/v1/blobs/raw`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-rarext-hash": shard.hash,
+        "x-rarext-media-type": "application/octet-stream",
+      },
+      body: Buffer.from(input.chunks[index]!) as unknown as BodyInit,
+    });
+    if (!response.ok) {
+      throw new Error(`registry refused engine shard ${index}: HTTP ${response.status} ${await response.text()}`);
+    }
+    const record = (await response.json()) as { hash?: unknown };
+    if (record.hash !== shard.hash) {
+      throw new Error(`registry stored engine shard ${index} as ${String(record.hash)}, expected ${shard.hash}`);
+    }
+  }
+  const manifest = Buffer.from(canonicalize(input.bundle));
+  const manifestHash = sha256Hex(manifest);
+  const response = await fetchImpl(`${registry}/v1/blobs/raw`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-rarext-hash": manifestHash,
+      "x-rarext-media-type": "application/vnd.rarext.engine-bundle+json",
+    },
+    body: manifest as unknown as BodyInit,
+  });
+  if (!response.ok) {
+    throw new Error(`registry refused the engine bundle manifest: HTTP ${response.status} ${await response.text()}`);
+  }
+  return { manifestHash };
 }

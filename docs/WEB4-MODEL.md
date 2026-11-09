@@ -19,23 +19,25 @@ phase asserts the caller's state contains no model file. The caller's deployment
 records `hardware.backend: "network"` and `memoryBytes: null` — it names compute it
 does not own.
 
-The **engine** (the process that turns tokens) runs on the RAREXT provider node, not
-on the caller. It is pinned end-to-end: the deployment commits an
-`engineFingerprint` (over the engine's name, version, and image digest), every run
-records it, and a replay refuses a provider whose present engine differs — so "the
-same model on a different engine build" is a different run, refused by name. The
-model weights live purely on RAREXT; the engine is the provider's, named and pinned
-by a commitment, never the caller's.
+The **engine** (the process that turns tokens) also runs on the RAREXT provider node,
+not on the caller — and the engine itself is a RAREXT artifact. It is sharded into
+RAREXT like the weights, under one committed digest (`rarext.engine-bundle.v1`), and
+a provider **fetches and verifies it before it will serve**: a shard that does not
+hash to the commitment, a reassembled artifact whose digest does not match, or a
+module that exposes no engine is refused before any inference. The provider runs the
+engine it fetched, not one the box already has, and the artifact digest is folded
+into the `engineFingerprint` the deployment commits, every run records, and a replay
+checks. The demo's `engine` phase serves with a fetched engine (and shows the served
+trace is the fetched engine's, not the built-in one) and refuses a tampered artifact.
 
-Making the engine **bytes** themselves a fetched-and-executed RAREXT artifact (so a
-provider runs only an engine image content-addressed on RAREXT, rather than one the
-box already has) additionally needs containerized execution: the engine binary/
-container would be sharded into RAREXT like the weights and the provider would run
-only the verified image. The `bundle`/provider plumbing and the engine fingerprint
-are shaped for that, but executing an arbitrary fetched binary is not done in this
-demo (no container runtime is assumed). What is demonstrated is the invariant the
-objective names: **the AI — weights and inference — lives on the RAREXT network,
-and the machine that asks runs nothing.**
+`bundle --engine-module <file> --engine-name <n>` shards the engine; `provider
+--engine-bundle <manifest>` fetches and runs it. The reference artifact is a
+JavaScript engine module evaluated in a `node:vm` context with no `require` and no
+filesystem; a container runtime would let the same shape carry an engine **image**
+and run only the verified bytes, which is the one thing this environment does not
+provide. What is demonstrated is the invariant the objective names: **the AI —
+weights and engine — lives on the RAREXT network, and the machine that asks runs
+nothing.**
 
 ```bash
 npm run demo:web4-model
@@ -44,7 +46,7 @@ npm run demo:web4-model
 runs the whole path with a deterministic native model in seconds:
 `storage -> 2 providers -> deploy -> registry -> card -> announce -> serve ->
 infer -> publish -> compare -> weights -> trace -> deterministic -> determinism ->
-replay -> anchor -> discover-deploy -> discover -> tamper -> verify`.
+engine -> replay -> anchor -> discover-deploy -> discover -> tamper -> verify`.
 
 To put a real GGUF through the same path:
 
@@ -1272,6 +1274,14 @@ why a large file is sharded rather than sent as one object.
   protocol can do is hand over cash or prove the external ledger is honest: an
   inclusion proof shows the movement is in a signed STATE, and the ledger's key is
   the receipt of that state, not the funds.
-- **The engine is the provider's.** With `execution.kind: "engine"` the provider
-  must have Ollama (today) and reproduces the model locally from the verified
-  file. The weights still come from RAREXT; the compute is the provider's.
+- **The engine can be a RAREXT artifact, but executing an engine IMAGE from RAREXT
+  needs a container runtime.** For the native class the engine itself is sharded
+  into RAREXT (`rarext.engine-bundle.v1`), the provider fetches and verifies it,
+  runs the fetched engine, and folds the artifact digest into the engine
+  fingerprint — so the engine is a RAREXT artifact, not the box's. With
+  `execution.kind: "engine"` the provider must have Ollama (today) and reproduces
+  the model locally from the verified file; carrying an executable engine image
+  there needs a container runtime, which this environment does not provide, so the
+  provider refuses to run a JS artifact as that engine rather than serve under a
+  false identity. The weights and (native) engine come from RAREXT; the compute is
+  the provider's.

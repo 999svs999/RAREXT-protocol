@@ -82,6 +82,14 @@ import {
 } from "../src/root-chain.ts";
 import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
 import { attestationForReceipt } from "../src/certificates.ts";
+import { engineDescriptorFingerprint } from "../src/engine-pin.ts";
+import {
+  buildEngineBundle,
+  fetchEngineArtifact,
+  loadEngine,
+  uploadEngineBundle,
+  verifyEngineBundle,
+} from "../src/engine-bundle.ts";
 import { comparableCompletion } from "../src/completion.ts";
 import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
@@ -5916,6 +5924,98 @@ test("the gateway refuses a deterministic-replay run without an independent witn
     if (gateway !== null) await gateway.close();
     if (first !== null) await first.close();
     if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("the engine itself is a RAREXT artifact a provider fetches, verifies, and runs", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const { bundle } = await publishNative({ base: reg.base });
+
+    // A tiny engine module: deterministic, and its output is NOT the built-in
+    // engine's, so the test can tell which engine actually ran.
+    const source = Buffer.from(
+      [
+        "module.exports.run = function (model, input) {",
+        "  var seed = (input.seed == null ? 7 : input.seed) >>> 0;",
+        "  var steps = Math.max(1, Math.min(input.steps || 4, 4));",
+        "  var tokens = [];",
+        "  for (var i = 0; i < steps; i++) { seed = (seed * 1103515245 + 12345) >>> 0; tokens.push(seed % model.vocab.length); }",
+        "  return { text: tokens.map(function (t) { return model.vocab[t]; }).join(''), seed: seed, steps: steps, tokens: tokens };",
+        "};",
+      ].join("\n"),
+    );
+    const { bundle: engineBundle, chunks } = buildEngineBundle({
+      source,
+      name: "rarext-test-engine",
+      engineVersion: "1",
+      chunkBytes: 24,
+    });
+    assert.deepEqual(verifyEngineBundle(engineBundle), []);
+    assert.ok(engineBundle.shards.length > 1, "the engine artifact is sharded");
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks });
+
+    // The provider fetches every engine shard from RAREXT, verifies the digest,
+    // and runs the FETCHED engine.
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "provider"),
+      port: 0,
+      engineBundle,
+    });
+    const health = (await (await fetch(`${provider.url}/health`)).json()) as {
+      engineFingerprint: string;
+    };
+    assert.equal(
+      health.engineFingerprint,
+      engineDescriptorFingerprint({
+        name: "rarext-test-engine",
+        version: "1",
+        digest: engineBundle.artifactDigest,
+      }),
+      "the engine-bundle digest is folded into the engine fingerprint",
+    );
+
+    const response = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "engine from RAREXT" }],
+        max_tokens: 4,
+        temperature: 0,
+        seed: 5,
+      }),
+    });
+    assert.equal(response.status, 200);
+    const json = (await response.json()) as { rarext_trace?: { tokens: number[] } };
+    // Recompute the FETCHED engine's tokens for seed 5 independently; the
+    // built-in engine would give a different sequence.
+    const vocab = (JSON.parse(NATIVE_BYTES.toString("utf8")) as { vocab: string[] }).vocab;
+    const expected: number[] = [];
+    let seed = 5 >>> 0;
+    for (let index = 0; index < 4; index += 1) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      expected.push(seed % vocab.length);
+    }
+    assert.deepEqual(json.rarext_trace?.tokens, expected, "the served trace is the fetched engine's");
+
+    // A tampered engine artifact — a committed digest that does not match the
+    // reassembled bytes — is refused before the provider can serve it.
+    const tampered = { ...engineBundle, artifactDigest: `sha256:${"0".repeat(64)}` };
+    const { digest: _digest, ...covered } = tampered;
+    const reDigested = { ...tampered, digest: canonicalDigest(covered) };
+    await assert.rejects(
+      () => fetchEngineArtifact({ registries: [reg.base], bundle: reDigested }),
+      /engine artifact digest .* does not match the committed/,
+    );
+    // A module that is not an engine is refused by the loader.
+    assert.throws(() => loadEngine(Buffer.from("module.exports = {};")), /exports no run/);
+  } finally {
+    if (provider !== null) await provider.close();
     await reg.close();
   }
 });

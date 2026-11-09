@@ -65,6 +65,8 @@ import {
   verifyProviderQuote,
 } from "./model-bundle.ts";
 import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bundle.ts";
+import { buildEngineBundle, uploadEngineBundle, verifyEngineBundle } from "./engine-bundle.ts";
+import type { EngineBundle } from "./engine-bundle.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
 import type { RootChain } from "./root-chain.ts";
 import { loadProviderBundle, startProvider } from "./provider.ts";
@@ -157,6 +159,9 @@ Common options:
   --measure <hex,...>   deploy: allowlist of measurements a provider must match
   --engine-version <v>  the serving engine's version, pinned by its fingerprint
   --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
+  --engine-module <f>   bundle: shard an engine module into RAREXT as a runnable engine artifact
+  --engine-name <n>     bundle: the engine artifact's family name
+  --engine-bundle <p>   provider: fetch/verify this RAREXT engine artifact before serving
   --engine-logprobs     ask the engine for token logprobs and record a decode judgment
   --tee-key-file <p>    the leaf/attestation key that signs a provider's machine quote
   --tee-cert-file <p>   certificates chaining the leaf key up to the trust anchor
@@ -694,10 +699,42 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   const bundlePath = join(out, "model-bundle.json");
   writeJsonFile(bundlePath, bundle);
 
+  // The ENGINE as a RAREXT artifact: shard the engine module into RAREXT under
+  // one committed digest, so a provider fetches and verifies the engine it runs
+  // instead of using whatever the box already has.
+  const engineModuleFlag = flag(values, "engine-module");
+  let engineBundle: EngineBundle | null = null;
+  let engineManifestHash: string | null = null;
+  let engineBundlePath: string | null = null;
+  if (engineModuleFlag !== undefined) {
+    const built = buildEngineBundle({
+      source: readFileSync(resolve(engineModuleFlag)),
+      name: flag(values, "engine-name") ?? "rarext-native-engine",
+      engineVersion: flag(values, "engine-version") ?? "1",
+      chunkBytes,
+    });
+    const engineErrors = verifyEngineBundle(built.bundle);
+    if (engineErrors.length > 0) {
+      throw new Error(`refusing to store an invalid engine bundle: ${engineErrors.join("; ")}`);
+    }
+    engineManifestHash = (await uploadEngineBundle({ registry, bundle: built.bundle, chunks: built.chunks })).manifestHash;
+    engineBundle = built.bundle;
+    engineBundlePath = join(out, "engine-bundle.json");
+    writeJsonFile(engineBundlePath, built.bundle);
+  }
+
   if (bool(values, "json")) {
     console.log(
       JSON.stringify(
-        { bundle, manifestHash: uploaded.manifestHash, bundlePath, sealKeyPath },
+        {
+          bundle,
+          manifestHash: uploaded.manifestHash,
+          bundlePath,
+          sealKeyPath,
+          engineBundle,
+          engineManifestHash,
+          engineBundlePath,
+        },
         null,
         2,
       ),
@@ -712,6 +749,10 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   console.log(`  shards      ${bundle.shards.length} (${formatBytes(bundle.totalBytes)})`);
   console.log(`  shardsRoot  ${bundle.shardsRoot}`);
   console.log(`  manifest    ${uploaded.manifestHash}`);
+  if (engineBundle !== null) {
+    console.log(`  engine      ${engineBundle.name}@${engineBundle.engineVersion} (${engineBundle.shards.length} shard(s))`);
+    console.log(`  engineDigest ${engineBundle.artifactDigest}`);
+  }
   console.log(`  execution   ${bundle.execution.kind}`);
   if (bundle.sealing !== undefined) {
     console.log(`  sealed      ${bundle.sealing.scheme} (keyCommitment ${bundle.sealing.keyCommitment.slice(0, 16)}…)`);
@@ -746,11 +787,18 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
   const out = flag(values, "out") === undefined ? null : resolve(flag(values, "out")!);
   const sealKeyFlag = flag(values, "seal-key-file");
   const sealKey = sealKeyFlag === undefined ? undefined : readSealKeyFile(resolve(sealKeyFlag));
+  // A RAREXT engine artifact the provider must fetch and verify before serving.
+  const engineBundleFlag = flag(values, "engine-bundle");
+  const engineBundle =
+    engineBundleFlag === undefined
+      ? undefined
+      : (readJson(resolve(engineBundleFlag)) as EngineBundle);
 
   const provider = await startProvider({
     bundle,
     registry,
     stateDir: resolve(flag(values, "state") ?? ".rarext-provider"),
+    ...(engineBundle === undefined ? {} : { engineBundle }),
     ...(engineEndpoint === undefined ? {} : { engineEndpoint }),
     host: flag(values, "host") ?? "127.0.0.1",
     port: flag(values, "port") ? Number(flag(values, "port")) : 8791,
@@ -2306,6 +2354,9 @@ async function main(): Promise<number> {
       measure: { type: "string" },
       "engine-version": { type: "string" },
       "engine-digest": { type: "string" },
+      "engine-module": { type: "string" },
+      "engine-name": { type: "string" },
+      "engine-bundle": { type: "string" },
       "engine-logprobs": { type: "boolean" },
       "tee-key-file": { type: "string" },
       "tee-cert-file": { type: "string" },

@@ -26,6 +26,8 @@ import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
 import type { ImageManifest, IsolationClass } from "./image-manifest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
+import { fetchEngineArtifact, loadEngine } from "./engine-bundle.ts";
+import type { EngineBundle, NativeEngine } from "./engine-bundle.ts";
 import {
   fetchBundleChunks,
   fetchBundleCiphertext,
@@ -103,6 +105,15 @@ export interface ProviderOptions {
    */
   engineVersion?: string | null;
   engineDigest?: string | null;
+  /**
+   * The ENGINE as a RAREXT artifact. When present, the provider fetches every
+   * shard from RAREXT, verifies it against the committed engine digest, and runs
+   * the fetched engine for the native class — so the engine is a RAREXT artifact,
+   * not whatever the box happens to have. A tampered shard or a module with no
+   * engine interface is refused before the provider serves. The artifact digest
+   * is folded into the engine fingerprint, binding runs and replays to it.
+   */
+  engineBundle?: EngineBundle;
   /**
    * The vendor/attestation key that signs this provider's machine quote. In a
    * real TEE this key lives in the chip; here the operator supplies it, and a
@@ -736,6 +747,22 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       (options.bundle.sealing === undefined ? "" : " (opened in memory; the RAREXT store never holds plaintext)"),
   );
 
+  // The engine the provider will RUN. When it is a RAREXT artifact, fetch and
+  // verify it first: a shard that does not hash to the committed engine, or a
+  // module that exposes no engine, stops the provider before it serves anything.
+  let loadedEngine: NativeEngine | null = null;
+  if (options.engineBundle !== undefined) {
+    if (options.bundle.execution.kind !== "native") {
+      throw new Error("a RAREXT engine artifact runs the native class; the engine class loads a model into a local engine");
+    }
+    const source = await fetchEngineArtifact({ registries, bundle: options.engineBundle });
+    loadedEngine = loadEngine(source);
+    log(
+      `loaded engine ${options.engineBundle.name}@${options.engineBundle.engineVersion} ` +
+        `(${options.engineBundle.artifactDigest.slice(0, 18)}…) from ${options.engineBundle.shards.length} RAREXT shard(s)`,
+    );
+  }
+
   let native: XorshiftModel | null = null;
   let engineModel: string | null = null;
   if (options.bundle.execution.kind === "native") {
@@ -809,16 +836,26 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   }
 
   // The engine this provider actually serves with, and the one value a run pins.
-  const engineDescriptor = {
-    name:
-      options.bundle.execution.kind === "engine"
-        ? options.bundle.execution.engine
-        : "rarext-native",
-    version:
-      options.engineVersion ??
-      (options.bundle.execution.kind === "engine" ? null : "xorshift32"),
-    digest: options.engineDigest ?? null,
-  };
+  // When the engine is a RAREXT artifact, its name/version/digest ARE the
+  // artifact's, so the fingerprint folds the engine-bundle digest into every run
+  // and a replay refuses an engine that does not match the committed artifact.
+  const engineDescriptor =
+    options.engineBundle !== undefined
+      ? {
+          name: options.engineBundle.name,
+          version: options.engineBundle.engineVersion,
+          digest: options.engineBundle.artifactDigest,
+        }
+      : {
+          name:
+            options.bundle.execution.kind === "engine"
+              ? options.bundle.execution.engine
+              : "rarext-native",
+          version:
+            options.engineVersion ??
+            (options.bundle.execution.kind === "engine" ? null : "xorshift32"),
+          digest: options.engineDigest ?? null,
+        };
   const engineFingerprint = engineDescriptorFingerprint(engineDescriptor);
 
   function cardFor(): ProviderCard {
@@ -880,14 +917,26 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         typeof body.seed === "number" && Number.isSafeInteger(body.seed)
           ? (body.seed as number)
           : null;
-      const result = runNativeModel(native, {
-        prompt,
-        steps: requestedSteps(
-          body,
-          options.bundle.execution.kind === "native" ? options.bundle.execution.defaultSteps : 32,
-        ),
-        seed,
-      });
+      const steps = requestedSteps(
+        body,
+        options.bundle.execution.kind === "native" ? options.bundle.execution.defaultSteps : 32,
+      );
+      // The engine is the RAREXT artifact when one was committed: the provider
+      // runs what it fetched and verified, not a local implementation.
+      const result = loadedEngine !== null
+        ? loadedEngine.run(native, { prompt, steps, seed })
+        : runNativeModel(native, { prompt, steps, seed });
+      if (
+        result === null ||
+        typeof result !== "object" ||
+        typeof result.text !== "string" ||
+        !Number.isSafeInteger(result.seed) ||
+        !Number.isSafeInteger(result.steps) ||
+        !Array.isArray(result.tokens) ||
+        !result.tokens.every((token) => Number.isSafeInteger(token))
+      ) {
+        throw new Error("the RAREXT engine artifact returned a malformed native result");
+      }
       return {
         text: result.text,
         seed: result.seed,

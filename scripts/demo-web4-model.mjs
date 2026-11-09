@@ -22,6 +22,7 @@
  *   trace     a required decode trace: a run without one is refused
  *   deterministic  a required replayable run: a sampled request is refused
  *   determinism  a claimed engine arithmetic: an independent witness must match
+ *   engine    the engine itself is a RAREXT artifact the provider fetches/verifies
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
  *   redeem    a key cashes credits out of the ledger against an external reference
@@ -98,7 +99,14 @@ import {
 } from "../apps/runtime/src/model-bundle.ts";
 import { buildDeployment, commitDeployment } from "../apps/runtime/src/manifest.ts";
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
-import { runNativeModel } from "../apps/runtime/src/provider.ts";
+import { runNativeModel, startProvider } from "../apps/runtime/src/provider.ts";
+import { engineDescriptorFingerprint } from "../apps/runtime/src/engine-pin.ts";
+import {
+  buildEngineBundle,
+  fetchEngineArtifact,
+  uploadEngineBundle,
+  verifyEngineBundle,
+} from "../apps/runtime/src/engine-bundle.ts";
 import {
   attestationBindsEnclaveKey,
   openResponse,
@@ -1877,6 +1885,115 @@ try {
     independenceDetail = error instanceof Error ? error.message : String(error);
   }
   phase("independence", independenceOk, independenceDetail);
+
+  // ── 12d0. The engine is a RAREXT artifact, not the box's ─────────────────
+  // The model weights are RAREXT blobs; so is the ENGINE. The engine module is
+  // sharded into RAREXT under one committed digest, and a provider fetches and
+  // verifies it before serving. A different engine (the built-in one) would emit
+  // a different trace, so the served trace proves which engine ran; a tampered
+  // artifact is refused before any inference.
+  let engineArtifactOk = false;
+  let engineArtifactDetail = "";
+  let engineArtifactProvider = null;
+  try {
+    const engineSource = Buffer.from(
+      [
+        "module.exports.run = function (model, input) {",
+        "  var steps = Math.max(1, Math.min(input.steps || 4, 4));",
+        "  var tokens = [];",
+        "  for (var i = 0; i < steps; i++) { tokens.push(i % model.vocab.length); }",
+        "  return { text: tokens.map(function (t) { return model.vocab[t]; }).join(''), seed: 1, steps: steps, tokens: tokens };",
+        "};",
+      ].join("\n"),
+    );
+    const { bundle: engineBundle, chunks } = buildEngineBundle({
+      source: engineSource,
+      name: "rarext-demo-engine",
+      engineVersion: "1",
+      chunkBytes: 32,
+    });
+    if (verifyEngineBundle(engineBundle).length > 0) throw new Error("the engine bundle is invalid");
+    await uploadEngineBundle({ registry: baseUrl, bundle: engineBundle, chunks });
+
+    // A tampered engine artifact (digest does not match the bytes) is refused.
+    const tampered = { ...engineBundle, artifactDigest: `sha256:${"0".repeat(64)}` };
+    const { digest: _tamperDigest, ...tamperCovered } = tampered;
+    const tamperRefused = await fetchEngineArtifact({
+      registries: [baseUrl],
+      bundle: { ...tampered, digest: canonicalDigest(tamperCovered) },
+    })
+      .then(() => false)
+      .catch(() => true);
+
+    if (!real) {
+      // The native class runs the FETCHED engine — the served trace is the
+      // fetched engine's (0,1,2,3), not the built-in engine's.
+      engineArtifactProvider = await startProvider({
+        bundle,
+        registry: baseUrl,
+        stateDir: join(state, "engine-artifact-provider"),
+        port: 0,
+        engineBundle,
+        ...(sealKey === null ? {} : { sealKey }),
+      });
+      const engineHealth = await getJson(`${engineArtifactProvider.url}/health`);
+      const fingerprintFolds =
+        engineHealth.engineFingerprint ===
+        engineDescriptorFingerprint({
+          name: "rarext-demo-engine",
+          version: "1",
+          digest: engineBundle.artifactDigest,
+        });
+      const engineAnswer = await fetch(`${engineArtifactProvider.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "run the RAREXT engine" }],
+          max_tokens: 4,
+          temperature: 0,
+        }),
+      });
+      const engineJson = await engineAnswer.json();
+      const engineTokens = engineJson?.rarext_trace?.tokens;
+      const fetchedEngineRan = Array.isArray(engineTokens) && engineTokens.join(",") === "0,1,2,3";
+      engineArtifactOk =
+        fingerprintFolds && engineAnswer.status === 200 && fetchedEngineRan && tamperRefused;
+      engineArtifactDetail = engineArtifactOk
+        ? `the engine is a RAREXT artifact: ${engineBundle.shards.length} shard(s) under ${engineBundle.artifactDigest.slice(0, 18)}…; ` +
+          `the provider fetched and verified it, its digest is folded into the engine fingerprint, it served the FETCHED ` +
+          `engine (trace ${String(engineTokens)}), and a tampered artifact was refused`
+        : `fingerprintFolds=${String(fingerprintFolds)} status=${engineAnswer.status} tokens=${JSON.stringify(engineTokens)} ` +
+          `tamperRefused=${String(tamperRefused)}`;
+    } else {
+      // The engine class runs the provider's external engine (Ollama). Carrying
+      // an executable engine IMAGE needs a container runtime, which this
+      // environment does not provide; the provider refuses to pretend a JS
+      // artifact is that engine rather than serve under a false identity.
+      const refusedEngineClass = await startProvider({
+        bundle,
+        registry: baseUrl,
+        stateDir: join(state, "engine-class-refused"),
+        port: 0,
+        engineBundle,
+        ...(sealKey === null ? {} : { sealKey }),
+      })
+        .then(() => false)
+        .catch(() => true);
+      engineArtifactOk = refusedEngineClass && tamperRefused;
+      engineArtifactDetail = engineArtifactOk
+        ? `the engine is a RAREXT artifact: ${engineBundle.shards.length} shard(s) under ${engineBundle.artifactDigest.slice(0, 18)}…; ` +
+          `the engine class runs an external engine, so the provider refused to run a JS artifact as it (a container ` +
+          `runtime would carry the engine image) and a tampered artifact was refused`
+        : `refused=${String(refusedEngineClass)} tamperRefused=${String(tamperRefused)}`;
+    }
+  } catch (error) {
+    engineArtifactOk = false;
+    engineArtifactDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (engineArtifactProvider !== null) await engineArtifactProvider.close().catch(() => {});
+  }
+  phase("engine", engineArtifactOk, engineArtifactDetail);
 
   // ── 12d. Measurement allowlist: the attestation is checked, not believed ─
   // The provider card attests a measurement (the software/image digest). A
