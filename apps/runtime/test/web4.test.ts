@@ -62,7 +62,12 @@ import {
 } from "../src/manifest.ts";
 import { startProvider } from "../src/provider.ts";
 import { replayEngineRun } from "../src/replay.ts";
-import { openResponse, sealRequest } from "../src/confidential.ts";
+import {
+  attestationBindsEnclaveKey,
+  enclaveKeyDigest,
+  openResponse,
+  sealRequest,
+} from "../src/confidential.ts";
 import {
   HARDWARE_ROOT_KEY_ID,
   hardwareRootSigner,
@@ -2201,6 +2206,206 @@ test("an enclave serves a bundle sealed to it, and a forwarder never holds the k
   } finally {
     if (forwarder !== null) await forwarder.close();
     if (enclave !== null) await enclave.close();
+    await reg.close();
+  }
+});
+
+test("an enclave's attestation binds the encryption key a caller seals to", async () => {
+  const enclave = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const impostor = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain } = issueMeasuredBootChain(leaf.publicKey, { app: runtimeCodeMeasurement() });
+
+  const sealKey = generateSealKey();
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+      wrapPublicKey: enclave.publicKey,
+    });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "enclave"),
+      port: 0,
+      enclaveKey: enclave.privateKey,
+      teeSigner: leaf,
+      teeChain: chain,
+    });
+
+    const attestation = (await (await fetch(`${provider.url}/v1/attestation`)).json()) as {
+      attestation: { enclaveKey?: string; quote?: unknown };
+      enclavePublicKey: string;
+    };
+    assert.match(attestation.enclavePublicKey, /BEGIN PUBLIC KEY/);
+    // The signed attestation carries the digest of the very key it published, and
+    // the quote covers it, so a caller can check before encrypting anything.
+    assert.equal(attestation.attestation.enclaveKey, enclaveKeyDigest(attestation.enclavePublicKey));
+    assert.equal(verifyProviderQuote(attestation.attestation), leaf.keyId);
+    assert.equal(attestationBindsEnclaveKey(attestation.attestation, attestation.enclavePublicKey), true);
+    // A key the operator does not hold — a man in the middle — is refused.
+    assert.equal(attestationBindsEnclaveKey(attestation.attestation, impostor.publicKey), false);
+    assert.notEqual(enclaveKeyDigest(impostor.publicKey), attestation.attestation.enclaveKey);
+    // The card carries the same binding.
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    assert.deepEqual(verifyProviderCard(card), []);
+    assert.equal(attestationBindsEnclaveKey(card.independence, attestation.enclavePublicKey), true);
+    assert.equal(attestationBindsEnclaveKey(card.independence, impostor.publicKey), false);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a run that commits an engine must have a provider receipt that signs it", async () => {
+  const enclave = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const sealKey = generateSealKey();
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain } = issueMeasuredBootChain(leaf.publicKey, { app: runtimeCodeMeasurement() });
+
+  const reg = await registry();
+  let enclaveNode: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let forwarder: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+      sealKey,
+      wrapPublicKey: enclave.publicKey,
+    });
+    const manifestHash = (await uploadBundle({ registry: reg.base, bundle, chunks })).manifestHash;
+
+    enclaveNode = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "enclave"),
+      port: 0,
+      enclaveKey: enclave.privateKey,
+      teeSigner: leaf,
+      teeChain: chain,
+    });
+    // The forwarder runs no engine of its own, so its receipts omit `engine`.
+    forwarder = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "forwarder"),
+      port: 0,
+      enclaveEndpoint: enclaveNode.url,
+    });
+    const enclaveEngine = ((await (await fetch(`${enclaveNode.url}/health`)).json()) as {
+      engineFingerprint: string;
+    }).engineFingerprint;
+    const forwarderKeyId = forwarder.card.provider.keyId!;
+
+    const deploy = (engineFingerprint: string | null) =>
+      commitDeployment(
+        buildDeployment({
+          probe: {
+            engine: { name: "openai-compatible", version: "web4", endpoint: forwarder!.url },
+            model: forwarder!.card.model,
+            apis: ["openai"],
+            models: [forwarder!.card.model],
+          },
+          hardware: hardwareFromNetwork(forwarder!.url),
+          placement: "web4",
+          labels: {
+            execution: "web4",
+            bundle: bundle.digest,
+            shardsRoot: bundle.shardsRoot,
+            manifestHash,
+            providers: forwarder!.url,
+            operators: forwarderKeyId,
+            quorum: "1",
+            ...(engineFingerprint === null ? {} : { engineFingerprint }),
+            fixture: "loopback",
+          },
+          createdAt: "2026-11-07T00:00:00.000Z",
+        }),
+      );
+
+    const ask = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: forwarder!.card.model.id,
+          messages: [{ role: "user", content: "which engine?" }],
+          max_tokens: 8,
+          temperature: 0,
+          seed: 2,
+        }),
+      });
+
+    // No engine committed: the run is fine even though the receipt omits it.
+    const loose = deploy(null);
+    assert.deepEqual(validateDeployment(loose), []);
+    gateway = await startGateway({
+      deployment: loose,
+      ledgerDir: join(reg.root, "gateway-loose"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [forwarder.url],
+      quorum: 1,
+      operators: { [forwarder.url]: forwarderKeyId },
+    });
+    assert.equal((await ask(gateway.url)).status, 200);
+    const looseBody = new RunLedger(join(reg.root, "gateway-loose")).records()[0]!.body;
+    assert.equal(verifyRunBody(looseBody, runSpecFromChallenge(challengeFor(loose))).correct, true);
+    await gateway.close();
+    gateway = null;
+
+    // The SAME run, but the deployment commits an engine the receipt does not
+    // sign: the run claims an engine no agreeing provider attested, and is refused.
+    const strict = deploy(enclaveEngine);
+    assert.deepEqual(validateDeployment(strict), []);
+    gateway = await startGateway({
+      deployment: strict,
+      ledgerDir: join(reg.root, "gateway-strict"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [forwarder.url],
+      quorum: 1,
+      operators: { [forwarder.url]: forwarderKeyId },
+    });
+    assert.equal((await ask(gateway.url)).status, 200);
+    const strictBody = new RunLedger(join(reg.root, "gateway-strict")).records()[0]!.body;
+    assert.equal(strictBody.engine.fingerprint, enclaveEngine);
+    assert.equal(
+      (strictBody.quorum!.providers[0]!.receipt as { engine?: string }).engine,
+      undefined,
+      "the forwarding provider's receipt omits the engine",
+    );
+    const verdict = verifyRunBody(strictBody, runSpecFromChallenge(challengeFor(strict)));
+    assert.equal(verdict.correct, false);
+    assert.ok((verdict.proof as { failures: string[] }).failures.includes("quorum"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (forwarder !== null) await forwarder.close();
+    if (enclaveNode !== null) await enclaveNode.close();
     await reg.close();
   }
 });

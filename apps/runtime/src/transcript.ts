@@ -461,11 +461,11 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
           const expected = canonicalDigest(attestationForReceipt(entry.attestation));
           if (receipt.attestation !== expected) return false;
         }
-        // When the run commits an engine, the provider's own engine claim must
-        // match it: a provider that served with another engine is refused.
-        if (runEngine !== null && typeof receipt.engine === "string" && receipt.engine !== runEngine) {
-          return false;
-        }
+        // When the run commits an engine, the provider's receipt MUST carry that
+        // engine: a provider that served with another engine — or that omitted the
+        // engine entirely, so the run claims one no agreeing provider signed — is
+        // refused.
+        if (runEngine !== null && receipt.engine !== runEngine) return false;
         // When the run commits a model bundle, the provider's own bundle claim
         // must match it: a provider that served other weights is refused.
         if (runBundle !== null && receipt.bundle !== runBundle) return false;

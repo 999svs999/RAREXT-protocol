@@ -164,6 +164,12 @@ export interface ProviderIndependence {
    */
   image?: ImageManifest;
   /**
+   * The digest of the enclave's ENCRYPTION public key, when the provider serves
+   * one. Bound by the quote, so a caller can check that the key it seals a prompt
+   * to is the key the attested enclave holds — a substituted key is refused.
+   */
+  enclaveKey?: string;
+  /**
    * The verifier's freshness nonce, when the attestation is challenged. A quote
    * binds the nonce it was made for, so a replayed (stale) attestation — one made
    * for an earlier nonce — is refused.
@@ -187,6 +193,7 @@ export function providerQuotePayload(independence: ProviderIndependence): {
   issuedAt: string;
   code?: string;
   image?: ImageManifest;
+  enclaveKey?: string;
   challenge?: string;
 } {
   return {
@@ -197,6 +204,7 @@ export function providerQuotePayload(independence: ProviderIndependence): {
     issuedAt: independence.issuedAt,
     ...(independence.code === undefined ? {} : { code: independence.code }),
     ...(independence.image === undefined ? {} : { image: independence.image }),
+    ...(independence.enclaveKey === undefined ? {} : { enclaveKey: independence.enclaveKey }),
     ...(independence.challenge === undefined ? {} : { challenge: independence.challenge }),
   };
 }
@@ -1244,6 +1252,12 @@ export function verifyProviderCard(value: unknown): string[] {
         (typeof value.independence.code !== "string" || !HEX64.test(value.independence.code))
       ) {
         errors.push("provider card independence.code must be a sha256 hex digest when present");
+      }
+      if (
+        value.independence.enclaveKey !== undefined &&
+        (typeof value.independence.enclaveKey !== "string" || !HEX64.test(value.independence.enclaveKey))
+      ) {
+        errors.push("provider card independence.enclaveKey must be a sha256 hex digest when present");
       }
       if (value.independence.image !== undefined) {
         const info = verifyImageManifest(value.independence.image);

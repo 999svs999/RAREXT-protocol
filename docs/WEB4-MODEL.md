@@ -180,9 +180,19 @@ which the caller kept. So the prompt and the answer are ciphertext everywhere
 except inside the enclave, and the forwarder's logs, a gateway, or a relay see only
 sealed bytes. A provider with no enclave key refuses a confidential request by name.
 
+The key the caller seals to is **bound into the signed attestation**: the enclave
+records `independence.enclaveKey` — a digest of its encryption public key — under
+its quote, and `GET /v1/attestation` returns both the key and that attestation. A
+caller checks the two against each other (`attestationBindsEnclaveKey`) before
+encrypting anything, so a man in the middle cannot substitute its own key and
+decrypt the prompt — the attestation's signature no longer vouches for it, and the
+seal is refused. The same binding rides into the provider's response receipt (its
+stable identity includes `enclaveKey`).
+
 This protects prompts from the *relaying* process and from the operator of the
-path. It does not protect them from an operator with root on the enclave's own host
-— the same software-enclave caveat as above; a hardware TEE closes it.
+path, and the key binding protects the caller from sealing to the wrong key. It does
+not protect them from an operator with root on the enclave's own host — the same
+software-enclave caveat as above; a hardware TEE closes it.
 
 A provider keeps its own key at `<state-dir>/provider-identity.json` (kind
 `rarext.provider-identity.v1`). The card it serves is signed with that key, and
@@ -317,14 +327,15 @@ claim agreement it did not get, and a repeated endpoint cannot count twice.
 
 The quorum evidence above is what the GATEWAY recorded. So each provider also
 signs a **receipt** over the exact exchange — its operator key over the request
-digest, the comparable response digest, its own attestation, **and the engine it
-served with** — and returns it in an `x-rarext-receipt` header:
+digest, the comparable response digest, its own attestation, the engine it served
+with, **and the bundle it served** — and returns it in an `x-rarext-receipt` header:
 
 ```json
 { "kind": "rarext.response-receipt.v1",
   "request": "<request digest>", "response": "<comparable response digest>",
   "attestation": "<digest of the machine/code/image identity>",
   "engine": "<the engine fingerprint this provider served with>",
+  "bundle": "<the bundle digest this provider served>",
   "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
 ```
 
@@ -344,11 +355,18 @@ fails. The operator signs "this answer came from THIS enclave", and the same
 binding holds whether the run recorded the static card or a freshly-challenged
 attestation.
 
-Finally the receipt binds the **engine**: the run's `engine.fingerprint` is the
-deployment's committed value, but the receipt carries the fingerprint the provider
-*says* it served with. A provider on a different engine build signs a different
-value, so a run attributed to the committed engine but served by another one fails
-verification — a verifier catches a changed engine, not only a replay.
+The receipt also binds the **engine**: the run's `engine.fingerprint` is the
+deployment's committed value, and every agreeing provider's receipt MUST carry that
+same fingerprint — the value it *says* it served with. A run that commits an engine
+no agreeing provider signed (a provider on another engine, or one whose receipt
+omits the engine), fails verification — a verifier catches a changed engine, and a
+run cannot claim an engine the providers did not attest, not only at replay.
+
+And it binds the **bundle**: the run's `bundle.digest` is the committed weights,
+but the receipt carries the bundle digest the provider *says* it served. A provider
+serving other weights signs a different value, so a run attributed to the committed
+model but served by another one fails — the answer is tied to the exact weights the
+provider signed, not just to the deployment's claim about them.
 
 A stream carries no receipt (there is no complete body to sign), and an env-var
 label operator is not a key, so the binding is enforced whenever the operator is a

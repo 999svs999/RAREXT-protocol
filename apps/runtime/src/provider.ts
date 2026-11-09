@@ -38,7 +38,7 @@ import {
   verifyModelBundle,
 } from "./model-bundle.ts";
 import type { ProviderCertificate, ProviderIndependence } from "./model-bundle.ts";
-import { openRequest, sealResponse } from "./confidential.ts";
+import { enclaveKeyDigest, openRequest, sealResponse } from "./confidential.ts";
 import type { SealedRequest } from "./confidential.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";
 import { normalizeEndpoint } from "./manifest.ts";
@@ -826,6 +826,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           measurement,
           code: codeMeasurement,
           ...(imageManifest === undefined ? {} : { image: imageManifest }),
+          // Bind the enclave's encryption key into the signed attestation, so a
+          // caller can verify the key it seals to belongs to this enclave.
+          ...(options.enclaveKey === undefined
+            ? {}
+            : { enclaveKey: enclaveKeyDigest(options.enclaveKey) }),
           issuedAt: new Date().toISOString(),
         };
         if (options.teeSigner === undefined) return body;
@@ -968,6 +973,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             measurement: base.measurement,
             ...(base.code === undefined ? {} : { code: base.code }),
             ...(base.image === undefined ? {} : { image: base.image }),
+            ...(base.enclaveKey === undefined ? {} : { enclaveKey: base.enclaveKey }),
             issuedAt: base.issuedAt,
             challenge: nonce,
           };

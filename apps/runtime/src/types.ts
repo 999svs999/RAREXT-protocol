@@ -252,6 +252,8 @@ export interface RunProviderAttestation {
   code?: string;
   /** The vendor-signed image manifest vouching for that code, when present. */
   image?: unknown;
+  /** The digest of the enclave's encryption public key, when it serves one. */
+  enclaveKey?: string;
   /** The freshness nonce the quote was made for, when the deployment challenged it. */
   challenge?: string;
   quote?: { signature: string; publicKey: unknown; suite: string };

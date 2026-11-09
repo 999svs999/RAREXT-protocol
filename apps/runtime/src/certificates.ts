@@ -89,6 +89,7 @@ export function attestationForReceipt(independence: unknown): unknown {
     measurement: source.measurement ?? null,
     code: source.code ?? null,
     image: source.image ?? null,
+    enclaveKey: source.enclaveKey ?? null,
   };
 }
 

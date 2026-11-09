@@ -96,7 +96,11 @@ import {
 } from "../apps/runtime/src/model-bundle.ts";
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
-import { openResponse, sealRequest } from "../apps/runtime/src/confidential.ts";
+import {
+  attestationBindsEnclaveKey,
+  openResponse,
+  sealRequest,
+} from "../apps/runtime/src/confidential.ts";
 import { replayEngineRun } from "../apps/runtime/src/replay.ts";
 import {
   HARDWARE_ROOT_KEY_ID,
@@ -1907,6 +1911,17 @@ try {
     const plainText = String((await plainAnswer.json())?.choices?.[0]?.message?.content ?? "");
     const ciphertextOnly = !JSON.stringify(sealedPrompt.sealed).includes(secret);
 
+    // The signed attestation binds the encryption key it publishes, so a caller
+    // only seals to a key the attested enclave actually holds — a substituted
+    // (man-in-the-middle) key is refused before any secret is encrypted to it.
+    const keyBound = attestationBindsEnclaveKey(attestation.attestation, attestation.enclavePublicKey);
+    const impostor = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    const substitutedRefused = attestationBindsEnclaveKey(attestation.attestation, impostor.publicKey) === false;
+
     enclaveOk =
       sealedReport.sealKeyPath === null &&
       enclaveBundle.sealing?.wrap?.scheme === "rsa-oaep-sha256" &&
@@ -1916,10 +1931,13 @@ try {
       text.length > 0 &&
       ciphertextOnly &&
       openedText.length > 0 &&
-      openedText === plainText;
+      openedText === plainText &&
+      keyBound &&
+      substitutedRefused;
     enclaveDetail =
       `the bundle is sealed to an enclave key; the forwarder holds ciphertext (holdsKey=${String(forwarderHealth.holdsKey)}); ` +
-      `a sealed prompt matched the plaintext answer with the prompt never on the wire: ${JSON.stringify(openedText.slice(0, 40))}`;
+      `the attestation binds the encryption key (a substituted key is refused); a sealed prompt matched the plaintext ` +
+      `answer with the prompt never on the wire: ${JSON.stringify(openedText.slice(0, 40))}`;
   } catch (error) {
     enclaveOk = false;
     enclaveDetail = error instanceof Error ? error.message : String(error);

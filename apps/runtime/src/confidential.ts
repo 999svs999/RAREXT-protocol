@@ -2,6 +2,7 @@ import {
   constants,
   createCipheriv,
   createDecipheriv,
+  createPublicKey,
   privateDecrypt,
   publicEncrypt,
   randomBytes,
@@ -9,12 +10,39 @@ import {
 import type { KeyObject } from "node:crypto";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
+import { sha256Hex } from "./digest.ts";
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const KEY_BYTES = 32;
 
 const RSA_PADDING = constants.RSA_PKCS1_OAEP_PADDING;
+
+/**
+ * The digest that binds an enclave's ENCRYPTION key to its attestation. A caller
+ * sealing a prompt needs the enclave's public key; the signed attestation carries
+ * this digest of it, so the caller can check the key it seals to is the key the
+ * attested enclave holds — a substituted key (a man in the middle) is refused.
+ * Both sides hash the SPKI DER, so PEM formatting cannot change the value.
+ */
+export function enclaveKeyDigest(key: KeyObject | string): string {
+  const publicKey = createPublicKey(key);
+  return sha256Hex(publicKey.export({ type: "spki", format: "der" }));
+}
+
+/**
+ * Whether a signed attestation vouches for a given enclave public key. A caller
+ * seals its prompt to the key only if this holds, so a substituted key is refused
+ * before any secret is encrypted to it.
+ */
+export function attestationBindsEnclaveKey(
+  attestation: unknown,
+  publicKey: KeyObject | string,
+): boolean {
+  if (typeof attestation !== "object" || attestation === null) return false;
+  const claimed = (attestation as { enclaveKey?: unknown }).enclaveKey;
+  return typeof claimed === "string" && claimed === enclaveKeyDigest(publicKey);
+}
 
 /** A prompt sealed to an enclave: a data key wrapped to it, and the ciphertext. */
 export interface SealedRequest {
