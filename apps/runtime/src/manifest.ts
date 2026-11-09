@@ -622,6 +622,18 @@ export function validateDeployment(value: unknown): string[] {
         errors.push("manifest.labels.teeSignedImage requires labels.teeVendor");
       }
     }
+    if (labels.teeSignedImageDepth !== undefined) {
+      const depth = Number(labels.teeSignedImageDepth);
+      if (!Number.isSafeInteger(depth) || depth < 1) {
+        errors.push("manifest.labels.teeSignedImageDepth must be a positive integer");
+      }
+      if (labels.teeSignedImage === undefined) {
+        errors.push("manifest.labels.teeSignedImageDepth requires labels.teeSignedImage");
+      }
+    }
+    if (labels.trace !== undefined && labels.trace !== "required") {
+      errors.push('manifest.labels.trace must be "required" when present');
+    }
   }
 
   return errors;

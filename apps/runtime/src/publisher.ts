@@ -161,12 +161,25 @@ function teeBootStagesSpec(labels: Record<string, string> | undefined): string[]
 }
 
 /** The measurement a deployment approves for each boot stage. */
-/** The vendor key whose signature over the enclave image a deployment requires. */
+/** The vendor ROOT whose certificate chain over the enclave image a deployment requires. */
 function teeSignedImageSpec(labels: Record<string, string> | undefined): string | undefined {
   const raw = labels?.teeSignedImage;
   if (typeof raw !== "string" || !/^[0-9a-f]{64}$/.test(raw)) return undefined;
   if (teeVendorSpec(labels) === undefined) return undefined;
   return raw;
+}
+
+/** The minimum certificate-chain depth the enclave image manifest must present. */
+function teeSignedImageDepthSpec(labels: Record<string, string> | undefined): number | undefined {
+  if (labels?.teeSignedImageDepth === undefined) return undefined;
+  if (teeSignedImageSpec(labels) === undefined) return undefined;
+  const value = Number(labels.teeSignedImageDepth);
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+}
+
+/** Whether a deployment requires every run to carry a valid decode trace. */
+function requireTraceSpec(labels: Record<string, string> | undefined): true | undefined {
+  return labels?.trace === "required" ? true : undefined;
 }
 
 /** The measurement of the enclave's own code a deployment approves. */
@@ -276,6 +289,12 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(teeSignedImageSpec(manifest.labels) === undefined
         ? {}
         : { teeSignedImage: teeSignedImageSpec(manifest.labels) }),
+      ...(teeSignedImageDepthSpec(manifest.labels) === undefined
+        ? {}
+        : { teeSignedImageDepth: teeSignedImageDepthSpec(manifest.labels) }),
+      ...(requireTraceSpec(manifest.labels) === undefined
+        ? {}
+        : { requireTrace: requireTraceSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

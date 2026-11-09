@@ -162,6 +162,14 @@ The ledger does not move real value — it cannot, and the protocol does not pre
 otherwise. It records, with the same guarantees as every other rail, that these
 credits left circulation against that reference.
 
+When the node is wired to a **settlement adapter** (`RAREXT_SETTLEMENT=echo|fail`,
+or `AppOptions.settlement`), a redemption settles through it FIRST: on success the
+node records the removal plus a **settlement receipt** bound to the external
+reference (`adapter`, `settlementId`); on failure it returns `502` and removes
+**no** credits, so the ledger never loses value the outside world did not receive.
+`GET /v1/work/settlement?keyId=…` lists those receipts. With no adapter, the
+redemption is ledger-only.
+
 ## Participation receipts
 
 The actions above pay for work. One more act happens every day and is worth recording even

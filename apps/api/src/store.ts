@@ -7,6 +7,7 @@ import type {
   RevocationKind,
 } from "./revocations.ts";
 import type { CreditRecord } from "./work.ts";
+import type { SettlementReceipt } from "./settlement.ts";
 import type { GovernanceProposal, GovernanceVote } from "../../../packages/core/src/index.ts";
 import type {
   Anchor,
@@ -70,6 +71,7 @@ interface Snapshot {
   governanceAdmissions?: Array<{ proposalRoot: string; admission: Record<string, unknown> }>;
   registryAdmissions?: Array<{ proposalRoot: string; appliedAt: string; entry: Record<string, unknown> }>;
   stateArchives?: Array<Record<string, unknown>>;
+  settlements?: SettlementReceipt[];
 }
 
 export class RarextStore {
@@ -88,6 +90,7 @@ export class RarextStore {
   private readonly identityLinks = new Map<string, IdentityLink>();
   private readonly revocations = new Map<string, Revocation>();
   private readonly credits: CreditRecord[] = [];
+  private readonly settlements: SettlementReceipt[] = [];
   private readonly proposalsByRoot = new Map<string, { root: string; proposal: GovernanceProposal }>();
   private readonly governanceVotes: GovernanceVote[] = [];
   private readonly voteSponsorships: VoteSponsorshipRecord[] = [];
@@ -685,6 +688,15 @@ export class RarextStore {
     return [...this.credits];
   }
 
+  addSettlement(receipt: SettlementReceipt): void {
+    this.settlements.push(receipt);
+    this.persist();
+  }
+
+  listSettlements(): SettlementReceipt[] {
+    return [...this.settlements];
+  }
+
   addRevocation(revocation: Revocation, persist = true): void {
     if (this.revocations.has(revocation.id)) return;
     this.revocations.set(revocation.id, revocation);
@@ -826,6 +838,10 @@ export class RarextStore {
         this.credits.push(credit);
       }
 
+      for (const settlement of snapshot.settlements ?? []) {
+        this.settlements.push(settlement);
+      }
+
       for (const entry of snapshot.proposals ?? []) {
         this.proposalsByRoot.set(entry.root, entry);
       }
@@ -874,6 +890,7 @@ export class RarextStore {
       identityLinks: [...this.identityLinks.values()],
       revocations: [...this.revocations.values()],
       credits: [...this.credits],
+      settlements: [...this.settlements],
       rotations: [...this.rotations],
       delegations: [...this.delegations],
       challenges: this.challenges(),

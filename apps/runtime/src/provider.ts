@@ -122,6 +122,12 @@ export interface ProviderOptions {
    * engine run is checked at the decode level rather than the text level alone.
    */
   engineLogprobs?: boolean;
+  /**
+   * Extra registries to fetch the manifest and shards from. A bundle is
+   * content-addressed, so any mirror serves the same bytes; naming one means a
+   * single registry outage does not stop this provider.
+   */
+  mirrors?: string[];
   /** How the engine loads a verified file. Injected in tests; Ollama in production. */
   engineCreate?: EngineCreate;
   fetchImpl?: typeof fetch;
@@ -461,13 +467,20 @@ async function startEnclaveProxy(options: ProviderOptions, enclaveEndpoint: stri
   }
 
   const manifestHash = bundleManifestHash(options.bundle);
-  const manifest = await fetchBundleManifest({ registry: options.registry, manifestHash, fetchImpl });
+  const registries = [options.registry, ...(options.mirrors ?? [])];
+  const manifest = await fetchBundleManifest({
+    registry: options.registry,
+    registries,
+    manifestHash,
+    fetchImpl,
+  });
   if (manifest.digest !== options.bundle.digest) {
     throw new Error(`registry returned bundle ${manifest.digest}, expected ${options.bundle.digest}`);
   }
   // Prove the committed ciphertext is served — without any key.
   const { bytes: ciphertext } = await fetchBundleCiphertext({
     registry: options.registry,
+    registries,
     bundle: options.bundle,
     fetchImpl,
     onShard: (index, size) => log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`),
@@ -661,8 +674,10 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   const manifestHash = bundleManifestHash(options.bundle);
   // The manifest must be in RAREXT too, so a reader can fetch the same list of
   // shards this provider used rather than trusting the card's copy.
+  const registries = [options.registry, ...(options.mirrors ?? [])];
   const manifest = await fetchBundleManifest({
     registry: options.registry,
+    registries,
     manifestHash,
     fetchImpl,
   });
@@ -679,6 +694,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   );
   const { bytes } = await fetchBundleChunks({
     registry: options.registry,
+    registries,
     bundle: options.bundle,
     fetchImpl,
     ...(sealKey === undefined ? {} : { sealKey }),

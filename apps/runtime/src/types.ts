@@ -409,12 +409,29 @@ export interface ModelRunSpec {
    */
   teeCodeMeasurement?: string;
   /**
-   * The vendor key id whose signature over the enclave IMAGE manifest the
-   * deployment requires. When committed, every agreeing provider must present a
-   * vendor-signed manifest for its code, so a self-measured digest is bound to a
-   * vendor signature. Committed only with `teeVendor`.
+   * The vendor ROOT key id the enclave IMAGE manifest's certificate chain must
+   * terminate at. When committed, every agreeing provider must present a manifest
+   * whose chain reaches that root for its code — so a manifest signed by a bare
+   * operator key is refused, and the code identity is bound to the pinned trust
+   * anchor. Committed only with `teeVendor`.
    */
   teeSignedImage?: string;
+  /**
+   * The minimum certificate-chain depth the enclave IMAGE manifest must present.
+   * A bare leaf (the signer is its own root) is depth 0; a signer certified by the
+   * anchor is depth ≥ 1. When committed, a manifest signed directly by the pinned
+   * root with no chain is refused, so the signer must be CERTIFIED by the anchor,
+   * not merely equal to it. Committed only with `teeSignedImage`.
+   */
+  teeSignedImageDepth?: number;
+  /**
+   * When true, the deployment requires every run to carry a valid DECODE TRACE:
+   * the native class's token ids, or an engine's token+logprob judgment. A run
+   * whose response has no trace is refused, so a provider or engine cannot
+   * silently omit the trace and still pass. Committed when `labels.trace` is
+   * "required".
+   */
+  requireTrace?: boolean;
 }
 
 export interface ProviderCardVerification {

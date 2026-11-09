@@ -111,7 +111,32 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.teeSignedImage === undefined
       ? {}
       : { teeSignedImage: teeCodeMeasurementFromSpec(value.teeSignedImage, value.teeVendor) }),
+    ...(value.teeSignedImageDepth === undefined
+      ? {}
+      : { teeSignedImageDepth: teeSignedImageDepthFromSpec(value.teeSignedImageDepth, value.teeSignedImage) }),
+    ...(value.requireTrace === undefined
+      ? {}
+      : { requireTrace: requireTraceFromSpec(value.requireTrace) }),
   };
+}
+
+/** A required decode trace is a boolean the challenge either commits or does not. */
+function requireTraceFromSpec(requireTrace: unknown): true {
+  if (requireTrace !== true) {
+    throw new Error("challenge.spec.requireTrace must be true when present");
+  }
+  return true;
+}
+
+/** A minimum image-chain depth only means something with a pinned root to chain to. */
+function teeSignedImageDepthFromSpec(depth: unknown, teeSignedImage: unknown): number {
+  if (!Number.isSafeInteger(depth) || (depth as number) < 1) {
+    throw new Error("challenge.spec.teeSignedImageDepth must be a positive integer when present");
+  }
+  if (typeof teeSignedImage !== "string" || !/^[0-9a-f]{64}$/.test(teeSignedImage)) {
+    throw new Error("challenge.spec.teeSignedImageDepth requires challenge.spec.teeSignedImage");
+  }
+  return depth as number;
 }
 
 /** An approved code measurement needs a pinned root to bind it to. */

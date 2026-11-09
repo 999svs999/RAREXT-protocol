@@ -25,6 +25,7 @@
  *   measure   a deployment approves provider measurements, or is refused
  *   quote     a provider's machine claim is vendor-signed and checked against a pin
  *   engine-pin  the run pins the serving engine; a replay refuses a changed one
+ *   mirror    a provider serves from a mirror when its primary registry is down
  *   enclave   the serving process holds ciphertext; an enclave unwraps and answers
  *             a sealed prompt (the forwarder never sees the plaintext)
  *   compare   ask every provider the same question and compare answers
@@ -270,16 +271,25 @@ try {
     teeLeaves.push({ leaf, leafPath, certPath, keyId: leaf.keyId, stages, measurements });
   }
 
-  // A vendor-signed image manifest: the vendor vouches that the enclave image has
-  // the running code's measurement. The provider refuses to run if the manifest
-  // does not vouch for the code it is actually running, and the deployment pins
-  // the vendor whose signature it accepts.
+  // A vendor-signed image manifest whose certificate CHAIN reaches the shipped
+  // hardware root. The provider refuses to run if the manifest does not vouch for
+  // the code it is actually running, and the deployment pins the ROOT the chain
+  // must terminate at — so a manifest signed by a bare (self-rooted) key is
+  // refused even though its signature is valid.
+  const manifestLeaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain: manifestChain } = issueHardwareChain(manifestLeaf.publicKey);
   const codeManifest = signImageManifest(
     { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
-    hardwareRootSigner(),
+    manifestLeaf,
+    manifestChain,
   );
   const codeManifestPath = join(state, "image-manifest.json");
   writeJsonFile(codeManifestPath, codeManifest);
+  // A bare-leaf manifest: a real signature, but no chain to the hardware root.
+  const bareManifest = signImageManifest(
+    { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
+    manifestLeaf,
+  );
 
   // ── 1. A RAREXT node that holds bytes ────────────────────────────────────
   api = spawnApi({
@@ -507,6 +517,8 @@ try {
     providerCards[0].independence.code,
     "--tee-signed-image",
     HARDWARE_ROOT_KEY_ID,
+    "--tee-signed-image-depth",
+    "2",
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -556,6 +568,9 @@ try {
     RAREXT_BLOB_DIR: blobDir,
     RAREXT_CHALLENGES: join(state, "challenges.json"),
     RAREXT_VERIFIERS: join(state, "verifiers.json"),
+    // The node settles redemptions through the echo adapter: it records a
+    // settlement receipt bound to the external reference.
+    RAREXT_SETTLEMENT: "echo",
   });
   const baseUrl = await api.ready;
   const registry = new RarextClient({ baseUrl });
@@ -1113,15 +1128,30 @@ try {
     const again = { ...instruction, reference: `${reference}-again`, nonce: `redeem-${Date.now()}-2` };
     const refused = await redeem(again);
 
+    // The node settled the redemption through the echo adapter and recorded a
+    // settlement receipt bound to the external reference.
+    const settlement = redemption.settlement;
+    const settlements = await getJson(
+      `${baseUrl}/v1/work/settlement?keyId=${encodeURIComponent(settledRecipientKeyId)}`,
+    );
+    const settlementOk =
+      settlement?.adapter === "echo" &&
+      settlement.settlementId === `echo:${reference}` &&
+      settlement.reference === reference &&
+      settlement.amount === amount &&
+      settlements?.settlements?.some((entry) => entry.settlementId === `echo:${reference}`) === true;
+
     redeemOk =
       redemption.balance === 0 &&
       redemption.redemption.reference === reference &&
       after.credits.net === 0 &&
       proofOk &&
+      settlementOk &&
       refused.status === 402;
     redeemDetail =
       `redeemed ${amount} credit(s) against ${reference.slice(0, 22)}… (net ${after.credits.net}, ` +
-      `ledger supply ${redemption.supply}); proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
+      `ledger supply ${redemption.supply}); settled via the ${String(settlement?.adapter)} adapter ` +
+      `(${String(settlement?.settlementId).slice(0, 24)}…); proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
   } catch (error) {
     redeemOk = false;
     redeemDetail = error instanceof Error ? error.message : String(error);
@@ -1367,27 +1397,44 @@ try {
     const codeRefused =
       wrongCode.status !== 0 &&
       /code measurement/.test((wrongCode.stderr || "") + (wrongCode.stdout || ""));
-    // The code digest is bound to a VENDOR-SIGNED image manifest: the deployment
-    // pins the vendor, so a manifest signed elsewhere is refused.
+    // The code digest is bound to a VENDOR-SIGNED image manifest whose chain
+    // terminates at the SHIPPED hardware root. The deployment pins the root, so a
+    // manifest signed by a bare (self-rooted) key is refused even though valid.
     const manifestOk =
       spec.teeSignedImage === HARDWARE_ROOT_KEY_ID &&
+      spec.teeSignedImageDepth === 2 &&
       providerCards.every((entry) => {
         const info = verifyImageManifest(entry.independence?.image);
         return (
           info !== null &&
-          info.vendorKeyId === HARDWARE_ROOT_KEY_ID &&
+          info.rootKeyId === HARDWARE_ROOT_KEY_ID &&
+          info.vendorKeyId === manifestLeaf.keyId &&
+          info.chainDepth >= 2 &&
           info.image === providerCards[0].independence.code
         );
       }) &&
       (runBody?.quorum?.providers ?? []).every((entry) => {
         const info = verifyImageManifest(entry.attestation?.image);
-        return info !== null && info.vendorKeyId === HARDWARE_ROOT_KEY_ID;
+        return info !== null && info.rootKeyId === HARDWARE_ROOT_KEY_ID && info.chainDepth >= 2;
       });
-    const foreignManifest = signImageManifest(
-      { image: providerCards[0].independence.code, runtime: "rarext-runtime" },
-      new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey),
+    // The same leaf key with no chain: a real signature, but self-rooted, so its
+    // root is the leaf and not the pinned hardware root.
+    const bareInfo = verifyImageManifest(bareManifest);
+    const bareRefused =
+      bareInfo !== null &&
+      bareInfo.vendorKeyId === manifestLeaf.keyId &&
+      bareInfo.rootKeyId !== HARDWARE_ROOT_KEY_ID;
+    // A manifest signed DIRECTLY by the anchor: the root matches, but it presents
+    // no chain, so a pinned minimum depth refuses it too.
+    const rootSignedManifest = signImageManifest(
+      { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
+      hardwareRootSigner(),
     );
-    const foreignRefused = verifyImageManifest(foreignManifest).vendorKeyId !== HARDWARE_ROOT_KEY_ID;
+    const rootSignedInfo = verifyImageManifest(rootSignedManifest);
+    const depthRefused =
+      rootSignedInfo !== null &&
+      rootSignedInfo.rootKeyId === HARDWARE_ROOT_KEY_ID &&
+      rootSignedInfo.chainDepth === 0;
     const wrongSignedImage = await runCli([
       "deploy",
       "--web4",
@@ -1408,6 +1455,30 @@ try {
     const signedImageRefused =
       wrongSignedImage.status !== 0 &&
       /signed-image/.test((wrongSignedImage.stderr || "") + (wrongSignedImage.stdout || ""));
+    // A depth the providers cannot satisfy (their chains are depth 2) is refused
+    // at deploy time, so a shallow manifest cannot slip through.
+    const wrongDepth = await runCli([
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--tee-vendor",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-signed-image",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-signed-image-depth",
+      "3",
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "quote-baddepth"),
+      "--json",
+    ]);
+    const depthCliRefused =
+      wrongDepth.status !== 0 &&
+      /signed-image-depth/.test((wrongDepth.stderr || "") + (wrongDepth.stdout || ""));
     // A vendor pin the providers cannot satisfy is refused at deploy time.
     const wrongPin = await runCli([
       "deploy",
@@ -1445,7 +1516,9 @@ try {
       codePinned &&
       codeRefused &&
       manifestOk &&
-      foreignRefused &&
+      bareRefused &&
+      depthRefused &&
+      depthCliRefused &&
       signedImageRefused &&
       runAttested &&
       wrongPin.status !== 0 &&
@@ -1453,9 +1526,10 @@ try {
     quoteDetail =
       `vendor root ${anchorKeyId.slice(0, 14)}… pinned at depth 3; each provider's leaf -> os -> firmware -> root ` +
       `chain measures every stage to the approved value; a nonce-freshness challenge bound one nonce across the run; ` +
-      `the enclave's code digest is bound to a vendor-signed image manifest; a chain rooted elsewhere, a chain with ` +
-      `no boot stages, a chain running unapproved firmware, a replayed (stale) attestation, unapproved enclave code, ` +
-      `and an image signed by another vendor were refused`;
+      `the enclave's code digest is bound to an image manifest whose chain reaches the hardware root at depth 2; a ` +
+      `manifest signed directly by the root, a chain rooted elsewhere, a chain with no boot stages, a chain running ` +
+      `unapproved firmware, a replayed (stale) attestation, unapproved enclave code, and a manifest whose chain never ` +
+      `reaches the root were refused`;
   } catch (error) {
     quoteOk = false;
     quoteDetail = error instanceof Error ? error.message : String(error);
@@ -1705,6 +1779,66 @@ try {
     if (enclaveProc !== null) enclaveProc.stop();
   }
   phase("enclave", enclaveOk, enclaveDetail);
+
+  // ── 12m. Mirrors: a provider serves even when its primary registry is down ─
+  // The bundle is content-addressed, so any mirror holds the same bytes. A
+  // provider given a DEAD primary and a live mirror fetches from the mirror.
+  let mirrorOk = false;
+  let mirrorDetail = "";
+  let mirrorNode = null;
+  let mirrorProvider = null;
+  try {
+    mirrorNode = spawnApi({ PORT: "0", HOST: "127.0.0.1", RAREXT_DATA: "none", RAREXT_BLOB_DIR: blobDir });
+    const mirrorUrl = await mirrorNode.ready;
+    const deadUrl = `http://127.0.0.1:${await freePort()}`;
+    mirrorProvider = spawnProcess(
+      [
+        "apps/runtime/src/cli.ts",
+        "provider",
+        "--bundle",
+        join(state, "model-bundle.json"),
+        "--registry",
+        deadUrl,
+        "--mirror-registry",
+        mirrorUrl,
+        "--state",
+        join(state, "mirror-provider"),
+        "--port",
+        String(await freePort()),
+        ...(seal && sealKeyPath !== null ? ["--seal-key-file", sealKeyPath] : []),
+        "--tee-key-file",
+        teeLeaves[0].leafPath,
+        "--tee-cert-file",
+        teeLeaves[0].certPath,
+      ],
+      {},
+      (line) => {
+        const match = line.match(/rarext provider serving .* on (https?:\/\/[^\s]+)/);
+        return match ? match[1].replace(/\/$/, "") : null;
+      },
+    );
+    const mirrorProviderUrl = await mirrorProvider.ready;
+    const answer = await fetch(`${mirrorProviderUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "mirror" }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    const text = String((await answer.json())?.choices?.[0]?.message?.content ?? "");
+    mirrorOk = answer.ok && text.length > 0;
+    mirrorDetail = `a provider served ${modelId} with a DEAD primary registry (${deadUrl}) by falling back to a mirror (${mirrorUrl})`;
+  } catch (error) {
+    mirrorOk = false;
+    mirrorDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (mirrorProvider !== null) mirrorProvider.stop();
+    if (mirrorNode !== null) mirrorNode.stop();
+  }
+  phase("mirror", mirrorOk, mirrorDetail);
 
   // ── 13. A corrupted shard is refused by a fresh provider ─────────────────
   const victim = bundle.shards[0].hash;

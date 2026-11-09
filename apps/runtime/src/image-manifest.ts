@@ -1,4 +1,6 @@
-import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
+import { publicKeyId } from "../../../packages/agent-sdk/src/index.ts";
+import { verifyCertificateChain } from "./certificates.ts";
+import type { ProviderCertificate } from "./certificates.ts";
 
 export const IMAGE_MANIFEST_KIND = "rarext.image-manifest.v1";
 
@@ -8,8 +10,10 @@ export const IMAGE_MANIFEST_KIND = "rarext.image-manifest.v1";
  * A self-computed code digest proves only what the running process says it is. A
  * manifest signed by a vendor key the deployment pins proves the digest is the
  * one the vendor certified for that image — the code identity is bound to a
- * signature, not taken on the running source's word. An enclave whose measured
- * image is not a signed one, or is signed by another vendor, is refused.
+ * signature, not taken on the running source's word. And when the manifest
+ * carries a certificate CHAIN, the signer is bound to a trust ANCHOR: a
+ * deployment pins the root, so an operator cannot mint a manifest under its own
+ * key and have it accepted — the chain must terminate at the pinned root.
  */
 export interface ImageManifest {
   kind: typeof IMAGE_MANIFEST_KIND;
@@ -21,9 +25,15 @@ export interface ImageManifest {
   signature: string;
   publicKey: unknown;
   suite: string;
+  /**
+   * Certificates from the manifest signer up to (but not including) the trust
+   * anchor. The last certificate's issuer is the root; a deployment pins the
+   * root's key id. Absent means the signer is its own root.
+   */
+  chain?: ProviderCertificate[];
 }
 
-/** The exact fields the manifest signature covers. */
+/** The exact fields the manifest signature covers (not the chain). */
 export function imageManifestPayload(manifest: ImageManifest): {
   kind: string;
   image: string;
@@ -38,10 +48,11 @@ export function imageManifestPayload(manifest: ImageManifest): {
   };
 }
 
-/** Sign an image manifest with a vendor key. */
+/** Sign an image manifest with a vendor key, optionally chained to an anchor. */
 export function signImageManifest(
   input: { image: string; runtime: string; publishedAt?: string },
   signer: { sign(payload: unknown): string; publicKey: unknown; suite: string },
+  chain?: ProviderCertificate[],
 ): ImageManifest {
   const body = {
     kind: IMAGE_MANIFEST_KIND,
@@ -54,32 +65,50 @@ export function signImageManifest(
     signature: signer.sign(body),
     publicKey: signer.publicKey,
     suite: signer.suite,
+    ...(chain === undefined ? {} : { chain }),
   };
 }
 
 /**
- * Verify an image manifest under its own vendor key, returning the image it names
- * and the vendor key id. `null` when the manifest is malformed or the signature
- * does not hold. Checking the vendor id against the deployment's pin is a further
- * step the gateway and verifier perform.
+ * Verify an image manifest: its own signature AND its chain of trust, returning
+ * the image it names, the signer's key id, and the ROOT key id the chain
+ * terminates at. `null` when the manifest is malformed, the signature does not
+ * hold, or the chain is broken. Checking the root against the deployment's pin is
+ * a further step the gateway and verifier perform.
  */
-export function verifyImageManifest(value: unknown): { image: string; vendorKeyId: string } | null {
+export function verifyImageManifest(
+  value: unknown,
+): { image: string; vendorKeyId: string; rootKeyId: string; chainDepth: number } | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const manifest = value as Record<string, unknown>;
   if (manifest.kind !== IMAGE_MANIFEST_KIND) return null;
   if (typeof manifest.image !== "string" || !/^[0-9a-f]{64}$/.test(manifest.image)) return null;
   if (typeof manifest.signature !== "string") return null;
   if (typeof manifest.publicKey !== "object" || manifest.publicKey === null) return null;
-  try {
-    const ok = verifyPayload(
-      manifest.publicKey as never,
-      imageManifestPayload(manifest as unknown as ImageManifest),
-      manifest.signature,
-      typeof manifest.suite === "string" ? (manifest.suite as never) : undefined,
-    );
-    if (!ok) return null;
-    return { image: manifest.image, vendorKeyId: publicKeyId(manifest.publicKey as never) };
-  } catch {
-    return null;
-  }
+
+  const rootKeyId = verifyCertificateChain({
+    leafPublicKey: manifest.publicKey,
+    payload: imageManifestPayload(manifest as unknown as ImageManifest),
+    signature: manifest.signature,
+    suite: typeof manifest.suite === "string" ? manifest.suite : undefined,
+    chain: manifest.chain,
+  });
+  if (rootKeyId === null) return null;
+  return {
+    image: manifest.image,
+    vendorKeyId: publicKeyId(manifest.publicKey as never),
+    rootKeyId,
+    chainDepth: Array.isArray(manifest.chain) ? manifest.chain.length : 0,
+  };
+}
+
+/**
+ * The length of a VALID manifest's certificate chain, or -1 if it does not verify.
+ * Depth zero is a bare leaf (its own root); a deployment that requires a
+ * minimum depth refuses a manifest signed directly by a key with no chain, so the
+ * signer must be certified by the anchor rather than merely equal to it.
+ */
+export function imageManifestChainDepth(value: unknown): number {
+  const info = verifyImageManifest(value);
+  return info === null ? -1 : info.chainDepth;
 }

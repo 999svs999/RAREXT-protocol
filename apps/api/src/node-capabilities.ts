@@ -92,6 +92,7 @@ export const NODE_CAPABILITIES: NodeCapabilitiesDocument = {
     { path: "/v1/work/ledger", note: "the whole-ledger commitment" },
     { path: "/v1/work/participation", note: "the participation receipt rail" },
     { path: "/v1/work/redeem", note: "remove credits from the ledger against a committed external reference" },
+    { path: "/v1/work/settlement", note: "the settlement receipts recorded when a redemption was settled off-ledger" },
     { path: "/v1/work/statement", note: "the ledger read from the earner's side: holds, credits, weight" },
     { path: "/v1/work/transfer", note: "move credits between keys: a signed debit and credit that sum to zero" },
     { path: "/v1/work/treasury", note: "the receipt classes a decision can name, and how big each is" },

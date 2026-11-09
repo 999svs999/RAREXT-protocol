@@ -3390,6 +3390,279 @@ test("an enclave's image is bound to a vendor-signed manifest", async () => {
   }
 });
 
+test("an image manifest's chain must terminate at the pinned hardware root", async () => {
+  const code = runtimeCodeMeasurement();
+  // The manifest signer is a LEAF, certified up to the shipped hardware root.
+  const manifestLeaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain: manifestChain } = issueHardwareChain(manifestLeaf.publicKey);
+  const chained = signImageManifest({ image: code, runtime: "rarext-runtime" }, manifestLeaf, manifestChain);
+  // The SAME leaf, signed with no chain: a real signature, but self-rooted.
+  const bare = signImageManifest({ image: code, runtime: "rarext-runtime" }, manifestLeaf);
+
+  const chainedInfo = verifyImageManifest(chained)!;
+  assert.equal(chainedInfo.vendorKeyId, manifestLeaf.keyId, "the signer is the leaf");
+  assert.equal(chainedInfo.rootKeyId, HARDWARE_ROOT_KEY_ID, "and its chain reaches the hardware root");
+  const bareInfo = verifyImageManifest(bare)!;
+  assert.equal(bareInfo.vendorKeyId, manifestLeaf.keyId, "same signer");
+  assert.equal(bareInfo.rootKeyId, manifestLeaf.keyId, "but a bare leaf is its own root");
+  assert.notEqual(bareInfo.rootKeyId, HARDWARE_ROOT_KEY_ID);
+
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let bareProvider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    const common = { bundle, registry: reg.base, port: 0, teeSigner: leaf, teeChain: chain };
+    first = await startProvider({ ...common, stateDir: join(reg.root, "a"), imageManifest: chained });
+    second = await startProvider({ ...common, stateDir: join(reg.root, "b"), imageManifest: chained });
+    // A provider whose manifest is real but self-rooted (no chain to the anchor).
+    bareProvider = await startProvider({ ...common, stateDir: join(reg.root, "bare"), imageManifest: bare });
+
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+    const cardBare = await fetchProviderCard({ endpoint: bareProvider.url });
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(verifyImageManifest(cardA.independence?.image)?.rootKeyId, HARDWARE_ROOT_KEY_ID);
+    assert.equal(verifyImageManifest(cardBare.independence?.image)?.rootKeyId, manifestLeaf.keyId);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "3",
+          teeBootStages: "firmware,os,app",
+          teeStageMeasurements: `firmware=${measurements.firmware},os=${measurements.os},app=${measurements.app}`,
+          teeCodeMeasurement: code,
+          teeSignedImage: HARDWARE_ROOT_KEY_ID,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeSignedImage, HARDWARE_ROOT_KEY_ID);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "rooted image?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // A self-rooted (bare-leaf) manifest cannot meet a hardware-rooted pin.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-bare"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, bareProvider.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [bareProvider.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [bareProvider.url]: cardBare.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    assert.equal(new RunLedger(join(reg.root, "gateway-bare")).records().length, 0);
+    await gateway.close();
+    gateway = null;
+
+    // The chain that reaches the pinned root satisfies it.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-rooted"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-rooted")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the chain: swapping in the bare-leaf manifest fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: cardBare.independence! } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    if (bareProvider !== null) await bareProvider.close();
+    await reg.close();
+  }
+});
+
+test("a pinned image-chain depth refuses a manifest signed directly by the root", async () => {
+  const code = runtimeCodeMeasurement();
+  // Signed directly by the anchor: the root matches, but the chain is empty.
+  const rootSigned = signImageManifest({ image: code, runtime: "rarext-runtime" }, hardwareRootSigner());
+  // Signed by a leaf CERTIFIED by the anchor: a real chain.
+  const manifestLeaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain: manifestChain } = issueHardwareChain(manifestLeaf.publicKey);
+  const chained = signImageManifest({ image: code, runtime: "rarext-runtime" }, manifestLeaf, manifestChain);
+
+  const rootInfo = verifyImageManifest(rootSigned)!;
+  assert.equal(rootInfo.rootKeyId, HARDWARE_ROOT_KEY_ID, "the root-signed manifest reaches the anchor");
+  assert.equal(rootInfo.chainDepth, 0, "but it presents no chain");
+  assert.equal(verifyImageManifest(chained)!.chainDepth, 2, "the certified leaf presents a chain");
+
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const { chain, measurements } = issueMeasuredBootChain(leaf.publicKey);
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let rootProvider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    const common = { bundle, registry: reg.base, port: 0, teeSigner: leaf, teeChain: chain };
+    first = await startProvider({ ...common, stateDir: join(reg.root, "a"), imageManifest: chained });
+    second = await startProvider({ ...common, stateDir: join(reg.root, "b"), imageManifest: chained });
+    rootProvider = await startProvider({ ...common, stateDir: join(reg.root, "root"), imageManifest: rootSigned });
+
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: second.url });
+    const cardRoot = await fetchProviderCard({ endpoint: rootProvider.url });
+    assert.deepEqual(verifyProviderCard(cardA), []);
+    assert.equal(verifyImageManifest(cardRoot.independence?.image)?.chainDepth, 0);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${second.url}`,
+          operators: "operator-a,operator-b",
+          quorum: "2",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "3",
+          teeBootStages: "firmware,os,app",
+          teeStageMeasurements: `firmware=${measurements.firmware},os=${measurements.os},app=${measurements.app}`,
+          teeCodeMeasurement: code,
+          teeSignedImage: HARDWARE_ROOT_KEY_ID,
+          teeSignedImageDepth: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeSignedImage, HARDWARE_ROOT_KEY_ID);
+    assert.equal(spec.teeSignedImageDepth, 1);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "depth?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // A depth-0 manifest that reaches the pinned root cannot meet a depth-≥1 pin.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-shallow"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, rootProvider.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [rootProvider.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [rootProvider.url]: cardRoot.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+    assert.equal(new RunLedger(join(reg.root, "gateway-shallow")).records().length, 0);
+    await gateway.close();
+    gateway = null;
+
+    // The certified chain meets the depth.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-deep"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url, second.url],
+      quorum: 2,
+      operators: { [first.url]: "operator-a", [second.url]: "operator-b" },
+      attestations: { [first.url]: cardA.independence!, [second.url]: cardB.independence! },
+    });
+    const ok = await request(gateway.url);
+    assert.equal(ok.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-deep")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // The verifier recomputes the depth: swapping in the depth-0 manifest fails.
+    const swapped = {
+      ...body,
+      quorum: {
+        ...body.quorum!,
+        providers: body.quorum!.providers.map((entry, index) =>
+          index === 0 ? { ...entry, attestation: cardRoot.independence! } : entry,
+        ),
+      },
+    };
+    assert.equal(verifyRunBody(swapped, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    if (rootProvider !== null) await rootProvider.close();
+    await reg.close();
+  }
+});
+
 test("a provider's signed receipt binds the answer, catching a lying gateway", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -3487,6 +3760,61 @@ test("a provider's signed receipt binds the answer, catching a lying gateway", a
     if (gateway !== null) await gateway.close();
     if (provider !== null) await provider.close();
     await reg.close();
+  }
+});
+
+test("a provider falls back to a mirror when the primary registry cannot serve", async () => {
+  const primary = await registry();
+  const mirror = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const { bundle, chunks } = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+    });
+    // The same content-addressed bundle is mirrored to both registries.
+    await uploadBundle({ registry: primary.base, bundle, chunks });
+    await uploadBundle({ registry: mirror.base, bundle, chunks });
+
+    // Break every shard on the primary: it now serves bytes that do not match.
+    for (const shard of bundle.shards) {
+      writeFileSync(join(primary.root, "blobs", shard.hash), Buffer.from("corrupt"));
+    }
+
+    // With only the primary, the provider refuses to start.
+    await assert.rejects(
+      startProvider({ bundle, registry: primary.base, stateDir: join(primary.root, "solo"), port: 0 }),
+      /from every registry/,
+    );
+
+    // With the mirror, it fetches the committed bytes and serves the model.
+    provider = await startProvider({
+      bundle,
+      registry: primary.base,
+      mirrors: [mirror.base],
+      stateDir: join(primary.root, "mirror"),
+      port: 0,
+    });
+    assert.deepEqual(provider.modelBytes, NATIVE_BYTES);
+    const response = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "mirror?" }],
+        max_tokens: 8,
+      }),
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+    assert.ok(body.choices[0]!.message.content.length > 0);
+  } finally {
+    if (provider !== null) await provider.close();
+    await mirror.close();
+    await primary.close();
   }
 });
 

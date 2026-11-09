@@ -230,11 +230,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const raw = deployment.labels?.teeCodeMeasurement;
     return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
   })();
-  // The vendor whose signature over the enclave image the deployment requires.
+  // The vendor root the enclave image manifest's chain must terminate at.
   const allowedSignedImage = (() => {
     if (allowedVendor === null) return null;
     const raw = deployment.labels?.teeSignedImage;
     return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
+  })();
+  // The minimum chain depth the image manifest must present, when pinned.
+  const allowedSignedImageDepth = (() => {
+    if (allowedSignedImage === null) return 0;
+    const value = Number(deployment.labels?.teeSignedImageDepth);
+    return Number.isSafeInteger(value) && value >= 1 ? value : 0;
   })();
 
   // The bounty the deployment committed, if any. Payment is a commitment the
@@ -585,10 +591,14 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           (allowedCode === null || answer.attestation?.code === allowedCode) &&
           (allowedSignedImage === null ||
             (() => {
+              // The manifest's chain must terminate at the pinned vendor ROOT and
+              // be at least the required depth, so a manifest signed by a bare
+              // operator key — or directly by the anchor with no chain — is refused.
               const info = verifyImageManifest(answer.attestation?.image);
               return (
                 info !== null &&
-                info.vendorKeyId === allowedSignedImage &&
+                info.rootKeyId === allowedSignedImage &&
+                info.chainDepth >= allowedSignedImageDepth &&
                 (allowedCode === null || info.image === allowedCode)
               );
             })()),

@@ -438,14 +438,19 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       });
 
     // A vendor-signed image manifest: every agreeing provider must present one
-    // signed by the pinned vendor that vouches for the approved code.
+    // whose certificate CHAIN terminates at the pinned vendor root AND is at least
+    // the required depth, so a manifest signed by a bare operator key — or
+    // directly by the anchor with no chain — is refused. The signer is the leaf;
+    // the root and depth are what the deployment pins.
+    const committedSignedImageDepth = spec.teeSignedImageDepth ?? 0;
     const signedImageMet =
       spec.teeSignedImage === undefined ||
       agreeing.every((entry) => {
         const info = verifyImageManifest(isRecord(entry.attestation) ? entry.attestation.image : undefined);
         return (
           info !== null &&
-          info.vendorKeyId === spec.teeSignedImage &&
+          info.rootKeyId === spec.teeSignedImage &&
+          info.chainDepth >= committedSignedImageDepth &&
           (spec.teeCodeMeasurement === undefined || info.image === spec.teeCodeMeasurement)
         );
       });
@@ -569,6 +574,7 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     isRecord(response.body) && isRecord(response.body.rarext_trace)
       ? response.body.rarext_trace
       : null;
+  let traceValid = false;
   if (trace !== null) {
     const kind = trace.kind;
     const tokenOk =
@@ -586,12 +592,13 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
           : false;
     // The digest covers the trace WITHOUT the digest field.
     const { digest, ...covered } = trace;
-    check(
-      checks,
-      failures,
-      "response.decodeTrace",
-      tokenOk && typeof digest === "string" && digest === canonicalDigest(covered),
-    );
+    traceValid = tokenOk && typeof digest === "string" && digest === canonicalDigest(covered);
+    check(checks, failures, "response.decodeTrace", traceValid);
+  }
+  // A deployment can REQUIRE a trace. Then a run whose response carries none (or
+  // an invalid one) is refused, so a provider or engine cannot silently omit it.
+  if (spec.requireTrace === true) {
+    check(checks, failures, "response.decodeTraceRequired", traceValid);
   }
 
   check(

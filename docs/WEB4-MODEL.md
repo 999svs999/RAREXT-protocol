@@ -90,6 +90,25 @@ different ones.
 If one byte of one shard is wrong, the provider refuses to start. There is no
 "best effort" load.
 
+### Registry mirrors: no single registry is a dependency
+
+A bundle is content-addressed, so its manifest and shards are the same bytes
+wherever they are mirrored. A provider given more than one registry fetches each
+shard from the **first registry that serves bytes matching the commitment**:
+
+```bash
+node apps/runtime/src/cli.ts provider --bundle model-bundle.json \
+  --registry https://registry-a.example \
+  --mirror-registry https://registry-b.example \
+  --mirror-registry https://registry-c.example
+```
+
+A registry that is down, missing a shard, or serving the wrong bytes is skipped;
+the provider fails only when every registry fails, and the error names what each
+did. So one registry outage does not stop a provider from serving a model — the
+same redundancy the discovery path gets from multiple registries, now on the
+compute side.
+
 ### Sealed weights
 
 A bundle can be **sealed**. `bundle --seal` shards the model, encrypts each shard
@@ -540,32 +559,42 @@ measured digest (for a build that measures itself out of band).
 #### The image manifest: the digest is vendor-signed
 
 A self-computed digest is only what the running process says. It becomes a
-certified value when a **vendor signs an image manifest** for it:
+certified value when a **vendor signs an image manifest** for it, and its signer is
+bound to a trust ANCHOR by a certificate chain (the same chain shape the machine
+quote uses):
 
 ```json
 { "kind": "rarext.image-manifest.v1", "image": "<code digest>", "runtime": "…",
-  "publishedAt": "…", "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
+  "publishedAt": "…", "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256",
+  "chain": [ { "subject": { …signer… }, "issuer": { …anchor… }, "signature": "…" } ] }
 ```
 
 `provider --image-manifest <file>` makes the provider refuse to run unless the
 manifest is valid AND its `image` is the code the process is actually running, then
 binds the manifest into its attestation (`independence.image`). A deployment pins
-the vendor whose signature it accepts:
+the vendor **root** the manifest's chain must terminate at:
 
 ```bash
 node apps/runtime/src/cli.ts deploy --web4 \
   --provider https://alice.example --provider https://bob.example \
   --quorum 2 --tee-vendor <vendor-root-key-id> \
   --tee-code <code-digest> --tee-signed-image <vendor-root-key-id> \
+  --tee-signed-image-depth 1 \
   --registry https://registry.example
 ```
 
 `deploy --tee-signed-image` commits `labels.teeSignedImage` and REFUSES unless every
-adopted provider presents a manifest signed by that vendor that vouches for the
-approved code. The gateway and the verifier require the same, so an image signed by
-another vendor — or an enclave whose measured image is not the signed one — is
-refused. The code digest is now bound to a vendor signature, not the running
-source's word.
+adopted provider presents a manifest whose chain reaches that root and vouches for
+the approved code. `--tee-signed-image-depth <n>` additionally commits
+`labels.teeSignedImageDepth` and requires a certificate-chain of at least that
+depth, so a manifest signed **directly by the anchor with no chain** (depth 0) is
+refused: the signer must be *certified* by the root, not merely equal to it —
+mirroring `--tee-chain-depth` for the machine quote. The gateway and the verifier
+recompute both: the chain's ROOT (not the leaf) must equal the pin, and its depth
+must reach the minimum. A manifest signed by a bare, self-rooted operator key, one
+signed directly by the root, one signed by another vendor, or one whose measured
+image is not the signed one is refused. The code digest is bound to the pinned trust
+anchor, not the running source's word.
 
 The honest boundary: the root is a fixed key shipped with the protocol, so this is
 the *shape* of a hardware root — a deployment pins a vendor root it did not choose,
@@ -640,6 +669,32 @@ curl -X POST https://registry.example/v1/work/inference \
 
 `deploy --bounty <n>` commits the amount. The node's action board prices the same
 act (`infer`) at its own base; the run pays the amount the buyer committed.
+
+### Off-ledger settlement: the adapter
+
+Removing credits from the ledger (a redemption, above) is the ledger half of a
+cash-out; actually moving value out is the outside world's, so the node does it
+through a pluggable **settlement adapter**. When a redemption is received, the node
+calls `adapter.settle({ keyId, amount, reference, redemptionId })` FIRST:
+
+- **The adapter succeeds** → the node records the credit removal AND a settlement
+  receipt bound to the redemption and the external reference (`adapter`,
+  `settlementId`, `detail`), and returns both in the response.
+- **The adapter throws** → the node returns `502` and removes **no** credits: the
+  ledger never loses value the outside world did not receive. The refusal is
+  atomic — nothing is written.
+
+`GET /v1/work/settlement?keyId=…` lists the settlement receipts the node recorded,
+so a redeemer can prove its redemption was settled against the reference it named.
+An adapter is visible from the environment (`RAREXT_SETTLEMENT=echo` records the
+movement by echoing the reference — a placeholder for a chain or escrow;
+`RAREXT_SETTLEMENT=fail` always refuses, for testing the atomic path), or supplied
+in code (`AppOptions.settlement`). With no adapter a redemption is ledger-only —
+recorded with `settlement: null`.
+
+The honest boundary: the protocol never moves real value; it calls an adapter once,
+atomically, and binds the adapter's answer to the ledger fact. Whether the adapter
+actually paid is the adapter's problem, and the reference is the receipt.
 
 ## The verification chain
 
@@ -827,14 +882,18 @@ why a large file is sharded rather than sent as one object.
   (`{ confidential: { wrappedKey, nonce, ciphertext } }`) is sealed to the enclave
   too, so the prompt and the answer are ciphertext everywhere but inside the
   enclave — the forwarder, a gateway, or a relay never sees them. The enclave's own
-  code is pinned and the digest is bound to a VENDOR-SIGNED image manifest
-  (`--tee-code` + `--tee-signed-image`), so an enclave running different code, or an
-  image signed by another vendor, is refused — the code identity is checked, not
-  claimed. But a software enclave is not silicon: an operator with root on the
-  enclave's host can read its memory and, with it, the prompt, and the manifest is
-  signed by a key file shipped with the protocol rather than one a chip holds. A
-  hardware-rooted TEE (SGX/SEV-SNP), whose image measurement the silicon takes and
-  whose root key never leaves the die, is what closes that; the attestation chain,
+  code is pinned and the digest is bound to an image manifest whose certificate
+  chain must reach the pinned hardware root, at a minimum depth (`--tee-code` +
+  `--tee-signed-image` + `--tee-signed-image-depth`), so an enclave running
+  different code, an image signed by another vendor, a manifest signed by a bare
+  self-rooted key, or one signed directly by the anchor with no chain is refused —
+  the code identity is checked and its trust anchor and depth are pinned, not merely
+  claimed. But a software enclave
+  is not silicon: an operator with root on the enclave's host can read its memory
+  and, with it, the prompt, and the root the manifest chain terminates at is a key
+  file shipped with the protocol rather than one a chip holds. A hardware-rooted TEE
+  (SGX/SEV-SNP), whose image measurement the silicon takes and whose root key never
+  leaves the die, is what closes that; the attestation chain, the certificate chain,
   the code digest, the signed image manifest, and the `scheme` field are shaped for
   it, but no hardware root is wired in.
 - **Inference is not cryptographically proven.** The run transcript proves the

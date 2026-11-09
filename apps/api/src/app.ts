@@ -113,6 +113,8 @@ import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
 import { ChallengeScheduler } from "./durability-schedule.ts";
 import { publicationDurability } from "./publication-durability.ts";
 import { verifyWorkerSignature } from "./worker.ts";
+import { createSettlementFromEnv } from "./settlement.ts";
+import type { SettlementAdapter, SettlementReceipt } from "./settlement.ts";
 import {
   ACTIONS,
   actionFor,
@@ -234,6 +236,12 @@ export interface AppOptions {
   /** Timeout for one external verifier request; defaults to 10 s. */
   verifierTimeoutMs?: number;
   verifierModules?: VerifierModuleRegistry;
+  /**
+   * The off-ledger settlement adapter. When configured, a redemption calls it to
+   * move value out and records its receipt; an adapter failure refuses the
+   * redemption atomically, so no credits are removed unsettled.
+   */
+  settlement?: SettlementAdapter | null;
   operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
@@ -1067,6 +1075,9 @@ function decodePathSegment(
 
 export function createApp(options: AppOptions = {}): AppServer {
   const store = options.store ?? new RarextStore();
+  // A pluggable off-ledger settlement adapter: options win, else the environment.
+  const settlementAdapter: SettlementAdapter | null =
+    options.settlement !== undefined ? options.settlement : createSettlementFromEnv(process.env);
   const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
   const registry = options.registry ?? createDefaultRegistry(options.fetch);
   const baseChallenges = options.challenges ?? createChallengeRegistry();
@@ -2639,8 +2650,43 @@ export function createApp(options: AppOptions = {}): AppServer {
           return;
         }
 
+        // Move the value OFF the ledger FIRST, through the configured adapter.
+        // If the adapter fails, the redemption is refused and NO credits are
+        // removed: the ledger never loses value the outside world did not
+        // receive. The adapter's answer is recorded as a settlement receipt
+        // bound to the redemption and to the external reference.
+        let settlement: SettlementReceipt | null = null;
+        if (settlementAdapter) {
+          try {
+            const result = await settlementAdapter.settle({
+              keyId: instruction.from,
+              amount: instruction.amount,
+              reference: instruction.reference,
+              redemptionId: id,
+            });
+            settlement = {
+              redemptionId: id,
+              keyId: instruction.from,
+              amount: instruction.amount,
+              reference: instruction.reference,
+              adapter: settlementAdapter.name,
+              settlementId: result.settlementId,
+              detail: result.detail ?? null,
+              at: new Date().toISOString(),
+            };
+          } catch (error) {
+            send(res, 502, {
+              error:
+                "settlement failed; the redemption was refused: " +
+                (error instanceof Error ? error.message : String(error)),
+            });
+            return;
+          }
+        }
+
         const records = redemptionRecords(instruction, recordRootHash);
         for (const record of records) store.addCredit(record as unknown as CreditRecord);
+        if (settlement !== null) store.addSettlement(settlement);
         const all = store.listCredits();
         send(res, 201, {
           redemption: {
@@ -2651,6 +2697,7 @@ export function createApp(options: AppOptions = {}): AppServer {
             nonce: instruction.nonce,
             at: instruction.at,
           },
+          settlement,
           balance: creditBalances(all)[instruction.from] ?? 0,
           supply: creditSupply(all),
           receipts: records.map((record) => ({
@@ -2662,6 +2709,17 @@ export function createApp(options: AppOptions = {}): AppServer {
             },
           })),
         });
+        return;
+      }
+
+      // The settlement receipts this node recorded, so a redeemer can prove its
+      // redemption was settled against the reference it named.
+      if (req.method === "GET" && pathname === "/v1/work/settlement") {
+        const keyId = url.searchParams.get("keyId");
+        const settlements = store
+          .listSettlements()
+          .filter((entry) => keyId === null || entry.keyId === keyId);
+        send(res, 200, { adapter: settlementAdapter?.name ?? null, settlements });
         return;
       }
 

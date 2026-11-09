@@ -14,8 +14,20 @@ import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/inde
 import { verifyImageManifest } from "./image-manifest.ts";
 import type { ImageManifest } from "./image-manifest.ts";
 import type { SignatureSuite } from "../../../packages/core/src/types.ts";
+import {
+  issueProviderCertificate,
+  providerCertificatePayload,
+  verifyCertificateChain,
+} from "./certificates.ts";
+import type { ProviderCertificate } from "./certificates.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import type { ApiShape, EngineName, ModelRef } from "./types.ts";
+
+// The certificate primitives live in `certificates.ts` so the image manifest's
+// chain and the machine quote's chain share one verifier; they are re-exported
+// here for the callers that already import them from the bundle module.
+export { issueProviderCertificate, providerCertificatePayload };
+export type { ProviderCertificate };
 
 /**
  * A model that lives on RAREXT.
@@ -114,32 +126,6 @@ export const PROVIDER_MACHINE_KIND = "rarext.provider-machine.v1";
  * trustworthy as the key that signs the card — it proves the OPERATOR claims
  * these machines are distinct, not that they are physically so.
  */
-/**
- * A certificate in the quote's chain of trust: a statement, signed by `issuer`,
- * that `subject`'s key is vouched for by `issuer`. A chain ends at a trust
- * anchor; a deployment pins that anchor's key id, so an operator-supplied leaf
- * key is not enough on its own — the chain must terminate at the pinned root.
- */
-export interface ProviderCertificate {
-  subject: unknown;
-  issuer: unknown;
-  /**
-   * What the subject IS: the boot stage it represents ("firmware", "os",
-   * "app"/"enclave"). A measured-boot chain names each stage, so a deployment can
-   * require the chain to extend through every stage it trusts.
-   */
-  stage?: string;
-  /**
-   * The measured value of that stage (a digest of the firmware/OS/app image). A
-   * deployment pins the measurements it approves, so the stage names become
-   * checked values, not claims: a chain carrying the wrong firmware measurement
-   * is refused.
-   */
-  measurement?: string;
-  signature: string;
-  suite: string;
-}
-
 export interface ProviderQuote {
   /** Base64 signature over the covered fields, by the leaf/attestation key. */
   signature: string;
@@ -242,49 +228,10 @@ export function verifyProviderQuote(independence: unknown): string | null {
   }
 }
 
-/** The exact fields a certificate covers. `stage`/`measurement` only when present. */
-export function providerCertificatePayload(cert: ProviderCertificate): {
-  subject: unknown;
-  issuer: unknown;
-  stage?: string;
-  measurement?: string;
-} {
-  return {
-    subject: cert.subject,
-    issuer: cert.issuer,
-    ...(cert.stage === undefined ? {} : { stage: cert.stage }),
-    ...(cert.measurement === undefined ? {} : { measurement: cert.measurement }),
-  };
-}
-
-/** Issue a certificate: `issuerSigner` vouches for `subject`'s key. */
-export function issueProviderCertificate(input: {
-  subject: unknown;
-  issuerSigner: { sign(payload: unknown): string; publicKey: unknown; suite: string };
-  stage?: string;
-  measurement?: string;
-}): ProviderCertificate {
-  const subject = input.subject;
-  const issuer = input.issuerSigner.publicKey;
-  const cert: ProviderCertificate = {
-    subject,
-    issuer,
-    ...(input.stage === undefined ? {} : { stage: input.stage }),
-    ...(input.measurement === undefined ? {} : { measurement: input.measurement }),
-    signature: "",
-    suite: input.issuerSigner.suite,
-  };
-  cert.signature = input.issuerSigner.sign(providerCertificatePayload(cert));
-  return cert;
-}
-
 /**
  * Verify a quote AND its chain of trust, returning the ROOT key id the chain
- * terminates at. Verifying the leaf's signature is not enough: each certificate
- * must be signed by its issuer, each subject must be the key below it, and the
- * top of the chain is the trust anchor. A deployment pins that anchor's id, so a
- * chain that does not reach the pinned root is refused. A quote with no chain is
- * its own root (the leaf is the anchor), which is the pre-chain behaviour.
+ * terminates at. The chain walk lives in `certificates.ts`, shared with the image
+ * manifest's chain, so "the chain must reach the pinned root" is one function.
  */
 export function verifyProviderChain(independence: unknown): string | null {
   if (!isRecord(independence)) return null;
@@ -293,54 +240,13 @@ export function verifyProviderChain(independence: unknown): string | null {
     return null;
   }
   const payload = providerQuotePayload(independence as unknown as ProviderIndependence);
-  let current = quote.publicKey as unknown as JsonWebKey;
-  try {
-    if (
-      !verifyPayload(
-        current,
-        payload,
-        quote.signature,
-        typeof quote.suite === "string" ? (quote.suite as SignatureSuite) : undefined,
-      )
-    ) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  const chain = Array.isArray(quote.chain) ? quote.chain : [];
-  for (const raw of chain) {
-    if (
-      !isRecord(raw) ||
-      !isRecord(raw.subject) ||
-      !isRecord(raw.issuer) ||
-      typeof raw.signature !== "string"
-    ) {
-      return null;
-    }
-    const cert = raw as unknown as ProviderCertificate;
-    try {
-      // The certificate must be ABOUT the key below it...
-      if (publicKeyId(cert.subject as unknown as JsonWebKey) !== publicKeyId(current)) return null;
-      // ... and signed by the issuer above it.
-      if (
-        !verifyPayload(
-          cert.issuer as unknown as JsonWebKey,
-          providerCertificatePayload(cert),
-          cert.signature,
-          typeof cert.suite === "string" ? (cert.suite as SignatureSuite) : undefined,
-        )
-      ) {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-    current = cert.issuer as unknown as JsonWebKey;
-  }
-
-  return publicKeyId(current);
+  return verifyCertificateChain({
+    leafPublicKey: quote.publicKey,
+    payload,
+    signature: quote.signature,
+    suite: typeof quote.suite === "string" ? quote.suite : undefined,
+    chain: quote.chain,
+  });
 }
 
 /**
@@ -892,7 +798,8 @@ async function fetchShard(
     }
   }
   throw new Error(
-    `shard ${shard.index} (${shard.hash}) is unavailable from every registry: ${attempts.join("; ")}`,
+    `shard ${shard.index} (${shard.hash}) failed verification or is missing from every registry: ` +
+      `${attempts.join("; ")}`,
   );
 }
 
@@ -983,7 +890,7 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
   bytes: Buffer;
 }> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const registry = normalizeBase(input.registry);
+  const registries = registryBases(input);
   const sealed = input.bundle.sealing !== undefined;
   const chunks: Buffer[] = [];
   const bytes = sealed ? null : Buffer.allocUnsafe(input.bundle.totalBytes);
@@ -991,17 +898,7 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
   let offset = 0;
 
   for (const shard of input.bundle.shards) {
-    const response = await fetchImpl(`${registry}/v1/blobs/${shard.hash}/raw`);
-    if (!response.ok) {
-      throw new Error(`shard ${shard.index} (${shard.hash}) is missing: HTTP ${response.status}`);
-    }
-    const chunk = Buffer.from(await response.arrayBuffer());
-    if (chunk.length !== shard.size || sha256Hex(chunk) !== shard.hash) {
-      throw new Error(
-        `shard ${shard.index} does not match its commitment ` +
-          `(${chunk.length} bytes, sha256 ${sha256Hex(chunk)})`,
-      );
-    }
+    const chunk = await fetchShard(registries, shard, fetchImpl);
     if (offset + chunk.length > input.bundle.totalBytes) {
       throw new Error(
         `shard ${shard.index} overruns the committed total of ${input.bundle.totalBytes} bytes`,
@@ -1084,29 +981,20 @@ export function unwrapSealKey(bundle: ModelBundle, privateKey: KeyObject | strin
  * holds and serves the committed ciphertext, but cannot open it.
  */
 export async function fetchBundleCiphertext(input: {
-  registry: string;
+  registry?: string;
+  registries?: string[];
   bundle: ModelBundle;
   fetchImpl?: typeof fetch;
   onShard?: (index: number, size: number) => void;
 }): Promise<{ bytes: Buffer }> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const registry = normalizeBase(input.registry);
+  const registries = registryBases(input);
   if (input.bundle.sealing === undefined) {
     throw new Error("fetchBundleCiphertext is only for a sealed bundle");
   }
   const chunks: Buffer[] = [];
   for (const shard of input.bundle.shards) {
-    const response = await fetchImpl(`${registry}/v1/blobs/${shard.hash}/raw`);
-    if (!response.ok) {
-      throw new Error(`shard ${shard.index} (${shard.hash}) is missing: HTTP ${response.status}`);
-    }
-    const chunk = Buffer.from(await response.arrayBuffer());
-    if (chunk.length !== shard.size || sha256Hex(chunk) !== shard.hash) {
-      throw new Error(
-        `shard ${shard.index} does not match its commitment ` +
-          `(${chunk.length} bytes, sha256 ${sha256Hex(chunk)})`,
-      );
-    }
+    const chunk = await fetchShard(registries, shard, fetchImpl);
     chunks.push(chunk);
     input.onShard?.(shard.index, chunk.length);
   }
@@ -1117,20 +1005,37 @@ export async function fetchBundleCiphertext(input: {
 
 /** Fetch the bundle manifest by its content address and verify it. */
 export async function fetchBundleManifest(input: {
-  registry: string;
+  registry?: string;
+  registries?: string[];
   manifestHash: string;
   fetchImpl?: typeof fetch;
 }): Promise<ModelBundle> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const registry = normalizeBase(input.registry);
-  const response = await fetchImpl(`${registry}/v1/blobs/${input.manifestHash}/raw`);
-  if (!response.ok) {
-    throw new Error(`bundle manifest ${input.manifestHash} is missing: HTTP ${response.status}`);
+  const registries = registryBases(input);
+  let bytes: Buffer | null = null;
+  const attempts: string[] = [];
+  for (const base of registries) {
+    try {
+      const response = await fetchImpl(`${base}/v1/blobs/${input.manifestHash}/raw`);
+      if (!response.ok) {
+        attempts.push(`${base}: HTTP ${response.status}`);
+        continue;
+      }
+      const candidate = Buffer.from(await response.arrayBuffer());
+      if (sha256Hex(candidate) !== input.manifestHash) {
+        attempts.push(`${base}: bytes do not match the content address`);
+        continue;
+      }
+      bytes = candidate;
+      break;
+    } catch (error) {
+      attempts.push(`${base}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const hash = sha256Hex(bytes);
-  if (hash !== input.manifestHash) {
-    throw new Error(`bundle manifest hashes to ${hash}, expected ${input.manifestHash}`);
+  if (bytes === null) {
+    throw new Error(
+      `bundle manifest ${input.manifestHash} is unavailable from every registry: ${attempts.join("; ")}`,
+    );
   }
 
   let value: unknown;

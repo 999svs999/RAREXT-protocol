@@ -35,7 +35,7 @@ import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import { canonicalDigest } from "./digest.ts";
 import { replayEngineRun } from "./replay.ts";
-import { verifyImageManifest } from "./image-manifest.ts";
+import { imageManifestChainDepth, verifyImageManifest } from "./image-manifest.ts";
 import {
   assessModelFit,
   buildDeployment,
@@ -165,7 +165,8 @@ Common options:
   --tee-code <hex>      deploy: the enclave code measurement providers must attest
   --code-measurement <hex>  provider: override the measured code digest (default: this runtime)
   --image-manifest <p>      provider: a vendor-signed image manifest vouching for the running code
-  --tee-signed-image <keyId>  deploy: the vendor key whose image-manifest signature is required
+  --tee-signed-image <keyId>  deploy: the vendor root the image manifest's chain must reach
+  --tee-signed-image-depth <n> deploy: minimum image-manifest chain depth (1 = certified by the root)
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -188,6 +189,7 @@ Common options:
   --publish             publish run transcripts to RAREXT
   --anchor              anchor after publishing (publish-deployment)
   --registry <url>      RAREXT API base (default http://127.0.0.1:8787; plan reads its cards)
+  --mirror-registry <url>  extra registry(ies) a provider fetches the bundle from (repeatable)
   --handle <name>       runtime publication handle (default rarext-runtime)
   --challenge <id>      challenge id to publish under (default derived from manifest)
   --transcript <path>   run record JSON for verify/replay
@@ -749,6 +751,9 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "enclave-endpoint") === undefined
       ? {}
       : { enclaveEndpoint: flag(values, "enclave-endpoint") }),
+    ...(flags(values, "mirror-registry").length === 0
+      ? {}
+      : { mirrors: flags(values, "mirror-registry") }),
     ...(bool(values, "engine-logprobs") ? { engineLogprobs: true } : {}),
     ...(sealKey === undefined ? {} : { sealKey }),
     log: (message) => console.error(`[provider] ${message}`),
@@ -1115,8 +1120,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     teeCode = teeCodeFlag;
   }
 
-  // A vendor-signed image manifest: every adopted provider must present one,
-  // signed by the pinned vendor, that vouches for the approved code.
+  // A vendor-signed image manifest: every adopted provider must present one
+  // whose certificate CHAIN terminates at the pinned vendor ROOT, so a manifest
+  // signed by a bare operator key cannot satisfy the pin.
   const teeSignedImageFlag = flag(values, "tee-signed-image");
   let teeSignedImage: string | null = null;
   if (teeSignedImageFlag !== undefined) {
@@ -1128,7 +1134,7 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
       const info = verifyImageManifest(entry.independence?.image);
       return (
         info === null ||
-        info.vendorKeyId !== teeSignedImageFlag ||
+        info.rootKeyId !== teeSignedImageFlag ||
         (teeCode !== null && info.image !== teeCode)
       );
     });
@@ -1136,6 +1142,28 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
       throw new Error("--tee-signed-image is not satisfied by every provider's image manifest");
     }
     teeSignedImage = teeSignedImageFlag;
+  }
+
+  // The minimum certificate-chain depth the image manifest must present, so a
+  // manifest signed directly by the anchor with no chain is refused.
+  const teeSignedImageDepthFlag = flag(values, "tee-signed-image-depth");
+  let teeSignedImageDepth: number | null = null;
+  if (teeSignedImageDepthFlag !== undefined) {
+    const depth = Number(teeSignedImageDepthFlag);
+    if (!Number.isSafeInteger(depth) || depth < 1) {
+      throw new Error("--tee-signed-image-depth must be a positive integer");
+    }
+    if (teeSignedImage === null) {
+      throw new Error("--tee-signed-image-depth requires --tee-signed-image");
+    }
+    const shallow = cards.filter((entry) => imageManifestChainDepth(entry.independence?.image) < depth);
+    if (shallow.length > 0) {
+      throw new Error(
+        `--tee-signed-image-depth ${depth} does not hold for every provider image manifest ` +
+          `(${cards.map((entry) => imageManifestChainDepth(entry.independence?.image)).join(", ")})`,
+      );
+    }
+    teeSignedImageDepth = depth;
   }
 
   const primary = endpoints[0]!;
@@ -1193,6 +1221,9 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         ...(teeFreshness === null ? {} : { teeFreshness }),
         ...(teeCode === null ? {} : { teeCodeMeasurement: teeCode }),
         ...(teeSignedImage === null ? {} : { teeSignedImage }),
+        ...(teeSignedImageDepth === null
+          ? {}
+          : { teeSignedImageDepth: String(teeSignedImageDepth) }),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -2147,6 +2178,7 @@ async function main(): Promise<number> {
       "tee-code": { type: "string" },
       "code-measurement": { type: "string" },
       "tee-signed-image": { type: "string" },
+      "tee-signed-image-depth": { type: "string" },
       "image-manifest": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
