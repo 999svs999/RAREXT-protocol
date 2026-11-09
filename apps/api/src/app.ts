@@ -113,7 +113,7 @@ import { DurabilityLedger, type DurabilityHolder } from "./durability.ts";
 import { ChallengeScheduler } from "./durability-schedule.ts";
 import { publicationDurability } from "./publication-durability.ts";
 import { verifyWorkerSignature } from "./worker.ts";
-import { createSettlementFromEnv } from "./settlement.ts";
+import { createSettlementFromEnv, settlementBinding, verifySettlementReceipt } from "./settlement.ts";
 import type { SettlementAdapter, SettlementReceipt } from "./settlement.ts";
 import {
   ACTIONS,
@@ -242,6 +242,12 @@ export interface AppOptions {
    * redemption atomically, so no credits are removed unsettled.
    */
   settlement?: SettlementAdapter | null;
+  /**
+   * The adapter key id a settlement receipt must verify under. When set, the node
+   * refuses a redemption whose adapter returns no signature or one signed by
+   * another key, so a recorded movement is attributable rather than taken on faith.
+   */
+  settlementKey?: string | null;
   operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
@@ -1078,6 +1084,12 @@ export function createApp(options: AppOptions = {}): AppServer {
   // A pluggable off-ledger settlement adapter: options win, else the environment.
   const settlementAdapter: SettlementAdapter | null =
     options.settlement !== undefined ? options.settlement : createSettlementFromEnv(process.env);
+  // The adapter key the node pins: a settlement is attributable only when the
+  // adapter signs it and the node can check the signature against this id.
+  const settlementKey: string | null =
+    options.settlementKey !== undefined
+      ? options.settlementKey
+      : (process.env.RAREXT_SETTLEMENT_KEY || null);
   const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
   const registry = options.registry ?? createDefaultRegistry(options.fetch);
   const baseChallenges = options.challenges ?? createChallengeRegistry();
@@ -2654,26 +2666,41 @@ export function createApp(options: AppOptions = {}): AppServer {
         // If the adapter fails, the redemption is refused and NO credits are
         // removed: the ledger never loses value the outside world did not
         // receive. The adapter's answer is recorded as a settlement receipt
-        // bound to the redemption and to the external reference.
+        // bound to the redemption and to the external reference. When an adapter
+        // key is pinned, the receipt must carry a valid signature under that key
+        // — an unsigned or mis-signed settlement is refused, not recorded.
         let settlement: SettlementReceipt | null = null;
         if (settlementAdapter) {
           try {
-            const result = await settlementAdapter.settle({
+            const request = {
               keyId: instruction.from,
               amount: instruction.amount,
               reference: instruction.reference,
               redemptionId: id,
-            });
-            settlement = {
-              redemptionId: id,
-              keyId: instruction.from,
-              amount: instruction.amount,
-              reference: instruction.reference,
+            };
+            const result = await settlementAdapter.settle(request);
+            const detail = result.detail ?? null;
+            const candidate: SettlementReceipt = {
+              ...request,
               adapter: settlementAdapter.name,
               settlementId: result.settlementId,
-              detail: result.detail ?? null,
+              detail,
+              binding: settlementBinding(request, result.settlementId, detail),
+              signature: typeof result.signature === "string" ? result.signature : null,
+              publicKey: result.publicKey ?? null,
+              suite: typeof result.suite === "string" ? result.suite : null,
+              signer:
+                result.publicKey === undefined || result.publicKey === null
+                  ? null
+                  : keyId(result.publicKey as never),
               at: new Date().toISOString(),
             };
+            if (settlementKey !== null && !verifySettlementReceipt(candidate, settlementKey)) {
+              throw new Error(
+                "the settlement receipt is unsigned or signed by a key other than the pinned adapter key",
+              );
+            }
+            settlement = candidate;
           } catch (error) {
             send(res, 502, {
               error:

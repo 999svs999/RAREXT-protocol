@@ -531,6 +531,42 @@ chains are shorter or root elsewhere, and the verifier recomputes the same rule.
 bare leaf key (depth zero) is valid attestation but **not hardware-rooted**, and is
 refused by name.
 
+### Root rotation and revocation
+
+A pinned root is not static forever. The protocol ships an append-only
+`rarext.root-rotation.v1` chain: each step retires one root and names its
+successor, carries both public keys, a monotonic `epoch`, a digest of the previous
+step, an optional `revoke` list, and is **signed by the root being retired**. Authority
+therefore flows forward from the shipped anchor; an unrelated key cannot claim the
+next root.
+
+```bash
+node apps/runtime/src/cli.ts provider --bundle model-bundle.json \
+  --tee-key-file leaf.json --tee-cert-file chain.json \
+  --tee-root-chain-file root-chain.json
+
+node apps/runtime/src/cli.ts deploy --web4 --provider https://alice.example \
+  --quorum 1 --tee-vendor <anchor-key-id> --tee-root-epoch 1 \
+  --registry https://registry.example
+```
+
+`deploy --tee-root-epoch 1` commits `labels.teeRootEpoch` and REFUSES unless every
+adopted provider's root chain starts at the pinned anchor, advances the epoch by
+exactly one per step, links each step to the previous digest, presents public keys
+whose ids match the roots they name, and terminates at the root that issued the
+provider's certificate chain. The challenge commits `spec.teeRootEpoch`; the
+gateway and the verifier recompute the same rule.
+
+Three refusals follow. A quote still rooted at the **retired anchor** is stale once
+the deployment has learned the rotation. A quote that terminates at a **revoked**
+root is refused even if that root is current. A **forged handover** — a rotation
+whose successor key does not hash to the key id it claims — breaks the chain.
+
+The honest boundary is unchanged: the anchor is still a key shipped in a file, not
+a fused hardware root, so "the vendor rotated its root" is only as trustworthy as
+the anchor itself. Rotation removes the *static* limit (a compromised or retired
+root could never be replaced), not the *file-versus-fuse* one.
+
 ### Measured boot
 
 Depth alone is not enough: a chain can reach the vendor root without measuring
@@ -746,10 +782,22 @@ calls `adapter.settle({ keyId, amount, reference, redemptionId })` FIRST:
 
 - **The adapter succeeds** → the node records the credit removal AND a settlement
   receipt bound to the redemption and the external reference (`adapter`,
-  `settlementId`, `detail`), and returns both in the response.
+  `settlementId`, `detail`, `binding`), and returns both in the response.
 - **The adapter throws** → the node returns `502` and removes **no** credits: the
   ledger never loses value the outside world did not receive. The refusal is
   atomic — nothing is written.
+
+The receipt is not taken on faith. An adapter can sign the settlement payload
+(`rarext.settlement-receipt.v1`: the redemption id, payer, amount, external
+reference, settlement id, and detail) with its own key; the node pins that key with
+`RAREXT_SETTLEMENT_KEY` (or `AppOptions.settlementKey`) and verifies the signature
+against the pinned key id before removing any credits. Every receipt also carries a
+`binding` digest over those same facts, recomputed by
+`verifySettlementReceipt(receipt, keyId)`, so an edited amount, reference, or
+settlement id breaks both the binding and the signature. An unsigned receipt, or
+one signed by another key, is refused exactly like a failed adapter: `502`, no
+credits removed, no settlement recorded. `RAREXT_SETTLEMENT_KEY_FILE` gives the
+echo adapter a signing key so a real chain or escrow can be wired the same way.
 
 `GET /v1/work/settlement?keyId=…` lists the settlement receipts the node recorded,
 so a redeemer can prove its redemption was settled against the reference it named.
@@ -759,9 +807,11 @@ movement by echoing the reference — a placeholder for a chain or escrow;
 in code (`AppOptions.settlement`). With no adapter a redemption is ledger-only —
 recorded with `settlement: null`.
 
-The honest boundary: the protocol never moves real value; it calls an adapter once,
-atomically, and binds the adapter's answer to the ledger fact. Whether the adapter
-actually paid is the adapter's problem, and the reference is the receipt.
+The honest boundary: the protocol never moves real cash; it calls an adapter once,
+atomically, and binds the adapter's answer to the ledger fact. A pinned adapter key
+makes the recorded movement attributable — a receipt cannot be invented by a node
+that does not hold the adapter's key — but it still does not prove the external
+ledger actually paid; the reference is the receipt.
 
 ## The verification chain
 
@@ -977,8 +1027,12 @@ why a large file is sharded rather than sent as one object.
   by the gateway and recomputed by the verifier. The operator supplies only a LEAF
   key and cannot mint its own trust: a bare leaf (depth zero), a chain ending at an
   operator anchor, a chain rooted elsewhere, a chain that skips the boot stages, a
-  chain running unapproved firmware/OS/app, or a REPLAYED (stale) attestation is
-  refused by name. What it still does not prove is that the machine ids name
+  chain running unapproved firmware/OS/app, a REPLAYED (stale) attestation, a quote
+  still rooted at a retired anchor, or one terminating at a revoked root is
+  refused by name. An append-only, root-signed rotation chain
+  (`--tee-root-epoch`) lets the anchor move forward without resetting the pin, so
+  a compromised or retired root can be replaced; the anchor is still a shipped key
+  file, not a fused root. What it still does not prove is that the machine ids name
   physically separate boxes, that the measurements reflect a real boot, or that the
   vendor root is real silicon: the root is a fixed key the protocol ships and the
   measurements are digests the chain carries, so it is hardware-*shaped* but a file.
@@ -1039,8 +1093,13 @@ why a large file is sharded rather than sent as one object.
   (`/v1/work/transfer`, a zero-sum pair) or take them out with a signed redemption
   (`/v1/work/redeem`, a debit with no credit that lowers the ledger supply),
   refused if it would overdraw the payer and proved against the same whole-ledger
-  root. What no protocol can do is hand over cash: the redemption commits an
-  external reference and a bounty is only as good as the accounts behind it.
+  root. The settlement half is attributable: a pinned adapter key signs the exact
+  settlement (`rarext.settlement-receipt.v1` over redemption id, payer, amount,
+  reference, settlement id, and detail), the node verifies it before removing
+  credits, and an unsigned or mis-signed receipt is refused atomically. What no
+  protocol can do is hand over cash or prove the external ledger paid: the
+  signature says WHO claimed the movement, and the reference is the receipt, not
+  the funds.
 - **The engine is the provider's.** With `execution.kind: "engine"` the provider
   must have Ollama (today) and reproduces the model locally from the verified
   file. The weights still come from RAREXT; the compute is the provider's.

@@ -39,6 +39,7 @@ import {
 } from "./model-bundle.ts";
 import type { ProviderCertificate, ProviderIndependence } from "./model-bundle.ts";
 import { enclaveKeyDigest, openRequest, sealResponse } from "./confidential.ts";
+import type { RootChain } from "./root-chain.ts";
 import type { SealedRequest } from "./confidential.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";
 import { normalizeEndpoint } from "./manifest.ts";
@@ -106,6 +107,12 @@ export interface ProviderOptions {
    * quote's chain of trust can be checked against a pinned root.
    */
   teeChain?: ProviderCertificate[];
+  /**
+   * An append-only root rotation/revocation chain from the pinned anchor to the
+   * root that issued `teeChain`. It lets a verifier learn the CURRENT root and
+   * which roots are revoked, so a quote rooted at a retired root is refused.
+   */
+  teeRootChain?: RootChain;
   /**
    * The enclave's RSA private key. With it, a bundle sealed to that enclave is
    * unwrapped and served inside this process (the enclave). Without it the
@@ -841,6 +848,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             publicKey: options.teeSigner.publicKey,
             suite: options.teeSigner.suite,
             ...(options.teeChain === undefined ? {} : { chain: options.teeChain }),
+            ...(options.teeRootChain === undefined ? {} : { rootChain: options.teeRootChain }),
           },
         };
       })(),
@@ -984,6 +992,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
               publicKey: options.teeSigner.publicKey,
               suite: options.teeSigner.suite,
               ...(options.teeChain === undefined ? {} : { chain: options.teeChain }),
+              ...(options.teeRootChain === undefined ? {} : { rootChain: options.teeRootChain }),
             },
           };
         }

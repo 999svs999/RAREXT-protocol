@@ -74,6 +74,12 @@ import {
   issueHardwareChain,
   issueMeasuredBootChain,
 } from "../src/hardware-root.ts";
+import {
+  ROOT_CHAIN_KIND,
+  issueRootRotation,
+  verifyProviderRootChain,
+  verifyRootChain,
+} from "../src/root-chain.ts";
 import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
 import { attestationForReceipt } from "../src/certificates.ts";
 import { comparableCompletion } from "../src/completion.ts";
@@ -2691,6 +2697,179 @@ test("a machine quote must chain from a hardware (vendor) root of trust", async 
     if (gateway !== null) await gateway.close();
     if (first !== null) await first.close();
     if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a quote's root can rotate, and a stale or revoked root is refused", async () => {
+  // The vendor rotates its root. The retirement step is signed by the OLD root,
+  // so authority flows from the shipped anchor forward; an unrelated key cannot
+  // claim the new root.
+  const newRoot = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const rotation = issueRootRotation({
+    fromSigner: hardwareRootSigner(),
+    nextSigner: newRoot,
+    epoch: 1,
+    previous: null,
+    issuedAt: "2026-11-07T00:00:00.000Z",
+  });
+  const rootChain = {
+    kind: ROOT_CHAIN_KIND as typeof ROOT_CHAIN_KIND,
+    anchor: HARDWARE_ROOT_KEY_ID,
+    rotations: [rotation],
+  };
+  const verified = verifyRootChain(rootChain, HARDWARE_ROOT_KEY_ID);
+  assert.ok(verified, "the rotation chain verifies from the pinned anchor");
+  assert.equal(verified.current, newRoot.keyId);
+  assert.equal(verified.epoch, 1);
+
+  // A certificate chain that terminates at the NEW root.
+  const leaf = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const platform = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const rotatedChain = [
+    issueProviderCertificate({ subject: leaf.publicKey, issuerSigner: platform }),
+    issueProviderCertificate({ subject: platform.publicKey, issuerSigner: newRoot }),
+  ];
+
+  const reg = await registry();
+  let rotated: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let stale: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    rotated = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "rotated"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: rotatedChain,
+      teeRootChain: rootChain,
+    });
+    stale = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "stale"),
+      port: 0,
+      teeSigner: leaf,
+      teeChain: issueHardwareChain(leaf.publicKey).chain,
+    });
+    const rotatedCard = await fetchProviderCard({ endpoint: rotated.url });
+    const staleCard = await fetchProviderCard({ endpoint: stale.url });
+
+    // The rotated quote terminates at the CURRENT root and reaches epoch 1.
+    assert.deepEqual(verifyProviderCard(rotatedCard), []);
+    assert.equal(verifyProviderChain(rotatedCard.independence), newRoot.keyId);
+    const rooted = verifyProviderRootChain(rotatedCard.independence, HARDWARE_ROOT_KEY_ID, 1);
+    assert.ok(rooted);
+    assert.equal(rooted.current, newRoot.keyId);
+    assert.equal(rooted.epoch, 1);
+
+    // A quote that still terminates at the retired anchor is STALE once the
+    // deployment has learned the rotation; at epoch 0 it is still accepted.
+    assert.equal(verifyProviderRootChain(staleCard.independence, HARDWARE_ROOT_KEY_ID, 0)?.current, HARDWARE_ROOT_KEY_ID);
+    assert.equal(verifyProviderRootChain(staleCard.independence, HARDWARE_ROOT_KEY_ID, 1), null);
+
+    // Revoking the new root refuses every quote that terminates at it, even
+    // though the chain still reaches it.
+    const revokedRotation = issueRootRotation({
+      fromSigner: hardwareRootSigner(),
+      nextSigner: newRoot,
+      epoch: 1,
+      previous: null,
+      revoke: [newRoot.keyId],
+    });
+    const revokedCard = {
+      ...rotatedCard.independence!,
+      quote: {
+        ...rotatedCard.independence!.quote!,
+        rootChain: {
+          kind: ROOT_CHAIN_KIND as typeof ROOT_CHAIN_KIND,
+          anchor: HARDWARE_ROOT_KEY_ID,
+          rotations: [revokedRotation],
+        },
+      },
+    };
+    assert.equal(verifyProviderRootChain(revokedCard, HARDWARE_ROOT_KEY_ID, 1), null);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: rotated.url },
+          model: rotatedCard.model,
+          apis: ["openai"],
+          models: [rotatedCard.model],
+        },
+        hardware: hardwareFromNetwork(rotated.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: rotated.url,
+          operators: rotatedCard.provider.keyId!,
+          quorum: "1",
+          teeVendor: HARDWARE_ROOT_KEY_ID,
+          teeChainDepth: "2",
+          teeRootEpoch: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.teeRootEpoch, 1);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "rotated root?" }],
+          max_tokens: 8,
+          temperature: 0,
+        }),
+      });
+
+    // The rotated provider satisfies the pinned epoch.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-rotated"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [rotated.url],
+      quorum: 1,
+      operators: { [rotated.url]: rotatedCard.provider.keyId! },
+      attestations: { [rotated.url]: rotatedCard.independence! },
+    });
+    const accepted = await request(gateway.url);
+    assert.equal(accepted.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-rotated")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+    await gateway.close();
+    gateway = null;
+
+    // A quote still rooted at the retired anchor is refused as stale.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-stale"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [stale.url],
+      quorum: 1,
+      operators: { [stale.url]: staleCard.provider.keyId! },
+      attestations: { [stale.url]: staleCard.independence! },
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /unverifiable machine quote/);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (rotated !== null) await rotated.close();
+    if (stale !== null) await stale.close();
     await reg.close();
   }
 });

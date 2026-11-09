@@ -8,8 +8,10 @@ import {
   canonicalize,
 } from "../../../packages/core/src/index.ts";
 import type { CreditRecordFields, RedemptionInstruction } from "../../../packages/core/src/index.ts";
+import { AgentSigner, generateAgentKeypair } from "../../../packages/agent-sdk/src/index.ts";
 import { RarextStore } from "../src/store.ts";
-import type { SettlementAdapter, SettlementRequest } from "../src/settlement.ts";
+import type { SettlementAdapter, SettlementReceipt, SettlementRequest } from "../src/settlement.ts";
+import { settlementPayload, verifySettlementReceipt } from "../src/settlement.ts";
 import { post, start, stop } from "./helpers.ts";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -130,6 +132,89 @@ test("a failing adapter refuses the redemption atomically", async () => {
       settlements: unknown[];
     };
     assert.equal(listed.settlements.length, 0);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("a pinned settlement key verifies a signed adapter receipt", async () => {
+  const signer = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const adapter: SettlementAdapter = {
+    name: "signed-chain",
+    async settle(request) {
+      const settlementId = `tx-${request.reference}`;
+      const detail = "confirmed";
+      return {
+        settlementId,
+        detail,
+        signature: signer.sign(settlementPayload(request, settlementId, detail)),
+        publicKey: signer.publicKey,
+        suite: signer.suite,
+      };
+    },
+  };
+  const store = new RarextStore();
+  const { server, base } = await start(store, { settlement: adapter, settlementKey: signer.keyId });
+  try {
+    const alice = registerKey(store, "alice");
+    store.addCredit(credit(alice.keyId, 12) as never);
+
+    const redeem = instruction(alice.keyId, 5, "chain:tx:0xsigned");
+    const response = await post(base, "/v1/work/redeem", { ...redeem, signature: alice.sign(redeem) });
+    const body = (await response.json()) as { settlement: SettlementReceipt; balance: number };
+    assert.equal(response.status, 201);
+    assert.equal(body.settlement.signer, signer.keyId);
+    assert.equal(body.settlement.adapter, "signed-chain");
+    assert.equal(verifySettlementReceipt(body.settlement, signer.keyId), true);
+
+    // Editing any settlement fact breaks the binding, so the signature no longer
+    // covers what the receipt now claims.
+    assert.equal(verifySettlementReceipt({ ...body.settlement, amount: 999 }, signer.keyId), false);
+    assert.equal(
+      verifySettlementReceipt({ ...body.settlement, reference: "chain:tx:other" }, signer.keyId),
+      false,
+    );
+    // A receipt signed by another key is not the pinned adapter's.
+    const other = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    assert.equal(verifySettlementReceipt(body.settlement, other.keyId), false);
+    // An unsigned receipt proves nothing.
+    assert.equal(
+      verifySettlementReceipt(
+        { ...body.settlement, signature: null, publicKey: null, signer: null },
+        signer.keyId,
+      ),
+      false,
+    );
+  } finally {
+    await stop(server);
+  }
+});
+
+test("a pinned settlement key refuses an unsigned adapter and removes no credits", async () => {
+  const signer = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const adapter: SettlementAdapter = {
+    name: "unsigned-chain",
+    async settle(request) {
+      return { settlementId: `tx-${request.reference}` };
+    },
+  };
+  const store = new RarextStore();
+  const { server, base } = await start(store, { settlement: adapter, settlementKey: signer.keyId });
+  try {
+    const alice = registerKey(store, "alice");
+    store.addCredit(credit(alice.keyId, 12) as never);
+
+    const redeem = instruction(alice.keyId, 5, "chain:tx:0xunsigned");
+    const response = await post(base, "/v1/work/redeem", { ...redeem, signature: alice.sign(redeem) });
+    assert.equal(response.status, 502);
+    assert.match(
+      ((await response.json()) as { error: string }).error,
+      /unsigned or signed by a key other than the pinned adapter key/,
+    );
+
+    // The ledger did not lose value the outside world cannot attribute.
+    assert.equal(store.listCredits().filter((entry) => entry.action === "redeem").length, 0);
+    assert.equal(store.listSettlements().length, 0);
   } finally {
     await stop(server);
   }

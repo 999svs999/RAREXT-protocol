@@ -108,9 +108,16 @@ import {
   issueHardwareChain,
   issueMeasuredBootChain,
 } from "../apps/runtime/src/hardware-root.ts";
+import {
+  ROOT_CHAIN_KIND,
+  issueRootRotation,
+  verifyProviderRootChain,
+  verifyRootChain,
+} from "../apps/runtime/src/root-chain.ts";
 import { runtimeCodeMeasurement } from "../apps/runtime/src/code-measurement.ts";
 import { signImageManifest, verifyImageManifest } from "../apps/runtime/src/image-manifest.ts";
 import { attestationForReceipt } from "../apps/runtime/src/certificates.ts";
+import { verifySettlementReceipt } from "../apps/api/src/settlement.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import {
@@ -297,6 +304,16 @@ try {
   );
   const codeManifestPath = join(state, "image-manifest.json");
   writeJsonFile(codeManifestPath, codeManifest);
+  // The off-ledger settlement adapter signs each movement with its own key; the
+  // node pins that key, so an unsigned or mis-signed settlement is refused rather
+  // than recorded on faith.
+  const settlementKeypair = generateAgentKeypair("ecdsa-p256");
+  const settlementSigner = new AgentSigner(settlementKeypair.privateKey);
+  const settlementKeyPath = join(state, "settlement-key.json");
+  writeJsonFile(settlementKeyPath, {
+    privateKey: settlementKeypair.privateKey,
+    publicKey: settlementKeypair.publicKey,
+  });
   // A bare-leaf manifest: a real signature, but no chain to the hardware root.
   const bareManifest = signImageManifest(
     { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
@@ -582,9 +599,12 @@ try {
     RAREXT_BLOB_DIR: blobDir,
     RAREXT_CHALLENGES: join(state, "challenges.json"),
     RAREXT_VERIFIERS: join(state, "verifiers.json"),
-    // The node settles redemptions through the echo adapter: it records a
-    // settlement receipt bound to the external reference.
+    // The node settles redemptions through the echo adapter, which signs each
+    // movement with its key; the node pins that key id, so an unsigned or
+    // mis-signed settlement is refused rather than recorded on faith.
     RAREXT_SETTLEMENT: "echo",
+    RAREXT_SETTLEMENT_KEY_FILE: settlementKeyPath,
+    RAREXT_SETTLEMENT_KEY: settlementSigner.keyId,
   });
   const baseUrl = await api.ready;
   const registry = new RarextClient({ baseUrl });
@@ -1368,6 +1388,10 @@ try {
       settlement.settlementId === `echo:${reference}` &&
       settlement.reference === reference &&
       settlement.amount === amount &&
+      settlement.signer === settlementSigner.keyId &&
+      verifySettlementReceipt(settlement, settlementSigner.keyId) === true &&
+      // Editing the amount breaks the binding and the signature with it.
+      verifySettlementReceipt({ ...settlement, amount: amount + 1 }, settlementSigner.keyId) === false &&
       settlements?.settlements?.some((entry) => entry.settlementId === `echo:${reference}`) === true;
 
     redeemOk =
@@ -1380,7 +1404,9 @@ try {
     redeemDetail =
       `redeemed ${amount} credit(s) against ${reference.slice(0, 22)}… (net ${after.credits.net}, ` +
       `ledger supply ${redemption.supply}); settled via the ${String(settlement?.adapter)} adapter ` +
-      `(${String(settlement?.settlementId).slice(0, 24)}…); proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
+      `(${String(settlement?.settlementId).slice(0, 24)}…), signed by the pinned adapter key ` +
+      `${String(settlement?.signer).slice(0, 10)}… and bound to the exact redemption (a tampered amount was refused); ` +
+      `proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
   } catch (error) {
     redeemOk = false;
     redeemDetail = error instanceof Error ? error.message : String(error);
@@ -1799,6 +1825,116 @@ try {
     quoteDetail = error instanceof Error ? error.message : String(error);
   }
   phase("quote", quoteOk, quoteDetail);
+
+  // ── 12d2. Root rotation: the trust root can move, and stale roots are refused
+  // The trust anchor is a shipped key, but it is not static forever: each
+  // retirement is a signed, append-only step from the CURRENT root to the next.
+  // A quote must present a chain that reaches the root in force; a quote still
+  // rooted at a retired anchor is stale once the deployment has learned the move.
+  let rotateOk = false;
+  let rotateDetail = "";
+  try {
+    const newRoot = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const rotation = issueRootRotation({
+      fromSigner: hardwareRootSigner(),
+      nextSigner: newRoot,
+      epoch: 1,
+      previous: null,
+      issuedAt: "2026-11-07T00:00:00.000Z",
+    });
+    const rootChain = {
+      kind: ROOT_CHAIN_KIND,
+      anchor: HARDWARE_ROOT_KEY_ID,
+      rotations: [rotation],
+    };
+    const chainInfo = verifyRootChain(rootChain, HARDWARE_ROOT_KEY_ID);
+    const chainOk =
+      chainInfo !== null && chainInfo.current === newRoot.keyId && chainInfo.epoch === 1;
+
+    // The live providers still terminate at the retired anchor: valid at epoch 0,
+    // stale once epoch 1 is pinned.
+    const anchorCurrent =
+      verifyProviderRootChain(providerCards[0].independence, HARDWARE_ROOT_KEY_ID, 0)?.current ===
+      HARDWARE_ROOT_KEY_ID;
+    const anchorStale =
+      verifyProviderRootChain(providerCards[0].independence, HARDWARE_ROOT_KEY_ID, 1) === null;
+
+    // A certificate chain that terminates at the NEW root, carried with the
+    // rotation chain that proves it is the current one.
+    const leafQuote = providerCards[0].independence.quote;
+    const platform = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    const rotatedChain = [
+      issueProviderCertificate({ subject: leafQuote.publicKey, issuerSigner: platform }),
+      issueProviderCertificate({ subject: platform.publicKey, issuerSigner: newRoot }),
+    ];
+    const rotatedAttestation = {
+      ...providerCards[0].independence,
+      quote: { ...leafQuote, chain: rotatedChain, rootChain },
+    };
+    const rooted = verifyProviderRootChain(rotatedAttestation, HARDWARE_ROOT_KEY_ID, 1);
+    const rotatedAccepted =
+      rooted !== null && rooted.current === newRoot.keyId && rooted.epoch === 1;
+
+    // Revoking the new root refuses a quote that terminates at it.
+    const revokedRotation = issueRootRotation({
+      fromSigner: hardwareRootSigner(),
+      nextSigner: newRoot,
+      epoch: 1,
+      previous: null,
+      revoke: [newRoot.keyId],
+    });
+    const revokedAttestation = {
+      ...rotatedAttestation,
+      quote: {
+        ...rotatedAttestation.quote,
+        rootChain: { ...rootChain, rotations: [revokedRotation] },
+      },
+    };
+    const revokedRefused =
+      verifyProviderRootChain(revokedAttestation, HARDWARE_ROOT_KEY_ID, 1) === null;
+
+    // Claiming a new root whose key does not match its advertised key id is a
+    // forged handover: the chain is refused.
+    const tamperedChain = verifyRootChain(
+      { ...rootChain, rotations: [{ ...rotation, nextPublicKey: leafQuote.publicKey }] },
+      HARDWARE_ROOT_KEY_ID,
+    );
+    const tamperRefused = tamperedChain === null;
+
+    // A deployment that has learned epoch 1 refuses the live (stale) providers
+    // at deploy time.
+    const staleDeploy = await runCli([
+      "deploy",
+      "--web4",
+      ...providerUrls.flatMap((url) => ["--provider", url]),
+      "--quorum",
+      String(providerUrls.length),
+      "--tee-vendor",
+      HARDWARE_ROOT_KEY_ID,
+      "--tee-root-epoch",
+      "1",
+      "--registry",
+      baseUrl,
+      "--allow-loopback",
+      "--out",
+      join(state, "rotate-stale"),
+      "--json",
+    ]);
+    const staleRefused =
+      staleDeploy.status !== 0 &&
+      /reachable from every provider's root chain/.test(
+        (staleDeploy.stderr || "") + (staleDeploy.stdout || ""),
+      );
+
+    rotateOk =
+      chainOk && anchorCurrent && anchorStale && rotatedAccepted && revokedRefused && tamperRefused && staleRefused;
+    rotateDetail = rotateOk
+      ? `the shipped anchor rotated to a new root signed by the retiring root (epoch 1); a quote chaining to the new root was accepted, while a quote still rooted at the retired anchor, a chain revoked at the new root, a handover with a mismatched key, and a deploy pinning epoch 1 over stale providers were all refused`
+      : `chain=${String(chainOk)} anchorCurrent=${String(anchorCurrent)} stale=${String(anchorStale)} accepted=${String(rotatedAccepted)} revoked=${String(revokedRefused)} tamper=${String(tamperRefused)} staleDeploy=${String(staleRefused)}`;
+  } catch (error) {
+    rotateDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("rotate", rotateOk, rotateDetail);
 
   // ── 12e. Engine pin: a replay refuses a provider whose engine changed ────
   // An arbitrary GGUF cannot be reproduced bit-for-bit by the protocol alone.

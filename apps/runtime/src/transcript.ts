@@ -14,6 +14,8 @@ import {
   verifyProviderChain,
 } from "./model-bundle.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
+import { verifyProviderRootChain } from "./root-chain.ts";
+import { verifyDeterminismClaim } from "./determinism.ts";
 import { attestationForReceipt } from "./certificates.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import type {
@@ -21,6 +23,7 @@ import type {
   DeploymentCommitment,
   DeploymentManifest,
   DeploymentVerification,
+  DeterminismClaim,
   EngineName,
   HardwareBackend,
   ModelRunBody,
@@ -154,6 +157,8 @@ export interface CreateRunInput {
   quorum?: RunQuorum;
   /** Present when the deployment committed a bounty and the run pays operators. */
   credits?: RunInferenceCredits;
+  /** Present when the run claims a determinism class, with its witness. */
+  determinism?: DeterminismClaim;
 }
 
 /**
@@ -187,6 +192,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
     ...(input.provider === undefined ? {} : { provider: input.provider }),
     ...(input.quorum === undefined ? {} : { quorum: input.quorum }),
     ...(input.credits === undefined ? {} : { credits: input.credits }),
+    ...(input.determinism === undefined ? {} : { determinism: input.determinism }),
     api: input.api,
     request: { body: input.request, digest: request.digest, bytes: request.bytes },
     response: {
@@ -522,6 +528,7 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     const committedDepth = spec.teeChainDepth ?? 0;
     const committedStages = spec.teeBootStages ?? [];
     const committedMeasurements = Object.entries(spec.teeStageMeasurements ?? {});
+    const committedRootEpoch = spec.teeRootEpoch ?? 0;
     // Freshness: one run, one nonce — every agreeing provider must bind the SAME
     // challenge, so a replayed attestation (made for another nonce) fails.
     const requireFreshness = spec.teeFreshness === "challenge";
@@ -593,7 +600,7 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         ? true
         : agreeing.every(
             (entry) =>
-              verifyProviderChain(entry.attestation) === committedVendor &&
+              verifyProviderRootChain(entry.attestation, committedVendor, committedRootEpoch) !== null &&
               providerChainDepth(entry.attestation) >= committedDepth &&
               committedStages.every((stage) => providerBootStages(entry.attestation).includes(stage)) &&
               committedMeasurements.every(
@@ -784,6 +791,15 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   // envelope) is refused, so a reader can always re-derive the bytes.
   if (spec.requireReplay === true) {
     check(checks, failures, "replay.required", replayable);
+  }
+
+  // A determinism class is a claim about the ENGINE'S ARITHMETIC, and a single
+  // run cannot prove it. When the challenge commits "deterministic-replay", the
+  // run must carry an independently recorded witness whose decode trace matches
+  // this run token-for-token, signed by a provider outside the run's own set.
+  const determinism = verifyDeterminismClaim(body, spec);
+  if (spec.determinism !== undefined || body.determinism !== undefined) {
+    check(checks, failures, "determinism.replayWitness", determinism.ok);
   }
 
   const correct = failures.length === 0;

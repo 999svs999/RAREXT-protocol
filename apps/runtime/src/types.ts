@@ -182,6 +182,46 @@ export interface ReplayEnvelope {
 }
 
 /**
+ * What an engine claims about its arithmetic. `deterministic-replay` is the
+ * strong class: the deployment asserts that a second, independently recorded
+ * run reproduces the decode trace token-for-token. The protocol cannot prove
+ * the arithmetic from one run, so the claim is backed by evidence: a witness run
+ * the provider signed. A deployment that does not commit a class makes no claim.
+ */
+export type DeterminismClass = "deterministic-replay";
+
+/**
+ * An independently recorded second run, carrying its own provider signature.
+ * It is not the recorder's word: the provider that produced it signed the
+ * request and the response (including the decode trace), so a gateway cannot
+ * fabricate a matching witness for a run the engine would not reproduce.
+ */
+export interface ReplayWitness {
+  kind: "rarext.replay-witness.v1";
+  /** The independent provider that produced the second run. */
+  provider: {
+    endpoint: string;
+    /** The signing provider's key id (the operator), when known. */
+    operator?: string | null;
+    machine?: string | null;
+  };
+  /** The exact request the witness sent; it must equal the run's request. */
+  request: unknown;
+  /** The exact response the independent provider returned. */
+  response: unknown;
+  /** The provider's own signed receipt over that request and response. */
+  receipt: unknown;
+  recordedAt: string;
+}
+
+/** A run's determinism claim: the class plus the witness that backs it. */
+export interface DeterminismClaim {
+  kind: "rarext.determinism.v1";
+  class: DeterminismClass;
+  witness: ReplayWitness;
+}
+
+/**
  * The model bytes a web4 run was produced from. Absent on local/remote runs,
  * whose weights the operator trusts the engine to name.
  */
@@ -302,6 +342,13 @@ export interface ModelRunBody {
   provider?: RunQuorumProvider;
   /** Present when the deployment required agreement across providers. */
   quorum?: RunQuorum;
+  /**
+   * Present when the run claims a determinism class. A deterministic-replay run
+   * carries an independently recorded witness whose decode trace matches this
+   * run token-for-token; the verifier checks the witness's provider signature,
+   * the shared request, and the trace, so the claim is evidence, not a label.
+   */
+  determinism?: DeterminismClaim;
   /** Present when the deployment committed a bounty and a quorum agreed. */
   credits?: RunInferenceCredits;
   /** The upstream API shape the transcript records. Absent on older records. */
@@ -386,6 +433,14 @@ export interface ModelRunSpec {
    */
   teeVendor?: string;
   /**
+   * The root-rotation epoch the deployment has learned. When committed, every
+   * agreeing provider's quote must present an append-only root chain from
+   * `teeVendor` reaching at least this epoch, terminating at the CURRENT root,
+   * and never at a revoked one. A quote whose chain stops at a retired root is
+   * refused as stale. Committed only with `teeVendor`.
+   */
+  teeRootEpoch?: number;
+  /**
    * The minimum certificate-chain depth a hardware-rooted deployment requires.
    * A bare leaf is depth 0; a leaf certified by a platform key certified by the
    * vendor root is depth 2. Committed only with `teeVendor`.
@@ -448,6 +503,15 @@ export interface ModelRunSpec {
    * a valid replay envelope. Committed when `labels.replay` is "required".
    */
   requireReplay?: boolean;
+  /**
+   * The determinism class the deployment commits. "deterministic-replay" is the
+   * strong claim: every run must carry an independently recorded witness whose
+   * decode trace (native token ids, or an engine token+logprob judgment) matches
+   * the run token-for-token. The witness must be signed by an independent
+   * provider, share the exact request, and never come from the run's own
+   * providers. Committed only with `requireTrace` and `requireReplay`.
+   */
+  determinism?: DeterminismClass;
 }
 
 export interface ProviderCardVerification {

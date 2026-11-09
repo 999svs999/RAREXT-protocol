@@ -64,6 +64,8 @@ import {
   verifyProviderChain,
 } from "./model-bundle.ts";
 import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bundle.ts";
+import { verifyProviderRootChain } from "./root-chain.ts";
+import type { RootChain } from "./root-chain.ts";
 import { loadProviderBundle, startProvider } from "./provider.ts";
 import { challengeFor, challengeIdFor, challengesFile, RuntimePublisher } from "./publisher.ts";
 import { AgentSigner, RarextClient } from "../../../packages/agent-sdk/src/index.ts";
@@ -157,8 +159,10 @@ Common options:
   --engine-logprobs     ask the engine for token logprobs and record a decode judgment
   --tee-key-file <p>    the leaf/attestation key that signs a provider's machine quote
   --tee-cert-file <p>   certificates chaining the leaf key up to the trust anchor
+  --tee-root-chain-file <p> the append-only root rotation/revocation chain from the anchor
   --tee-vendor <keyId>  deploy: the trust-anchor key id a quote's chain must terminate at
   --tee-chain-depth <n> deploy: minimum chain depth (2 = leaf -> platform -> vendor root)
+  --tee-root-epoch <n>  deploy: the root-rotation epoch a quote's chain must reach
   --tee-boot-stages <list> deploy: measured-boot stages the chain must name (e.g. firmware,os,app)
   --tee-boot-measurements <list> deploy: per-stage measurements (e.g. firmware=<hex>,os=<hex>,app=<hex>)
   --tee-freshness <k>   deploy: "challenge" — require a fresh nonce-bound attestation per run
@@ -267,6 +271,18 @@ function readTeeChain(path: string): ProviderCertificate[] {
     return (value as { chain: ProviderCertificate[] }).chain;
   }
   throw new Error(`tee certificate chain at ${path} must be an array or { "chain": [ ... ] }`);
+}
+
+/**
+ * Read a root rotation/revocation chain: `{ kind, anchor, rotations: [...] }`,
+ * or the bare rotations array with the anchor supplied by the deployment.
+ */
+function readTeeRootChain(path: string): RootChain {
+  const value = readJson(path) as unknown;
+  if (value !== null && typeof value === "object" && Array.isArray((value as { rotations?: unknown }).rotations)) {
+    return value as RootChain;
+  }
+  throw new Error(`tee root chain at ${path} must be { "kind", "anchor", "rotations": [ ... ] }`);
 }
 
 function readSealKeyFile(path: string): Buffer {
@@ -747,6 +763,9 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(flag(values, "tee-cert-file") === undefined
       ? {}
       : { teeChain: readTeeChain(resolve(flag(values, "tee-cert-file")!)) }),
+    ...(flag(values, "tee-root-chain-file") === undefined
+      ? {}
+      : { teeRootChain: readTeeRootChain(resolve(flag(values, "tee-root-chain-file")!)) }),
     ...(flag(values, "enclave-key-file") === undefined
       ? {}
       : { enclaveKey: readFileSync(resolve(flag(values, "enclave-key-file")!), "utf8") }),
@@ -1105,6 +1124,28 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     teeFreshness = "challenge";
   }
 
+  // Root rotation: every adopted provider must present a root chain from the
+  // pinned anchor that reaches at least this epoch, terminates at the current
+  // root, and names no revoked root. A quote rooted at a retired root is stale.
+  const teeRootEpochFlag = flag(values, "tee-root-epoch");
+  let teeRootEpoch: number | null = null;
+  if (teeRootEpochFlag !== undefined) {
+    const epoch = Number(teeRootEpochFlag);
+    if (!Number.isSafeInteger(epoch) || epoch < 1) {
+      throw new Error("--tee-root-epoch must be a positive integer");
+    }
+    if (teeVendor === null) throw new Error("--tee-root-epoch requires --tee-vendor");
+    for (const entry of cards) {
+      const rooted = verifyProviderRootChain(entry.independence, teeVendor, epoch);
+      if (rooted === null) {
+        throw new Error(
+          `--tee-root-epoch ${epoch} is not reachable from every provider's root chain`,
+        );
+      }
+    }
+    teeRootEpoch = epoch;
+  }
+
   // The enclave code the deployment approves: every adopted provider must attest
   // it, so an enclave running other code is refused.
   const teeCodeFlag = flag(values, "tee-code");
@@ -1221,6 +1262,7 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
                 .join(","),
             }),
         ...(teeFreshness === null ? {} : { teeFreshness }),
+        ...(teeRootEpoch === null ? {} : { teeRootEpoch: String(teeRootEpoch) }),
         ...(teeCode === null ? {} : { teeCodeMeasurement: teeCode }),
         ...(teeSignedImage === null ? {} : { teeSignedImage }),
         ...(teeSignedImageDepth === null
@@ -2178,8 +2220,10 @@ async function main(): Promise<number> {
       "engine-logprobs": { type: "boolean" },
       "tee-key-file": { type: "string" },
       "tee-cert-file": { type: "string" },
+      "tee-root-chain-file": { type: "string" },
       "tee-vendor": { type: "string" },
       "tee-chain-depth": { type: "string" },
+      "tee-root-epoch": { type: "string" },
       "tee-boot-stages": { type: "string" },
       "tee-boot-measurements": { type: "string" },
       "tee-freshness": { type: "string" },

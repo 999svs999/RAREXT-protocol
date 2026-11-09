@@ -606,6 +606,15 @@ export function validateDeployment(value: unknown): string[] {
         errors.push("manifest.labels.teeFreshness requires labels.teeVendor");
       }
     }
+    if (labels.teeRootEpoch !== undefined) {
+      const epoch = Number(labels.teeRootEpoch);
+      if (!Number.isSafeInteger(epoch) || epoch < 1) {
+        errors.push("manifest.labels.teeRootEpoch must be a positive integer");
+      }
+      if (labels.teeVendor === undefined) {
+        errors.push("manifest.labels.teeRootEpoch requires labels.teeVendor");
+      }
+    }
     if (labels.teeCodeMeasurement !== undefined) {
       if (typeof labels.teeCodeMeasurement !== "string" || !/^[0-9a-f]{64}$/.test(labels.teeCodeMeasurement)) {
         errors.push("manifest.labels.teeCodeMeasurement must be a sha256 hex digest");
@@ -636,6 +645,16 @@ export function validateDeployment(value: unknown): string[] {
     }
     if (labels.replay !== undefined && labels.replay !== "required") {
       errors.push('manifest.labels.replay must be "required" when present');
+    }
+    if (labels.determinism !== undefined) {
+      if (labels.determinism !== "deterministic-replay") {
+        errors.push('manifest.labels.determinism must be "deterministic-replay" when present');
+      }
+      if (labels.trace !== "required" || labels.replay !== "required") {
+        errors.push(
+          "manifest.labels.determinism requires labels.trace and labels.replay to be \"required\"",
+        );
+      }
     }
   }
 

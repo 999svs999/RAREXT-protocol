@@ -13,6 +13,7 @@ import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
 import type { ImageManifest } from "./image-manifest.ts";
+import type { RootChain } from "./root-chain.ts";
 import type { SignatureSuite } from "../../../packages/core/src/types.ts";
 import {
   issueProviderCertificate,
@@ -137,6 +138,13 @@ export interface ProviderQuote {
    * last certificate's issuer is the root; a deployment pins the root's key id.
    */
   chain?: ProviderCertificate[];
+  /**
+   * An append-only root rotation/revocation chain from the pinned anchor to the
+   * root that issued `chain`. A verifier follows it to learn the CURRENT root
+   * and which roots are revoked, so a quote rooted at a retired root is refused
+   * as stale instead of being silently accepted under a static anchor.
+   */
+  rootChain?: RootChain;
 }
 
 export interface ProviderIndependence {

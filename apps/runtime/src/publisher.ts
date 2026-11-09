@@ -187,6 +187,20 @@ function requireReplaySpec(labels: Record<string, string> | undefined): true | u
   return labels?.replay === "required" ? true : undefined;
 }
 
+/**
+ * The determinism class a deployment commits. A class only means something with
+ * the trace and replay requirements it is built on: without a committed trace
+ * there is nothing to compare token-for-token, and without a replay envelope the
+ * run is not reproducible. A half-committed class is treated as absent.
+ */
+function determinismSpec(
+  labels: Record<string, string> | undefined,
+): "deterministic-replay" | undefined {
+  if (labels?.determinism !== "deterministic-replay") return undefined;
+  if (labels.trace !== "required" || labels.replay !== "required") return undefined;
+  return "deterministic-replay";
+}
+
 /** The measurement of the enclave's own code a deployment approves. */
 function teeCodeMeasurementSpec(labels: Record<string, string> | undefined): string | undefined {
   const raw = labels?.teeCodeMeasurement;
@@ -200,6 +214,18 @@ function teeFreshnessSpec(labels: Record<string, string> | undefined): "challeng
   if (labels?.teeFreshness !== "challenge") return undefined;
   if (teeVendorSpec(labels) === undefined) return undefined;
   return "challenge";
+}
+
+/**
+ * The root-rotation epoch a deployment has learned. When committed, every quote
+ * must present a root chain from `teeVendor` that reaches at least this epoch and
+ * terminates at the CURRENT root. Only meaningful with a pinned vendor root.
+ */
+function teeRootEpochSpec(labels: Record<string, string> | undefined): number | undefined {
+  if (labels?.teeRootEpoch === undefined) return undefined;
+  if (teeVendorSpec(labels) === undefined) return undefined;
+  const value = Number(labels.teeRootEpoch);
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
 }
 
 function teeStageMeasurementsSpec(
@@ -288,6 +314,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(teeFreshnessSpec(manifest.labels) === undefined
         ? {}
         : { teeFreshness: teeFreshnessSpec(manifest.labels) }),
+      ...(teeRootEpochSpec(manifest.labels) === undefined
+        ? {}
+        : { teeRootEpoch: teeRootEpochSpec(manifest.labels) }),
       ...(teeCodeMeasurementSpec(manifest.labels) === undefined
         ? {}
         : { teeCodeMeasurement: teeCodeMeasurementSpec(manifest.labels) }),
@@ -303,6 +332,9 @@ export function challengeFor(manifest: DeploymentCommitment) {
       ...(requireReplaySpec(manifest.labels) === undefined
         ? {}
         : { requireReplay: requireReplaySpec(manifest.labels) }),
+      ...(determinismSpec(manifest.labels) === undefined
+        ? {}
+        : { determinism: determinismSpec(manifest.labels) }),
     },
     semanticsId: `ai-model-run/${challengeIdFor(manifest)}`,
     semanticsVersion: 1,

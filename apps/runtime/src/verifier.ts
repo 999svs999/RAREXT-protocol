@@ -105,6 +105,9 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.teeFreshness === undefined
       ? {}
       : { teeFreshness: teeFreshnessFromSpec(value.teeFreshness, value.teeVendor) }),
+    ...(value.teeRootEpoch === undefined
+      ? {}
+      : { teeRootEpoch: teeRootEpochFromSpec(value.teeRootEpoch, value.teeVendor) }),
     ...(value.teeCodeMeasurement === undefined
       ? {}
       : { teeCodeMeasurement: teeCodeMeasurementFromSpec(value.teeCodeMeasurement, value.teeVendor) }),
@@ -120,7 +123,37 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     ...(value.requireReplay === undefined
       ? {}
       : { requireReplay: requireReplayFromSpec(value.requireReplay) }),
+    ...(value.determinism === undefined
+      ? {}
+      : {
+          determinism: determinismFromSpec(
+            value.determinism,
+            value.requireTrace,
+            value.requireReplay,
+          ),
+        }),
   };
+}
+
+/**
+ * A determinism class is only meaningful with the trace and replay requirements
+ * it is built on: there is nothing to compare token-for-token without a trace,
+ * and nothing to reproduce without a replay envelope.
+ */
+function determinismFromSpec(
+  determinism: unknown,
+  requireTrace: unknown,
+  requireReplay: unknown,
+): "deterministic-replay" {
+  if (determinism !== "deterministic-replay") {
+    throw new Error('challenge.spec.determinism must be "deterministic-replay" when present');
+  }
+  if (requireTrace !== true || requireReplay !== true) {
+    throw new Error(
+      "challenge.spec.determinism requires challenge.spec.requireTrace and challenge.spec.requireReplay",
+    );
+  }
+  return "deterministic-replay";
 }
 
 /** A required replay envelope is a boolean the challenge either commits or not. */
@@ -171,6 +204,17 @@ function teeFreshnessFromSpec(freshness: unknown, teeVendor: unknown): "challeng
     throw new Error("challenge.spec.teeFreshness requires challenge.spec.teeVendor");
   }
   return "challenge";
+}
+
+/** A root-rotation epoch only means something with a pinned anchor to rotate from. */
+function teeRootEpochFromSpec(epoch: unknown, teeVendor: unknown): number {
+  if (!Number.isSafeInteger(epoch) || (epoch as number) < 1) {
+    throw new Error("challenge.spec.teeRootEpoch must be a positive integer when present");
+  }
+  if (typeof teeVendor !== "string" || !/^[0-9a-f]{64}$/.test(teeVendor)) {
+    throw new Error("challenge.spec.teeRootEpoch requires challenge.spec.teeVendor");
+  }
+  return epoch as number;
 }
 
 /** Approved stage measurements only mean something with named stages to pin. */

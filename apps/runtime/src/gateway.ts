@@ -32,6 +32,7 @@ import {
   verifyProviderChain,
 } from "./model-bundle.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
+import { verifyProviderRootChain } from "./root-chain.ts";
 import { comparableCompletion } from "./completion.ts";
 import type {
   ApiShape,
@@ -246,6 +247,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (allowedVendor === null) return null;
     const raw = deployment.labels?.teeSignedImage;
     return typeof raw === "string" && /^[0-9a-f]{64}$/.test(raw) ? raw : null;
+  })();
+  // The root-rotation epoch the deployment has learned. A quote whose root chain
+  // does not reach this epoch is stale.
+  const allowedRootEpoch = (() => {
+    if (allowedVendor === null) return 0;
+    const value = Number(deployment.labels?.teeRootEpoch);
+    return Number.isSafeInteger(value) && value >= 1 ? value : 0;
   })();
   // The minimum chain depth the image manifest must present, when pinned.
   const allowedSignedImageDepth = (() => {
@@ -640,7 +648,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       allowedVendor === null ||
       winnerAnswers.every(
         (answer) =>
-          verifyProviderChain(answer.attestation) === allowedVendor &&
+          verifyProviderRootChain(answer.attestation, allowedVendor, allowedRootEpoch) !== null &&
           (challengeNonce === null || answer.attestation?.challenge === challengeNonce) &&
           providerChainDepth(answer.attestation) >= allowedChainDepth &&
           allowedBootStages.every((stage) => providerBootStages(answer.attestation).includes(stage)) &&
