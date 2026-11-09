@@ -248,6 +248,17 @@ export interface AppOptions {
    * another key, so a recorded movement is attributable rather than taken on faith.
    */
   settlementKey?: string | null;
+  /**
+   * The external ledger's key id. When set, a settlement receipt must also carry
+   * an inclusion proof: the movement is a leaf in a checkpoint signed by this key.
+   * The node then refuses a settlement the external ledger did not record.
+   */
+  settlementLedgerKey?: string | null;
+  /**
+   * The minimum external-ledger checkpoint height accepted. Refuses a stale
+   * checkpoint replayed for a new redemption. Only meaningful with a pinned key.
+   */
+  settlementLedgerMinHeight?: number;
   operators?: VerifierOperatorRegistry;
   semantics?: SemanticsRegistry;
   chains?: ChainRegistry;
@@ -1090,6 +1101,17 @@ export function createApp(options: AppOptions = {}): AppServer {
     options.settlementKey !== undefined
       ? options.settlementKey
       : (process.env.RAREXT_SETTLEMENT_KEY || null);
+  // The external ledger's key the node pins: a settlement must then be INCLUDED
+  // in a signed checkpoint the ledger issued, at a fresh-enough height.
+  const settlementLedgerKey: string | null =
+    options.settlementLedgerKey !== undefined
+      ? options.settlementLedgerKey
+      : (process.env.RAREXT_SETTLEMENT_LEDGER_KEY || null);
+  const settlementLedgerMinHeight: number = (() => {
+    const raw =
+      options.settlementLedgerMinHeight ?? Number(process.env.RAREXT_SETTLEMENT_LEDGER_MIN_HEIGHT ?? "0");
+    return Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
+  })();
   const publicDir = options.publicDir ?? DEFAULT_PUBLIC_DIR;
   const registry = options.registry ?? createDefaultRegistry(options.fetch);
   const baseChallenges = options.challenges ?? createChallengeRegistry();
@@ -2693,11 +2715,19 @@ export function createApp(options: AppOptions = {}): AppServer {
                 result.publicKey === undefined || result.publicKey === null
                   ? null
                   : keyId(result.publicKey as never),
+              inclusion: result.inclusion ?? null,
               at: new Date().toISOString(),
             };
-            if (settlementKey !== null && !verifySettlementReceipt(candidate, settlementKey)) {
+            if (
+              (settlementKey !== null || settlementLedgerKey !== null) &&
+              !verifySettlementReceipt(candidate, settlementKey, {
+                ledgerKeyId: settlementLedgerKey,
+                minHeight: settlementLedgerMinHeight,
+              })
+            ) {
               throw new Error(
-                "the settlement receipt is unsigned or signed by a key other than the pinned adapter key",
+                "the settlement receipt is unsigned, signed by another key, or not included in the " +
+                  "pinned external ledger's signed state",
               );
             }
             settlement = candidate;

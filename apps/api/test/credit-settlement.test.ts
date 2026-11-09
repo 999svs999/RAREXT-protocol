@@ -11,7 +11,15 @@ import type { CreditRecordFields, RedemptionInstruction } from "../../../package
 import { AgentSigner, generateAgentKeypair } from "../../../packages/agent-sdk/src/index.ts";
 import { RarextStore } from "../src/store.ts";
 import type { SettlementAdapter, SettlementReceipt, SettlementRequest } from "../src/settlement.ts";
-import { settlementPayload, verifySettlementReceipt } from "../src/settlement.ts";
+import {
+  buildSettlementInclusion,
+  settlementBinding,
+  settlementCheckpointPayload,
+  settlementLeaf,
+  settlementPayload,
+  verifySettlementInclusion,
+  verifySettlementReceipt,
+} from "../src/settlement.ts";
 import { post, start, stop } from "./helpers.ts";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -209,7 +217,7 @@ test("a pinned settlement key refuses an unsigned adapter and removes no credits
     assert.equal(response.status, 502);
     assert.match(
       ((await response.json()) as { error: string }).error,
-      /unsigned or signed by a key other than the pinned adapter key/,
+      /unsigned, signed by another key, or not included/,
     );
 
     // The ledger did not lose value the outside world cannot attribute.
@@ -232,6 +240,165 @@ test("without an adapter a redemption is ledger-only, recorded with no settlemen
     assert.equal(response.status, 201);
     assert.equal(body.settlement, null);
     assert.equal(body.balance, 7);
+  } finally {
+    await stop(server);
+  }
+});
+
+test("a pinned external-ledger key verifies a settlement included in a signed checkpoint", async () => {
+  const adapterSigner = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const ledgerSigner = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const otherLeafA = settlementLeaf("a".repeat(64));
+  const otherLeafB = settlementLeaf("b".repeat(64));
+  let lastInclusion: SettlementReceipt["inclusion"] = null;
+
+  const adapter: SettlementAdapter = {
+    name: "included-chain",
+    async settle(request) {
+      const settlementId = `tx-${request.reference}`;
+      const detail = "confirmed";
+      const binding = settlementBinding(request, settlementId, detail);
+      // A two-leaf-plus path: the movement is proved against the whole state,
+      // not a tree of one.
+      const leaf = settlementLeaf(binding);
+      const inclusion = buildSettlementInclusion({
+        binding,
+        ledger: "external-ledger",
+        height: 9,
+        signer: ledgerSigner,
+        leaves: [otherLeafA, leaf, otherLeafB],
+      });
+      lastInclusion = inclusion;
+      return {
+        settlementId,
+        detail,
+        signature: adapterSigner.sign(settlementPayload(request, settlementId, detail)),
+        publicKey: adapterSigner.publicKey,
+        suite: adapterSigner.suite,
+        inclusion,
+      };
+    },
+  };
+  const store = new RarextStore();
+  const { server, base } = await start(store, {
+    settlement: adapter,
+    settlementKey: adapterSigner.keyId,
+    settlementLedgerKey: ledgerSigner.keyId,
+    settlementLedgerMinHeight: 3,
+  });
+  try {
+    const alice = registerKey(store, "alice");
+    store.addCredit(credit(alice.keyId, 12) as never);
+
+    const redeem = instruction(alice.keyId, 5, "chain:tx:0xincluded");
+    const response = await post(base, "/v1/work/redeem", { ...redeem, signature: alice.sign(redeem) });
+    const body = (await response.json()) as { settlement: SettlementReceipt; balance: number };
+    assert.equal(response.status, 201);
+    assert.equal(body.balance, 7);
+    assert.ok(body.settlement.inclusion, "the receipt carries an inclusion proof");
+    assert.ok(body.settlement.inclusion!.path.length > 0, "the proof is against a multi-leaf tree");
+    assert.equal(body.settlement.inclusion!.checkpoint.height, 9);
+
+    // The receipt verifies only with a proof into the pinned ledger's state.
+    assert.equal(
+      verifySettlementInclusion(body.settlement.binding, body.settlement.inclusion, ledgerSigner.keyId, 3),
+      true,
+    );
+    assert.equal(
+      verifySettlementReceipt(body.settlement, adapterSigner.keyId, {
+        ledgerKeyId: ledgerSigner.keyId,
+        minHeight: 3,
+      }),
+      true,
+    );
+
+    // A stale checkpoint is refused: the height must be at least the pin.
+    assert.equal(
+      verifySettlementInclusion(
+        body.settlement.binding,
+        { ...body.settlement.inclusion!, checkpoint: { ...body.settlement.inclusion!.checkpoint, height: 1 } },
+        ledgerSigner.keyId,
+        3,
+      ),
+      false,
+    );
+    // A checkpoint for a different state (root) is refused by the Merkle path.
+    assert.equal(
+      verifySettlementInclusion(
+        body.settlement.binding,
+        { ...body.settlement.inclusion!, checkpoint: { ...body.settlement.inclusion!.checkpoint, root: "f".repeat(64) } },
+        ledgerSigner.keyId,
+        3,
+      ),
+      false,
+    );
+    // A checkpoint signed by another key is not the pinned ledger's.
+    const impostor = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+    assert.equal(
+      verifySettlementInclusion(
+        body.settlement.binding,
+        { ...body.settlement.inclusion!, checkpoint: { ...body.settlement.inclusion!.checkpoint, publicKey: impostor.publicKey, signature: impostor.sign(settlementCheckpointPayload(body.settlement.inclusion!.checkpoint)) } },
+        ledgerSigner.keyId,
+        3,
+      ),
+      false,
+    );
+    // A proof for a DIFFERENT settlement does not prove this one.
+    assert.equal(
+      verifySettlementInclusion("0".repeat(64), body.settlement.inclusion, ledgerSigner.keyId, 3),
+      false,
+    );
+    // A receipt with no inclusion cannot satisfy a pinned ledger key.
+    assert.equal(
+      verifySettlementReceipt({ ...body.settlement, inclusion: null }, adapterSigner.keyId, {
+        ledgerKeyId: ledgerSigner.keyId,
+      }),
+      false,
+    );
+  } finally {
+    await stop(server);
+  }
+});
+
+test("a pinned external-ledger key refuses a settlement the ledger did not include", async () => {
+  const adapterSigner = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const ledgerSigner = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
+  const adapter: SettlementAdapter = {
+    name: "unrecorded-chain",
+    async settle(request) {
+      const settlementId = `tx-${request.reference}`;
+      const detail = "claimed";
+      return {
+        settlementId,
+        detail,
+        signature: adapterSigner.sign(settlementPayload(request, settlementId, detail)),
+        publicKey: adapterSigner.publicKey,
+        suite: adapterSigner.suite,
+        // The adapter claims the movement but the external ledger did not record it.
+      };
+    },
+  };
+  const store = new RarextStore();
+  const { server, base } = await start(store, {
+    settlement: adapter,
+    settlementKey: adapterSigner.keyId,
+    settlementLedgerKey: ledgerSigner.keyId,
+  });
+  try {
+    const alice = registerKey(store, "alice");
+    store.addCredit(credit(alice.keyId, 12) as never);
+
+    const redeem = instruction(alice.keyId, 5, "chain:tx:0xunrecorded");
+    const response = await post(base, "/v1/work/redeem", { ...redeem, signature: alice.sign(redeem) });
+    assert.equal(response.status, 502);
+    assert.match(
+      ((await response.json()) as { error: string }).error,
+      /not included in the pinned external ledger/,
+    );
+
+    // No credits were removed and no settlement was recorded.
+    assert.equal(store.listCredits().filter((entry) => entry.action === "redeem").length, 0);
+    assert.equal(store.listSettlements().length, 0);
   } finally {
     await stop(server);
   }

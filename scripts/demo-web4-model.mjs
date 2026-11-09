@@ -119,7 +119,10 @@ import {
 import { runtimeCodeMeasurement } from "../apps/runtime/src/code-measurement.ts";
 import { signImageManifest, verifyImageManifest } from "../apps/runtime/src/image-manifest.ts";
 import { attestationForReceipt } from "../apps/runtime/src/certificates.ts";
-import { verifySettlementReceipt } from "../apps/api/src/settlement.ts";
+import {
+  verifySettlementInclusion,
+  verifySettlementReceipt,
+} from "../apps/api/src/settlement.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../apps/runtime/src/transcript.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../apps/runtime/src/verifier.ts";
 import {
@@ -316,6 +319,17 @@ try {
     privateKey: settlementKeypair.privateKey,
     publicKey: settlementKeypair.publicKey,
   });
+  // The external ledger signs a checkpoint over its settlement state; the node
+  // pins that key and requires a Merkle inclusion proof, so a movement the ledger
+  // never recorded is refused rather than paid out against the adapter's word.
+  const ledgerKeypair = generateAgentKeypair("ecdsa-p256");
+  const ledgerSigner = new AgentSigner(ledgerKeypair.privateKey);
+  const ledgerKeyPath = join(state, "settlement-ledger-key.json");
+  writeJsonFile(ledgerKeyPath, {
+    privateKey: ledgerKeypair.privateKey,
+    publicKey: ledgerKeypair.publicKey,
+  });
+  const ledgerHeight = 7;
   // A bare-leaf manifest: a real signature, but no chain to the hardware root.
   const bareManifest = signImageManifest(
     { image: runtimeCodeMeasurement(), runtime: "rarext-runtime" },
@@ -607,6 +621,14 @@ try {
     RAREXT_SETTLEMENT: "echo",
     RAREXT_SETTLEMENT_KEY_FILE: settlementKeyPath,
     RAREXT_SETTLEMENT_KEY: settlementSigner.keyId,
+    // The echo adapter also proves each settlement is included in the external
+    // ledger's signed checkpoint; the node pins the ledger key and a minimum
+    // height, so a stale checkpoint or an unrecorded movement is refused.
+    RAREXT_SETTLEMENT_LEDGER_KEY_FILE: ledgerKeyPath,
+    RAREXT_SETTLEMENT_LEDGER_KEY: ledgerSigner.keyId,
+    RAREXT_SETTLEMENT_LEDGER: "echo-chain",
+    RAREXT_SETTLEMENT_LEDGER_HEIGHT: String(ledgerHeight),
+    RAREXT_SETTLEMENT_LEDGER_MIN_HEIGHT: String(ledgerHeight),
   });
   const baseUrl = await api.ready;
   const registry = new RarextClient({ baseUrl });
@@ -1005,7 +1027,9 @@ try {
           "--registry",
           baseUrl,
           "--state",
-          join(state, "witness-provider"),
+          // Outside the caller's state dir, so a cached engine file never makes
+          // the later "the caller keeps no weights" phase see a model.
+          providerBState,
           "--port",
           String(witnessPort),
           "--handle",
@@ -1579,13 +1603,51 @@ try {
     const settlements = await getJson(
       `${baseUrl}/v1/work/settlement?keyId=${encodeURIComponent(settledRecipientKeyId)}`,
     );
+    const inclusionOk =
+      settlement?.inclusion?.checkpoint?.ledger === "echo-chain" &&
+      settlement.inclusion.checkpoint.height === ledgerHeight &&
+      settlement.inclusion.checkpoint.publicKey != null &&
+      verifySettlementInclusion(
+        settlement.binding,
+        settlement.inclusion,
+        ledgerSigner.keyId,
+        ledgerHeight,
+      ) === true &&
+      // A stale checkpoint (height below the pin) is refused.
+      verifySettlementInclusion(
+        settlement.binding,
+        {
+          ...settlement.inclusion,
+          checkpoint: { ...settlement.inclusion.checkpoint, height: ledgerHeight - 1 },
+        },
+        ledgerSigner.keyId,
+        ledgerHeight,
+      ) === false &&
+      // A checkpoint for a different state is refused by the Merkle path.
+      verifySettlementInclusion(
+        settlement.binding,
+        {
+          ...settlement.inclusion,
+          checkpoint: { ...settlement.inclusion.checkpoint, root: "f".repeat(64) },
+        },
+        ledgerSigner.keyId,
+        ledgerHeight,
+      ) === false;
     const settlementOk =
       settlement?.adapter === "echo" &&
       settlement.settlementId === `echo:${reference}` &&
       settlement.reference === reference &&
       settlement.amount === amount &&
       settlement.signer === settlementSigner.keyId &&
-      verifySettlementReceipt(settlement, settlementSigner.keyId) === true &&
+      verifySettlementReceipt(settlement, settlementSigner.keyId, {
+        ledgerKeyId: ledgerSigner.keyId,
+        minHeight: ledgerHeight,
+      }) === true &&
+      // The movement must be included in the pinned external ledger's state.
+      verifySettlementReceipt({ ...settlement, inclusion: null }, settlementSigner.keyId, {
+        ledgerKeyId: ledgerSigner.keyId,
+      }) === false &&
+      inclusionOk &&
       // Editing the amount breaks the binding and the signature with it.
       verifySettlementReceipt({ ...settlement, amount: amount + 1 }, settlementSigner.keyId) === false &&
       settlements?.settlements?.some((entry) => entry.settlementId === `echo:${reference}`) === true;
@@ -1601,7 +1663,10 @@ try {
       `redeemed ${amount} credit(s) against ${reference.slice(0, 22)}… (net ${after.credits.net}, ` +
       `ledger supply ${redemption.supply}); settled via the ${String(settlement?.adapter)} adapter ` +
       `(${String(settlement?.settlementId).slice(0, 24)}…), signed by the pinned adapter key ` +
-      `${String(settlement?.signer).slice(0, 10)}… and bound to the exact redemption (a tampered amount was refused); ` +
+      `${String(settlement?.signer).slice(0, 10)}… and included in the external ledger's signed checkpoint ` +
+      `(${String(settlement?.inclusion?.checkpoint?.ledger)} at height ${String(settlement?.inclusion?.checkpoint?.height)}, ` +
+      `proved against ${String(settlement?.inclusion?.checkpoint?.root).slice(0, 12)}…; a stale checkpoint, a different ` +
+      `state root, an unrecorded movement, and a tampered amount were all refused); ` +
       `proof ${String(proofOk)}; a second redemption was refused (${refused.status})`;
   } catch (error) {
     redeemOk = false;

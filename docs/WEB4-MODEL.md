@@ -799,6 +799,30 @@ one signed by another key, is refused exactly like a failed adapter: `502`, no
 credits removed, no settlement recorded. `RAREXT_SETTLEMENT_KEY_FILE` gives the
 echo adapter a signing key so a real chain or escrow can be wired the same way.
 
+### Inclusion in the external ledger's signed state
+
+A signed receipt says WHO claimed the movement; it does not say the external ledger
+ever recorded it. So a node can pin the external ledger's key and require an
+**inclusion proof**. The adapter returns an `inclusion` alongside its signature: the
+settlement's leaf (`settlementLeaf(binding)`) with a Merkle path into a
+`rarext.settlement-checkpoint.v1` — the ledger's state root at a height, signed by
+the ledger's key. The node:
+
+- recomputes the leaf from the receipt's own `binding`;
+- verifies the Merkle path reaches the checkpoint's `root` (`verifyProof`);
+- verifies the checkpoint signature and, when pinned, that its signer is the
+  external ledger's key (`RAREXT_SETTLEMENT_LEDGER_KEY` / `AppOptions.settlementLedgerKey`);
+- refuses a checkpoint **below** `RAREXT_SETTLEMENT_LEDGER_MIN_HEIGHT`, so an old
+  but still-valid checkpoint cannot be replayed for a new redemption.
+
+With a ledger key pinned, a settlement the ledger did not record — no inclusion, a
+proof for another movement, a forked root, a stale height, or a checkpoint signed
+by another key — is refused exactly like a failed adapter: `502`, no credits
+removed, nothing recorded. `RAREXT_SETTLEMENT_LEDGER_KEY_FILE`,
+`RAREXT_SETTLEMENT_LEDGER`, and `RAREXT_SETTLEMENT_LEDGER_HEIGHT` let the echo
+adapter emit a real (single-leaf) checkpoint so a chain or escrow can be wired the
+same way.
+
 `GET /v1/work/settlement?keyId=…` lists the settlement receipts the node recorded,
 so a redeemer can prove its redemption was settled against the reference it named.
 An adapter is visible from the environment (`RAREXT_SETTLEMENT=echo` records the
@@ -809,9 +833,12 @@ recorded with `settlement: null`.
 
 The honest boundary: the protocol never moves real cash; it calls an adapter once,
 atomically, and binds the adapter's answer to the ledger fact. A pinned adapter key
-makes the recorded movement attributable — a receipt cannot be invented by a node
-that does not hold the adapter's key — but it still does not prove the external
-ledger actually paid; the reference is the receipt.
+makes the recorded movement attributable, and a pinned ledger key plus an inclusion
+proof makes it *recorded in a signed external state* — the movement cannot be
+invented by a node that holds neither key, and cannot be replayed from a stale or
+forked checkpoint. What it still does not prove is that value actually left the
+system, or that the external ledger is honest: the checkpoint signature is the
+receipt of a state, and the ledger's key is itself an anchor.
 
 ## The verification chain
 
@@ -1121,13 +1148,18 @@ why a large file is sharded rather than sent as one object.
   and a replay of it is refused when the judgment diverges. A deployment can even
   REQUIRE a trace (`--require-trace`) AND a replay envelope (`--require-replay`):
   then a run whose response carries no trace, or a sampled request with no envelope,
-  is refused by the gateway and fails verification. What is still not proven is that
-  the engine's arithmetic IS the model's — an arbitrary GGUF is not reproduced
-  bit-for-bit by the protocol alone, and an engine that exposes neither tokens nor
-  logprobs can only record a trace if `--engine-logprobs` is set and the engine
-  honors it. For such an engine the protocol pins the engine (`engine.fingerprint`)
-  and refuses a replay whose provider runs a different engine: a checked
-  re-execution under a named engine, not a proof of determinism.
+  is refused by the gateway and fails verification. A deployment can go one step
+  further and commit a determinism class (`--determinism deterministic-replay`):
+  every run must then carry an independently recorded witness — a second run from a
+  provider outside the run's own set — whose decode trace matches token-for-token,
+  signed by that provider, so the claim rests on a second signature rather than one.
+  What is still not proven is that the engine's arithmetic IS the model's — an
+  arbitrary GGUF is not reproduced bit-for-bit by the protocol alone, two co-located
+  witness providers are two keys and not two machines, and an engine that exposes
+  neither tokens nor logprobs can only record a trace if `--engine-logprobs` is set
+  and the engine honors it. For such an engine the protocol pins the engine
+  (`engine.fingerprint`) and refuses a replay whose provider runs a different
+  engine: a checked re-execution under a named engine, not a proof of determinism.
 - **Credits move on the ledger, and can leave it against an external
   reference — but the protocol does not move real value.** A committed bounty is
   recorded and settled in RAREXT's credit ledger; the run commits who was paid, the
@@ -1136,13 +1168,15 @@ why a large file is sharded rather than sent as one object.
   (`/v1/work/transfer`, a zero-sum pair) or take them out with a signed redemption
   (`/v1/work/redeem`, a debit with no credit that lowers the ledger supply),
   refused if it would overdraw the payer and proved against the same whole-ledger
-  root. The settlement half is attributable: a pinned adapter key signs the exact
-  settlement (`rarext.settlement-receipt.v1` over redemption id, payer, amount,
-  reference, settlement id, and detail), the node verifies it before removing
-  credits, and an unsigned or mis-signed receipt is refused atomically. What no
-  protocol can do is hand over cash or prove the external ledger paid: the
-  signature says WHO claimed the movement, and the reference is the receipt, not
-  the funds.
+  root. The settlement half is attributable and recorded: a pinned adapter key
+  signs the exact settlement (`rarext.settlement-receipt.v1` over redemption id,
+  payer, amount, reference, settlement id, and detail), a pinned external-ledger
+  key plus a Merkle inclusion proof binds it into a signed checkpoint at a fresh
+  height, the node verifies both before removing credits, and an unsigned,
+  mis-signed, unrecorded, stale, or forked receipt is refused atomically. What no
+  protocol can do is hand over cash or prove the external ledger is honest: an
+  inclusion proof shows the movement is in a signed STATE, and the ledger's key is
+  the receipt of that state, not the funds.
 - **The engine is the provider's.** With `execution.kind: "engine"` the provider
   must have Ollama (today) and reproduces the model locally from the verified
   file. The weights still come from RAREXT; the compute is the provider's.
