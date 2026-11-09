@@ -317,13 +317,14 @@ claim agreement it did not get, and a repeated endpoint cannot count twice.
 
 The quorum evidence above is what the GATEWAY recorded. So each provider also
 signs a **receipt** over the exact exchange — its operator key over the request
-digest, the comparable response digest, **and its own attestation** — and returns
-it in an `x-rarext-receipt` header:
+digest, the comparable response digest, its own attestation, **and the engine it
+served with** — and returns it in an `x-rarext-receipt` header:
 
 ```json
 { "kind": "rarext.response-receipt.v1",
   "request": "<request digest>", "response": "<comparable response digest>",
   "attestation": "<digest of the machine/code/image identity>",
+  "engine": "<the engine fingerprint this provider served with>",
   "signature": "…", "publicKey": { … }, "suite": "ecdsa-p256" }
 ```
 
@@ -342,6 +343,12 @@ receipt's `attestation` digest no longer matches what the run holds and the run
 fails. The operator signs "this answer came from THIS enclave", and the same
 binding holds whether the run recorded the static card or a freshly-challenged
 attestation.
+
+Finally the receipt binds the **engine**: the run's `engine.fingerprint` is the
+deployment's committed value, but the receipt carries the fingerprint the provider
+*says* it served with. A provider on a different engine build signs a different
+value, so a run attributed to the committed engine but served by another one fails
+verification — a verifier catches a changed engine, not only a replay.
 
 A stream carries no receipt (there is no complete body to sign), and an env-var
 label operator is not a key, so the binding is enforced whenever the operator is a
@@ -769,6 +776,12 @@ re-issued, and its output is compared to the committed output. The verifier
 recomputes the same rule, refusing a run whose `engine.fingerprint` is not the
 one the challenge pinned.
 
+A verifier also catches a changed engine **without a replay**: each provider's
+receipt signs the engine fingerprint it actually served with, and the verifier
+requires it to equal the run's committed `engine.fingerprint`. So a gateway cannot
+record a run attributed to the pinned engine but served by another one — the
+provider's own signature disagrees and the run fails.
+
 ```bash
 # replay refuses a provider whose engine differs from the pinned one
 node apps/runtime/src/cli.ts replay --transcript run.json --endpoint https://other.example
@@ -837,6 +850,28 @@ it: a provider (or engine) whose response carries no trace, and a pass-through S
 stream that has no complete body to commit a trace over, are both refused `503`.
 So a deployment can insist on the decode-level evidence rather than trusting that
 the provider happens to emit it.
+
+### Requiring a replayable run
+
+A run is only *reproducible* if the caller asked for deterministic decoding — a
+temperature of 0 and a seed — which the run records as a replay envelope. A
+deployment can make that mandatory:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --provider https://bob.example \
+  --quorum 2 --require-replay \
+  --registry https://registry.example
+```
+
+`deploy --require-replay` commits `labels.replay = "required"`, and the challenge
+commits `spec.requireReplay`. The gateway refuses a **sampled** request — one with a
+temperature above 0, or no seed — with `422` before it forwards anything, so a
+non-reproducible run is never recorded. The verifier adds a `replay.required` check,
+so a run that arrives without a valid replay envelope fails, even if every other
+digest is consistent. Together with `--require-trace` this is the strongest shape:
+every run is deterministic, carries its decode trace, and can be re-derived by any
+reader holding the same bundle and engine.
 
 ## Commands
 
@@ -949,8 +984,9 @@ why a large file is sharded rather than sent as one object.
   engine run can be checked at the same level when the engine exposes per-token
   logprobs: `--engine-logprobs` records a **judgment** (tokens + logprobs + digest),
   and a replay of it is refused when the judgment diverges. A deployment can even
-  REQUIRE a trace (`--require-trace`): then a run whose response carries none is
-  refused by the gateway and fails verification. What is still not proven is that
+  REQUIRE a trace (`--require-trace`) AND a replay envelope (`--require-replay`):
+  then a run whose response carries no trace, or a sampled request with no envelope,
+  is refused by the gateway and fails verification. What is still not proven is that
   the engine's arithmetic IS the model's — an arbitrary GGUF is not reproduced
   bit-for-bit by the protocol alone, and an engine that exposes neither tokens nor
   logprobs can only record a trace if `--engine-logprobs` is set and the engine

@@ -264,16 +264,19 @@ export function decodeTrace(trace: TraceData | null): Record<string, unknown> {
 
 /**
  * The base64 header a provider returns: its operator key's signature over the
- * request digest, the comparable response digest, AND its own attestation. A
- * gateway that relays the answer cannot fabricate it, and — because the
- * attestation is bound — it cannot pair the answer with a different enclave, so
- * the run proves what the provider said AND where it said it from.
+ * request digest, the comparable response digest, its own attestation, AND the
+ * engine it served with. A gateway that relays the answer cannot fabricate it,
+ * cannot pair the answer with a different enclave, and cannot attribute it to a
+ * different engine — so a verifier sees the provider's own claim about where it
+ * ran, not just the deployment's, and a provider whose engine changed is refused.
  */
 function responseReceiptHeader(
   signer: AgentSigner,
   requestBody: unknown,
   responseBody: Record<string, unknown>,
   attestation: unknown,
+  engine: string | null,
+  bundle: string | null,
 ): string {
   const payload = {
     kind: "rarext.response-receipt.v1",
@@ -282,6 +285,8 @@ function responseReceiptHeader(
     ...(attestation === undefined
       ? {}
       : { attestation: canonicalDigest(attestationForReceipt(attestation)) }),
+    ...(engine === null ? {} : { engine }),
+    ...(bundle === null ? {} : { bundle }),
   };
   const receipt = {
     ...payload,
@@ -615,6 +620,9 @@ async function startEnclaveProxy(options: ProviderOptions, enclaveEndpoint: stri
                 JSON.parse(raw) as unknown,
                 parsed,
                 cardFor().independence,
+                // The forwarder runs no engine of its own; it does not claim one.
+                null,
+                options.bundle.digest,
               );
             }
           } catch {
@@ -749,7 +757,14 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
    * cannot fabricate this, so the transcript proves what the provider said.
    */
   const receiptHeader = (requestBody: unknown, responseBody: Record<string, unknown>): string =>
-    responseReceiptHeader(signer, requestBody, responseBody, cardFor().independence);
+    responseReceiptHeader(
+      signer,
+      requestBody,
+      responseBody,
+      cardFor().independence,
+      engineFingerprint,
+      options.bundle.digest,
+    );
 
   // The machine this provider attests, bound to the key that signs the card. The
   // default is the host, so co-located providers collide and a machine-independent

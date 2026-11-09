@@ -4212,6 +4212,235 @@ test("a provider's receipt binds its own attestation, not just the answer", asyn
   }
 });
 
+test("a provider's receipt binds the engine it served with, so a verifier catches a changed engine", async () => {
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let other: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    first = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0 });
+    // A second provider on a DIFFERENT engine build.
+    other = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "b"),
+      port: 0,
+      engineVersion: "other-engine",
+    });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: other.url });
+    const operatorA = cardA.provider.keyId!;
+    const operatorB = cardB.provider.keyId!;
+    const engineA = ((await (await fetch(`${first.url}/health`)).json()) as { engineFingerprint: string })
+      .engineFingerprint;
+    const engineB = ((await (await fetch(`${other.url}/health`)).json()) as { engineFingerprint: string })
+      .engineFingerprint;
+    assert.match(engineA, /^[0-9a-f]{64}$/);
+    assert.notEqual(engineA, engineB);
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: `${first.url},${other.url}`,
+          // Both operators are committed so the two runs differ ONLY by engine.
+          operators: `${operatorA},${operatorB}`,
+          quorum: "1",
+          engineFingerprint: engineA,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.engineFingerprint, engineA);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "which engine?" }],
+          max_tokens: 8,
+          temperature: 0,
+          seed: 9,
+        }),
+      });
+
+    // The provider on the committed engine verifies.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-a"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url],
+      quorum: 1,
+      operators: { [first.url]: operatorA },
+    });
+    assert.equal((await request(gateway.url)).status, 200);
+    const goodBody = new RunLedger(join(reg.root, "gateway-a")).records()[0]!.body;
+    assert.equal(goodBody.engine.fingerprint, engineA);
+    assert.equal((goodBody.quorum!.providers[0]!.receipt as { engine: string }).engine, engineA);
+    assert.equal(verifyRunBody(goodBody, spec).correct, true);
+    await gateway.close();
+    gateway = null;
+
+    // A provider on a DIFFERENT engine is refused by the VERIFIER — no replay
+    // needed — because its receipt signs the engine it actually served with.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-b"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [other.url],
+      quorum: 1,
+      operators: { [other.url]: operatorB },
+    });
+    assert.equal((await request(gateway.url)).status, 200);
+    const badBody = new RunLedger(join(reg.root, "gateway-b")).records()[0]!.body;
+    assert.equal(badBody.engine.fingerprint, engineA, "the run records the committed engine");
+    assert.equal((badBody.quorum!.providers[0]!.receipt as { engine: string }).engine, engineB);
+    const verdict = verifyRunBody(badBody, spec);
+    assert.equal(verdict.correct, false);
+    assert.ok((verdict.proof as { failures: string[] }).failures.includes("quorum"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (other !== null) await other.close();
+    await reg.close();
+  }
+});
+
+test("a provider's receipt binds the bundle it served, so a verifier catches other weights", async () => {
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let other: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    // Two DIFFERENT bundles with the same model id.
+    const bundleA = buildModelBundle({
+      bytes: NATIVE_BYTES,
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+    });
+    const bundleB = buildModelBundle({
+      // A valid xorshift model with DIFFERENT parameters: same model id, other weights.
+      bytes: Buffer.from(JSON.stringify({ ...NATIVE_MODEL, params: { a: 5, b: 13, c: 17 } })),
+      model: NATIVE_REF,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 97,
+      createdAt: "2026-11-07T00:00:00.000Z",
+    });
+    assert.notEqual(bundleA.bundle.digest, bundleB.bundle.digest);
+    const manifestA = (await uploadBundle({ registry: reg.base, bundle: bundleA.bundle, chunks: bundleA.chunks })).manifestHash;
+    await uploadBundle({ registry: reg.base, bundle: bundleB.bundle, chunks: bundleB.chunks });
+
+    first = await startProvider({ bundle: bundleA.bundle, registry: reg.base, stateDir: join(reg.root, "a"), port: 0 });
+    other = await startProvider({ bundle: bundleB.bundle, registry: reg.base, stateDir: join(reg.root, "b"), port: 0 });
+    const cardA = await fetchProviderCard({ endpoint: first.url });
+    const cardB = await fetchProviderCard({ endpoint: other.url });
+    const operatorA = cardA.provider.keyId!;
+    const operatorB = cardB.provider.keyId!;
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: cardA.model,
+          apis: ["openai"],
+          models: [cardA.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundleA.bundle.digest,
+          shardsRoot: bundleA.bundle.shardsRoot,
+          manifestHash: manifestA,
+          providers: `${first.url},${other.url}`,
+          operators: `${operatorA},${operatorB}`,
+          quorum: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "which weights?" }],
+          max_tokens: 8,
+          temperature: 0,
+          seed: 4,
+        }),
+      });
+
+    // The provider serving the committed bundle verifies.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-a"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [first.url],
+      quorum: 1,
+      operators: { [first.url]: operatorA },
+    });
+    assert.equal((await request(gateway.url)).status, 200);
+    const goodBody = new RunLedger(join(reg.root, "gateway-a")).records()[0]!.body;
+    assert.equal(goodBody.bundle!.digest, bundleA.bundle.digest);
+    assert.equal((goodBody.quorum!.providers[0]!.receipt as { bundle: string }).bundle, bundleA.bundle.digest);
+    assert.equal(verifyRunBody(goodBody, spec).correct, true);
+    await gateway.close();
+    gateway = null;
+
+    // A provider serving OTHER weights is refused by the VERIFIER: the receipt
+    // signs the bundle it actually served, which is not the committed one.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-b"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [other.url],
+      quorum: 1,
+      operators: { [other.url]: operatorB },
+    });
+    assert.equal((await request(gateway.url)).status, 200);
+    const badBody = new RunLedger(join(reg.root, "gateway-b")).records()[0]!.body;
+    assert.equal(badBody.bundle!.digest, bundleA.bundle.digest, "the run records the committed bundle");
+    assert.equal((badBody.quorum!.providers[0]!.receipt as { bundle: string }).bundle, bundleB.bundle.digest);
+    const verdict = verifyRunBody(badBody, spec);
+    assert.equal(verdict.correct, false);
+    assert.ok((verdict.proof as { failures: string[] }).failures.includes("quorum"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (other !== null) await other.close();
+    await reg.close();
+  }
+});
+
 test("a provider falls back to a mirror when the primary registry cannot serve", async () => {
   const primary = await registry();
   const mirror = await registry();

@@ -715,8 +715,8 @@ try {
 
   // ── 9r. Provider receipts: each provider signed what it said, from where ──
   // The transcript carries the provider's OWN signature over the request, the
-  // response it returned, AND its attestation, so the run proves what it said and
-  // which enclave it said it from — pairing the answer with another enclave fails.
+  // response it returned, its attestation, AND the engine it served with, so the
+  // run proves what it said, which enclave it said it from, and on which engine.
   const receipts = publishedBody?.quorum?.providers ?? [];
   const receiptOk =
     receipts.length === providerUrls.length &&
@@ -728,6 +728,8 @@ try {
         receipt.request === publishedBody?.request?.digest &&
         entry.attestation !== undefined &&
         receipt.attestation === canonicalDigest(attestationForReceipt(entry.attestation)) &&
+        receipt.engine === publishedBody?.engine?.fingerprint &&
+        receipt.bundle === publishedBody?.bundle?.digest &&
         publicKeyId(receipt.publicKey) === entry.operator
       );
     }) &&
@@ -750,7 +752,7 @@ try {
     "receipt",
     receiptOk && forgedReceiptRefused,
     receiptOk && forgedReceiptRefused
-      ? `${providerUrls.length} provider receipt(s) bind their operator, the run's request/response, and their own attestation; a run paired with a different attestation was refused`
+      ? `${providerUrls.length} provider receipt(s) bind their operator, the run's request/response, their own attestation, the engine they served with, and the bundle they served; a run paired with a different attestation was refused`
       : `receiptOk=${String(receiptOk)} forgedRefused=${String(forgedReceiptRefused)}`,
   );
 

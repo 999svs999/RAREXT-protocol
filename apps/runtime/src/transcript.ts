@@ -434,9 +434,20 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
         (entry) => isRecord(entry.attestation) && entry.attestation.code === spec.teeCodeMeasurement,
       );
     // A provider's OWN receipt: its operator key over the request digest, the
-    // response it returned, and its attestation. When present, it must bind to
-    // the recorded operator, the exact bytes, and the recorded enclave, so a
-    // gateway cannot fabricate a provider's answer OR pair it with another one.
+    // response it returned, its attestation, the engine it served with, AND the
+    // bundle it served. When present, it must bind to the recorded operator, the
+    // exact bytes, the recorded enclave, the committed engine, and the committed
+    // weights, so a gateway cannot fabricate a provider's answer, pair it with
+    // another enclave, or attribute it to another engine or model than the one
+    // the provider signed.
+    const runEngine =
+      isRecord(body) && isRecord(body.engine) && typeof body.engine.fingerprint === "string"
+        ? body.engine.fingerprint
+        : null;
+    const runBundle =
+      isRecord(body) && isRecord(body.bundle) && typeof body.bundle.digest === "string"
+        ? body.bundle.digest
+        : null;
     const receiptsMet = providers
       .filter((entry): entry is Record<string, unknown> => isRecord(entry) && entry.receipt !== undefined)
       .every((entry) => {
@@ -450,11 +461,21 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
           const expected = canonicalDigest(attestationForReceipt(entry.attestation));
           if (receipt.attestation !== expected) return false;
         }
+        // When the run commits an engine, the provider's own engine claim must
+        // match it: a provider that served with another engine is refused.
+        if (runEngine !== null && typeof receipt.engine === "string" && receipt.engine !== runEngine) {
+          return false;
+        }
+        // When the run commits a model bundle, the provider's own bundle claim
+        // must match it: a provider that served other weights is refused.
+        if (runBundle !== null && receipt.bundle !== runBundle) return false;
         const payload = {
           kind: receipt.kind,
           request: receipt.request,
           response: receipt.response,
           ...(receipt.attestation === undefined ? {} : { attestation: receipt.attestation }),
+          ...(receipt.engine === undefined ? {} : { engine: receipt.engine }),
+          ...(receipt.bundle === undefined ? {} : { bundle: receipt.bundle }),
         };
         let ok = false;
         try {
