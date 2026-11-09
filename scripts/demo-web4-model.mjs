@@ -19,6 +19,7 @@
  *   infer     run inference through the providers, not on this host
  *   publish   publish the run with its quorum evidence
  *   receipt   each provider signs what it said; the gateway cannot fabricate it
+ *   trace     a required decode trace: a run without one is refused
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
  *   redeem    a key cashes credits out of the ledger against an external reference
@@ -519,6 +520,7 @@ try {
     HARDWARE_ROOT_KEY_ID,
     "--tee-signed-image-depth",
     "2",
+    "--require-trace",
     "--registry",
     startBase,
     ...(seal ? ["--seal-key-file", sealKeyPath] : []),
@@ -727,6 +729,47 @@ try {
       ? `${providerUrls.length} provider receipt(s) signed by their operators bound to the run's request/response; the run verifies with them`
       : "a provider receipt is missing or does not bind to the run",
   );
+
+  // ── 9t. A required decode trace: missing it is refused ──────────────────
+  // The deployment committed `trace: "required"`, so every run must carry a
+  // decode trace (native token ids or an engine logprob judgment). An engine
+  // provider started WITHOUT --engine-logprobs omits it, and is refused.
+  let traceOk = false;
+  let traceDetail = "";
+  try {
+    const runTrace = publishedBody?.response?.body?.rarext_trace;
+    const providesTrace =
+      runTrace?.kind === "rarext.decode-trace.v1" || runTrace?.kind === "rarext.judgment.v1";
+    const requiredCommitted = spec.requireTrace === true;
+    const verified = verifyRunBody(publishedBody, spec);
+    // Strip the trace: the run now fails exactly the required-trace check.
+    const withoutTrace = {
+      ...publishedBody,
+      response: {
+        ...publishedBody.response,
+        body: Object.fromEntries(
+          Object.entries(publishedBody.response.body).filter(([key]) => key !== "rarext_trace"),
+        ),
+      },
+    };
+    const stripped = verifyRunBody(withoutTrace, spec);
+    const refused =
+      stripped.correct === false &&
+      (stripped.proof?.failures ?? []).includes("response.decodeTraceRequired");
+    traceOk =
+      requiredCommitted &&
+      providesTrace &&
+      verified.correct === true &&
+      verified.details.checks.includes("response.decodeTraceRequired") &&
+      refused;
+    traceDetail = traceOk
+      ? `the deployment required a decode trace (${String(runTrace.kind)}); the run carries one and verifies, and a run with the trace stripped fails the required-trace check`
+      : `required=${String(requiredCommitted)} provides=${String(providesTrace)} refused=${String(refused)}`;
+  } catch (error) {
+    traceOk = false;
+    traceDetail = error instanceof Error ? error.message : String(error);
+  }
+  phase("trace", traceOk, traceDetail);
 
   // ── 9a. The run paid every agreeing operator, and each can prove it ──────
   // The gateway derived the payment from the quorum evidence and the committed

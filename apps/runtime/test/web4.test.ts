@@ -3663,6 +3663,132 @@ test("a pinned image-chain depth refuses a manifest signed directly by the root"
   }
 });
 
+test("a deployment that requires a decode trace refuses a run without one", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({ bundle, registry: reg.base, stateDir: join(reg.root, "p"), port: 0 });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: "operator-a",
+          quorum: "1",
+          trace: "required",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.requireTrace, true);
+
+    const request = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "trace required?" }],
+          max_tokens: 8,
+          temperature: 0,
+          seed: 5,
+        }),
+      });
+
+    // The native provider emits a trace, so the run is written and verifies.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: "operator-a" },
+    });
+    assert.equal((await request(gateway.url)).status, 200);
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    assert.ok((body.response.body as { rarext_trace?: unknown }).rarext_trace);
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true);
+    // The committed requirement is what the verifier checked, and it passed.
+    assert.ok(verified.details.checks.includes("response.decodeTraceRequired"));
+
+    // A run whose response lacks the trace fails that very check.
+    const stripped = {
+      ...body,
+      response: {
+        ...body.response,
+        body: Object.fromEntries(
+          Object.entries(body.response.body as Record<string, unknown>).filter(
+            ([key]) => key !== "rarext_trace",
+          ),
+        ),
+      },
+    };
+    const strippedVerdict = verifyRunBody(stripped, spec);
+    assert.equal(strippedVerdict.correct, false);
+    assert.ok(
+      (strippedVerdict.proof as { failures: string[] }).failures.includes("response.decodeTraceRequired"),
+    );
+    // With no requirement, that check never runs, so its absence is not a failure.
+    assert.equal(
+      (verifyRunBody(stripped, { ...spec, requireTrace: undefined }).proof as { failures: string[] }).failures.includes(
+        "response.decodeTraceRequired",
+      ),
+      false,
+    );
+    await gateway.close();
+    gateway = null;
+
+    // A gateway that receives a provider response with the trace stripped refuses
+    // the run before writing it.
+    const strippingFetch: typeof fetch = async (input, init) => {
+      const response = await fetch(input, init);
+      const json = (await response.json()) as Record<string, unknown>;
+      delete (json as { rarext_trace?: unknown }).rarext_trace;
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      const receipt = response.headers.get("x-rarext-receipt");
+      if (receipt !== null) headers["x-rarext-receipt"] = receipt;
+      return new Response(JSON.stringify(json), { status: 200, headers });
+    };
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-notrace"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: "operator-a" },
+      fetchImpl: strippingFetch,
+    });
+    const refused = await request(gateway.url);
+    assert.equal(refused.status, 503);
+    assert.match(((await refused.json()) as { error: string }).error, /requires a decode trace/);
+    assert.equal(new RunLedger(join(reg.root, "gateway-notrace")).records().length, 0);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 test("a provider's signed receipt binds the answer, catching a lying gateway", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;

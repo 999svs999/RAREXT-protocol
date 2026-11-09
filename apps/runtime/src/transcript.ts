@@ -71,6 +71,33 @@ export function extractResponseText(body: unknown, api: ApiShape): string {
   return api === "anthropic" ? extractAnthropicText(body) : extractOpenAiText(body);
 }
 
+/**
+ * Whether a response body carries a VALID decode trace: the native class's token
+ * ids, or an engine's token+logprob judgment, with a digest that recomputes. One
+ * function so the gateway that decides whether to write a run and the verifier
+ * that judges it agree on what "has a trace" means.
+ */
+export function validDecodeTrace(body: unknown): boolean {
+  const trace = isRecord(body) && isRecord(body.rarext_trace) ? body.rarext_trace : null;
+  if (trace === null) return false;
+  const kind = trace.kind;
+  const tokenOk =
+    kind === "rarext.decode-trace.v1"
+      ? Array.isArray(trace.tokens) &&
+        trace.tokens.length > 0 &&
+        trace.tokens.every((token) => Number.isSafeInteger(token))
+      : kind === "rarext.judgment.v1"
+        ? Array.isArray(trace.tokens) &&
+          trace.tokens.length > 0 &&
+          trace.tokens.every((token) => typeof token === "string") &&
+          Array.isArray(trace.logprobs) &&
+          trace.logprobs.length === trace.tokens.length &&
+          trace.logprobs.every((value) => typeof value === "number")
+        : false;
+  const { digest, ...covered } = trace;
+  return tokenOk && typeof digest === "string" && digest === canonicalDigest(covered);
+}
+
 function checkedCanonical(value: unknown, label: string): { digest: string; bytes: number } {
   const bytes = canonicalBytes(value);
   if (bytes > MAX_TRANSCRIPT_BYTES) throw new TranscriptTooLargeError(bytes);
@@ -574,31 +601,13 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
     isRecord(response.body) && isRecord(response.body.rarext_trace)
       ? response.body.rarext_trace
       : null;
-  let traceValid = false;
   if (trace !== null) {
-    const kind = trace.kind;
-    const tokenOk =
-      kind === "rarext.decode-trace.v1"
-        ? Array.isArray(trace.tokens) &&
-          trace.tokens.length > 0 &&
-          trace.tokens.every((token) => Number.isSafeInteger(token))
-        : kind === "rarext.judgment.v1"
-          ? Array.isArray(trace.tokens) &&
-            trace.tokens.length > 0 &&
-            trace.tokens.every((token) => typeof token === "string") &&
-            Array.isArray(trace.logprobs) &&
-            trace.logprobs.length === trace.tokens.length &&
-            trace.logprobs.every((value) => typeof value === "number")
-          : false;
-    // The digest covers the trace WITHOUT the digest field.
-    const { digest, ...covered } = trace;
-    traceValid = tokenOk && typeof digest === "string" && digest === canonicalDigest(covered);
-    check(checks, failures, "response.decodeTrace", traceValid);
+    check(checks, failures, "response.decodeTrace", validDecodeTrace(response.body));
   }
   // A deployment can REQUIRE a trace. Then a run whose response carries none (or
   // an invalid one) is refused, so a provider or engine cannot silently omit it.
   if (spec.requireTrace === true) {
-    check(checks, failures, "response.decodeTraceRequired", traceValid);
+    check(checks, failures, "response.decodeTraceRequired", validDecodeTrace(response.body));
   }
 
   check(

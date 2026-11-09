@@ -24,7 +24,7 @@ import {
 import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
-import { createRunBody, TranscriptTooLargeError } from "./transcript.ts";
+import { createRunBody, TranscriptTooLargeError, validDecodeTrace } from "./transcript.ts";
 import {
   providerBootStages,
   providerChainDepth,
@@ -179,6 +179,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       : [deployment.engine.endpoint];
   const quorumRequired = options.quorum ?? upstreams.length;
   const quorumEnabled = options.quorum !== undefined || upstreams.length > 1;
+  // A deployment can require every run to carry a decode trace: a response with
+  // none is refused before a run is written.
+  const requiresTrace = deployment.labels?.trace === "required";
   // A machine-independent deployment counts the quorum over distinct machines,
   // so a run whose agreeing providers sit on one box is refused before it is
   // written. The requirement is the deployment's, not a gateway switch.
@@ -821,6 +824,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
+      if (requiresTrace && !validDecodeTrace(outcome.response)) {
+        sendJson(response, 503, {
+          error: "the deployment requires a decode trace; the agreed response carried none",
+        });
+        return;
+      }
       const result = await record(
         "openai",
         outcome.request,
@@ -873,6 +882,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
+    // A pass-through stream has no complete body to commit a trace over, so a
+    // deployment that requires a trace refuses it rather than writing a run with
+    // none.
+    if (requiresTrace && payload.stream === true && contentType.includes("text/event-stream")) {
+      sendJson(response, 503, {
+        error: "the deployment requires a decode trace; a pass-through stream cannot carry one",
+      });
+      return;
+    }
+
     if (payload.stream === true && contentType.includes("text/event-stream")) {
       response.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -910,6 +929,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     const json = (await upstream.json()) as unknown;
+    if (requiresTrace && !validDecodeTrace(json)) {
+      sendJson(response, 503, {
+        error: "the deployment requires a decode trace; the response carried none",
+      });
+      return;
+    }
     const result = await record("openai", payload, json, usageFromOpenAi(json), startedAt);
     sendJson(response, 200, json, { ...baseHeaders(), ...runHeaders(result) });
   }
@@ -967,6 +992,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           type: "error",
           error: { type: "api_error", message: outcome.error },
           ...(outcome.details === undefined ? {} : { evidence: outcome.details }),
+        });
+        return;
+      }
+      if (requiresTrace && !validDecodeTrace(outcome.response)) {
+        sendJson(response, 503, {
+          type: "error",
+          error: { type: "api_error", message: "the deployment requires a decode trace; the agreed response carried none" },
         });
         return;
       }
@@ -1037,6 +1069,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     const json = (await upstream.json()) as Record<string, unknown>;
+    if (requiresTrace && !validDecodeTrace(json)) {
+      sendJson(response, 503, {
+        type: "error",
+        error: { type: "api_error", message: "the deployment requires a decode trace; the response carried none" },
+      });
+      return;
+    }
     const result = nativeAnthropic
       ? await record("anthropic", upstreamBody, json, usageFromAnthropic(json), startedAt)
       : await record("openai", upstreamBody, json, usageFromOpenAi(json), startedAt);
