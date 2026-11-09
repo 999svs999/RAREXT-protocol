@@ -16,8 +16,8 @@ npm run demo:web4-model
 
 runs the whole path with a deterministic native model in seconds:
 `storage -> 2 providers -> deploy -> registry -> card -> announce -> serve ->
-infer -> publish -> compare -> weights -> replay -> anchor -> discover-deploy ->
-discover -> tamper -> verify`.
+infer -> publish -> compare -> weights -> trace -> deterministic -> determinism ->
+replay -> anchor -> discover-deploy -> discover -> tamper -> verify`.
 
 To put a real GGUF through the same path:
 
@@ -960,6 +960,49 @@ so a run that arrives without a valid replay envelope fails, even if every other
 digest is consistent. Together with `--require-trace` this is the strongest shape:
 every run is deterministic, carries its decode trace, and can be re-derived by any
 reader holding the same bundle and engine.
+
+### Determinism class: an independent witness
+
+A trace and a replay envelope still prove less than they appear to. A provider can
+run any arithmetic and write any token ids; one run's trace is only that
+provider's word, and a reader who merely recomputes the digests is checking that
+the provider was *consistent*, not that the engine *reproduces*. The protocol
+closes part of that gap with a committed **determinism class**:
+
+```bash
+node apps/runtime/src/cli.ts deploy --web4 \
+  --provider https://alice.example --quorum 1 \
+  --determinism deterministic-replay \
+  --registry https://registry.example
+
+node apps/runtime/src/cli.ts serve --manifest .rarext-runtime/deployment.json \
+  --witness https://witness.example --publish
+```
+
+`deploy --determinism deterministic-replay` commits `labels.determinism` (and, as
+a consequence, `trace` and `replay` required); the challenge commits
+`spec.determinism`. Every run under the class must then carry a **witness**: a
+second, independently recorded run whose decode trace — native token ids, or an
+engine token+logprob judgment — matches the run **token-for-token**. The witness
+embeds its own response and the provider's own signed receipt over it, so it is
+not the recorder's word.
+
+`serve --witness <url>` names one or more providers OUTSIDE the committed provider
+set. Before recording, the gateway sends the exact same request to a witness
+provider, checks that its trace matches token-for-token, and refuses the run
+(`503`) if the engine did not reproduce, if the witness is the run's own provider,
+or if no independent witness is configured. The verifier recomputes the same rule:
+the shared request, the token-for-token trace, the witness receipt signature (and
+the engine and bundle it binds), and independence from every provider that
+produced the run. Stripping the witness, reusing a run provider as the witness,
+diverging a token, or editing the witness receipt all fail `determinism.replayWitness`.
+
+The honest boundary: a witness raises the cost of a false determinism claim from
+one signature to two independent ones, and it makes the claim checkable rather
+than asserted — but it still does not prove the engine's arithmetic is
+reproducible on any machine. Two co-located providers are two keys, not two
+boxes, and a bit-for-bit proof needs hardware plus an engine that exposes its
+arithmetic, which the protocol cannot supply.
 
 ## Commands
 

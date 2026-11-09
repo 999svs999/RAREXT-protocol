@@ -34,9 +34,15 @@ import {
 import { verifyImageManifest } from "./image-manifest.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
 import { comparableCompletion } from "./completion.ts";
+import {
+  makeReplayWitness,
+  replayWitnessProblem,
+} from "./determinism.ts";
+import type { WitnessContext } from "./determinism.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
+  DeterminismClaim,
   RunInferenceCredits,
   RunProviderAttestation,
   RunQuorum,
@@ -70,6 +76,14 @@ export interface GatewayOptions {
    * upstreams; 1 keeps the old single-response behaviour.
    */
   quorum?: number;
+  /**
+   * Independent provider endpoints a deterministic-replay deployment uses for
+   * its witness run. They must be OUTSIDE the run's own upstreams: a witness
+   * confirms the engine's arithmetic only if a provider that did not produce the
+   * run produced the second trace. Unset means a deterministic-replay deployment
+   * cannot be served — the gateway refuses rather than record an unbacked claim.
+   */
+  witnesses?: string[];
   /**
    * Operator identity per endpoint, when the deployment committed operators.
    * Agreement is then counted over distinct operators, not just endpoints, so
@@ -181,12 +195,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       : [deployment.engine.endpoint];
   const quorumRequired = options.quorum ?? upstreams.length;
   const quorumEnabled = options.quorum !== undefined || upstreams.length > 1;
+  // A deterministic-replay deployment makes a claim about the engine's
+  // arithmetic, so it necessarily requires a trace (something to compare) and a
+  // replayable request (something to reproduce). The label is the switch; the
+  // two requirements follow from it even if the labels were not repeated.
+  const requiresDeterminism = deployment.labels?.determinism === "deterministic-replay";
   // A deployment can require every run to carry a decode trace: a response with
   // none is refused before a run is written.
-  const requiresTrace = deployment.labels?.trace === "required";
+  const requiresTrace = deployment.labels?.trace === "required" || requiresDeterminism;
   // A deployment can require every run to be replayable: a sampled request
   // (temperature > 0, or no seed) is refused before it is forwarded.
-  const requiresReplay = deployment.labels?.replay === "required";
+  const requiresReplay = deployment.labels?.replay === "required" || requiresDeterminism;
   const deterministic = (payload: Record<string, unknown>): boolean => {
     const sampling = samplingFromRequest(payload);
     return sampling.temperature === 0 && sampling.seed !== null;
@@ -407,6 +426,127 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       : canonicalDigest(response);
   }
 
+  // The engine fingerprint and bundle digest this deployment commits, so a
+  // witness receipt must bind the same engine and weights the run claims.
+  const runEngineFingerprint = (() => {
+    const pin = deployment.labels?.engineFingerprint ?? deployment.engine.fingerprint;
+    return typeof pin === "string" && /^[0-9a-f]{64}$/.test(pin) ? pin : null;
+  })();
+  const runBundleDigest = (() => {
+    const labels = deployment.labels ?? {};
+    return labels.execution === "web4" && typeof labels.bundle === "string" ? labels.bundle : null;
+  })();
+
+  /**
+   * Ask an INDEPENDENT provider for a second run of the same request and build
+   * the witness a deterministic-replay run carries. The gateway checks the
+   * witness BEFORE recording, so an engine that does not reproduce the trace is
+   * refused here rather than by a reader later. A candidate that is one of the
+   * run's own providers is not a witness and is skipped.
+   */
+  async function makeDeterminismWitness(
+    shape: ApiShape,
+    requestBody: Record<string, unknown>,
+    context: WitnessContext,
+  ): Promise<{ claim: DeterminismClaim } | { error: string; status: number }> {
+    const runEndpoints = context.endpoints.map((endpoint) => endpoint.replace(/\/+$/, ""));
+    const candidates = [...new Set((options.witnesses ?? []).map((endpoint) => endpoint.replace(/\/+$/, "")))].filter(
+      (endpoint) => !runEndpoints.includes(endpoint),
+    );
+    if (candidates.length === 0) {
+      return {
+        error:
+          "the deployment requires a deterministic-replay witness, but the gateway has no " +
+          "independent witness provider (one outside the run's own providers)",
+        status: 503,
+      };
+    }
+
+    let lastError = "no witness provider answered";
+    for (const endpoint of candidates) {
+      const url = shape === "anthropic" ? anthropicMessagesUrl(endpoint) : openAiChatUrl(endpoint);
+      try {
+        const response = await fetchImpl(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+            ...upstreamHeaders,
+          },
+          body: JSON.stringify(requestBody),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!response.ok) {
+          lastError = `${endpoint} answered HTTP ${response.status}`;
+          continue;
+        }
+        const json: unknown = await response.json();
+        const witness = makeReplayWitness({
+          endpoint,
+          operator: options.operators?.[endpoint] ?? null,
+          machine: options.machines?.[endpoint] ?? null,
+          request: requestBody,
+          response: json,
+          receipt: receiptFromHeaders(response.headers),
+        });
+        const problem = replayWitnessProblem(context, witness);
+        if (problem !== null) {
+          lastError = `${endpoint}: ${problem}`;
+          continue;
+        }
+        return {
+          claim: { kind: "rarext.determinism.v1", class: "deterministic-replay", witness },
+        };
+      } catch (error) {
+        lastError = `${endpoint}: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    return {
+      error: `the deployment requires a deterministic-replay witness, but none matched: ${lastError}`,
+      status: 503,
+    };
+  }
+
+  /** The witness context for a quorum run, read from its recorded providers. */
+  function witnessContextForQuorum(
+    quorum: RunQuorum,
+    request: unknown,
+    response: unknown,
+  ): WitnessContext {
+    const strings = (field: "operator" | "machine"): string[] =>
+      quorum.providers
+        .map((entry) => entry[field])
+        .filter((value): value is string => typeof value === "string" && value !== "");
+    return {
+      request,
+      response,
+      engine: runEngineFingerprint,
+      bundle: runBundleDigest,
+      endpoints: quorum.providers.map((entry) => entry.endpoint),
+      operators: strings("operator"),
+      machines: strings("machine"),
+    };
+  }
+
+  /** The witness context for a single-provider run. */
+  function witnessContextForSingle(
+    endpoint: string,
+    request: unknown,
+    response: unknown,
+  ): WitnessContext {
+    const operator = options.operators?.[endpoint];
+    const machine = options.machines?.[endpoint];
+    return {
+      request,
+      response,
+      engine: runEngineFingerprint,
+      bundle: runBundleDigest,
+      endpoints: [endpoint],
+      operators: typeof operator === "string" && operator !== "" ? [operator] : [],
+      machines: typeof machine === "string" && machine !== "" ? [machine] : [],
+    };
+  }
+
   async function record(
     api: "openai" | "anthropic",
     payload: Record<string, unknown>,
@@ -415,6 +555,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     startedAt: string,
     quorum?: RunQuorum,
     provider?: RunQuorumProvider,
+    determinism?: DeterminismClaim,
   ): Promise<RecordedRun> {
     const completedAt = new Date().toISOString();
     const sampling = samplingFromRequest(payload);
@@ -437,6 +578,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         ...(quorum === undefined ? {} : { quorum }),
         ...(provider === undefined ? {} : { provider }),
         ...(credits === undefined ? {} : { credits }),
+        ...(determinism === undefined ? {} : { determinism }),
       });
       record = ledger.append(body);
     } catch (error) {
@@ -907,6 +1049,19 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
+      let determinism: DeterminismClaim | undefined;
+      if (requiresDeterminism) {
+        const witness = await makeDeterminismWitness(
+          "openai",
+          outcome.request,
+          witnessContextForQuorum(outcome.quorum, outcome.request, outcome.response),
+        );
+        if ("error" in witness) {
+          sendJson(response, witness.status, { error: witness.error });
+          return;
+        }
+        determinism = witness.claim;
+      }
       const result = await record(
         "openai",
         outcome.request,
@@ -914,6 +1069,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         usageFromOpenAi(outcome.response),
         startedAt,
         outcome.quorum,
+        undefined,
+        determinism,
       );
       const headers = {
         ...baseHeaders(),
@@ -1019,6 +1176,19 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       });
       return;
     }
+    let determinism: DeterminismClaim | undefined;
+    if (requiresDeterminism) {
+      const witness = await makeDeterminismWitness(
+        "openai",
+        payload,
+        witnessContextForSingle(deployment.engine.endpoint, payload, json),
+      );
+      if ("error" in witness) {
+        sendJson(response, witness.status, { error: witness.error });
+        return;
+      }
+      determinism = witness.claim;
+    }
     const result = await record(
       "openai",
       payload,
@@ -1031,6 +1201,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         providerResponseDigest(json),
         receiptFromHeaders(upstream.headers),
       ),
+      determinism,
     );
     sendJson(response, 200, json, { ...baseHeaders(), ...runHeaders(result) });
   }
@@ -1109,6 +1280,22 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
+      let determinism: DeterminismClaim | undefined;
+      if (requiresDeterminism) {
+        const witness = await makeDeterminismWitness(
+          nativeAnthropic ? "anthropic" : "openai",
+          outcome.request,
+          witnessContextForQuorum(outcome.quorum, outcome.request, outcome.response),
+        );
+        if ("error" in witness) {
+          sendJson(response, witness.status, {
+            type: "error",
+            error: { type: "api_error", message: witness.error },
+          });
+          return;
+        }
+        determinism = witness.claim;
+      }
       const result = nativeAnthropic
         ? await record(
             "anthropic",
@@ -1117,6 +1304,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             usageFromAnthropic(outcome.response),
             startedAt,
             outcome.quorum,
+            undefined,
+            determinism,
           )
         : await record(
             "openai",
@@ -1125,6 +1314,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             usageFromOpenAi(outcome.response),
             startedAt,
             outcome.quorum,
+            undefined,
+            determinism,
           );
       const anthropic = nativeAnthropic
         ? outcome.response
@@ -1183,6 +1374,22 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       });
       return;
     }
+    let determinism: DeterminismClaim | undefined;
+    if (requiresDeterminism) {
+      const witness = await makeDeterminismWitness(
+        nativeAnthropic ? "anthropic" : "openai",
+        upstreamBody,
+        witnessContextForSingle(deployment.engine.endpoint, upstreamBody, json),
+      );
+      if ("error" in witness) {
+        sendJson(response, witness.status, {
+          type: "error",
+          error: { type: "api_error", message: witness.error },
+        });
+        return;
+      }
+      determinism = witness.claim;
+    }
     const result = nativeAnthropic
       ? await record(
           "anthropic",
@@ -1196,6 +1403,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             providerResponseDigest(json),
             receiptFromHeaders(upstream.headers),
           ),
+          determinism,
         )
       : await record(
           "openai",
@@ -1209,6 +1417,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             providerResponseDigest(json),
             receiptFromHeaders(upstream.headers),
           ),
+          determinism,
         );
     const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
     sendJson(response, 200, anthropic, { ...baseHeaders(), ...runHeaders(result) });

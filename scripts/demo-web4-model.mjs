@@ -21,6 +21,7 @@
  *   receipt   each provider signs what it said; the gateway cannot fabricate it
  *   trace     a required decode trace: a run without one is refused
  *   deterministic  a required replayable run: a sampled request is refused
+ *   determinism  a claimed engine arithmetic: an independent witness must match
  *   pay       pay each agreeing operator and prove it against the ledger root
  *   settle    the node records the payments, and a key moves credits to another
  *   redeem    a key cashes credits out of the ledger against an external reference
@@ -94,6 +95,7 @@ import {
   verifyProviderChain,
   verifyProviderQuote,
 } from "../apps/runtime/src/model-bundle.ts";
+import { buildDeployment, commitDeployment } from "../apps/runtime/src/manifest.ts";
 import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts";
 import { runNativeModel } from "../apps/runtime/src/provider.ts";
 import {
@@ -976,6 +978,200 @@ try {
     deterministicDetail = error instanceof Error ? error.message : String(error);
   }
   phase("deterministic", deterministicOk, deterministicDetail);
+
+  // ── 9e. Determinism class: an independent witness must match token-for-token ─
+  // A single run cannot prove the engine's arithmetic: a provider can write any
+  // trace and call it deterministic. The deployment commits
+  // `determinism: "deterministic-replay"`, so every run must carry a SECOND,
+  // independently recorded run — a witness — whose decode trace matches the run
+  // token-for-token, signed by a provider outside the run's own provider set.
+  let determinismOk = false;
+  let determinismDetail = "";
+  let determinismGateway = null;
+  let witnessProvider = null;
+  try {
+    // The witness has to be a provider OTHER than the one that produced the run.
+    // The native path already runs two providers; an engine path shares the
+    // host's Ollama, so start a second provider process for the witness.
+    let witnessUrl = providerBUrl;
+    if (witnessUrl === null) {
+      const witnessPort = await freePort();
+      witnessProvider = spawnProcess(
+        [
+          "apps/runtime/src/cli.ts",
+          "provider",
+          "--bundle",
+          join(state, "model-bundle.json"),
+          "--registry",
+          baseUrl,
+          "--state",
+          join(state, "witness-provider"),
+          "--port",
+          String(witnessPort),
+          "--handle",
+          "provider-witness",
+          "--engine-logprobs",
+          ...(seal ? ["--seal-key-file", sealKeyPath] : []),
+          ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
+        ],
+        {},
+        (line) => {
+          const match = line.match(/rarext provider serving .* on (https?:\/\/[^\s]+)/);
+          return match ? match[1].replace(/\/$/, "") : null;
+        },
+      );
+      witnessUrl = await witnessProvider.ready;
+    }
+
+    // The deterministic-replay deployment: one provider answers, a DIFFERENT
+    // provider is the witness. It commits the same bundle and engine, and the
+    // trace + replay requirements the class is built on.
+    const determinismDeployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { ...deployment.engine, endpoint: providerUrls[0] },
+          model: deployment.model,
+          apis: ["openai"],
+          models: [deployment.model],
+        },
+        hardware: deployment.hardware,
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: deployment.labels.bundle,
+          shardsRoot: deployment.labels.shardsRoot,
+          manifestHash: deployment.labels.manifestHash,
+          providers: providerUrls[0],
+          operators: providerCards[0].provider.keyId,
+          quorum: "1",
+          trace: "required",
+          replay: "required",
+          determinism: "deterministic-replay",
+          ...(deployment.labels.engineFingerprint
+            ? { engineFingerprint: deployment.labels.engineFingerprint }
+            : {}),
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const determinismSpec = runSpecFromChallenge(challengeFor(determinismDeployment));
+
+    determinismGateway = await startGateway({
+      deployment: determinismDeployment,
+      ledgerDir: join(state, "gateway-determinism"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [providerUrls[0]],
+      quorum: 1,
+      witnesses: [witnessUrl],
+      operators: { [providerUrls[0]]: providerCards[0].provider.keyId },
+    });
+
+    const ask = (extra) =>
+      fetch(`${determinismGateway.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: determinismDeployment.model.id,
+          messages: [{ role: "user", content: "reproduce the arithmetic" }],
+          max_tokens: 8,
+          ...extra,
+        }),
+      });
+    const determinismSampled = await ask({ temperature: 0.7, seed: 1 });
+    const determinismAccepted = await ask({ temperature: 0, seed: 4242 });
+
+    const determinismLedgerDir = join(state, "gateway-determinism");
+    const determinismBody = new RunLedger(determinismLedgerDir).records()[0]?.body ?? null;
+    const claim = determinismBody?.determinism ?? null;
+    const runTrace = determinismBody?.response?.body?.rarext_trace ?? null;
+    const witnessTrace = claim?.witness?.response?.rarext_trace ?? null;
+    const traceMatchesTokenForToken =
+      runTrace !== null &&
+      witnessTrace !== null &&
+      runTrace.kind === witnessTrace.kind &&
+      Array.isArray(runTrace.tokens) &&
+      Array.isArray(witnessTrace.tokens) &&
+      runTrace.tokens.length === witnessTrace.tokens.length &&
+      runTrace.tokens.every((token, index) => token === witnessTrace.tokens[index]) &&
+      (runTrace.kind !== "rarext.judgment.v1" ||
+        (Array.isArray(runTrace.logprobs) &&
+          Array.isArray(witnessTrace.logprobs) &&
+          runTrace.logprobs.length === witnessTrace.logprobs.length &&
+          runTrace.logprobs.every((value, index) => value === witnessTrace.logprobs[index])));
+
+    const verified = determinismBody ? verifyRunBody(determinismBody, determinismSpec) : null;
+    const stripped = determinismBody
+      ? verifyRunBody({ ...determinismBody, determinism: undefined }, determinismSpec)
+      : null;
+    const selfWitness =
+      determinismBody && claim !== null
+        ? verifyRunBody(
+            {
+              ...determinismBody,
+              determinism: {
+                ...claim,
+                witness: {
+                  ...claim.witness,
+                  provider: { ...claim.witness.provider, endpoint: providerUrls[0] },
+                },
+              },
+            },
+            determinismSpec,
+          )
+        : null;
+    const diverged =
+      determinismBody && claim !== null
+        ? verifyRunBody(
+            {
+              ...determinismBody,
+              determinism: {
+                ...claim,
+                witness: {
+                  ...claim.witness,
+                  response: {
+                    ...claim.witness.response,
+                    rarext_trace: { ...claim.witness.response.rarext_trace, tokens: [1, 2, 3] },
+                  },
+                },
+              },
+            },
+            determinismSpec,
+          )
+        : null;
+
+    determinismOk =
+      determinismSpec.determinism === "deterministic-replay" &&
+      determinismSampled.status === 422 &&
+      determinismAccepted.status === 200 &&
+      claim?.class === "deterministic-replay" &&
+      claim?.witness?.provider?.endpoint?.replace(/\/+$/, "") === witnessUrl.replace(/\/+$/, "") &&
+      verified?.correct === true &&
+      verified.details.checks.includes("determinism.replayWitness") &&
+      traceMatchesTokenForToken &&
+      stripped?.correct === false &&
+      stripped.proof?.failures?.includes("determinism.replayWitness") === true &&
+      selfWitness?.correct === false &&
+      diverged?.correct === false;
+    determinismDetail = determinismOk
+      ? `committed determinism "deterministic-replay": a sampled request was refused (422); the accepted run carried an ` +
+        `independent witness from ${String(claim.witness.provider.endpoint)} whose decode trace ` +
+        `(${String(runTrace.tokens.length)} ${runTrace.kind === "rarext.judgment.v1" ? "tokens+logprobs" : "token ids"}) ` +
+        `matched the run token-for-token; stripping the witness, reusing the run's own provider as witness, and ` +
+        `diverging the witness trace were all refused`
+      : `class=${String(determinismSpec.determinism)} sampled=${determinismSampled.status} accepted=${determinismAccepted.status} ` +
+        `claim=${String(claim?.class)} traceMatch=${String(traceMatchesTokenForToken)} verified=${String(verified?.correct)} ` +
+        `failures=${JSON.stringify(verified?.proof?.failures)} stripped=${String(stripped?.correct)} ` +
+        `self=${String(selfWitness?.correct)} diverged=${String(diverged?.correct)}`;
+  } catch (error) {
+    determinismOk = false;
+    determinismDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (determinismGateway !== null) await determinismGateway.close().catch(() => {});
+    if (witnessProvider !== null) witnessProvider.stop();
+  }
+  phase("determinism", determinismOk, determinismDetail);
 
   // ── 9a. The run paid every agreeing operator, and each can prove it ──────
   // The gateway derived the payment from the quorum evidence and the committed

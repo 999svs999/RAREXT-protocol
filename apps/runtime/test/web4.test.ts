@@ -5296,3 +5296,303 @@ test("a disagreeing provider blocks the run instead of averaging it away", async
     await reg.close();
   }
 });
+
+test("a deterministic-replay deployment records an independent witness that matches token-for-token", async () => {
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "first"),
+      port: 0,
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "second"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: first.url });
+    const operatorA = card.provider.keyId!;
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash: card.bundle.manifestHash,
+          providers: first.url,
+          operators: operatorA,
+          trace: "required",
+          replay: "required",
+          determinism: "deterministic-replay",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    assert.deepEqual(validateDeployment(deployment), []);
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.determinism, "deterministic-replay");
+    assert.equal(spec.requireTrace, true);
+    assert.equal(spec.requireReplay, true);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      witnesses: [second.url],
+      operators: { [first.url]: operatorA },
+    });
+
+    const response = await fetch(`${gateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: deployment.model.id,
+        messages: [{ role: "user", content: "reproduce the arithmetic" }],
+        max_tokens: 8,
+        temperature: 0,
+        seed: 4242,
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    const claim = body.determinism;
+    assert.ok(claim, "the run carries a determinism claim");
+    assert.equal(claim!.class, "deterministic-replay");
+    assert.equal(
+      claim!.witness.provider.endpoint.replace(/\/+$/, ""),
+      second.url.replace(/\/+$/, ""),
+      "the witness is the independent provider, not the run's own",
+    );
+
+    // The run's trace and the witness's trace are the same tokens.
+    const runTrace = (body.response.body as Record<string, unknown>).rarext_trace as {
+      kind: string;
+      tokens: unknown[];
+    };
+    const witnessTrace = (claim!.witness.response as Record<string, unknown>).rarext_trace as {
+      kind: string;
+      tokens: unknown[];
+    };
+    assert.equal(witnessTrace.kind, runTrace.kind);
+    assert.deepEqual(witnessTrace.tokens, runTrace.tokens);
+
+    const verified = verifyRunBody(body, spec);
+    assert.equal(verified.correct, true, verified.error);
+    assert.ok(verified.details.checks.includes("determinism.replayWitness"));
+
+    // Removing the claim leaves the committed class unbacked.
+    const missing = verifyRunBody({ ...body, determinism: undefined }, spec);
+    assert.equal(missing.correct, false);
+    assert.match(missing.error ?? "", /determinism\.replayWitness/);
+
+    // A witness that is one of the run's own providers is not independent.
+    const notIndependent = verifyRunBody(
+      {
+        ...body,
+        determinism: {
+          ...claim!,
+          witness: {
+            ...claim!.witness,
+            provider: { ...claim!.witness.provider, endpoint: first.url },
+          },
+        },
+      },
+      spec,
+    );
+    assert.equal(notIndependent.correct, false);
+    assert.match(notIndependent.error ?? "", /determinism\.replayWitness/);
+
+    // A witness for a different request corroborates nothing.
+    const otherRequest = verifyRunBody(
+      {
+        ...body,
+        determinism: {
+          ...claim!,
+          witness: { ...claim!.witness, request: { model: "someone-else" } },
+        },
+      },
+      spec,
+    );
+    assert.equal(otherRequest.correct, false);
+
+    // A witness response whose trace diverges breaks both the trace match and
+    // the provider receipt that binds it.
+    const tamperedTrace = verifyRunBody(
+      {
+        ...body,
+        determinism: {
+          ...claim!,
+          witness: {
+            ...claim!.witness,
+            response: {
+              ...(claim!.witness.response as Record<string, unknown>),
+              rarext_trace: {
+                ...(witnessTrace as unknown as Record<string, unknown>),
+                tokens: [987654321],
+              },
+            },
+          },
+        },
+      },
+      spec,
+    );
+    assert.equal(tamperedTrace.correct, false);
+
+    // A witness receipt with a bad signature is refused.
+    const badSignature = verifyRunBody(
+      {
+        ...body,
+        determinism: {
+          ...claim!,
+          witness: {
+            ...claim!.witness,
+            receipt: {
+              ...(claim!.witness.receipt as Record<string, unknown>),
+              signature: "A".repeat(88),
+            },
+          },
+        },
+      },
+      spec,
+    );
+    assert.equal(badSignature.correct, false);
+
+    // A challenge that commits the class without a trace/replay requirement is
+    // itself invalid: there is nothing to compare or reproduce. The challenge
+    // parser refuses it rather than letting a run satisfy it vacuously.
+    const malformed = challengeFor(deployment);
+    const malformedSpec = malformed.spec as Record<string, unknown>;
+    delete malformedSpec.requireTrace;
+    delete malformedSpec.requireReplay;
+    assert.throws(
+      () => runSpecFromChallenge(malformed),
+      /requireTrace and challenge\.spec\.requireReplay/,
+    );
+
+    // A run may not claim a class the challenge never committed.
+    const looseSpec = { ...spec, determinism: undefined, requireTrace: undefined, requireReplay: undefined };
+    const uncommitted = verifyRunBody(body, looseSpec);
+    assert.equal(uncommitted.correct, false);
+    assert.match(uncommitted.error ?? "", /determinism\.replayWitness/);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("the gateway refuses a deterministic-replay run without an independent witness", async () => {
+  const reg = await registry();
+  let first: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let second: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle } = await publishNative({ base: reg.base });
+    first = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "first"),
+      port: 0,
+    });
+    second = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "second"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: first.url });
+
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: first.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(first.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash: card.bundle.manifestHash,
+          trace: "required",
+          replay: "required",
+          determinism: "deterministic-replay",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+
+    const ask = (url: string) =>
+      fetch(`${url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: deployment.model.id,
+          messages: [{ role: "user", content: "reproduce?" }],
+          max_tokens: 8,
+          temperature: 0,
+          seed: 7,
+        }),
+      });
+
+    // No witness provider configured at all: the gateway refuses rather than
+    // record a claim it cannot back.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-none"),
+      port: 0,
+      upstreamApi: "openai",
+    });
+    const none = await ask(gateway.url);
+    assert.equal(none.status, 503);
+    assert.match(((await none.json()) as { error: string }).error, /no independent witness provider/);
+    assert.equal(new RunLedger(join(reg.root, "gateway-none")).records().length, 0);
+    await gateway.close();
+    gateway = null;
+
+    // A witness that is one of the run's own providers is not a witness.
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway-self"),
+      port: 0,
+      upstreamApi: "openai",
+      witnesses: [first.url, second.url],
+    });
+    const self = await ask(gateway.url);
+    assert.equal(self.status, 200);
+    const body = new RunLedger(join(reg.root, "gateway-self")).records()[0]!.body;
+    assert.equal(
+      body.determinism!.witness.provider.endpoint.replace(/\/+$/, ""),
+      second.url.replace(/\/+$/, ""),
+      "the gateway skips its own provider and uses the independent one",
+    );
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (first !== null) await first.close();
+    if (second !== null) await second.close();
+    await reg.close();
+  }
+});

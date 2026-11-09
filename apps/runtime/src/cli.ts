@@ -173,6 +173,8 @@ Common options:
   --tee-signed-image-depth <n> deploy: minimum image-manifest chain depth (1 = certified by the root)
   --require-trace       deploy: require every run to carry a decode trace (native tokens or engine logprobs)
   --require-replay      deploy: require every run to be replayable (temperature 0 + seed, committed envelope)
+  --determinism <class> deploy: "deterministic-replay" — require an independent witness whose trace matches
+  --witness <url>       serve: an independent provider for the determinism witness (repeatable)
   --independence <k>    "machine": require the quorum over distinct provider machines
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
@@ -977,6 +979,16 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
     throw new Error("--bounty requires every provider card to name a distinct operator identity");
   }
 
+  // A determinism class commits what the deployment CLAIMS about the engine's
+  // arithmetic: a second, independently recorded run reproduces the decode trace
+  // token-for-token. The class is only a commitment; the run-time witness is
+  // enforced by whoever serves, so a declaration without one is refused there.
+  const determinismFlag = flag(values, "determinism");
+  if (determinismFlag !== undefined && determinismFlag !== "deterministic-replay") {
+    throw new Error('--determinism must be "deterministic-replay"');
+  }
+  const determinismClass = determinismFlag === "deterministic-replay" ? "deterministic-replay" : null;
+
   // Machine independence: the quorum must be met by agreeing providers that
   // attested distinct machines. The machine ids come from the signed cards, so
   // they are the operators' own claims, committed operator-aligned.
@@ -1268,12 +1280,17 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
         ...(teeSignedImageDepth === null
           ? {}
           : { teeSignedImageDepth: String(teeSignedImageDepth) }),
+        // A determinism class is a claim about the engine's arithmetic. It is
+        // built on a trace (something to compare token-for-token) and a replay
+        // envelope (something to reproduce), so asking for the class asks for
+        // both. The commitment then requires an independent witness per run.
+        ...(determinismClass === null ? {} : { determinism: determinismClass }),
         // A deployment can require every run to carry a decode trace, so a
         // provider or engine cannot silently omit it.
-        ...(bool(values, "require-trace") ? { trace: "required" } : {}),
+        ...(bool(values, "require-trace") || determinismClass !== null ? { trace: "required" } : {}),
         // A deployment can require every run to be replayable, so a reader can
         // always re-derive the bytes.
-        ...(bool(values, "require-replay") ? { replay: "required" } : {}),
+        ...(bool(values, "require-replay") || determinismClass !== null ? { replay: "required" } : {}),
         // A bounty makes the run pay the operators that agreed; the challenge
         // commits the amount, so a run cannot invent its own price.
         ...(bounty === null ? {} : { bounty: String(bounty) }),
@@ -1772,6 +1789,17 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
   }
   const commitsQuorum = committedProviders.length > 0 || labels.quorum !== undefined;
 
+  // A deterministic-replay deployment needs an independent witness provider: one
+  // that did NOT produce the run. It is a serve-time setting, not a commitment,
+  // because the witness is chosen by whoever serves.
+  const witnesses = flags(values, "witness");
+  if (labels.determinism === "deterministic-replay" && witnesses.length === 0) {
+    throw new Error(
+      "--witness is required for a deterministic-replay deployment: name at least one " +
+        "independent provider outside the committed provider set",
+    );
+  }
+
   const gateway = await startGateway({
     deployment,
     ledgerDir: state,
@@ -1787,6 +1815,7 @@ async function commandServe(values: Record<string, unknown>): Promise<number> {
     ...(commitsQuorum && machines !== undefined ? { machines } : {}),
     ...(commitsQuorum && measurements !== undefined ? { measurements } : {}),
     ...(commitsQuorum && attestations !== undefined ? { attestations } : {}),
+    ...(witnesses.length > 0 ? { witnesses } : {}),
     log: (message) => console.error(`[runtime] ${message}`),
   });
 
@@ -2233,6 +2262,8 @@ async function main(): Promise<number> {
       "tee-signed-image-depth": { type: "string" },
       "require-trace": { type: "boolean" },
       "require-replay": { type: "boolean" },
+      determinism: { type: "string" },
+      witness: { type: "string", multiple: true },
       "image-manifest": { type: "string" },
       independence: { type: "string" },
       "engine-endpoint": { type: "string" },
