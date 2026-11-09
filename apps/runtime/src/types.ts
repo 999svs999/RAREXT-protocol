@@ -293,6 +293,13 @@ export interface ModelRunBody {
   engine: { name: EngineName; version: string | null; fingerprint?: string | null };
   /** Present when the run names a RAREXT-hosted model bundle. */
   bundle?: RunBundleRef;
+  /**
+   * Present when a non-quorum run records the single provider that answered.
+   * It carries the endpoint, the operator/attestation the gateway observed, and
+   * the provider's own receipt, so a run that commits an engine or bundle is
+   * attributable even without a quorum.
+   */
+  provider?: RunQuorumProvider;
   /** Present when the deployment required agreement across providers. */
   quorum?: RunQuorum;
   /** Present when the deployment committed a bounty and a quorum agreed. */

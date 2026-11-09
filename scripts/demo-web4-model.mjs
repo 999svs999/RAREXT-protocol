@@ -752,13 +752,124 @@ try {
   };
   const forgedReceiptRefused =
     publishedBody !== undefined && verifyRunBody(forgedReceiptBody, spec).correct === false;
+  // Dropping an agreeing provider's receipt entirely is refused too: a run that
+  // commits a bundle/engine/enclave cannot stand without a signature from every
+  // provider it counts.
+  const strippedReceiptBody = {
+    ...publishedBody,
+    quorum: {
+      ...publishedBody.quorum,
+      providers: (publishedBody.quorum?.providers ?? []).map((entry, index) => {
+        if (index !== 0) return entry;
+        const copy = { ...entry };
+        delete copy.receipt;
+        return copy;
+      }),
+    },
+  };
+  const strippedReceiptRefused =
+    publishedBody !== undefined && verifyRunBody(strippedReceiptBody, spec).correct === false;
+  // A forged dissent — an "answered" provider with a different digest and no
+  // signature — cannot pad the evidence set either. Dissenters are not payees,
+  // so a run cannot be refused on the credit root; the receipt rule is what
+  // stops an unsigned voice being recorded as quorum evidence.
+  const forgedDissentBody = {
+    ...publishedBody,
+    quorum: {
+      ...publishedBody.quorum,
+      responded: (publishedBody.quorum?.providers ?? []).length + 1,
+      providers: [
+        ...(publishedBody.quorum?.providers ?? []),
+        {
+          endpoint: "http://127.0.0.1:1",
+          responseDigest: "0".repeat(64),
+          operator: "0".repeat(64),
+          machine: null,
+          measurement: null,
+        },
+      ],
+    },
+  };
+  const forgedDissentRefused =
+    publishedBody !== undefined && verifyRunBody(forgedDissentBody, spec).correct === false;
   phase(
     "receipt",
-    receiptOk && forgedReceiptRefused,
-    receiptOk && forgedReceiptRefused
-      ? `${providerUrls.length} provider receipt(s) bind their operator, the run's request/response, their own attestation, the engine they served with, and the bundle they served; a run paired with a different attestation was refused`
-      : `receiptOk=${String(receiptOk)} forgedRefused=${String(forgedReceiptRefused)}`,
+    receiptOk && forgedReceiptRefused && strippedReceiptRefused && forgedDissentRefused,
+    receiptOk && forgedReceiptRefused && strippedReceiptRefused && forgedDissentRefused
+      ? `${providerUrls.length} provider receipt(s) bind their operator, the run's request/response, their own attestation, the engine they served with, and the bundle they served; a run paired with a different attestation, with an agreeing provider's receipt removed, or padded with an unsigned dissenting provider was refused`
+      : `receiptOk=${String(receiptOk)} forgedRefused=${String(forgedReceiptRefused)} strippedRefused=${String(strippedReceiptRefused)} dissentRefused=${String(forgedDissentRefused)}`,
   );
+
+  // ── 9s. A single-provider run still names and binds its provider ─────────
+  // Without a quorum the gateway records the one provider that answered: its
+  // endpoint, operator, attestation, and own receipt. A run that commits the
+  // bundle but omits that signature is refused, so the single-provider path is
+  // not an attribution gap.
+  let attributeOk = false;
+  let attributeDetail = "";
+  let singleGateway = null;
+  try {
+    const singleLedger = join(state, "single-provider-ledger");
+    singleGateway = await startGateway({
+      deployment,
+      ledgerDir: singleLedger,
+      host: "127.0.0.1",
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [providerUrls[0]],
+      operators: {
+        [providerUrls[0]]:
+          providerCards[0].provider.keyId ??
+          providerCards[0].provider.handle ??
+          providerUrls[0],
+      },
+      attestations: { [providerUrls[0]]: providerCards[0].independence },
+    });
+    const singleResponse = await fetch(`${singleGateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: deployment.model.id,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        seed: 4242,
+        max_tokens: 24,
+        stream: false,
+      }),
+    });
+    const singleBody = new RunLedger(singleLedger).records()[0]?.body ?? null;
+    // The run has no quorum evidence, so verify against the same challenge minus
+    // its quorum-only commitments (quorum and the bounty it pays).
+    const singleSpec = { ...spec };
+    delete singleSpec.quorum;
+    delete singleSpec.inferenceBounty;
+    const honest =
+      singleBody !== null && verifyRunBody(singleBody, singleSpec).correct === true;
+    const names =
+      singleBody?.quorum === undefined &&
+      singleBody?.provider?.endpoint === providerUrls[0] &&
+      singleBody?.provider?.operator ===
+        (providerCards[0].provider.keyId ?? providerCards[0].provider.handle) &&
+      singleBody?.provider?.attestation !== undefined &&
+      singleBody?.provider?.receipt !== undefined;
+    let unsignedRefused = false;
+    if (singleBody !== null) {
+      const unsigned = { ...singleBody, provider: { ...singleBody.provider } };
+      delete unsigned.provider.receipt;
+      unsignedRefused =
+        verifyRunBody(unsigned, singleSpec).proof?.failures?.includes("provider.evidence") ===
+        true;
+    }
+    attributeOk = singleResponse.status === 200 && honest && names && unsignedRefused;
+    attributeDetail = attributeOk
+      ? `non-quorum run names ${String(singleBody?.provider?.endpoint)}, operator ${String(singleBody?.provider?.operator).slice(0, 10)}…, its attestation, and its receipt; removing the receipt was refused (provider.evidence)`
+      : `status=${singleResponse.status} honest=${String(honest)} names=${String(names)} unsignedRefused=${String(unsignedRefused)}`;
+  } catch (error) {
+    attributeDetail = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (singleGateway !== null) await singleGateway.close().catch(() => {});
+  }
+  phase("attribute", attributeOk, attributeDetail);
 
   // ── 9t. A required decode trace: missing it is refused ──────────────────
   // The deployment committed `trace: "required"`, so every run must carry a

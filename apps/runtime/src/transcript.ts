@@ -3,6 +3,7 @@ import {
   inferenceCreditRecords,
 } from "../../../packages/core/src/index.ts";
 import { canonicalBytes, canonicalDigest, sha256Hex } from "./digest.ts";
+import { comparableCompletion } from "./completion.ts";
 import { extractAnthropicText, extractOpenAiText, extractSseText } from "./engines.ts";
 import { deploymentDigest, isLoopbackEndpoint, validateDeployment } from "./manifest.ts";
 import {
@@ -30,6 +31,7 @@ import type {
   RunBundleRef,
   RunInferenceCredits,
   RunQuorum,
+  RunQuorumProvider,
   RunRecord,
   SamplingParams,
   TokenUsage,
@@ -146,6 +148,8 @@ export interface CreateRunInput {
   previous: string | null;
   /** Present when the engine is deterministic enough for an independent replay. */
   replay?: boolean;
+  /** Present when a non-quorum run records the single provider that answered. */
+  provider?: RunQuorumProvider;
   /** Present when the deployment required agreement across providers. */
   quorum?: RunQuorum;
   /** Present when the deployment committed a bounty and the run pays operators. */
@@ -180,6 +184,7 @@ export function createRunBody(input: CreateRunInput): ModelRunBody {
       })(),
     },
     ...(bundle === null ? {} : { bundle }),
+    ...(input.provider === undefined ? {} : { provider: input.provider }),
     ...(input.quorum === undefined ? {} : { quorum: input.quorum }),
     ...(input.credits === undefined ? {} : { credits: input.credits }),
     api: input.api,
@@ -317,12 +322,113 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
   check(checks, failures, "response.digest", response.digest === responseDigest);
   check(checks, failures, "response.bytes", response.bytes === responseBytes);
 
+  // The engine and bundle a run commits. The same evidence must be backed by a
+  // provider signature whether the run has a quorum or a single provider.
+  const runEngine =
+    isRecord(body) && isRecord(body.engine) && typeof body.engine.fingerprint === "string"
+      ? body.engine.fingerprint
+      : null;
+  const runBundle =
+    isRecord(body) && isRecord(body.bundle) && typeof body.bundle.digest === "string"
+      ? body.bundle.digest
+      : null;
+  const runCommitsEvidence =
+    runEngine !== null || runBundle !== null || spec.teeVendor !== undefined;
+
+  // A provider's OWN receipt: its operator key over the request digest, the
+  // response it returned, its attestation, the engine it served with, AND the
+  // bundle it served. Shared by quorum evidence and a single-provider run, so a
+  // gateway cannot fabricate a provider's answer, pair it with another enclave,
+  // or attribute it to another engine or model than the one the provider signed.
+  const receiptBinds = (entry: Record<string, unknown>, entryResponse: string): boolean => {
+    const receipt = entry.receipt;
+    if (!isRecord(receipt) || receipt.kind !== "rarext.response-receipt.v1") return false;
+    if (receipt.request !== requestDigest || receipt.response !== entryResponse) return false;
+    if (!isRecord(receipt.publicKey) || typeof receipt.signature !== "string") return false;
+    // When the run records the provider's attestation, the receipt must carry
+    // its digest: the answer is tied to the measured enclave it came from.
+    if (isRecord(entry.attestation)) {
+      const expected = canonicalDigest(attestationForReceipt(entry.attestation));
+      if (receipt.attestation !== expected) return false;
+    }
+    // When the run commits an engine, the provider's receipt MUST carry that
+    // engine: a provider that served with another engine — or that omitted the
+    // engine entirely, so the run claims one no provider signed — is refused.
+    if (runEngine !== null && receipt.engine !== runEngine) return false;
+    // When the run commits a model bundle, the provider's own bundle claim must
+    // match it: a provider that served other weights is refused.
+    if (runBundle !== null && receipt.bundle !== runBundle) return false;
+    const payload = {
+      kind: receipt.kind,
+      request: receipt.request,
+      response: receipt.response,
+      ...(receipt.attestation === undefined ? {} : { attestation: receipt.attestation }),
+      ...(receipt.engine === undefined ? {} : { engine: receipt.engine }),
+      ...(receipt.bundle === undefined ? {} : { bundle: receipt.bundle }),
+    };
+    let ok = false;
+    try {
+      ok = verifyPayload(
+        receipt.publicKey as never,
+        payload,
+        receipt.signature,
+        typeof receipt.suite === "string" ? (receipt.suite as never) : undefined,
+      );
+    } catch {
+      ok = false;
+    }
+    if (!ok) return false;
+    // When the recorded operator is a key id (64-hex), the receipt must be
+    // signed by that key; a label operator is not a key and is not checked.
+    return (
+      typeof entry.operator !== "string" ||
+      !HEX64.test(entry.operator) ||
+      publicKeyId(receipt.publicKey as never) === entry.operator
+    );
+  };
+
   // A quorum run names every provider and the exact response each returned.
   // The chosen response must be one of those digests, and the deployment's
   // required count must be met. The evidence is inside the transcript, so
   // editing any of it moves the run digest.
   if (spec.quorum === undefined) {
     check(checks, failures, "quorum.absent", body.quorum === undefined);
+    // A non-quorum run records the one provider that answered it. When the run
+    // commits evidence, that provider must be recorded AND — for a complete
+    // (non-stream) response — must have signed the exact response. A
+    // single-provider web4 run therefore cannot attribute a committed
+    // engine/bundle/enclave to no one. A pass-through stream has no complete
+    // body to sign, so it must at least name the provider it came from.
+    const provider = isRecord(body) && isRecord(body.provider) ? body.provider : null;
+    const providerAttested = provider !== null && isRecord(provider.attestation);
+    const nonQuorumEvidence = runCommitsEvidence || providerAttested;
+    // A provider signs the comparable completion (ids/clock removed), or the
+    // recorded bytes of a stream; the verifier recomputes the same digest from
+    // the run's response, so a block copied from another answer is refused.
+    const expectedProviderDigest =
+      isRecord(response.body) && response.body.kind === "sse"
+        ? responseDigest
+        : isRecord(response.body)
+          ? canonicalDigest(comparableCompletion(response.body))
+          : responseDigest;
+    const providerValid =
+      provider !== null &&
+      typeof provider.endpoint === "string" &&
+      /^https?:\/\//.test(provider.endpoint) &&
+      provider.responseDigest === expectedProviderDigest;
+    const responseIsStream = isRecord(response.body) && response.body.kind === "sse";
+    const receiptRequired = nonQuorumEvidence && !responseIsStream;
+    const receiptMet =
+      !receiptRequired ||
+      (provider !== null &&
+        typeof provider.responseDigest === "string" &&
+        receiptBinds(provider, provider.responseDigest));
+    check(
+      checks,
+      failures,
+      "provider.evidence",
+      !nonQuorumEvidence || (providerValid && receiptMet),
+    );
   } else {
     const quorum = isRecord(body.quorum) ? body.quorum : null;
     const providers = quorum !== null && Array.isArray(quorum.providers) ? quorum.providers : [];
@@ -433,70 +539,31 @@ export function verifyRunBody(body: unknown, spec: ModelRunSpec): ModelRunVerifi
       agreeing.every(
         (entry) => isRecord(entry.attestation) && entry.attestation.code === spec.teeCodeMeasurement,
       );
-    // A provider's OWN receipt: its operator key over the request digest, the
-    // response it returned, its attestation, the engine it served with, AND the
-    // bundle it served. When present, it must bind to the recorded operator, the
-    // exact bytes, the recorded enclave, the committed engine, and the committed
-    // weights, so a gateway cannot fabricate a provider's answer, pair it with
-    // another enclave, or attribute it to another engine or model than the one
-    // the provider signed.
-    const runEngine =
-      isRecord(body) && isRecord(body.engine) && typeof body.engine.fingerprint === "string"
-        ? body.engine.fingerprint
-        : null;
-    const runBundle =
-      isRecord(body) && isRecord(body.bundle) && typeof body.bundle.digest === "string"
-        ? body.bundle.digest
-        : null;
-    const receiptsMet = providers
-      .filter((entry): entry is Record<string, unknown> => isRecord(entry) && entry.receipt !== undefined)
-      .every((entry) => {
-        const receipt = entry.receipt;
-        if (!isRecord(receipt) || receipt.kind !== "rarext.response-receipt.v1") return false;
-        if (receipt.request !== requestDigest || receipt.response !== entry.responseDigest) return false;
-        if (!isRecord(receipt.publicKey) || typeof receipt.signature !== "string") return false;
-        // When the run records the provider's attestation, the receipt must carry
-        // its digest: the answer is tied to the measured enclave it came from.
-        if (isRecord(entry.attestation)) {
-          const expected = canonicalDigest(attestationForReceipt(entry.attestation));
-          if (receipt.attestation !== expected) return false;
-        }
-        // When the run commits an engine, the provider's receipt MUST carry that
-        // engine: a provider that served with another engine — or that omitted the
-        // engine entirely, so the run claims one no agreeing provider signed — is
-        // refused.
-        if (runEngine !== null && receipt.engine !== runEngine) return false;
-        // When the run commits a model bundle, the provider's own bundle claim
-        // must match it: a provider that served other weights is refused.
-        if (runBundle !== null && receipt.bundle !== runBundle) return false;
-        const payload = {
-          kind: receipt.kind,
-          request: receipt.request,
-          response: receipt.response,
-          ...(receipt.attestation === undefined ? {} : { attestation: receipt.attestation }),
-          ...(receipt.engine === undefined ? {} : { engine: receipt.engine }),
-          ...(receipt.bundle === undefined ? {} : { bundle: receipt.bundle }),
-        };
-        let ok = false;
-        try {
-          ok = verifyPayload(
-            receipt.publicKey as never,
-            payload,
-            receipt.signature,
-            typeof receipt.suite === "string" ? (receipt.suite as never) : undefined,
-          );
-        } catch {
-          ok = false;
-        }
-        if (!ok) return false;
-        // When the recorded operator is a key id (64-hex), the receipt must be
-        // signed by that key; a label operator is not a key and is not checked.
-        return (
-          typeof entry.operator !== "string" ||
-          !HEX64.test(entry.operator) ||
-          publicKeyId(receipt.publicKey as never) === entry.operator
+    // Once a run commits evidence — an engine, a model bundle, a pinned vendor,
+    // or a recorded attestation — the evidence must be backed by a signature.
+    // Every recorded provider that ANSWERED must present its OWN receipt, not
+    // just the agreeing ones: a gateway cannot invent an unsigned dissenting
+    // voice to pad the answered count or the provider set, because a provider
+    // entry with no signature is not evidence of anything. A loose run, with no
+    // committed evidence, may still omit receipts.
+    const evidenceCommitted =
+      runCommitsEvidence || agreeing.some((entry) => isRecord(entry.attestation));
+    const receiptsPresent =
+      !evidenceCommitted ||
+      providers.every((entry) => isRecord(entry) && entry.receipt !== undefined);
+    const receiptsMet =
+      receiptsPresent &&
+      providers
+        .filter(
+          (entry): entry is Record<string, unknown> =>
+            isRecord(entry) && entry.receipt !== undefined,
+        )
+        .every((entry) =>
+          receiptBinds(
+            entry,
+            typeof entry.responseDigest === "string" ? entry.responseDigest : "",
+          ),
         );
-      });
 
     // A vendor-signed image manifest: every agreeing provider must present one
     // whose certificate CHAIN terminates at the pinned vendor root AND is at least

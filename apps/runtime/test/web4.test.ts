@@ -76,6 +76,7 @@ import {
 } from "../src/hardware-root.ts";
 import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
 import { attestationForReceipt } from "../src/certificates.ts";
+import { comparableCompletion } from "../src/completion.ts";
 import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
@@ -1315,15 +1316,35 @@ test("a dissent is recorded as evidence but never counted toward quorum", async 
     assert.equal(spec.quorum, 2);
 
     // The third provider answers differently. Two agree, so the run stands —
-    // and the transcript carries all three, including the dissent.
+    // and the transcript carries all three, including the dissent. A real
+    // dissenting provider SIGNS its own answer (over the exact request it got
+    // and the bundle it served), so the dissent is evidence, not an unsigned
+    // claim the gateway invented.
+    const dissentSigner = new AgentSigner(generateAgentKeypair("ecdsa-p256").privateKey);
     const dissenting: typeof fetch = async (input, init) => {
       const response = await fetch(input, init);
       if (!String(input).startsWith(endpoints[2]!)) return response;
       const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
       body.choices[0]!.message.content = "a different answer";
+      const requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      const payload = {
+        kind: "rarext.response-receipt.v1",
+        request: canonicalDigest(requestBody),
+        response: canonicalDigest(comparableCompletion(body as Record<string, unknown>)),
+        bundle: bundle.digest,
+      };
+      const receipt = {
+        ...payload,
+        signature: dissentSigner.sign(payload),
+        publicKey: dissentSigner.publicKey,
+        suite: dissentSigner.suite,
+      };
       return new Response(JSON.stringify(body), {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-rarext-receipt": Buffer.from(JSON.stringify(receipt), "utf8").toString("base64"),
+        },
       });
     };
 
@@ -4310,6 +4331,282 @@ test("a provider's signed receipt binds the answer, catching a lying gateway", a
     assert.equal((await request(gateway.url)).status, 200);
     const liedBody = new RunLedger(join(reg.root, "gateway-lie")).records()[0]!.body;
     assert.equal(verifyRunBody(liedBody, spec).correct, false);
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a run that commits evidence is refused when an agreeing provider presents no receipt", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "p"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const operatorKeyId = card.provider.keyId!;
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: operatorKeyId,
+          quorum: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: operatorKeyId },
+    });
+    assert.equal(
+      (
+        await fetch(`${gateway.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: deployment.model.id,
+            messages: [{ role: "user", content: "who signed?" }],
+            max_tokens: 8,
+            temperature: 0,
+          }),
+        })
+      ).status,
+      200,
+    );
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    // The run commits evidence: a model bundle no provider can be attributed to
+    // without a signature.
+    assert.equal(body.bundle?.digest, bundle.digest);
+    assert.ok(body.quorum!.providers[0]!.receipt, "the honest run carries a receipt");
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // Strip the agreeing provider's OWN receipt. Everything else still matches —
+    // the exact request, the exact response, the operator, the run's committed
+    // bundle — so this is precisely the unattributed run the strict rule exists
+    // to refuse.
+    const stripped = structuredClone(body);
+    delete (stripped.quorum!.providers[0] as { receipt?: unknown }).receipt;
+    assert.equal(stripped.quorum!.providers[0]!.receipt, undefined);
+    const verdict = verifyRunBody(stripped, spec);
+    assert.equal(verdict.correct, false);
+    assert.ok((verdict.proof as { failures: string[] }).failures.includes("quorum"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a forged unsigned dissent cannot be admitted as quorum evidence", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "p"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const operatorKeyId = card.provider.keyId!;
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: operatorKeyId,
+          quorum: "1",
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      quorum: 1,
+      operators: { [provider.url]: operatorKeyId },
+    });
+    assert.equal(
+      (
+        await fetch(`${gateway.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: deployment.model.id,
+            messages: [{ role: "user", content: "any dissent?" }],
+            max_tokens: 8,
+            temperature: 0,
+          }),
+        })
+      ).status,
+      200,
+    );
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // A gateway invents a dissenting provider — no signature, a different digest,
+    // an endpoint the run never called — and raises `responded` to include it.
+    // The disagreement is not paid (dissenters are not payees), so only the
+    // receipt rule can refuse the padded evidence set.
+    const padded = structuredClone(body);
+    padded.quorum!.providers.push({
+      endpoint: "http://127.0.0.1:1",
+      responseDigest: "0".repeat(64),
+      operator: "0".repeat(64),
+      machine: null,
+      measurement: null,
+    });
+    padded.quorum!.responded = padded.quorum!.providers.length;
+    assert.equal(padded.quorum!.providers.length, 2);
+    assert.equal(padded.quorum!.agreed, 1);
+    const verdict = verifyRunBody(padded, spec);
+    assert.equal(verdict.correct, false);
+    assert.ok((verdict.proof as { failures: string[] }).failures.includes("quorum"));
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a non-quorum web4 run records its provider, and refuses an unsigned one", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const { bundle, manifestHash } = await publishNative({ base: reg.base });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "p"),
+      port: 0,
+    });
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const operatorKeyId = card.provider.keyId!;
+    // No `quorum` label and no `quorum` option: this is the single-provider
+    // path, where the run has no quorum evidence at all.
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          shardsRoot: bundle.shardsRoot,
+          manifestHash,
+          providers: provider.url,
+          operators: operatorKeyId,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-07T00:00:00.000Z",
+      }),
+    );
+    const spec = runSpecFromChallenge(challengeFor(deployment));
+    assert.equal(spec.quorum, undefined);
+
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "gateway"),
+      port: 0,
+      upstreamApi: "openai",
+      upstreams: [provider.url],
+      operators: { [provider.url]: operatorKeyId },
+      attestations: { [provider.url]: card.independence! },
+    });
+    assert.equal(
+      (
+        await fetch(`${gateway.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: deployment.model.id,
+            messages: [{ role: "user", content: "who answered?" }],
+            max_tokens: 8,
+            temperature: 0,
+          }),
+        })
+      ).status,
+      200,
+    );
+    const body = new RunLedger(join(reg.root, "gateway")).records()[0]!.body;
+    assert.equal(body.quorum, undefined);
+    assert.ok(body.provider, "a non-quorum run names the one provider that answered");
+    assert.equal(body.provider!.endpoint, provider.url);
+    assert.equal(body.provider!.operator, operatorKeyId);
+    assert.ok(body.provider!.attestation, "the observed attestation is recorded");
+    assert.ok(body.provider!.receipt, "the provider's own receipt is recorded");
+    assert.equal(verifyRunBody(body, spec).correct, true);
+
+    // Strip the receipt: the run still commits a bundle, but no provider signed
+    // it. Without the non-quorum rule this body would verify — the gap this
+    // closes is exactly a single-provider run attributed to no one.
+    const unsigned = structuredClone(body);
+    delete (unsigned.provider as { receipt?: unknown }).receipt;
+    const unsignedVerdict = verifyRunBody(unsigned, spec);
+    assert.equal(unsignedVerdict.correct, false);
+    assert.ok(
+      (unsignedVerdict.proof as { failures: string[] }).failures.includes("provider.evidence"),
+    );
+
+    // And the provider block itself is required when evidence is committed.
+    const naked = structuredClone(body);
+    delete naked.provider;
+    const nakedVerdict = verifyRunBody(naked, spec);
+    assert.equal(nakedVerdict.correct, false);
+    assert.ok((nakedVerdict.proof as { failures: string[] }).failures.includes("provider.evidence"));
   } finally {
     if (gateway !== null) await gateway.close();
     if (provider !== null) await provider.close();

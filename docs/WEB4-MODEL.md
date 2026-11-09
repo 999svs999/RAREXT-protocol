@@ -368,6 +368,26 @@ serving other weights signs a different value, so a run attributed to the commit
 model but served by another one fails — the answer is tied to the exact weights the
 provider signed, not just to the deployment's claim about them.
 
+Presence is part of the rule, not just correctness: **every recorded provider that
+answered — whether it agreed or dissented — must present a receipt** once the run
+commits evidence: an engine fingerprint, a model bundle, a pinned vendor, or a
+recorded attestation. Otherwise a gateway could count a provider that signed
+nothing toward the quorum and record the run under a committed engine/bundle/enclave
+that no one attested, which is exactly the attribution gap receipts exist to close.
+Dissenters are included for the same reason: a gateway must not be able to invent an
+unsigned dissenting voice to pad the answered count or the recorded provider set —
+a provider entry with no signature is not evidence of anything. A loose run, with no
+committed evidence, may still omit them; a run that names evidence may not.
+
+The single-provider path is held to the same rule. A non-quorum run records the
+one provider that answered in `provider` — its `endpoint`, the `operator` and
+attestation the gateway observed, and the provider's own `receipt`. When the run
+commits evidence, that block is required and the receipt must bind the exact
+response (and the committed engine/bundle), so a single-provider web4 run cannot
+attribute a committed model or enclave to no one. A pass-through stream has no
+complete body to sign; it still must name the provider it came from, but cannot
+carry a receipt.
+
 A stream carries no receipt (there is no complete body to sign), and an env-var
 label operator is not a key, so the binding is enforced whenever the operator is a
 key id.

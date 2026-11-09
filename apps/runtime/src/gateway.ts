@@ -39,6 +39,7 @@ import type {
   RunInferenceCredits,
   RunProviderAttestation,
   RunQuorum,
+  RunQuorumProvider,
   RunRecord,
 } from "./types.ts";
 import { MAX_REQUEST_BYTES, RUNTIME_VERSION } from "./types.ts";
@@ -352,6 +353,52 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     return null;
   }
 
+  /**
+   * The single provider a non-quorum run answered from: the endpoint, the
+   * identity/attestation the gateway observed, and the receipt the provider
+   * returned. Recorded so the run is attributable without a quorum.
+   */
+  function singleProvider(
+    endpoint: string,
+    responseDigest: string,
+    receipt: unknown,
+  ): RunQuorumProvider {
+    return {
+      endpoint,
+      responseDigest,
+      operator: options.operators?.[endpoint] ?? null,
+      machine: options.machines?.[endpoint] ?? null,
+      measurement: options.measurements?.[endpoint] ?? null,
+      ...(options.attestations?.[endpoint] === undefined
+        ? {}
+        : { attestation: options.attestations[endpoint] }),
+      ...(receipt === null || receipt === undefined ? {} : { receipt }),
+    };
+  }
+
+  /** Parse the provider's own receipt header, if it returned one. */
+  function receiptFromHeaders(headers: Headers): unknown {
+    const header = headers.get("x-rarext-receipt");
+    if (header === null) return null;
+    try {
+      return JSON.parse(Buffer.from(header, "base64").toString("utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The digest a provider signs over: the comparable part of a completion (ids
+   * and wall-clock fields removed), or the recorded bytes of a stream, which has
+   * no complete body to compare.
+   */
+  function providerResponseDigest(response: unknown): string {
+    if (isRecord(response) && response.kind === "sse") return canonicalDigest(response);
+    return isRecord(response)
+      ? canonicalDigest(comparableCompletion(response))
+      : canonicalDigest(response);
+  }
+
   async function record(
     api: "openai" | "anthropic",
     payload: Record<string, unknown>,
@@ -359,6 +406,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     usage: ReturnType<typeof usageFromOpenAi>,
     startedAt: string,
     quorum?: RunQuorum,
+    provider?: RunQuorumProvider,
   ): Promise<RecordedRun> {
     const completedAt = new Date().toISOString();
     const sampling = samplingFromRequest(payload);
@@ -379,6 +427,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         // decoding; a sampled run can be re-hashed but not reproduced.
         replay: sampling.temperature === 0 && sampling.seed !== null,
         ...(quorum === undefined ? {} : { quorum }),
+        ...(provider === undefined ? {} : { provider }),
         ...(credits === undefined ? {} : { credits }),
       });
       record = ledger.append(body);
@@ -934,12 +983,19 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       response.end();
 
       const data = Buffer.concat(chunks).toString("utf8");
+      const streamResponse = { kind: "sse", data };
       const result = await record(
         "openai",
         payload,
-        { kind: "sse", data },
+        streamResponse,
         null,
         startedAt,
+        undefined,
+        singleProvider(
+          deployment.engine.endpoint,
+          providerResponseDigest(streamResponse),
+          receiptFromHeaders(upstream.headers),
+        ),
       );
       log(
         `stream run ${result.record?.digest.slice(0, 12) ?? "unrecorded"} (${extractSseText(data).length} chars)` +
@@ -955,7 +1011,19 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       });
       return;
     }
-    const result = await record("openai", payload, json, usageFromOpenAi(json), startedAt);
+    const result = await record(
+      "openai",
+      payload,
+      json,
+      usageFromOpenAi(json),
+      startedAt,
+      undefined,
+      singleProvider(
+        deployment.engine.endpoint,
+        providerResponseDigest(json),
+        receiptFromHeaders(upstream.headers),
+      ),
+    );
     sendJson(response, 200, json, { ...baseHeaders(), ...runHeaders(result) });
   }
 
@@ -1108,8 +1176,32 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
     const result = nativeAnthropic
-      ? await record("anthropic", upstreamBody, json, usageFromAnthropic(json), startedAt)
-      : await record("openai", upstreamBody, json, usageFromOpenAi(json), startedAt);
+      ? await record(
+          "anthropic",
+          upstreamBody,
+          json,
+          usageFromAnthropic(json),
+          startedAt,
+          undefined,
+          singleProvider(
+            deployment.engine.endpoint,
+            providerResponseDigest(json),
+            receiptFromHeaders(upstream.headers),
+          ),
+        )
+      : await record(
+          "openai",
+          upstreamBody,
+          json,
+          usageFromOpenAi(json),
+          startedAt,
+          undefined,
+          singleProvider(
+            deployment.engine.endpoint,
+            providerResponseDigest(json),
+            receiptFromHeaders(upstream.headers),
+          ),
+        );
     const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
     sendJson(response, 200, anthropic, { ...baseHeaders(), ...runHeaders(result) });
   }
