@@ -30,14 +30,29 @@ into the `engineFingerprint` the deployment commits, every run records, and a re
 checks. The demo's `engine` phase serves with a fetched engine (and shows the served
 trace is the fetched engine's, not the built-in one) and refuses a tampered artifact.
 
-`bundle --engine-module <file> --engine-name <n>` shards the engine; `provider
---engine-bundle <manifest>` fetches and runs it. The reference artifact is a
-JavaScript engine module evaluated in a `node:vm` context with no `require` and no
-filesystem; a container runtime would let the same shape carry an engine **image**
-and run only the verified bytes, which is the one thing this environment does not
-provide. What is demonstrated is the invariant the objective names: **the AI —
-weights and engine — lives on the RAREXT network, and the machine that asks runs
-nothing.**
+`bundle --engine-module <file> --engine-runtime native|gguf --engine-name <n>`
+shards the engine; `provider --engine-bundle <manifest>` fetches and runs it. The
+artifact is a JavaScript engine module evaluated in a `node:vm` context with no
+`require` and no filesystem.
+
+Two runtimes ship in this repository:
+
+- `rarext.native-engine.node-cjs.v1` runs the committed xorshift32 model.
+- `rarext.gguf-engine.node-cjs.v1` is **RAREXT's own GGUF transformer**
+  (`apps/runtime/engines/rarext-gguf-engine.js`). It parses the GGUF header, KV,
+  and tensor table, dequantizes the committed weights (F32/F16/Q4_0/Q5_0/Q8_0/
+  Q4_K/Q6_K), and runs the qwen2 transformer — RMSNorm, GQA attention, NeoX RoPE,
+  SwiGLU, and tied output — inside the provider. A GGUF execution named
+  `engine: "rarext"` therefore needs **no Ollama, no llama.cpp, no native addon,
+  and no container runtime**, and no engine endpoint at all: both the weights and
+  the engine are fetched from RAREXT and verified before serving. The generated
+  token ids are recorded as a `rarext.decode-trace.v1`, so a replay re-runs the
+  same fetched engine and compares token-for-token.
+
+A container runtime would still be needed to carry a *third-party engine image*
+as the artifact. What is demonstrated is the invariant the objective names: **the
+AI — weights and engine — lives on the RAREXT network, and the machine that asks
+runs nothing.**
 
 ```bash
 npm run demo:web4-model
@@ -60,11 +75,12 @@ npm run demo:web4-model
 ```
 
 The demo shards the GGUF into RAREXT blobs, starts a provider that fetches and
-reassembles them, asks the provider's own Ollama to load the verified file, and
-serves real completions. The caller still holds no weights and runs no model.
-The reference run stored a 397,807,936-byte `qwen2.5:0.5b` GGUF as 48 blobs and
-passed all 13 phases for a real model; the native multi-provider demo passes
-16/16.
+reassembles them, and serves real completions. The caller still holds no weights
+and runs no model. In the `engine` phase the GGUF is served a second time by
+RAREXT's **own** GGUF engine artifact, with **no engine endpoint**: the provider
+fetches and verifies both the weights and the engine, runs the transformer
+itself, reproduces the same token trace twice, and refuses a tampered engine
+artifact. The reference GGUF is 397,807,936 bytes (`qwen2.5:0.5b`, Q4_K_M).
 
 ## What is committed
 
@@ -955,9 +971,13 @@ For the native execution class, replay is real: the demo deletes the source mode
 file before the provider starts, then regenerates the committed output from the
 bundle bytes and the request seed and compares it to the recorded text.
 
-For a GGUF, exact token replay depends on the engine, hardware, and decoding
-state. RAREXT does not pretend otherwise: the run is an exact transcript, and a
-provider holding the same `weightsDigest` is what makes a replay meaningful.
+For a GGUF served by RAREXT's own engine (`engine: "rarext"`), the transformer is
+a fixed, deterministic artifact: the provider fetches the exact engine bytes,
+greedy decoding records the generated token ids, and a replay on the same engine
+artifact re-runs and compares token-for-token. For a *third-party* engine, exact
+token replay still depends on the engine, hardware, and decoding state; RAREXT
+does not pretend otherwise. The run remains an exact transcript, and a provider
+holding the same `weightsDigest` is what makes a replay meaningful.
 `representation: "generative"` remains the right claim for a model class with a
 deterministic replay function; the runtime's `exact` verifier does not invent one
 for an arbitrary engine.
@@ -1274,14 +1294,17 @@ why a large file is sharded rather than sent as one object.
   protocol can do is hand over cash or prove the external ledger is honest: an
   inclusion proof shows the movement is in a signed STATE, and the ledger's key is
   the receipt of that state, not the funds.
-- **The engine can be a RAREXT artifact, but executing an engine IMAGE from RAREXT
-  needs a container runtime.** For the native class the engine itself is sharded
-  into RAREXT (`rarext.engine-bundle.v1`), the provider fetches and verifies it,
-  runs the fetched engine, and folds the artifact digest into the engine
-  fingerprint — so the engine is a RAREXT artifact, not the box's. With
-  `execution.kind: "engine"` the provider must have Ollama (today) and reproduces
-  the model locally from the verified file; carrying an executable engine image
-  there needs a container runtime, which this environment does not provide, so the
-  provider refuses to run a JS artifact as that engine rather than serve under a
-  false identity. The weights and (native) engine come from RAREXT; the compute is
-  the provider's.
+- **The engine can be a RAREXT artifact, and RAREXT now carries its own GGUF
+  engine — but a THIRD-PARTY engine IMAGE still needs a container runtime.** The
+  engine is sharded into RAREXT (`rarext.engine-bundle.v1`), the provider fetches
+  and verifies it, runs the fetched engine, and folds the artifact digest into the
+  engine fingerprint — so the engine is a RAREXT artifact, not the box's. The
+  GGUF runtime (`rarext.gguf-engine.node-cjs.v1`) is RAREXT's own transformer, so
+  a qwen2 GGUF is served with no Ollama, llama.cpp, native addon, or container,
+  and no engine endpoint: weights and engine both come from RAREXT. What remains
+  outside this repository is carrying a **third-party engine binary/image** as the
+  artifact: executing that safely needs a container runtime, which this
+  environment does not provide, so the provider refuses to run a JS artifact as
+  such an engine rather than serve under a false identity. The engine supports
+  qwen2 GGUF and the listed tensor types; another architecture or quantization
+  needs another engine artifact. The compute is the provider's.

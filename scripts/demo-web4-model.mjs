@@ -86,6 +86,7 @@ import { discoverBundle } from "../apps/runtime/src/discovery.ts";
 import { startGateway } from "../apps/runtime/src/gateway.ts";
 import { RunLedger, writeJsonFile } from "../apps/runtime/src/ledger.ts";
 import {
+  buildModelBundle,
   fetchBundleChunks,
   fetchBundleManifest,
   fetchProviderCard,
@@ -93,6 +94,7 @@ import {
   providerBootStages,
   providerChainDepth,
   providerStageMeasurements,
+  uploadBundle,
   verifyModelBundle,
   verifyProviderChain,
   verifyProviderQuote,
@@ -102,6 +104,7 @@ import { challengeFor, RuntimePublisher } from "../apps/runtime/src/publisher.ts
 import { runNativeModel, startProvider } from "../apps/runtime/src/provider.ts";
 import { engineDescriptorFingerprint } from "../apps/runtime/src/engine-pin.ts";
 import {
+  ENGINE_ARTIFACT_RUNTIME_GGUF,
   buildEngineBundle,
   fetchEngineArtifact,
   uploadEngineBundle,
@@ -1966,26 +1969,86 @@ try {
         : `fingerprintFolds=${String(fingerprintFolds)} status=${engineAnswer.status} tokens=${JSON.stringify(engineTokens)} ` +
           `tamperRefused=${String(tamperRefused)}`;
     } else {
-      // The engine class runs the provider's external engine (Ollama). Carrying
-      // an executable engine IMAGE needs a container runtime, which this
-      // environment does not provide; the provider refuses to pretend a JS
-      // artifact is that engine rather than serve under a false identity.
-      const refusedEngineClass = await startProvider({
-        bundle,
-        registry: baseUrl,
-        stateDir: join(state, "engine-class-refused"),
-        port: 0,
-        engineBundle,
+      // The engine class CAN be RAREXT's own. RAREXT's GGUF engine artifact
+      // parses the committed GGUF and runs the transformer in the provider's
+      // process: no Ollama, no llama.cpp, no native addon, no container. Build a
+      // second model bundle that names the RAREXT engine, upload it, and serve
+      // it with NO engine endpoint.
+      const ggufBytes = readFileSync(gguf);
+      const { bundle: ownBundle, chunks: ownChunks } = buildModelBundle({
+        bytes: ggufBytes,
+        model: {
+          ...bundle.model,
+          id: `${bundle.model.id}-rarext-engine`,
+          sizeBytes: null,
+          weightsDigest: null,
+        },
+        execution: { kind: "engine", engine: "rarext", engineModel: null },
+        chunkBytes: 8 * 1024 * 1024,
         ...(sealKey === null ? {} : { sealKey }),
-      })
-        .then(() => false)
-        .catch(() => true);
-      engineArtifactOk = refusedEngineClass && tamperRefused;
+      });
+      await uploadBundle({ registry: baseUrl, bundle: ownBundle, chunks: ownChunks });
+
+      const ownEngine = buildEngineBundle({
+        source: readFileSync(new URL("../apps/runtime/engines/rarext-gguf-engine.js", import.meta.url)),
+        name: "rarext-gguf-engine",
+        engineVersion: "1",
+        runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+        chunkBytes: 1024 * 1024,
+      });
+      await uploadEngineBundle({
+        registry: baseUrl,
+        bundle: ownEngine.bundle,
+        chunks: ownEngine.chunks,
+      });
+
+      engineArtifactProvider = await startProvider({
+        bundle: ownBundle,
+        registry: baseUrl,
+        stateDir: join(state, "own-gguf-engine"),
+        port: 0,
+        engineBundle: ownEngine.bundle,
+        ...(sealKey === null ? {} : { sealKey }),
+      });
+      const ownHealth = await getJson(`${engineArtifactProvider.url}/health`);
+      const fingerprintFolds =
+        ownHealth.engineFingerprint ===
+        engineDescriptorFingerprint({
+          name: "rarext-gguf-engine",
+          version: "1",
+          digest: ownEngine.bundle.artifactDigest,
+        });
+      const askOwn = () =>
+        fetch(`${engineArtifactProvider.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: ownBundle.model.id,
+            messages: [{ role: "user", content: "Hello" }],
+            max_tokens: 2,
+            temperature: 0,
+            seed: 7,
+          }),
+        });
+      const firstAnswer = await askOwn();
+      const firstJson = await firstAnswer.json();
+      const secondJson = await (await askOwn()).json();
+      const traceA = firstJson?.rarext_trace?.tokens;
+      const traceB = secondJson?.rarext_trace?.tokens;
+      const deterministic =
+        Array.isArray(traceA) &&
+        traceA.length === 2 &&
+        traceA.every((token) => Number.isSafeInteger(token)) &&
+        JSON.stringify(traceA) === JSON.stringify(traceB);
+      engineArtifactOk =
+        fingerprintFolds && firstAnswer.status === 200 && deterministic && tamperRefused;
       engineArtifactDetail = engineArtifactOk
-        ? `the engine is a RAREXT artifact: ${engineBundle.shards.length} shard(s) under ${engineBundle.artifactDigest.slice(0, 18)}…; ` +
-          `the engine class runs an external engine, so the provider refused to run a JS artifact as it (a container ` +
-          `runtime would carry the engine image) and a tampered artifact was refused`
-        : `refused=${String(refusedEngineClass)} tamperRefused=${String(tamperRefused)}`;
+        ? `the engine is RAREXT's own GGUF artifact (${ownEngine.bundle.shards.length} shard(s) under ` +
+          `${ownEngine.bundle.artifactDigest.slice(0, 18)}…): the provider fetched and verified it, ran it over the ` +
+          `committed GGUF with NO engine endpoint (no Ollama/llama.cpp/container), folded its digest into the engine ` +
+          `fingerprint, reproduced trace ${JSON.stringify(traceA)} twice, and refused a tampered artifact`
+        : `fingerprintFolds=${String(fingerprintFolds)} status=${firstAnswer.status} traceA=${JSON.stringify(traceA)} ` +
+          `traceB=${JSON.stringify(traceB)} tamperRefused=${String(tamperRefused)}`;
     }
   } catch (error) {
     engineArtifactOk = false;

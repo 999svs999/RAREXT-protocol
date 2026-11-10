@@ -65,7 +65,13 @@ import {
   verifyProviderQuote,
 } from "./model-bundle.ts";
 import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bundle.ts";
-import { buildEngineBundle, uploadEngineBundle, verifyEngineBundle } from "./engine-bundle.ts";
+import {
+  ENGINE_ARTIFACT_RUNTIME,
+  ENGINE_ARTIFACT_RUNTIME_GGUF,
+  buildEngineBundle,
+  uploadEngineBundle,
+  verifyEngineBundle,
+} from "./engine-bundle.ts";
 import type { EngineBundle } from "./engine-bundle.ts";
 import { verifyProviderRootChain } from "./root-chain.ts";
 import type { RootChain } from "./root-chain.ts";
@@ -136,7 +142,7 @@ Commands:
 
 Common options:
   --endpoint <url>      engine base URL (default http://127.0.0.1:11434 for deploy)
-  --engine <name>       ollama | strata | freetoken | openai-compatible | anthropic
+  --engine <name>       rarext | ollama | strata | freetoken | openai-compatible | anthropic
   --model <id>          engine-native model id
   --remote              commit a cloud deployment; no weights or inference run here
   --web4                commit a RAREXT provider; weights are storage blobs
@@ -160,6 +166,7 @@ Common options:
   --engine-version <v>  the serving engine's version, pinned by its fingerprint
   --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
   --engine-module <f>   bundle: shard an engine module into RAREXT as a runnable engine artifact
+  --engine-runtime <r>  bundle: native | gguf (default native) engine artifact runtime
   --engine-name <n>     bundle: the engine artifact's family name
   --engine-bundle <p>   provider: fetch/verify this RAREXT engine artifact before serving
   --engine-logprobs     ask the engine for token logprobs and record a decode judgment
@@ -707,10 +714,16 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   let engineManifestHash: string | null = null;
   let engineBundlePath: string | null = null;
   if (engineModuleFlag !== undefined) {
+    const runtimeFlag = flag(values, "engine-runtime") ?? "native";
+    if (runtimeFlag !== "native" && runtimeFlag !== "gguf") {
+      throw new Error("--engine-runtime must be native or gguf");
+    }
     const built = buildEngineBundle({
       source: readFileSync(resolve(engineModuleFlag)),
       name: flag(values, "engine-name") ?? "rarext-native-engine",
       engineVersion: flag(values, "engine-version") ?? "1",
+      runtime:
+        runtimeFlag === "gguf" ? ENGINE_ARTIFACT_RUNTIME_GGUF : ENGINE_ARTIFACT_RUNTIME,
       chunkBytes,
     });
     const engineErrors = verifyEngineBundle(built.bundle);
@@ -781,9 +794,13 @@ async function commandProvider(values: Record<string, unknown>): Promise<number>
     ...(manifestHash === undefined ? {} : { manifestHash }),
   });
 
+  // A RAREXT-native GGUF bundle runs its own fetched engine, so it has no
+  // external engine endpoint (and must not silently fall back to one).
+  const ownEngine =
+    bundle.execution.kind === "engine" && bundle.execution.engine === "rarext";
   const engineEndpoint =
     flag(values, "engine-endpoint") ??
-    (bundle.execution.kind === "engine" ? "http://127.0.0.1:11434" : undefined);
+    (bundle.execution.kind === "engine" && !ownEngine ? "http://127.0.0.1:11434" : undefined);
   const out = flag(values, "out") === undefined ? null : resolve(flag(values, "out")!);
   const sealKeyFlag = flag(values, "seal-key-file");
   const sealKey = sealKeyFlag === undefined ? undefined : readSealKeyFile(resolve(sealKeyFlag));

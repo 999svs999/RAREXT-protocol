@@ -562,7 +562,7 @@ export function samplingFromRequest(body: Record<string, unknown>): {
 export function supportedApis(engine: EngineName): ApiShape[] {
   // The runtime translates Anthropic Messages to the OpenAI surface, so every
   // engine advertises both to clients regardless of what the engine speaks.
-  return engine === "ollama" || engine === "openai-compatible" || engine === "strata" || engine === "freetoken"
+  return engine === "ollama" || engine === "openai-compatible" || engine === "strata" || engine === "freetoken" || engine === "rarext"
     ? ["openai", "anthropic"]
     : ["openai"];
 }

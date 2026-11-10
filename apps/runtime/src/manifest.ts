@@ -247,6 +247,7 @@ export function buildDeployment(input: {
 }
 
 const ENGINE_NAMES = new Set<EngineName>([
+  "rarext",
   "ollama",
   "strata",
   "freetoken",

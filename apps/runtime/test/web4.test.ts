@@ -84,6 +84,7 @@ import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
 import { attestationForReceipt } from "../src/certificates.ts";
 import { engineDescriptorFingerprint } from "../src/engine-pin.ts";
 import {
+  ENGINE_ARTIFACT_RUNTIME_GGUF,
   buildEngineBundle,
   fetchEngineArtifact,
   loadEngine,
@@ -121,6 +122,132 @@ const NATIVE_EXECUTION: ExecutionRef = {
   modelClass: "xorshift32",
   defaultSteps: 12,
 };
+
+/**
+ * A tiny, self-contained qwen2 GGUF. It is small enough to build in the test
+ * and big enough to exercise the whole RAREXT GGUF engine: header + KV +
+ * tensor-info parse, byte-level BPE, RMSNorm, GQA attention, RoPE, SwiGLU, and
+ * tied output. Every tensor is F32 so the fixture stays readable.
+ */
+function tinyGgufModel(): Buffer {
+  const vocabSize = 32;
+  const nEmbd = 8;
+  const nHead = 2;
+  const nHeadKv = 1;
+  const nFfn = 16;
+  const tokens: string[] = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (let i = 0; i < vocabSize - tokens.length; i += 1) tokens.push(`<x${i}>`);
+
+  const u32 = (value: number): Buffer => {
+    const out = Buffer.alloc(4);
+    out.writeUInt32LE(value, 0);
+    return out;
+  };
+  const u64 = (value: number): Buffer => {
+    const out = Buffer.alloc(8);
+    out.writeBigUInt64LE(BigInt(value), 0);
+    return out;
+  };
+  const f32 = (value: number): Buffer => {
+    const out = Buffer.alloc(4);
+    out.writeFloatLE(value, 0);
+    return out;
+  };
+  const str = (value: string): Buffer => {
+    const bytes = Buffer.from(value, "utf8");
+    return Buffer.concat([u64(bytes.length), bytes]);
+  };
+  const kv = (key: string, type: number, value: Buffer): Buffer =>
+    Buffer.concat([str(key), u32(type), value]);
+  const array = (elementType: number, values: Buffer[]): Buffer =>
+    Buffer.concat([u32(elementType), u64(values.length), ...values]);
+
+  let state = 0x12345678;
+  const rand = (): number => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+
+  interface TensorSpec {
+    name: string;
+    dims: number[];
+    kind: "weight" | "norm" | "bias";
+  }
+  const specs: TensorSpec[] = [
+    { name: "token_embd.weight", dims: [nEmbd, vocabSize], kind: "weight" },
+    { name: "blk.0.attn_norm.weight", dims: [nEmbd], kind: "norm" },
+    { name: "blk.0.attn_q.weight", dims: [nEmbd, nEmbd], kind: "weight" },
+    { name: "blk.0.attn_k.weight", dims: [nEmbd, nHeadKv * (nEmbd / nHead)], kind: "weight" },
+    { name: "blk.0.attn_v.weight", dims: [nEmbd, nHeadKv * (nEmbd / nHead)], kind: "weight" },
+    { name: "blk.0.attn_q.bias", dims: [nEmbd], kind: "bias" },
+    { name: "blk.0.attn_k.bias", dims: [nHeadKv * (nEmbd / nHead)], kind: "bias" },
+    { name: "blk.0.attn_v.bias", dims: [nHeadKv * (nEmbd / nHead)], kind: "bias" },
+    { name: "blk.0.attn_output.weight", dims: [nEmbd, nEmbd], kind: "weight" },
+    { name: "blk.0.ffn_norm.weight", dims: [nEmbd], kind: "norm" },
+    { name: "blk.0.ffn_gate.weight", dims: [nEmbd, nFfn], kind: "weight" },
+    { name: "blk.0.ffn_up.weight", dims: [nEmbd, nFfn], kind: "weight" },
+    { name: "blk.0.ffn_down.weight", dims: [nFfn, nEmbd], kind: "weight" },
+    { name: "output_norm.weight", dims: [nEmbd], kind: "norm" },
+  ];
+
+  const datas: Buffer[] = [];
+  let offset = 0;
+  const infos: Buffer[] = [];
+  for (const spec of specs) {
+    const count = spec.dims.reduce((total, dim) => total * dim, 1);
+    const floats = Buffer.alloc(count * 4);
+    for (let i = 0; i < count; i += 1) {
+      let value: number;
+      if (spec.kind === "norm") value = 1 + (rand() - 0.5) * 0.1;
+      else if (spec.kind === "bias") value = (rand() - 0.5) * 0.1;
+      else value = (rand() - 0.5) * 0.2;
+      floats.writeFloatLE(value, i * 4);
+    }
+    datas.push(floats);
+    infos.push(
+      Buffer.concat([
+        str(spec.name),
+        u32(spec.dims.length),
+        ...spec.dims.map(u64),
+        u32(0), // GGML_TYPE_F32
+        u64(offset),
+      ]),
+    );
+    offset += floats.length;
+  }
+
+  const kvs = [
+    kv("general.architecture", 8, str("qwen2")),
+    kv("general.file_type", 4, u32(0)),
+    kv("qwen2.block_count", 4, u32(1)),
+    kv("qwen2.context_length", 4, u32(64)),
+    kv("qwen2.embedding_length", 4, u32(nEmbd)),
+    kv("qwen2.feed_forward_length", 4, u32(nFfn)),
+    kv("qwen2.attention.head_count", 4, u32(nHead)),
+    kv("qwen2.attention.head_count_kv", 4, u32(nHeadKv)),
+    kv("qwen2.attention.layer_norm_rms_epsilon", 6, f32(1e-6)),
+    kv("qwen2.rope.freq_base", 6, f32(10000)),
+    kv("tokenizer.ggml.model", 8, str("gpt2")),
+    kv("tokenizer.ggml.pre", 8, str("qwen2")),
+    kv("tokenizer.ggml.tokens", 9, array(8, tokens.map(str))),
+    kv("tokenizer.ggml.token_type", 9, array(5, tokens.map(() => u32(1)))),
+    kv("tokenizer.ggml.merges", 9, array(8, [])),
+    kv("tokenizer.ggml.bos_token_id", 4, u32(0)),
+    kv("tokenizer.ggml.eos_token_id", 4, u32(1)),
+  ];
+
+  const header = Buffer.concat([
+    Buffer.from("GGUF", "ascii"),
+    u32(3),
+    u64(specs.length),
+    u64(kvs.length),
+    ...kvs,
+    ...infos,
+  ]);
+  const dataStart = Math.ceil(header.length / 32) * 32;
+  const padding = Buffer.alloc(dataStart - header.length);
+  return Buffer.concat([header, padding, ...datas]);
+}
 
 async function registry() {
   const root = mkdtempSync(join(tmpdir(), "rarext-web4-test-"));
@@ -5924,6 +6051,128 @@ test("the gateway refuses a deterministic-replay run without an independent witn
     if (gateway !== null) await gateway.close();
     if (first !== null) await first.close();
     if (second !== null) await second.close();
+    await reg.close();
+  }
+});
+
+test("a GGUF is served by RAREXT's own fetched engine, with no external engine", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel();
+    const model: ModelRef = {
+      id: "tiny-qwen2",
+      family: "qwen2",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    // RAREXT's own GGUF engine is itself a sharded RAREXT artifact.
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    assert.deepEqual(verifyEngineBundle(engineBundle), []);
+    assert.ok(engineBundle.shards.length > 1, "the engine artifact is sharded");
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    // No engineEndpoint: the provider has no external engine to call. It fetches
+    // BOTH the weights and the engine from RAREXT, then runs the fetched engine.
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "own-gguf-engine"),
+      port: 0,
+      engineBundle,
+    });
+    const health = (await (await fetch(`${provider.url}/health`)).json()) as {
+      engineFingerprint: string;
+      execution: string;
+    };
+    assert.equal(health.execution, "engine");
+    assert.equal(
+      health.engineFingerprint,
+      engineDescriptorFingerprint({
+        name: "rarext-gguf-engine",
+        version: "1",
+        digest: engineBundle.artifactDigest,
+      }),
+    );
+
+    const ask = async (seed: number): Promise<Response> =>
+      fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "ab" }],
+          max_tokens: 3,
+          temperature: 0,
+          seed,
+        }),
+      });
+
+    const first = await ask(11);
+    assert.equal(first.status, 200);
+    const firstJson = (await first.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      rarext_trace?: { kind?: string; tokens?: number[] };
+    };
+    assert.equal(firstJson.rarext_trace?.kind, "rarext.decode-trace.v1");
+    assert.equal(firstJson.rarext_trace?.tokens?.length, 3, "the run records the generated token ids");
+    assert.ok(firstJson.rarext_trace?.tokens?.every((token) => Number.isSafeInteger(token)));
+    assert.equal(typeof firstJson.choices?.[0]?.message?.content, "string");
+
+    // Greedy decoding is deterministic: a second run on the fetched engine
+    // produces the same token-for-token trace a replay would re-check.
+    const secondJson = (await (await ask(11)).json()) as {
+      rarext_trace?: { tokens?: number[] };
+    };
+    assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
+
+    // The weights stay in memory: the provider never materializes the GGUF on
+    // disk, because its own engine parses the verified bytes directly.
+    const stateDir = join(reg.root, "own-gguf-engine");
+    assert.equal(existsSync(join(stateDir, "models")), false);
+
+    // A GGUF execution cannot be served by a native engine artifact, and a
+    // native execution cannot be served by the GGUF artifact. Both are refused.
+    const { bundle: nativeBundle } = await publishNative({ base: reg.base });
+    await assert.rejects(
+      () =>
+        startProvider({
+          bundle,
+          registry: reg.base,
+          stateDir: join(reg.root, "own-gguf-wrong-runtime"),
+          port: 0,
+          engineBundle: { ...engineBundle, runtime: "rarext.native-engine.node-cjs.v1" },
+        }),
+      /needs a GGUF engine artifact/,
+    );
+    await assert.rejects(
+      () =>
+        startProvider({
+          bundle: nativeBundle,
+          registry: reg.base,
+          stateDir: join(reg.root, "native-wrong-runtime"),
+          port: 0,
+          engineBundle,
+        }),
+      /needs a native engine artifact/,
+    );
+  } finally {
+    if (provider !== null) await provider.close();
     await reg.close();
   }
 });

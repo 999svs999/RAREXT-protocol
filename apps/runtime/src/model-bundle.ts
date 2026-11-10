@@ -550,6 +550,7 @@ export function buildModelBundle(input: BuildBundleInput): {
 
 const EXECUTION_KINDS = new Set(["native", "engine"]);
 const ENGINE_NAMES = new Set<EngineName>([
+  "rarext",
   "ollama",
   "strata",
   "freetoken",

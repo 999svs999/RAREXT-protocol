@@ -52,6 +52,7 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     throw new Error("challenge.spec.weightsDigest must be a string or null");
   }
   if (
+    value.engine !== "rarext" &&
     value.engine !== "ollama" &&
     value.engine !== "strata" &&
     value.engine !== "freetoken" &&

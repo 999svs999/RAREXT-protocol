@@ -24,14 +24,29 @@ import type { BundleShard } from "./model-bundle.ts";
  * the same shape carry an engine IMAGE and run only the verified bytes. The
  * protocol shape — shard, commit, fetch, verify, refuse-on-mismatch, bind into
  * the run — is the same either way.
+ *
+ * RAREXT ships two runtimes in this repository:
+ *   - `rarext.native-engine.node-cjs.v1` — the xorshift32 class.
+ *   - `rarext.gguf-engine.node-cjs.v1` — RAREXT's own GGUF transformer
+ *     (`apps/runtime/engines/rarext-gguf-engine.js`), so a GGUF model needs no
+ *     Ollama, no llama.cpp, and no container runtime on the provider.
  */
 
 export const ENGINE_BUNDLE_KIND = "rarext.engine-bundle.v1";
 /**
  * How the artifact is executed. `node-cjs` is a CommonJS module that assigns
  * `module.exports.run = (model, input) => ({ text, seed, steps, tokens })`.
+ *
+ * The native runtime runs the committed model in RAREXT's xorshift32 class. The
+ * GGUF runtime runs RAREXT's OWN GGUF engine: the artifact parses the GGUF,
+ * dequantizes the committed weights, and performs the transformer itself. No
+ * Ollama, llama.cpp, native addon, or container runtime is involved.
  */
 export const ENGINE_ARTIFACT_RUNTIME = "rarext.native-engine.node-cjs.v1";
+export const ENGINE_ARTIFACT_RUNTIME_GGUF = "rarext.gguf-engine.node-cjs.v1";
+export type EngineArtifactRuntime =
+  | typeof ENGINE_ARTIFACT_RUNTIME
+  | typeof ENGINE_ARTIFACT_RUNTIME_GGUF;
 
 export interface EngineBundle {
   kind: typeof ENGINE_BUNDLE_KIND;
@@ -42,7 +57,7 @@ export interface EngineBundle {
   /** The engine's own version string. */
   engineVersion: string;
   /** How the artifact is executed. */
-  runtime: typeof ENGINE_ARTIFACT_RUNTIME;
+  runtime: EngineArtifactRuntime;
   shards: BundleShard[];
   /** Sum of the shard bytes: the artifact size. */
   totalBytes: number;
@@ -78,6 +93,7 @@ export function buildEngineBundle(input: {
   source: Uint8Array;
   name: string;
   engineVersion: string;
+  runtime?: EngineArtifactRuntime;
   id?: string;
   chunkBytes?: number;
   createdAt?: string;
@@ -95,7 +111,7 @@ export function buildEngineBundle(input: {
     id: input.id ?? `${input.name}-${input.engineVersion}`,
     name: input.name,
     engineVersion: input.engineVersion,
-    runtime: ENGINE_ARTIFACT_RUNTIME,
+    runtime: input.runtime ?? ENGINE_ARTIFACT_RUNTIME,
     shards,
     totalBytes: chunks.reduce((total, chunk) => total + chunk.length, 0),
     shardsRoot: bundleShardsRoot(shards),
@@ -113,8 +129,10 @@ export function verifyEngineBundle(value: unknown): string[] {
   if (typeof value.id !== "string" || value.id.length === 0) errors.push("engine bundle id must be non-empty");
   if (typeof value.name !== "string" || value.name.length === 0) errors.push("engine bundle name must be non-empty");
   if (typeof value.engineVersion !== "string") errors.push("engine bundle engineVersion must be a string");
-  if (value.runtime !== ENGINE_ARTIFACT_RUNTIME) {
-    errors.push(`engine bundle runtime must be "${ENGINE_ARTIFACT_RUNTIME}"`);
+  if (value.runtime !== ENGINE_ARTIFACT_RUNTIME && value.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
+    errors.push(
+      `engine bundle runtime must be "${ENGINE_ARTIFACT_RUNTIME}" or "${ENGINE_ARTIFACT_RUNTIME_GGUF}"`,
+    );
   }
   if (typeof value.artifactDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value.artifactDigest)) {
     errors.push("engine bundle artifactDigest must be sha256:<hex>");
@@ -204,12 +222,19 @@ export async function fetchEngineArtifact(input: {
   return bytes;
 }
 
-/** The interface a native engine artifact must expose. */
+/** The interface an engine artifact must expose. `model` is whatever the
+ *  runtime class carries: the xorshift32 model, or `{ kind: "gguf", bytes }`. */
 export interface NativeEngine {
   run(
     model: unknown,
-    input: { prompt: string; steps: number; seed?: number | null },
+    input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
   ): { text: string; seed: number; steps: number; tokens: number[] };
+}
+
+/** A model handle for the GGUF runtime: the verified bytes, nothing else. */
+export interface GgufModel {
+  kind: "gguf";
+  bytes: Uint8Array;
 }
 
 /**

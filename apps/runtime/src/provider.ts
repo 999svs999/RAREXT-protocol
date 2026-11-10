@@ -26,8 +26,13 @@ import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { verifyImageManifest } from "./image-manifest.ts";
 import type { ImageManifest, IsolationClass } from "./image-manifest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
-import { fetchEngineArtifact, loadEngine } from "./engine-bundle.ts";
-import type { EngineBundle, NativeEngine } from "./engine-bundle.ts";
+import {
+  ENGINE_ARTIFACT_RUNTIME,
+  ENGINE_ARTIFACT_RUNTIME_GGUF,
+  fetchEngineArtifact,
+  loadEngine,
+} from "./engine-bundle.ts";
+import type { EngineBundle, GgufModel, NativeEngine } from "./engine-bundle.ts";
 import {
   fetchBundleChunks,
   fetchBundleCiphertext,
@@ -750,10 +755,26 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   // The engine the provider will RUN. When it is a RAREXT artifact, fetch and
   // verify it first: a shard that does not hash to the committed engine, or a
   // module that exposes no engine, stops the provider before it serves anything.
+  // The RAREXT-native engine class: the provider runs its own fetched GGUF
+  // engine over the committed weights. There is no external engine to load
+  // into, so no engine endpoint is required and no weights are written to disk.
+  const ownGguf =
+    options.bundle.execution.kind === "engine" && options.bundle.execution.engine === "rarext";
+
   let loadedEngine: NativeEngine | null = null;
   if (options.engineBundle !== undefined) {
-    if (options.bundle.execution.kind !== "native") {
-      throw new Error("a RAREXT engine artifact runs the native class; the engine class loads a model into a local engine");
+    if (options.bundle.execution.kind === "native") {
+      if (options.engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME) {
+        throw new Error("the native class needs a native engine artifact");
+      }
+    } else if (ownGguf) {
+      if (options.engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
+        throw new Error("the RAREXT GGUF class needs a GGUF engine artifact");
+      }
+    } else {
+      throw new Error(
+        "a RAREXT engine artifact runs the native class or the RAREXT GGUF class; a third-party engine loads a model into itself",
+      );
     }
     const source = await fetchEngineArtifact({ registries, bundle: options.engineBundle });
     loadedEngine = loadEngine(source);
@@ -765,8 +786,15 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
   let native: XorshiftModel | null = null;
   let engineModel: string | null = null;
+  let gguf: GgufModel | null = null;
   if (options.bundle.execution.kind === "native") {
     native = parseNativeModel(bytes);
+  } else if (ownGguf) {
+    if (loadedEngine === null) {
+      throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");
+    }
+    // The verified bytes stay in memory. The fetched engine parses them.
+    gguf = { kind: "gguf", bytes };
   } else {
     if (options.engineEndpoint === undefined) {
       throw new Error("an engine bundle needs --engine-endpoint so the provider can load the model");
@@ -936,6 +964,39 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         !result.tokens.every((token) => Number.isSafeInteger(token))
       ) {
         throw new Error("the RAREXT engine artifact returned a malformed native result");
+      }
+      return {
+        text: result.text,
+        seed: result.seed,
+        steps: result.steps,
+        trace: { kind: "rarext.decode-trace.v1", tokens: result.tokens },
+      };
+    }
+
+    if (gguf !== null) {
+      if (loadedEngine === null) throw new Error("the RAREXT GGUF engine was not loaded");
+      const seed =
+        typeof body.seed === "number" && Number.isSafeInteger(body.seed)
+          ? (body.seed as number)
+          : null;
+      const steps = requestedSteps(body, 32);
+      const temperature =
+        typeof body.temperature === "number" && Number.isFinite(body.temperature)
+          ? (body.temperature as number)
+          : 0;
+      // The provider runs the engine it fetched from RAREXT over the weights it
+      // fetched from RAREXT. No Ollama, llama.cpp, native addon, or container.
+      const result = loadedEngine.run(gguf, { prompt, steps, seed, temperature });
+      if (
+        result === null ||
+        typeof result !== "object" ||
+        typeof result.text !== "string" ||
+        !Number.isSafeInteger(result.seed) ||
+        !Number.isSafeInteger(result.steps) ||
+        !Array.isArray(result.tokens) ||
+        !result.tokens.every((token) => Number.isSafeInteger(token))
+      ) {
+        throw new Error("the RAREXT GGUF engine returned a malformed result");
       }
       return {
         text: result.text,
