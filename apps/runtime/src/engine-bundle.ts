@@ -231,6 +231,11 @@ export interface NativeEngine {
   ): { text: string; seed: number; steps: number; tokens: number[] };
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
+  /** Present on the GGUF runtime: the parsed header/KV/tensor table. */
+  parseGguf?(bytes: Uint8Array): {
+    kv: Record<string, unknown>;
+    tensors: Record<string, { name: string; type: number; cols: number; rows: number; rowBytes: number }>;
+  };
   /** Present on the GGUF runtime: the rotary-position primitive, for tests. */
   rope?(
     vector: Float32Array,
@@ -240,7 +245,15 @@ export interface NativeEngine {
     position: number,
     base: number,
     neox: boolean,
+    factors?: Float32Array | null,
+    attn?: number,
+    freqScale?: number,
   ): void;
+  /** Present on the GGUF runtime: the LongRoPE set a run would use, for tests. */
+  ropeFactors?(
+    model: unknown,
+    input: { prompt: string; steps: number },
+  ): { set: "long" | "short"; values: number[] } | null;
   /** Present on the GGUF runtime: LayerNorm (Phi-2), for tests. */
   layerNorm?(
     out: Float32Array,
@@ -282,8 +295,10 @@ export function loadEngine(source: Uint8Array): NativeEngine {
   const exports = module.exports as {
     run?: unknown;
     dequantTensor?: unknown;
+    parseGguf?: unknown;
     rope?: unknown;
     layerNorm?: unknown;
+    ropeFactors?: unknown;
   };
   const run = exports.run;
   if (typeof run !== "function") {
@@ -294,11 +309,17 @@ export function loadEngine(source: Uint8Array): NativeEngine {
     ...(typeof exports.dequantTensor === "function"
       ? { dequantTensor: exports.dequantTensor as NonNullable<NativeEngine["dequantTensor"]> }
       : {}),
+    ...(typeof exports.parseGguf === "function"
+      ? { parseGguf: exports.parseGguf as NonNullable<NativeEngine["parseGguf"]> }
+      : {}),
     ...(typeof exports.rope === "function"
       ? { rope: exports.rope as NonNullable<NativeEngine["rope"]> }
       : {}),
     ...(typeof exports.layerNorm === "function"
       ? { layerNorm: exports.layerNorm as NonNullable<NativeEngine["layerNorm"]> }
+      : {}),
+    ...(typeof exports.ropeFactors === "function"
+      ? { ropeFactors: exports.ropeFactors as NonNullable<NativeEngine["ropeFactors"]> }
       : {}),
   };
 }

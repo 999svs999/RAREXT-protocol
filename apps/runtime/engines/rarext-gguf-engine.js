@@ -1333,6 +1333,21 @@
     throw new Error("cannot decode IQ block type " + type);
   }
 
+  /**
+   * Which LongRoPE factor tensor a run of `totalLen` positions would use:
+   * "long" past the model's original context, "short" otherwise, or null when
+   * the model has no LongRoPE factors. Exposed so a test can assert the choice
+   * directly instead of inferring it from an argmax that may not move.
+   */
+  function selectRopeFactorSet(gguf, arch, totalLen) {
+    var longF = tensorOrNull(gguf, "blk.0.rope_factors_long.weight");
+    var shortF = tensorOrNull(gguf, "blk.0.rope_factors_short.weight");
+    if (longF === undefined && shortF === undefined) return null;
+    var origCtx = gguf.kv[arch + ".rope.scaling.original_context_length"] || 0;
+    if (origCtx > 0 && totalLen > origCtx) return longF !== undefined ? "long" : "short";
+    return shortF !== undefined ? "short" : "long";
+  }
+
   function dequantRow(model, tensor, row, out) {
     var view = model.view;
     var base = model.dataStart + tensor.offset + row * tensor.rowBytes;
@@ -2335,13 +2350,12 @@
       throw new Error(arch + " declares " + nRot + " rotary dimensions, not an even part of " + headDim);
     }
     // Long-context Phi-3 files carry per-dimension long/short RoPE factors
-    // (LongRoPE). Refuse rather than silently applying an unscaled rope.
-    if (
-      tensorOrNull(gguf, "blk.0.rope_factors_long.weight") !== undefined ||
-      tensorOrNull(gguf, "blk.0.rope_factors_short.weight") !== undefined
-    ) {
-      throw new Error("this rarext engine does not yet apply Phi LongRoPE scaling factors");
-    }
+    // (LongRoPE) plus an attention magnitude factor. The short set is used when
+    // the run fits the original context, the long set beyond it (llama.cpp's
+    // get_rope_factors rule).
+    var ropeAttnFactor = kv[arch + ".rope.scaling.attn_factor"] || 1;
+    var ropeFreqScale = kv[arch + ".rope.scaling.factor"] || 1;
+    var ropeOrigCtx = kv[arch + ".rope.scaling.original_context_length"] || 0;
     var group = nHead / nHeadKv;
 
     var tokenizer = new Tokenizer(gguf);
@@ -2383,6 +2397,28 @@
       cacheK.push([]);
       cacheV.push([]);
     }
+
+    // Dequantized norm rows are cached; declared here because the LongRoPE
+    // factors below are dequantized through the same helper.
+    var normCache = new Map();
+    // LongRoPE factors for this run: the long set once the sequence would pass
+    // the model's original context, the short set otherwise. Absent for the
+    // ordinary (non-scaled) models, in which case the rope is unscaled.
+    var ropeFactorTensor = null;
+    var longFactors = tensorOrNull(gguf, "blk.0.rope_factors_long.weight");
+    var shortFactors = tensorOrNull(gguf, "blk.0.rope_factors_short.weight");
+    if (longFactors !== undefined || shortFactors !== undefined) {
+      var totalLen = promptIds.length + steps;
+      ropeFactorTensor =
+        ropeOrigCtx > 0 && totalLen > ropeOrigCtx
+          ? longFactors || shortFactors
+          : shortFactors || longFactors;
+    }
+    var ropeFactors =
+      ropeFactorTensor === null || ropeFactorTensor === undefined
+        ? null
+        : dequantNorm(gguf, ropeFactorTensor, nRot / 2);
+    var ropeFactorSet = selectRopeFactorSet(gguf, arch, promptIds.length + steps);
 
     var position = 0;
     var generated = [];
@@ -2432,8 +2468,8 @@
           addBias(v, biasOrNull(gguf, prefix + "attn_v.bias", kvDim));
         }
 
-        rope(q, nHead, headDim, nRot, position, ropeBase, neox);
-        rope(k, nHeadKv, headDim, nRot, position, ropeBase, neox);
+        rope(q, nHead, headDim, nRot, position, ropeBase, neox, ropeFactors, ropeAttnFactor, ropeFreqScale);
+        rope(k, nHeadKv, headDim, nRot, position, ropeBase, neox, ropeFactors, ropeAttnFactor, ropeFreqScale);
 
         cacheK[layerIndex].push(new Float32Array(k));
         cacheV[layerIndex].push(new Float32Array(v));
@@ -2572,7 +2608,6 @@
       return logits;
     }
 
-    var normCache = new Map();
     function dequantNorm(g, tensor, size) {
       if (tensor === undefined) throw new Error("GGUF is missing a norm tensor");
       var cached = normCache.get(tensor.name);
@@ -2629,14 +2664,18 @@
     };
   }
 
-  function rope(vector, heads, headDim, nRot, position, base, neox) {
+  function rope(vector, heads, headDim, nRot, position, base, neox, factors, attn, freqScale) {
     var half = nRot / 2;
+    var af = attn === undefined ? 1 : attn;
+    var fs = freqScale === undefined ? 1 : freqScale;
     for (var h = 0; h < heads; h += 1) {
       var off = h * headDim;
       for (var i = 0; i < half; i += 1) {
-        var theta = position * Math.pow(base, (-2 * i) / nRot);
-        var cos = Math.cos(theta);
-        var sin = Math.sin(theta);
+        var theta = fs * position * Math.pow(base, (-2 * i) / nRot);
+        // LongRoPE divides each pair's angle by its per-dimension factor.
+        if (factors !== undefined && factors !== null) theta /= factors[i];
+        var cos = Math.cos(theta) * af;
+        var sin = Math.sin(theta) * af;
         var a = neox ? off + i : off + 2 * i;
         var b = neox ? off + i + half : off + 2 * i + 1;
         var x0 = vector[a];
@@ -2664,6 +2703,21 @@
     dequantTensor: dequantTensor,
     rope: rope,
     layerNorm: layerNorm,
+    ropeFactors: function (model, input) {
+      var g = parseGguf(model.bytes);
+      var arch = g.kv["general.architecture"];
+      var prompt = String(input && input.prompt == null ? "" : input.prompt);
+      var total = new Tokenizer(g).encode(prompt).length + Math.max(0, Number(input && input.steps) || 0);
+      var set = selectRopeFactorSet(g, arch, total);
+      if (set === null) return null;
+      var tensor = tensorOrNull(
+        g,
+        set === "long" ? "blk.0.rope_factors_long.weight" : "blk.0.rope_factors_short.weight",
+      );
+      var values = new Float32Array(tensor.cols);
+      dequantRow(g, tensor, 0, values);
+      return { set: set, values: Array.from(values) };
+    },
     encode: function (model, text) {
       return new Tokenizer(parseGguf(model.bytes)).encode(text);
     },

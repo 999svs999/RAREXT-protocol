@@ -170,7 +170,7 @@ function tinyGgufModel(
     /** Override `general.architecture` while keeping this layout (negative tests). */
     archOverride?: string;
     /** Quantize weight tensors to this type (default: F32). */
-    quant?: "IQ4_NL";
+    quant?: "IQ4_NL" | "IQ2_XXS";
     nEmbd?: number;
     nHead?: number;
     nHeadKv?: number;
@@ -179,8 +179,16 @@ function tinyGgufModel(
     nRot?: number;
     /** Phi-3 fused QKV/ffn_up (default) or the equivalent separate tensors. */
     phi3Layout?: "fused" | "separate";
-    /** Add Phi LongRoPE factor tensors (negative test: must be refused). */
+    /** Add Phi LongRoPE short/long factor tensors (all ones). */
     longRope?: boolean;
+    /** Phi `rope.scaling.attn_factor` (default: absent). */
+    ropeAttnFactor?: number;
+    /** Phi `rope.scaling.original_context_length` (default: absent). */
+    ropeOrigCtx?: number;
+    /** Value written into the LongRoPE short factor tensor (default 1). */
+    ropeShortFactor?: number;
+    /** Value written into the LongRoPE long factor tensor (default 1). */
+    ropeLongFactor?: number;
   } = {},
 ): Buffer {
   const arch = options.arch ?? "qwen2";
@@ -234,7 +242,7 @@ function tinyGgufModel(
   interface TensorSpec {
     name: string;
     dims: number[];
-    kind: "weight" | "norm" | "bias";
+    kind: "weight" | "norm" | "bias" | "factor";
   }
   const kvDim = nHeadKv * (nEmbd / nHead);
   const specs: TensorSpec[] = [
@@ -298,8 +306,8 @@ function tinyGgufModel(
             ] as TensorSpec[])),
     ...(options.longRope
       ? ([
-          { name: "blk.0.rope_factors_long.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "weight" },
-          { name: "blk.0.rope_factors_short.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "weight" },
+          { name: "blk.0.rope_factors_long.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "factor" },
+          { name: "blk.0.rope_factors_short.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "factor" },
         ] as TensorSpec[])
       : []),
     ...(isPhi2
@@ -361,27 +369,40 @@ function tinyGgufModel(
       let value: number;
       if (spec.kind === "norm") value = options.normValue ?? 1 + (rand() - 0.5) * 0.1;
       else if (spec.kind === "bias") value = (rand() - 0.5) * 0.1;
+      else if (spec.kind === "factor") {
+        value = spec.name.includes("long") ? (options.ropeLongFactor ?? 1) : (options.ropeShortFactor ?? 1);
+      }
       else value = (rand() - 0.5) * 0.2;
       values.push(value);
     }
-    const quantize =
-      options.quant === "IQ4_NL" &&
-      spec.kind === "weight" &&
-      spec.dims[0]! % 32 === 0;
-    const data = quantize
+    const quantIq4 = options.quant === "IQ4_NL" && spec.kind === "weight" && spec.dims[0]! % 32 === 0;
+    const quantIq2 = options.quant === "IQ2_XXS" && spec.kind === "weight" && spec.dims[0]! % 256 === 0;
+    // An all-zero IQ2_XXS block with d = 1.0 decodes to the constant grid row 0
+    // (0x08 * 0.125 = 1.0), which is enough to drive the quant-domain dot path.
+    const quantIq2xxs = (dims: number[]): Buffer => {
+      const rows = dims.slice(1).reduce((total, dim) => total * dim, 1) || 1;
+      const blocks = (rows * dims[0]!) / 256;
+      const out = Buffer.alloc(blocks * 66);
+      for (let b = 0; b < blocks; b += 1) out.writeUInt16LE(0x3c00, b * 66);
+      return out;
+    };
+    const quantType = quantIq4 ? 20 : quantIq2 ? 16 : 0;
+    const data = quantIq4
       ? quantIq4nl(values, spec.dims[0]!)
-      : (() => {
-          const floats = Buffer.alloc(count * 4);
-          for (let i = 0; i < count; i += 1) floats.writeFloatLE(values[i]!, i * 4);
-          return floats;
-        })();
+      : quantIq2
+        ? quantIq2xxs(spec.dims)
+        : (() => {
+            const floats = Buffer.alloc(count * 4);
+            for (let i = 0; i < count; i += 1) floats.writeFloatLE(values[i]!, i * 4);
+            return floats;
+          })();
     datas.push(data);
     infos.push(
       Buffer.concat([
         str(spec.name),
         u32(spec.dims.length),
         ...spec.dims.map(u64),
-        u32(quantize ? 20 : 0), // GGML_TYPE_IQ4_NL vs GGML_TYPE_F32
+        u32(quantType), // GGML_TYPE_IQ4_NL / IQ2_XXS vs GGML_TYPE_F32
         u64(offset),
       ]),
     );
@@ -403,6 +424,12 @@ function tinyGgufModel(
     kv(`${arch}.rope.freq_base`, 6, f32(10000)),
     ...(isPhi3
       ? [kv(`${arch}.rope.dimension_count`, 4, u32(options.nRot ?? nEmbd / nHead))]
+      : []),
+    ...(options.ropeAttnFactor !== undefined
+      ? [kv(`${arch}.rope.scaling.attn_factor`, 6, f32(options.ropeAttnFactor))]
+      : []),
+    ...(options.ropeOrigCtx !== undefined
+      ? [kv(`${arch}.rope.scaling.original_context_length`, 4, u32(options.ropeOrigCtx))]
       : []),
     ...(isMoe
       ? [
@@ -6623,6 +6650,68 @@ test("the GGUF engine dequantizes every quantization it advertises", () => {
   );
 });
 
+test("the GGUF engine decodes every IQ grid quant with the upstream block layout", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const half = (bits: number): Buffer => {
+    const out = Buffer.alloc(2);
+    out.writeUInt16LE(bits, 0);
+    return out;
+  };
+  // d = 1.0 (0x3c00). All index/scale/sign bits are zero, so every group
+  // selects grid row 0. Those rows are known upstream values:
+  //   iq2*   grid0 = 0x0808080808080808 -> 8   (db = 0.125)  -> 1.0
+  //   iq3xxs grid0 = 0x04040404         -> 4   (db = 0.25)   -> 1.0
+  //   iq3s   grid0 = 0x01010101         -> 1   (db = 1)      -> 1.0
+  //   iq1s   grid0 = 0xffffffffffffffff -> -1  (dl = 1, delta = +0.125) -> -0.875
+  const check = (type: number, size: number, expected: number, head?: Buffer): void => {
+    const data = Buffer.alloc(size);
+    (head ?? half(0x3c00)).copy(data, 0);
+    const bytes = singleTensorGguf(type, [256], data);
+    const got = Array.from(engine.dequantTensor!({ kind: "gguf", bytes }, "t", 0));
+    assert.equal(got.length, 256, `type ${type} produced 256 values`);
+    for (const value of got) {
+      assert.ok(Math.abs(value - expected) < 1e-6, `type ${type}: ${value} != ${expected}`);
+    }
+  };
+  check(16, 66, 1.0); // IQ2_XXS
+  check(17, 74, 1.0); // IQ2_XS
+  check(22, 82, 1.0); // IQ2_S
+  check(18, 98, 1.0); // IQ3_XXS
+  check(21, 110, 1.0); // IQ3_S
+  check(19, 50, -0.875); // IQ1_S
+  // IQ1_M packs d into the top nibbles of scales[2] and scales[3]: the f16 bits
+  // are (sc2_nibble<<8)|(sc3_nibble<<12) plus lower nibbles, so sc2 = 0xc000 and
+  // sc3 = 0x3000 reconstruct 0x3c00 (d = 1) with every 3-bit sub-scale zero,
+  // giving -1 + 0.125 = -0.875 across the block.
+  const iq1m = Buffer.alloc(56);
+  iq1m.writeUInt16LE(0xc000, 4);
+  iq1m.writeUInt16LE(0x3000, 6);
+  check(29, 56, -0.875, iq1m);
+});
+
+test("the GGUF engine serves an IQ2_XXS quantized model through the quant-domain dot path", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const bytes = tinyGgufModel({
+    arch: "qwen2",
+    tokenizer: "gpt2",
+    quant: "IQ2_XXS",
+    nEmbd: 256,
+    nHead: 4,
+    nHeadKv: 2,
+    nFfn: 512,
+  });
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+  const first = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  const second = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.equal(first.tokens.length, 3);
+  assert.equal(first.tokens.join(","), second.tokens.join(","), "the IQ2_XXS run is deterministic");
+  const row = Array.from(engine.dequantTensor!(model, "blk.0.attn_q.weight", 0));
+  assert.ok(
+    row.every((value) => Math.abs(value - 1) < 1e-6),
+    "all-zero IQ2_XXS blocks with d=1 decode to all-ones weights",
+  );
+});
+
 test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + SentencePiece)", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -6968,19 +7057,53 @@ test("Phi-3 applies RoPE to only the declared rotary dimensions", () => {
   assert.equal(full[3], 0, "d3 has no source value to rotate");
 });
 
-test("Phi LongRoPE factors are refused instead of silently ignored", () => {
+test("Phi LongRoPE divides each pair's angle by its factor and scales by attn_factor", () => {
   const engine = loadEngine(
     readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
   );
-  const bytes = tinyGgufModel({ arch: "phi3", tokenizer: "llama", longRope: true });
-  assert.throws(
-    () =>
-      engine.run(
-        { kind: "gguf", bytes: new Uint8Array(bytes) },
-        { prompt: "a b", steps: 1, temperature: 0 },
-      ),
-    /LongRoPE scaling factors/,
+  const rotated = (factors: Float32Array | null, attn: number): number[] => {
+    const vector = Float32Array.from([1, 0, 0, 0]);
+    engine.rope!(vector, 1, 4, 4, 1, 10000, true, factors, attn, 1);
+    return Array.from(vector);
+  };
+  const plain = rotated(null, 1);
+  assert.ok(Math.abs(plain[0]! - Math.cos(1)) < 1e-6, "unscaled rope uses theta = position");
+  const factored = rotated(Float32Array.from([2, 2]), 1);
+  assert.ok(Math.abs(factored[0]! - Math.cos(0.5)) < 1e-6, "a factor of 2 halves the angle");
+  const magnified = rotated(null, 2);
+  assert.ok(Math.abs(magnified[0]! - 2 * Math.cos(1)) < 1e-6, "attn_factor scales cos/sin");
+});
+
+test("Phi LongRoPE picks the short factor set in-context and the long set past it", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
   );
+  const model = (ropeOrigCtx: number) => ({
+    kind: "gguf" as const,
+    bytes: new Uint8Array(
+      tinyGgufModel({
+        arch: "phi3",
+        tokenizer: "llama",
+        longRope: true,
+        nEmbd: 32,
+        nHead: 2,
+        nHeadKv: 2,
+        nFfn: 64,
+        ropeShortFactor: 1,
+        ropeLongFactor: 8,
+        ropeOrigCtx,
+      }),
+    ),
+  });
+  const inCtx = engine.ropeFactors!(model(4096), { prompt: "a b", steps: 3 });
+  assert.equal(inCtx?.set, "short", "a run inside the original context uses the short set");
+  assert.ok(inCtx!.values.every((value) => Math.abs(value - 1) < 1e-6), "short factors come from the short tensor");
+  const past = engine.ropeFactors!(model(2), { prompt: "a b", steps: 3 });
+  assert.equal(past?.set, "long", "a run past the original context uses the long set");
+  assert.ok(past!.values.every((value) => Math.abs(value - 8) < 1e-6), "long factors come from the long tensor");
+  // A model without LongRoPE factors reports none.
+  const plain = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ arch: "qwen2" })) };
+  assert.equal(engine.ropeFactors!(plain, { prompt: "a b", steps: 3 }), null);
 });
 
 test("RAREXT's own engine serves a Phi-2 GGUF (LayerNorm, GELU, parallel FFN residual)", async () => {

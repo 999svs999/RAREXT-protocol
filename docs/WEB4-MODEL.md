@@ -46,14 +46,15 @@ Two runtimes ship in this repository:
 - `rarext.gguf-engine.node-cjs.v1` is **RAREXT's own GGUF transformer**
   (`apps/runtime/engines/rarext-gguf-engine.js`). It parses the GGUF header, KV,
   and tensor table, dequantizes the committed weights (F32/F16/BF16/Q4_0/Q4_1/
-  Q5_0/Q5_1/Q8_0/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K/Q8_K and the non-linear 4-bit IQ4_NL
-  and IQ4_XS), and runs the transformer inside the
+  Q5_0/Q5_1/Q8_0/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K/Q8_K, the non-linear 4-bit IQ4_NL and
+  IQ4_XS, and the **grid quants IQ2_XXS/IQ2_XS/IQ2_S/IQ3_XXS/IQ3_S/IQ1_S/IQ1_M**
+  from ggml's own grid tables), and runs the transformer inside the
   provider: qwen2, llama/mistral, **mixtral** (top-k MoE routing), **gemma**
   (GeGLU, norm+1, `sqrt(n_embd)` embedding scale), **phi3** (optional partial
-  NeoX rotary, fused QKV, fused gate/up) and **phi2** (LayerNorm with bias, GELU
-  sequential FFN, parallel FFN residual, output bias) — RMSNorm/LayerNorm, GQA
-  attention, NeoX or adjacent-pair RoPE, SwiGLU/GeGLU/GELU, optional output
-  matrix. Both GPT-2
+  NeoX rotary, fused QKV, fused gate/up, LongRoPE long/short factors with the
+  `attn_factor` magnitude) and **phi2** (LayerNorm with bias, GELU sequential
+  FFN, parallel FFN residual, output bias) — RMSNorm/LayerNorm, GQA attention,
+  NeoX or adjacent-pair RoPE, SwiGLU/GeGLU/GELU, optional output matrix. Both GPT-2
   byte-level BPE and SentencePiece tokenizers are implemented, so the engine
   covers the common GGUF families rather than one. A GGUF `bundle` therefore
   defaults to this engine and commits it into the model bundle; Ollama is only
@@ -1341,9 +1342,14 @@ why a large file is sharded rather than sent as one object.
   covers qwen2, llama/mistral, **mixtral** (top-k expert routing over a stacked
   expert bank) and **gemma** (GeGLU, norm weights biased by +1, and the
   `sqrt(n_embd)` embedding scale), **phi3** (partial NeoX rotary, fused QKV,
-  fused gate/up) and **phi2** (LayerNorm with bias, GELU, parallel FFN
-  residual), plus the listed tensor types and the non-linear IQ4_NL/IQ4_XS 4-bit
-  family. What it still does not cover — Phi LongRoPE scaling factors and the
-  IQ2/IQ3/IQ1 grid quants — needs the missing grid tables, the scaling math, or
-  a real fixture before it can be claimed; a model using them is refused rather
-  than mis-served. The compute is the provider's.
+  fused gate/up, LongRoPE factors) and **phi2** (LayerNorm with bias, GELU,
+  parallel FFN residual), plus every tensor type listed above, including the
+  IQ2/IQ3/IQ1 grid quants. The grid-quant decoders are verified two ways:
+  hand-computed values taken from ggml's own grid rows plus a full IQ2_XXS
+  decode through the quant-domain dot path (all seven types), and real
+  IQ-quantized GGUFs served end-to-end at 34/34 with a replayed decode trace
+  (`Qwen2.5-0.5B-Instruct-IQ2_M`, IQ2_S+IQ3_S tensors; `…-IQ3_XS`, IQ3_S
+  tensors). The remaining third-party tie is the GGUF container itself: turning
+  Hugging Face safetensors into a servable model still uses llama.cpp's
+  converter, so a RAREXT-native safetensors ingest is the next thing to build.
+  The compute is the provider's.
