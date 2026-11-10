@@ -1150,6 +1150,189 @@
 
   // ── quantized rows ────────────────────────────────────────────────────────
 
+  /**
+   * Decode one 256-value IQ grid-quant block into `out`. This is a direct
+   * transliteration of ggml's dequantize_row_iq2_xxs / iq2_xs / iq2_s /
+   * iq3_xxs / iq3_s / iq1_s / iq1_m, so the dequant and dot paths read the same
+   * bits the same way. Grid rows are `IQ*_GRID` byte tables (from ggml-common.h).
+   */
+  function iqBlockFloats(type, view, base, out) {
+    var l, j;
+    if (type === TYPE_IQ2_XXS) {
+      var dqx = f16(view.getUint16(base, true));
+      for (var ib = 0; ib < 8; ib += 1) {
+        var qp = base + 2 + 8 * ib;
+        var aux0 = view.getUint32(qp, true);
+        var aux1 = view.getUint32(qp + 4, true);
+        var dbx = dqx * (0.5 + (aux1 >>> 28)) * 0.25;
+        var aux8 = [
+          aux0 & 255, (aux0 >>> 8) & 255, (aux0 >>> 16) & 255, (aux0 >>> 24) & 255,
+          aux1 & 255, (aux1 >>> 8) & 255, (aux1 >>> 16) & 255, (aux1 >>> 24) & 255,
+        ];
+        for (l = 0; l < 4; l += 1) {
+          var gx = aux8[l] * 8;
+          var sgnx = KSIGNS_IQ2XS[(aux1 >>> (7 * l)) & 127];
+          for (j = 0; j < 8; j += 1) {
+            out[ib * 32 + l * 8 + j] = dbx * IQ2XXS_GRID[gx + j] * ((sgnx & KMASK_IQ2XS[j]) ? -1 : 1);
+          }
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ2_XS) {
+      var dxs = f16(view.getUint16(base, true));
+      var scx = base + 2 + 64;
+      for (var ib2 = 0; ib2 < 8; ib2 += 1) {
+        var sx = view.getUint8(scx + ib2);
+        var dbx0 = dxs * (0.5 + (sx & 15)) * 0.25;
+        var dbx1 = dxs * (0.5 + (sx >> 4)) * 0.25;
+        for (l = 0; l < 4; l += 1) {
+          var vx = view.getUint16(base + 2 + (4 * ib2 + l) * 2, true);
+          var gxx = (vx & 511) * 8;
+          var sgnxx = KSIGNS_IQ2XS[(vx >> 9) & 127];
+          var ddx = l < 2 ? dbx0 : dbx1;
+          for (j = 0; j < 8; j += 1) {
+            out[ib2 * 32 + l * 8 + j] = ddx * IQ2XS_GRID[gxx + j] * ((sgnxx & KMASK_IQ2XS[j]) ? -1 : 1);
+          }
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ2_S) {
+      var d2 = f16(view.getUint16(base, true));
+      var qs2 = base + 2;
+      var qh2 = base + 2 + 64;
+      var sc2 = base + 2 + 64 + 8;
+      var sg2 = base + 2 + 32;
+      for (ib = 0; ib < 8; ib += 1) {
+        var s2 = view.getUint8(sc2 + ib);
+        var e0 = d2 * (0.5 + (s2 & 15)) * 0.25;
+        var e1 = d2 * (0.5 + (s2 >> 4)) * 0.25;
+        for (l = 0; l < 4; l += 1) {
+          var dl2 = l < 2 ? e0 : e1;
+          var idx2 =
+            view.getUint8(qs2 + 4 * ib + l) |
+            ((view.getUint8(qh2 + ib) << (8 - 2 * l)) & 0x300);
+          var g2 = idx2 * 8;
+          var sb2 = view.getUint8(sg2 + 4 * ib + l);
+          for (j = 0; j < 8; j += 1) {
+            out[ib * 32 + l * 8 + j] = dl2 * IQ2S_GRID[g2 + j] * ((sb2 & KMASK_IQ2XS[j]) ? -1 : 1);
+          }
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ3_XXS) {
+      var d3x = f16(view.getUint16(base, true));
+      var qs3x = base + 2;
+      var ss3x = base + 2 + 64;
+      for (ib = 0; ib < 8; ib += 1) {
+        var ax = view.getUint32(ss3x + 4 * ib, true);
+        var db3x = d3x * (0.5 + (ax >>> 28)) * 0.5;
+        for (l = 0; l < 4; l += 1) {
+          var sg3x = KSIGNS_IQ2XS[(ax >>> (7 * l)) & 127];
+          var g3a = view.getUint8(qs3x + 8 * ib + 2 * l) * 4;
+          var g3b = view.getUint8(qs3x + 8 * ib + 2 * l + 1) * 4;
+          for (j = 0; j < 4; j += 1) {
+            out[ib * 32 + l * 8 + j] = db3x * IQ3XXS_GRID[g3a + j] * ((sg3x & KMASK_IQ2XS[j]) ? -1 : 1);
+            out[ib * 32 + l * 8 + j + 4] =
+              db3x * IQ3XXS_GRID[g3b + j] * ((sg3x & KMASK_IQ2XS[j + 4]) ? -1 : 1);
+          }
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ3_S) {
+      var d3s = f16(view.getUint16(base, true));
+      var q3 = base + 2;
+      var h3 = base + 2 + 64;
+      var s3 = base + 2 + 64 + 8;
+      var c3 = base + 2 + 64 + 8 + 32;
+      var y3 = 0;
+      for (var it = 0; it < 4; it += 1) {
+        var scl = view.getUint8(c3 + it);
+        var dv1 = d3s * (1 + 2 * (scl & 15));
+        var dv2 = d3s * (1 + 2 * (scl >> 4));
+        for (var half = 0; half < 2; half += 1) {
+          var dv = half === 0 ? dv1 : dv2;
+          var hb = view.getUint8(h3 + it * 2 + half);
+          for (l = 0; l < 4; l += 1) {
+            var i1 = (view.getUint8(q3 + 2 * l) | ((hb << (8 - 2 * l)) & 256)) * 4;
+            var i2 = (view.getUint8(q3 + 2 * l + 1) | ((hb << (7 - 2 * l)) & 256)) * 4;
+            var sb3 = view.getUint8(s3 + l);
+            for (j = 0; j < 4; j += 1) {
+              out[y3 + j] = dv * IQ3S_GRID[i1 + j] * ((sb3 & KMASK_IQ2XS[j]) ? -1 : 1);
+              out[y3 + j + 4] = dv * IQ3S_GRID[i2 + j] * ((sb3 & KMASK_IQ2XS[j + 4]) ? -1 : 1);
+            }
+            y3 += 8;
+          }
+          q3 += 8;
+          s3 += 4;
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ1_S) {
+      var d1 = f16(view.getUint16(base, true));
+      var qs1 = base + 2;
+      var qh1 = base + 2 + 32;
+      for (ib = 0; ib < 8; ib += 1) {
+        var hv = view.getUint16(qh1 + 2 * ib, true);
+        var dl1 = d1 * (2 * ((hv >> 12) & 7) + 1);
+        var delta1 = hv & 0x8000 ? -0.125 : 0.125;
+        for (l = 0; l < 4; l += 1) {
+          var idx1 = view.getUint8(qs1 + 4 * ib + l) | (((hv >> (3 * l)) & 7) << 8);
+          var g1 = idx1 * 8;
+          for (j = 0; j < 8; j += 1) {
+            out[ib * 32 + l * 8 + j] = dl1 * (IQ1S_GRID[g1 + j] + delta1);
+          }
+        }
+      }
+      return out;
+    }
+    if (type === TYPE_IQ1_M) {
+      var sc0 = view.getUint16(base, true);
+      var sc1 = view.getUint16(base + 2, true);
+      var sc2v = view.getUint16(base + 4, true);
+      var sc3 = view.getUint16(base + 6, true);
+      var scaleU16 =
+        (sc0 >> 12) | ((sc1 >> 8) & 0x00f0) | ((sc2v >> 4) & 0x0f00) | (sc3 & 0xf000);
+      var dm = f16(scaleU16);
+      var qsm = base + 8;
+      var qhm = base + 8 + 32;
+      var scm = [sc0, sc1, sc2v, sc3];
+      for (ib = 0; ib < 8; ib += 1) {
+        var sh = 6 * (ib & 1);
+        var dlm1 = dm * (2 * ((scm[ib >> 1] >> sh) & 7) + 1);
+        var dlm2 = dm * (2 * ((scm[ib >> 1] >> (sh + 3)) & 7) + 1);
+        var hb0 = view.getUint8(qhm + 2 * ib);
+        var hb1 = view.getUint8(qhm + 2 * ib + 1);
+        var qb = qsm + 4 * ib;
+        var idxm = [
+          view.getUint8(qb) | ((hb0 << 8) & 0x700),
+          view.getUint8(qb + 1) | ((hb0 << 4) & 0x700),
+          view.getUint8(qb + 2) | ((hb1 << 8) & 0x700),
+          view.getUint8(qb + 3) | ((hb1 << 4) & 0x700),
+        ];
+        var delm = [
+          hb0 & 0x08 ? -0.125 : 0.125,
+          hb0 & 0x80 ? -0.125 : 0.125,
+          hb1 & 0x08 ? -0.125 : 0.125,
+          hb1 & 0x80 ? -0.125 : 0.125,
+        ];
+        for (l = 0; l < 4; l += 1) {
+          var gm = idxm[l] * 8;
+          var dlv = l < 2 ? dlm1 : dlm2;
+          for (j = 0; j < 8; j += 1) {
+            out[ib * 32 + l * 8 + j] = dlv * (IQ1S_GRID[gm + j] + delm[l]);
+          }
+        }
+      }
+      return out;
+    }
+    throw new Error("cannot decode IQ block type " + type);
+  }
+
   function dequantRow(model, tensor, row, out) {
     var view = model.view;
     var base = model.dataStart + tensor.offset + row * tensor.rowBytes;
@@ -1418,6 +1601,21 @@
           }
         }
         return out;
+      case TYPE_IQ2_XXS:
+      case TYPE_IQ2_XS:
+      case TYPE_IQ2_S:
+      case TYPE_IQ3_XXS:
+      case TYPE_IQ3_S:
+      case TYPE_IQ1_S:
+      case TYPE_IQ1_M: {
+        var iqBytes = BLOCK[tensor.type].bytes;
+        var iqScratch = new Float32Array(256);
+        for (var qx = 0; qx < cols; qx += 256) {
+          iqBlockFloats(tensor.type, view, base + (qx / 256) * iqBytes, iqScratch);
+          for (i = 0; i < 256; i += 1) out[qx + i] = iqScratch[i];
+        }
+        return out;
+      }
       case TYPE_BF16:
         for (i = 0; i < cols; i += 1) out[i] = bf16(view.getUint16(base + i * 2, true));
         return out;
@@ -1727,6 +1925,21 @@
           }
         }
         return total;
+      case TYPE_IQ2_XXS:
+      case TYPE_IQ2_XS:
+      case TYPE_IQ2_S:
+      case TYPE_IQ3_XXS:
+      case TYPE_IQ3_S:
+      case TYPE_IQ1_S:
+      case TYPE_IQ1_M: {
+        var iqBytesD = BLOCK[tensor.type].bytes;
+        var iqScratchD = new Float32Array(256);
+        for (var qd = 0; qd < cols; qd += 256) {
+          iqBlockFloats(tensor.type, view, base + (qd / 256) * iqBytesD, iqScratchD);
+          for (i = 0; i < 256; i += 1) total += iqScratchD[i] * vec[qd + i];
+        }
+        return total;
+      }
       case TYPE_BF16:
         for (i = 0; i < cols; i += 1) total += bf16(view.getUint16(base + i * 2, true)) * vec[i];
         return total;

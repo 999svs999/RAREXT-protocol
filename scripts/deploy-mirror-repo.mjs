@@ -66,21 +66,46 @@ if (!existsSync(SOURCE)) {
 // the working tree: the tree is what gets copied, the SERVED bytes are what
 // the peer is verified against.
 const originBundleUrl = "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json";
-const originResponse = await fetch(originBundleUrl);
-if (!originResponse.ok) {
-  console.error(`the origin's bundle is not readable (${originResponse.status}) — refusing to publish a peer from nothing`);
-  process.exit(1);
-}
-const originBytes = new Uint8Array(await originResponse.arrayBuffer());
-const originRoot = JSON.parse(new TextDecoder().decode(originBytes)).manifest.root;
-console.log(`origin root: ${originRoot}`);
-
 const localBundle = readFileSync(join(SOURCE, "bundle.json"));
 const localRoot = JSON.parse(localBundle.toString("utf8")).manifest.root;
-if (localRoot !== originRoot || sha256(localBundle) !== sha256(originBytes)) {
-  console.error("the committed tree disagrees with the served origin — republish before deploying a peer");
-  process.exit(1);
+
+// GitHub Pages serves the pushed tree through a CDN, so the bytes are not
+// available the instant `git push` returns. Comparing once turned that propagation
+// delay into a hard failure ("the committed tree disagrees with the served
+// origin") on the 23:46 ship, minutes after the same code passed by hand — a race,
+// not a defect. Poll until the origin catches up, and only fail if it never does.
+const WAIT_MS = Number(process.env.RAREXT_ORIGIN_WAIT_MS || 180000);
+const STEP_MS = 10000;
+const startedAt = Date.now();
+let originBytes = null;
+let originRoot = null;
+let lastReason = "no attempt";
+for (;;) {
+  try {
+    const originResponse = await fetch(originBundleUrl, { cache: "no-store" });
+    if (!originResponse.ok) {
+      lastReason = `origin bundle HTTP ${originResponse.status}`;
+    } else {
+      const bytes = new Uint8Array(await originResponse.arrayBuffer());
+      const root = JSON.parse(new TextDecoder().decode(bytes)).manifest.root;
+      if (root === localRoot && sha256(localBundle) === sha256(bytes)) {
+        originBytes = bytes;
+        originRoot = root;
+        break;
+      }
+      lastReason = `origin root ${root} vs committed ${localRoot}`;
+    }
+  } catch (error) {
+    lastReason = String(error?.message ?? error).slice(0, 120);
+  }
+  if (Date.now() - startedAt > WAIT_MS) {
+    console.error(`the committed tree still disagrees with the served origin after ${Math.round(WAIT_MS / 1000)}s (${lastReason}) — refusing to deploy a peer from a stale projection`);
+    process.exit(1);
+  }
+  console.log(`waiting for the origin to serve the new tree (${lastReason})…`);
+  await new Promise((r) => setTimeout(r, STEP_MS));
 }
+console.log(`origin root: ${originRoot} (matched after ${Math.round((Date.now() - startedAt) / 1000)}s)`);
 
 if (DRY_RUN) {
   console.log("dry run: the committed tree matches the served origin; stopping before any network write");
