@@ -17,7 +17,16 @@ export function parseSentencePieceModel(buffer: Uint8Array): {
 export function tokenizeSection(dir: string, config: Record<string, unknown>): Record<string, unknown>;
 export function hparamsSection(config: Record<string, unknown>): Record<string, unknown>;
 export function buildContainer(kv: Record<string, unknown>, tensors: HfTensor[]): Buffer;
-export function convertHfDirectory(dir: string): {
+export function quantizeTensor(
+  type: string,
+  values: Float32Array,
+  cols: number,
+  rows: number,
+): { type: number; bytes: Buffer };
+export function convertHfDirectory(
+  dir: string,
+  options?: { quant?: string },
+): {
   bytes: Buffer;
   tensorCount: number;
   ggmlTypes: string[];

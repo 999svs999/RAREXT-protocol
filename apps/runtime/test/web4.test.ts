@@ -9,9 +9,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  buildContainer,
   convertHfDirectory,
   hparamsSection,
   parseSentencePieceModel,
+  quantizeTensor,
+  tokenizeSection,
 } from "../../../scripts/convert-hf-safetensors.mjs";
 
 import {
@@ -6911,6 +6914,244 @@ test("SentencePiece tokenizer.model checkpoints are ingested natively and decode
   const hfModel = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
   const served = engine.run(hfModel, { prompt: "a b", steps: 3, temperature: 0 }).tokens.join(",");
   assert.equal(served, reference, "the SentencePiece container decodes exactly like the GGUF fixture");
+});
+
+/** Emit a GGUF fixture's exact tensors as Hugging Face safetensors entries. */
+function hfEntriesFromGguf(
+  engine: ReturnType<typeof loadEngine>,
+  ggufBytes: Buffer,
+): { name: string; dtype: string; shape: number[]; bytes: Buffer }[] {
+  const parsed = engine.parseGguf!(new Uint8Array(ggufBytes));
+  const source = new Uint8Array(ggufBytes);
+  return Object.values(parsed.tensors).map((tensor) => {
+    const length = tensor.rowBytes * tensor.rows;
+    return {
+      name: ggufToHfName(tensor.name),
+      dtype: "F32",
+      // 1-D tensors (norms, biases) stay 1-D so the ingest leaves them F32.
+      shape: tensor.rows === 1 ? [tensor.cols] : [tensor.rows, tensor.cols],
+      bytes: Buffer.from(
+        source.subarray(parsed.dataStart + tensor.offset, parsed.dataStart + tensor.offset + length),
+      ),
+    };
+  });
+}
+
+test("the ingest quantizes weights to the engine's own block formats", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const constant = (quant: string, value: number): number => {
+    const result = quantizeTensor(quant, Float32Array.from({ length: 32 }, () => value), 32, 1);
+    const container = buildContainer({}, [
+      { name: "t", type: result.type, dims: [32, 1], bytes: result.bytes },
+    ]);
+    const row = engine.dequantTensor!({ kind: "hf", bytes: new Uint8Array(container) }, "t", 0);
+    return row[0]!;
+  };
+  assert.ok(Math.abs(constant("Q8_0", 0.5) - 0.5) < 1e-4, "Q8_0 round-trips a constant block");
+  assert.ok(Math.abs(constant("Q4_0", 0.5) - 0.5) < 1e-4, "Q4_0 round-trips a constant block");
+  const iq4 = constant("IQ4_NL", 0.5);
+  assert.ok(Math.abs(iq4 - 0.5) < 0.06, `IQ4_NL stays within its table step; got ${iq4}`);
+  assert.throws(() => quantizeTensor("Q9_9", new Float32Array(32), 32, 1), /unknown quantization/);
+});
+
+test("a Q8_0-quantized container decodes within the quantization bound and runs deterministically", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({
+    arch: "qwen2",
+    tokenizer: "gpt2",
+    nEmbd: 32,
+    nHead: 2,
+    nHeadKv: 2,
+    nFfn: 64,
+  });
+  const tokens = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const dir = mkdtempSync(join(tmpdir(), "rarext-quant-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "qwen2",
+      hidden_size: 32,
+      num_attention_heads: 2,
+      num_key_value_heads: 2,
+      intermediate_size: 64,
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({
+      model: { type: "BPE", vocab: Object.fromEntries(tokens.map((token, id) => [token, id])), merges: [] },
+      added_tokens: [],
+    }),
+  );
+  writeSafetensors(join(dir, "model.safetensors"), hfEntriesFromGguf(engine, ggufBytes));
+
+  const container = convertHfDirectory(dir, { quant: "Q8_0" });
+  assert.ok(container.ggmlTypes.includes("Q8_0"), "2D weights are Q8_0");
+  assert.ok(container.ggmlTypes.includes("F32"), "norms stay F32");
+  const model = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+
+  const original = Array.from(
+    engine.dequantTensor!({ kind: "gguf", bytes: new Uint8Array(ggufBytes) }, "blk.0.attn_q.weight", 0),
+  );
+  const quantized = Array.from(engine.dequantTensor!(model, "blk.0.attn_q.weight", 0));
+  const bound = Math.max(...original.map(Math.abs)) / 127 + 1e-5;
+  for (let i = 0; i < original.length; i += 1) {
+    assert.ok(
+      Math.abs(quantized[i]! - original[i]!) <= bound,
+      `Q8_0 error within bound at ${i}: ${quantized[i]} vs ${original[i]} (bound ${bound})`);
+  }
+
+  const first = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.ok(first.tokens.length >= 1, "the quantized container generates tokens");
+  const second = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.equal(first.tokens.join(","), second.tokens.join(","), "the quantized container is deterministic");
+});
+
+test("a Unigram/SentencePiece vocab inside tokenizer.json is ingested and decodes like the GGUF", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({ arch: "llama", tokenizer: "llama" });
+  const ggufModel = { kind: "gguf" as const, bytes: new Uint8Array(ggufBytes) };
+  const reference = engine
+    .run(ggufModel, { prompt: "a b", steps: 3, temperature: 0 })
+    .tokens.join(",");
+
+  const tokens = ["\u2581", "a", "b", "c", "d", "e", "f", "g"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const scores = tokens.map((_, index) => (index === 0 ? 0 : -index * 0.1));
+  const dir = mkdtempSync(join(tmpdir(), "rarext-unigram-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "llama",
+      hidden_size: 8,
+      num_attention_heads: 2,
+      num_key_value_heads: 1,
+      intermediate_size: 16,
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({
+      model: {
+        type: "Unigram",
+        unk_id: 0,
+        vocab: tokens.map((token, index) => [token, scores[index]]),
+      },
+      added_tokens: [],
+    }),
+  );
+  writeFileSync(join(dir, "tokenizer_config.json"), JSON.stringify({ add_bos_token: false }));
+  writeSafetensors(join(dir, "model.safetensors"), hfEntriesFromGguf(engine, ggufBytes));
+
+  const container = convertHfDirectory(dir);
+  const hfModel = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+  const served = engine.run(hfModel, { prompt: "a b", steps: 3, temperature: 0 }).tokens.join(",");
+  assert.equal(served, reference, "the Unigram container decodes exactly like the GGUF fixture");
+});
+
+test("the ingest refuses a tokenizer.json model type it does not implement", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rarext-wordpiece-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ model_type: "llama" }));
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({ model: { type: "WordPiece", vocab: {} } }),
+  );
+  assert.throws(() => tokenizeSection(dir, { model_type: "llama" }), /only BPE\/Unigram/);
+});
+
+test("Q4_K quantizes a super-block on the grid and decodes within one step", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  // 256 values on a 0.1 grid spanning [-0.8, 0.7]: a per-32 sub-block step of
+  // exactly 0.1, so the reconstruction must land within half a step.
+  const values = Float32Array.from({ length: 256 }, (_, i) => ((i % 16) - 8) * 0.1);
+  const result = quantizeTensor("Q4_K", values, 256, 1);
+  assert.equal(result.type, 12, "Q4_K is ggml type 12");
+  const container = buildContainer({}, [
+    { name: "t", type: result.type, dims: [256, 1], bytes: result.bytes },
+  ]);
+  const row = engine.dequantTensor!({ kind: "hf", bytes: new Uint8Array(container) }, "t", 0);
+  assert.equal(row.length, 256);
+  for (let i = 0; i < 256; i += 1) {
+    assert.ok(
+      Math.abs(row[i]! - values[i]!) <= 0.05 + 1e-4,
+      `Q4_K[${i}] = ${row[i]} vs ${values[i]}`,
+    );
+  }
+});
+
+test("a Q4_K container decodes within the sub-block step and runs deterministically", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({
+    arch: "qwen2",
+    tokenizer: "gpt2",
+    nEmbd: 256,
+    nHead: 4,
+    nHeadKv: 4,
+    nFfn: 512,
+  });
+  const tokens = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const dir = mkdtempSync(join(tmpdir(), "rarext-q4k-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "qwen2",
+      hidden_size: 256,
+      num_attention_heads: 4,
+      num_key_value_heads: 4,
+      intermediate_size: 512,
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({
+      model: { type: "BPE", vocab: Object.fromEntries(tokens.map((token, id) => [token, id])), merges: [] },
+      added_tokens: [],
+    }),
+  );
+  writeSafetensors(join(dir, "model.safetensors"), hfEntriesFromGguf(engine, ggufBytes));
+
+  const container = convertHfDirectory(dir, { quant: "Q4_K" });
+  assert.ok(container.ggmlTypes.includes("Q4_K"), "2D weights are Q4_K");
+  assert.ok(container.ggmlTypes.includes("F32"), "norms stay F32");
+  const model = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+
+  const original = Array.from(
+    engine.dequantTensor!({ kind: "gguf", bytes: new Uint8Array(ggufBytes) }, "blk.0.attn_q.weight", 0),
+  );
+  const quantized = Array.from(engine.dequantTensor!(model, "blk.0.attn_q.weight", 0));
+  const span = Math.max(...original) - Math.min(...original);
+  const bound = span / 15 / 2 + 1e-3;
+  for (let i = 0; i < original.length; i += 1) {
+    assert.ok(
+      Math.abs(quantized[i]! - original[i]!) <= bound,
+      `Q4_K error within a step at ${i}: ${quantized[i]} vs ${original[i]} (bound ${bound})`,
+    );
+  }
+
+  const first = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.ok(first.tokens.length >= 1);
+  const second = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.equal(first.tokens.join(","), second.tokens.join(","), "the Q4_K container is deterministic");
 });
 
 test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + SentencePiece)", async () => {

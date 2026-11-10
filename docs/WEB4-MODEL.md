@@ -73,7 +73,8 @@ magic `RXHF`) produced by RAREXT's own ingest
 (SentencePiece) — with **no llama.cpp, no gguf-py and no third-party converter**. The converter maps the HF parameter names
 and config into the GGUF-style KV/tensor table the engine already consumes, so
 one engine runs both containers. `bundle --file model.rarext` detects the magic,
-defaults to RAREXT's engine and commits it, exactly like a GGUF.
+defaults to RAREXT's engine and commits it, exactly like a GGUF. Weight
+quantization is RAREXT's own (`Q8_0`/`Q4_0`/`IQ4_NL`/`Q4_K`), not a llama.cpp pass.
 
 A container runtime would still be needed to carry a *third-party engine image*
 as the artifact. What is demonstrated is the invariant the objective names: **the
@@ -1362,6 +1363,11 @@ why a large file is sharded rather than sent as one object.
   the `RXHF` container, so no llama.cpp tooling is needed to serve them; that
   ingest implements qwen2/llama with both a byte-level BPE `tokenizer.json` and a
   **SentencePiece `tokenizer.model`**, whose protobuf it parses directly (no
-  `sentencepiece` dependency). It copies weights as F32/F16/BF16 — it does not
-  quantize — so a converted container is larger than a quantized GGUF. The
-  compute is the provider's.
+  `sentencepiece` dependency). It also **quantizes**: the third argument selects
+  `F32`, `Q8_0`, `Q4_0`, `IQ4_NL` or **`Q4_K`** (the K-quant super-block: 8 six-bit
+  scales and 8 six-bit mins packed the way ggml reads them). A 2-D weight matrix
+  is quantized when its columns span whole blocks — 32 values for Q4_0/Q8_0/IQ4_NL
+  and 256 for Q4_K. Under `Q4_K`, a weight row too narrow for a 256 super-block
+  falls back to `Q8_0` (like a GGUF "K_M" mix) instead of staying 16-bit, and
+  norms/biases keep the checkpoint's F16/BF16/F32 dtype, so the container always
+  decodes. The compute is the provider's.

@@ -4,17 +4,19 @@
  * into a RAREXT-native container ("RXHF") that RAREXT's own engine serves
  * directly. No llama.cpp, no gguf-py, no third-party converter.
  *
- *   node --experimental-strip-types scripts/convert-hf-safetensors.mjs <hf-dir> <out.rarext> [F32|Q4_0|Q8_0|IQ4_NL]
+ *   node --experimental-strip-types scripts/convert-hf-safetensors.mjs <hf-dir> <out.rarext> [F32|Q4_0|Q8_0|IQ4_NL|Q4_K]
  *
- * Supported: qwen2 and llama architectures, with either a byte-level BPE
- * tokenizer (tokenizer.json) or a SentencePiece tokenizer (tokenizer.model,
- * parsed directly from the protobuf). Other layouts are refused, not guessed.
+ * Supported: qwen2 and llama architectures, with a byte-level BPE tokenizer
+ * (tokenizer.json), a Unigram/SentencePiece tokenizer (either tokenizer.model,
+ * parsed straight from the protobuf, or a Unigram vocab inside tokenizer.json).
+ * Weights can be quantized to Q4_0/Q8_0/IQ4_NL/Q4_K with RAREXT's own encoders.
+ * Other layouts are refused, not guessed.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const DTYPE = { F32: 0, F16: 1, Q4_0: 2, Q8_0: 8, IQ4_NL: 20, BF16: 30 };
-const GGML_TYPE_NAME = { 0: "F32", 1: "F16", 2: "Q4_0", 8: "Q8_0", 20: "IQ4_NL", 30: "BF16" };
+const DTYPE = { F32: 0, F16: 1, Q4_0: 2, Q8_0: 8, Q4_K: 12, IQ4_NL: 20, BF16: 30 };
+const GGML_TYPE_NAME = { 0: "F32", 1: "F16", 2: "Q4_0", 8: "Q8_0", 12: "Q4_K", 20: "IQ4_NL", 30: "BF16" };
 
 // ── float <-> half ───────────────────────────────────────────────────────────
 function f16ToF32(bits) {
@@ -162,7 +164,80 @@ export function quantizeTensor(type, values, cols, rows) {
     }
     return { type: 20, bytes: out };
   }
-  throw new Error(`unknown quantization ${type}; only Q4_0/Q8_0/IQ4_NL`);
+  if (type === "Q4_K") {
+    if (cols % 256 !== 0) throw new Error(`cannot Q4_K quantize ${cols} columns; not a multiple of 256`);
+    const superBlocks = (rows * cols) / 256;
+    const out = Buffer.alloc(superBlocks * 144);
+    let w = 0;
+    for (let sb = 0; sb < superBlocks; sb += 1) {
+      const base = sb * 256;
+      const scales = new Array(8);
+      const mins = new Array(8);
+      let maxScale = 0;
+      let maxMin = 0;
+      for (let j = 0; j < 8; j += 1) {
+        let minx = Infinity;
+        let maxx = -Infinity;
+        for (let l = 0; l < 32; l += 1) {
+          const v = values[base + j * 32 + l];
+          if (v < minx) minx = v;
+          if (v > maxx) maxx = v;
+        }
+        const scale = (maxx - minx) / 15;
+        const min = Math.max(0, -minx);
+        scales[j] = scale;
+        mins[j] = min;
+        if (scale > maxScale) maxScale = scale;
+        if (min > maxMin) maxMin = min;
+      }
+      const d = maxScale / 63;
+      const dmin = maxMin / 63;
+      const invScale = maxScale > 0 ? 63 / maxScale : 0;
+      const invMin = maxMin > 0 ? 63 / maxMin : 0;
+      const packed = new Uint8Array(12);
+      const ls6 = new Array(8);
+      const lm6 = new Array(8);
+      for (let j = 0; j < 8; j += 1) {
+        const ls = Math.min(63, Math.round(invScale * scales[j]));
+        const lm = Math.min(63, Math.round(invMin * mins[j]));
+        ls6[j] = ls;
+        lm6[j] = lm;
+        if (j < 4) {
+          packed[j] = ls;
+          packed[j + 4] = lm;
+        } else {
+          // 6-bit scales/mins packed the way ggml's get_scale_min_k4 reads them.
+          packed[j + 4] = (ls & 0xf) | ((lm & 0xf) << 4);
+          packed[j - 4] |= (ls >> 4) << 6;
+          packed[j] |= (lm >> 4) << 6;
+        }
+      }
+      const dBits = f32ToF16(d);
+      const dminBits = f32ToF16(dmin);
+      out.writeUInt16LE(dBits, w);
+      out.writeUInt16LE(dminBits, w + 2);
+      Buffer.from(packed).copy(out, w + 4);
+      const qsOff = w + 16;
+      const dEff = f16ToF32(dBits);
+      const dminEff = f16ToF32(dminBits);
+      for (let g = 0; g < 4; g += 1) {
+        const lowScale = dEff * ls6[2 * g];
+        const lowMin = dminEff * lm6[2 * g];
+        const highScale = dEff * ls6[2 * g + 1];
+        const highMin = dminEff * lm6[2 * g + 1];
+        for (let i = 0; i < 32; i += 1) {
+          let low = lowScale ? Math.round((values[base + g * 64 + i] + lowMin) / lowScale) : 0;
+          let high = highScale ? Math.round((values[base + g * 64 + 32 + i] + highMin) / highScale) : 0;
+          low = Math.max(0, Math.min(15, low));
+          high = Math.max(0, Math.min(15, high));
+          out.writeUInt8((high << 4) | low, qsOff + g * 32 + i);
+        }
+      }
+      w += 144;
+    }
+    return { type: 12, bytes: out };
+  }
+  throw new Error(`unknown quantization ${type}; only Q4_0/Q8_0/IQ4_NL/Q4_K`);
 }
 
 /** Rank suffix per HF parameter name, for the GGUF-style naming the engine uses. */
@@ -329,8 +404,37 @@ export function tokenizeSection(dir, config) {
   const tokenizerPath = join(dir, "tokenizer.json");
   const tokenizer = JSON.parse(readFileSync(tokenizerPath, "utf8"));
   const model = tokenizer.model ?? {};
+  if (model.type === "Unigram" || model.type === "SPM" || model.type === "SentencePiece") {
+    // SentencePiece carried inside tokenizer.json: vocab is [piece, score] pairs.
+    const tokens = [];
+    const scores = [];
+    for (const entry of model.vocab ?? []) {
+      const [piece, score] = Array.isArray(entry) ? entry : [entry, 0];
+      tokens.push(piece);
+      scores.push(score);
+    }
+    let maxId = tokens.length - 1;
+    for (const token of tokenizer.added_tokens ?? []) if (token.id > maxId) maxId = token.id;
+    while (tokens.length <= maxId) {
+      tokens.push("");
+      scores.push(0);
+    }
+    for (const token of tokenizer.added_tokens ?? []) {
+      tokens[token.id] = token.content;
+      scores[token.id] = 0;
+    }
+    return {
+      "tokenizer.ggml.model": "llama",
+      "tokenizer.ggml.tokens": tokens,
+      "tokenizer.ggml.scores": scores,
+      "tokenizer.ggml.add_bos_token":
+        tokenizerConfig.add_bos_token === undefined ? true : tokenizerConfig.add_bos_token,
+      ...(config.bos_token_id !== undefined ? { "tokenizer.ggml.bos_token_id": config.bos_token_id } : {}),
+      ...(config.eos_token_id !== undefined ? { "tokenizer.ggml.eos_token_id": config.eos_token_id } : {}),
+    };
+  }
   if (model.type !== "BPE") {
-    throw new Error(`only byte-level BPE tokenizer.json is supported; got ${model.type}`);
+    throw new Error(`unsupported tokenizer.json model type ${model.type}; only BPE/Unigram`);
   }
   const vocab = model.vocab ?? {};
   let maxId = 0;
@@ -413,7 +517,7 @@ export function buildContainer(kv, tensors) {
 export function convertHfDirectory(dir, options = {}) {
   const quant = options.quant ?? "F32";
   if (quant !== "F32" && DTYPE[quant] === undefined) {
-    throw new Error(`unknown quantization ${quant}; only F32/Q4_0/Q8_0/IQ4_NL`);
+    throw new Error(`unknown quantization ${quant}; only F32/Q4_0/Q8_0/IQ4_NL/Q4_K`);
   }
   const config = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   const kv = { ...hparamsSection(config), ...tokenizeSection(dir, config) };
@@ -426,18 +530,26 @@ export function convertHfDirectory(dir, options = {}) {
     const dims = [info.shape[info.shape.length - 1], ...info.shape.slice(0, -1).reverse()];
     const cols = dims[0];
     const rows = dims.slice(1).reduce((total, dim) => total * dim, 1);
-    const quantizable = quant !== "F32" && info.shape.length === 2 && cols % 32 === 0;
-    if (quantizable) {
-      const result = quantizeTensor(quant, toFloat32(info.dtype, info.bytes), cols, rows);
+    const blockWeights = quant === "Q4_K" ? 256 : 32;
+    const is2d = info.shape.length === 2;
+    // Q4_K needs 256-wide super-blocks; a narrower weight row falls back to Q8_0
+    // (32-wide) rather than staying in a slow 16-bit path, like a GGUF "K_M" mix.
+    const chosenQuant =
+      quant !== "F32" && is2d && cols % blockWeights === 0
+        ? quant
+        : quant === "Q4_K" && is2d && cols % 32 === 0
+          ? "Q8_0"
+          : null;
+    if (chosenQuant !== null) {
+      const result = quantizeTensor(chosenQuant, toFloat32(info.dtype, info.bytes), cols, rows);
       tensors.push({ name, type: result.type, dims, bytes: result.bytes });
     } else {
-      const floats = toFloat32(info.dtype, info.bytes);
-      tensors.push({
-        name,
-        type: 0,
-        dims,
-        bytes: Buffer.from(floats.buffer, floats.byteOffset, floats.byteLength),
-      });
+      // Keep the checkpoint's own float dtype rather than upcasting to F32.
+      const type = DTYPE[info.dtype];
+      if (type === undefined || (type !== 0 && type !== 1 && type !== 30)) {
+        throw new Error(`unsupported dtype ${info.dtype} for ${hfName}`);
+      }
+      tensors.push({ name, type, dims, bytes: info.bytes });
     }
   }
   return {
