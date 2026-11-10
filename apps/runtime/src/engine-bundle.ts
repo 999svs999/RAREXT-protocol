@@ -229,6 +229,8 @@ export interface NativeEngine {
     model: unknown,
     input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
   ): { text: string; seed: number; steps: number; tokens: number[] };
+  /** Present on the GGUF runtime: dequantize one committed row for inspection. */
+  dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
 }
 
 /** A model handle for the GGUF runtime: the verified bytes, nothing else. */
@@ -259,11 +261,20 @@ export function loadEngine(source: Uint8Array): NativeEngine {
   } catch (error) {
     throw new Error(`the engine artifact failed to load: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const run = (module.exports as { run?: unknown }).run;
+  const exports = module.exports as {
+    run?: unknown;
+    dequantTensor?: unknown;
+  };
+  const run = exports.run;
   if (typeof run !== "function") {
     throw new Error("the engine artifact exports no run(model, input) function");
   }
-  return { run: run as NativeEngine["run"] };
+  return {
+    run: run as NativeEngine["run"],
+    ...(typeof exports.dequantTensor === "function"
+      ? { dequantTensor: exports.dequantTensor as NonNullable<NativeEngine["dequantTensor"]> }
+      : {}),
+  };
 }
 
 /** A stable id for an engine bundle, for logging and pinning. */

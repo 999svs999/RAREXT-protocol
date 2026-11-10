@@ -123,19 +123,57 @@ const NATIVE_EXECUTION: ExecutionRef = {
   defaultSteps: 12,
 };
 
+
+/** One-tensor GGUF, used to check a single dequantization path in isolation. */
+function singleTensorGguf(type: number, dims: number[], data: Buffer): Buffer {
+  const u32 = (value: number): Buffer => {
+    const out = Buffer.alloc(4);
+    out.writeUInt32LE(value, 0);
+    return out;
+  };
+  const u64 = (value: number): Buffer => {
+    const out = Buffer.alloc(8);
+    out.writeBigUInt64LE(BigInt(value), 0);
+    return out;
+  };
+  const str = (value: string): Buffer => {
+    const bytes = Buffer.from(value, "utf8");
+    return Buffer.concat([u64(bytes.length), bytes]);
+  };
+  const header = Buffer.concat([
+    Buffer.from("GGUF", "ascii"),
+    u32(3),
+    u64(1),
+    u64(0),
+    str("t"),
+    u32(dims.length),
+    ...dims.map(u64),
+    u32(type),
+    u64(0),
+  ]);
+  const dataStart = Math.ceil(header.length / 32) * 32;
+  return Buffer.concat([header, Buffer.alloc(dataStart - header.length), data]);
+}
 /**
  * A tiny, self-contained qwen2 GGUF. It is small enough to build in the test
  * and big enough to exercise the whole RAREXT GGUF engine: header + KV +
  * tensor-info parse, byte-level BPE, RMSNorm, GQA attention, RoPE, SwiGLU, and
  * tied output. Every tensor is F32 so the fixture stays readable.
  */
-function tinyGgufModel(): Buffer {
+function tinyGgufModel(
+  options: { arch?: "qwen2" | "llama"; tokenizer?: "gpt2" | "llama" } = {},
+): Buffer {
+  const arch = options.arch ?? "qwen2";
+  const tokenizerModel = options.tokenizer ?? "gpt2";
   const vocabSize = 32;
   const nEmbd = 8;
   const nHead = 2;
   const nHeadKv = 1;
   const nFfn = 16;
-  const tokens: string[] = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  const tokens: string[] =
+    tokenizerModel === "llama"
+      ? ["\u2581", "a", "b", "c", "d", "e", "f", "g"]
+      : ["a", "b", "c", "d", "e", "f", "g", "h"];
   for (let i = 0; i < vocabSize - tokens.length; i += 1) tokens.push(`<x${i}>`);
 
   const u32 = (value: number): Buffer => {
@@ -217,23 +255,33 @@ function tinyGgufModel(): Buffer {
   }
 
   const kvs = [
-    kv("general.architecture", 8, str("qwen2")),
+    kv("general.architecture", 8, str(arch)),
     kv("general.file_type", 4, u32(0)),
-    kv("qwen2.block_count", 4, u32(1)),
-    kv("qwen2.context_length", 4, u32(64)),
-    kv("qwen2.embedding_length", 4, u32(nEmbd)),
-    kv("qwen2.feed_forward_length", 4, u32(nFfn)),
-    kv("qwen2.attention.head_count", 4, u32(nHead)),
-    kv("qwen2.attention.head_count_kv", 4, u32(nHeadKv)),
-    kv("qwen2.attention.layer_norm_rms_epsilon", 6, f32(1e-6)),
-    kv("qwen2.rope.freq_base", 6, f32(10000)),
-    kv("tokenizer.ggml.model", 8, str("gpt2")),
-    kv("tokenizer.ggml.pre", 8, str("qwen2")),
+    kv(`${arch}.block_count`, 4, u32(1)),
+    kv(`${arch}.context_length`, 4, u32(64)),
+    kv(`${arch}.embedding_length`, 4, u32(nEmbd)),
+    kv(`${arch}.feed_forward_length`, 4, u32(nFfn)),
+    kv(`${arch}.attention.head_count`, 4, u32(nHead)),
+    kv(`${arch}.attention.head_count_kv`, 4, u32(nHeadKv)),
+    kv(`${arch}.attention.layer_norm_rms_epsilon`, 6, f32(1e-6)),
+    kv(`${arch}.rope.freq_base`, 6, f32(10000)),
+    kv("tokenizer.ggml.model", 8, str(tokenizerModel)),
+    kv("tokenizer.ggml.pre", 8, str(arch === "qwen2" ? "qwen2" : "default")),
     kv("tokenizer.ggml.tokens", 9, array(8, tokens.map(str))),
     kv("tokenizer.ggml.token_type", 9, array(5, tokens.map(() => u32(1)))),
     kv("tokenizer.ggml.merges", 9, array(8, [])),
     kv("tokenizer.ggml.bos_token_id", 4, u32(0)),
     kv("tokenizer.ggml.eos_token_id", 4, u32(1)),
+    ...(tokenizerModel === "llama"
+      ? [
+          kv(
+            "tokenizer.ggml.scores",
+            9,
+            array(6, tokens.map((_, index) => f32(index === 0 ? 0 : -index * 0.1))),
+          ),
+          kv("tokenizer.ggml.add_bos_token", 7, Buffer.from([0])),
+        ]
+      : []),
   ];
 
   const header = Buffer.concat([
@@ -6171,6 +6219,173 @@ test("a GGUF is served by RAREXT's own fetched engine, with no external engine",
         }),
       /needs a native engine artifact/,
     );
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the GGUF engine dequantizes every quantization it advertises", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  assert.ok(engine.dequantTensor !== undefined);
+  const dequant = engine.dequantTensor;
+
+  const H1 = 0x3c00;
+  const H05 = 0x3800;
+  const half = (bits: number): Buffer => {
+    const out = Buffer.alloc(2);
+    out.writeUInt16LE(bits, 0);
+    return out;
+  };
+  const check = (type: number, dims: number[], data: Buffer, expected: number[]): void => {
+    const bytes = singleTensorGguf(type, dims, data);
+    const got = Array.from(dequant({ kind: "gguf", bytes }, "t", 0));
+    assert.equal(got.length, expected.length, `type ${type} produced ${got.length} values`);
+    for (let i = 0; i < expected.length; i += 1) {
+      assert.ok(
+        Math.abs(got[i]! - expected[i]!) < 1e-4,
+        `type ${type}[${i}] = ${got[i]} but expected ${expected[i]}`,
+      );
+    }
+  };
+  const repeat = (value: number, count: number): number[] => Array.from({ length: count }, () => value);
+  const groups = (values: number[]): number[] => values.flatMap((value) => repeat(value, 32));
+
+  // F32 / F16 / BF16.
+  const f32 = Buffer.alloc(32 * 4);
+  for (let i = 0; i < 32; i += 1) f32.writeFloatLE(i - 16, i * 4);
+  check(0, [32], f32, Array.from({ length: 32 }, (_, i) => i - 16));
+  const f16 = Buffer.alloc(32 * 2);
+  for (let i = 0; i < 32; i += 1) f16.writeUInt16LE(i === 0 ? H1 : i === 1 ? H05 : 0, i * 2);
+  check(1, [32], f16, [1, 0.5, ...repeat(0, 30)]);
+  const bf16 = Buffer.alloc(32 * 2);
+  const bf16Values = [0x3f80, 0xc000, 0x3f00, 0x0000];
+  for (let i = 0; i < 32; i += 1) bf16.writeUInt16LE(bf16Values[i % 4]!, i * 2);
+  check(30, [32], bf16, Array.from({ length: 32 }, (_, i) => [1, -2, 0.5, 0][i % 4]!));
+
+  // Q4_0 / Q4_1 / Q5_1 / Q8_0.
+  check(2, [32], Buffer.concat([half(H1), Buffer.alloc(16, 0x10)]), [
+    ...repeat(-8, 16),
+    ...repeat(-7, 16),
+  ]);
+  const q41 = Buffer.concat([half(H1), half(H05), Buffer.alloc(16, 0x10)]);
+  check(3, [32], q41, [...repeat(0.5, 16), ...repeat(1.5, 16)]);
+  const q51 = Buffer.concat([half(H1), half(H05), Buffer.alloc(4, 0), Buffer.alloc(16, 0x10)]);
+  check(7, [32], q51, [...repeat(0.5, 16), ...repeat(1.5, 16)]);
+  const q8 = Buffer.concat([half(H1), Buffer.from(Array.from({ length: 32 }, (_, i) => i))]);
+  check(8, [32], q8, Array.from({ length: 32 }, (_, i) => i));
+
+  // Q2_K: scale 1, min 0, qs = 0xE4 (2-bit fields 0,1,2,3).
+  check(
+    10,
+    [256],
+    Buffer.concat([Buffer.alloc(16, 0x01), Buffer.alloc(64, 0xe4), half(H1), half(0)]),
+    [...groups([0, 1, 2, 3]), ...groups([0, 1, 2, 3])],
+  );
+
+  // Q3_K: all scales decode to 33 (dl = 1), hmask all ones, same 2-bit fields.
+  check(
+    11,
+    [256],
+    Buffer.concat([
+      Buffer.alloc(32, 0xff),
+      Buffer.alloc(64, 0xe4),
+      Buffer.concat([Buffer.alloc(8, 0x11), Buffer.alloc(4, 0xaa)]),
+      half(H1),
+    ]),
+    [...groups([0, 1, 2, 3]), ...groups([0, 1, 2, 3])],
+  );
+
+  // Q4_K: all scales 1, qs 0x10 (low nibble 0, high nibble 1).
+  check(
+    12,
+    [256],
+    Buffer.concat([
+      half(H1),
+      half(0),
+      Buffer.from([1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]),
+      Buffer.alloc(128, 0x10),
+    ]),
+    [0, 0, 0, 0].flatMap(() => [...repeat(0, 32), ...repeat(1, 32)]),
+  );
+
+  // Q5_K: all scales 1, qh all ones, ql 0x11 => every weight is 1 + 16.
+  check(
+    13,
+    [256],
+    Buffer.concat([
+      half(H1),
+      half(0),
+      Buffer.from([1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]),
+      Buffer.alloc(32, 0xff),
+      Buffer.alloc(128, 0x11),
+    ]),
+    repeat(17, 256),
+  );
+
+  // Q6_K: all scales 1, ql/qh 0 => every 6-bit field is -32.
+  check(
+    14,
+    [256],
+    Buffer.concat([Buffer.alloc(128, 0), Buffer.alloc(64, 0), Buffer.alloc(16, 1), half(H1)]),
+    repeat(-32, 256),
+  );
+});
+
+test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + SentencePiece)", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ arch: "llama", tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-llama",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "own-llama-engine"),
+      port: 0,
+      engineBundle,
+    });
+    const ask = async (): Promise<Response> =>
+      fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "a b" }],
+          max_tokens: 2,
+          temperature: 0,
+          seed: 3,
+        }),
+      });
+    const first = await ask();
+    assert.equal(first.status, 200);
+    const firstJson = (await first.json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.equal(firstJson.rarext_trace?.tokens?.length, 2);
+    const secondJson = (await (await ask()).json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
   } finally {
     if (provider !== null) await provider.close();
     await reg.close();

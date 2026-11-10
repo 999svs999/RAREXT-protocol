@@ -39,24 +39,68 @@
     return F16_TABLE[bits & 0xffff];
   }
 
+  /** bfloat16 is the top 16 bits of an IEEE-754 float32. */
+  function bf16(bits) {
+    var sign = (bits & 0x8000) !== 0 ? -1 : 1;
+    var exponent = (bits >> 7) & 0xff;
+    var mantissa = bits & 0x7f;
+    if (exponent === 0) return sign * (mantissa / 128) * Math.pow(2, -126);
+    if (exponent === 255) return mantissa === 0 ? sign * Infinity : NaN;
+    return sign * (1 + mantissa / 128) * Math.pow(2, exponent - 127);
+  }
+
+  /** Q3_K stores 16 signed 6-bit scales packed into 12 bytes with two extra
+   *  two-bit fields per scale. This is ggml's unpack, in JavaScript. */
+  function q3Scales(view, offset) {
+    var kmask1 = 0x03030303;
+    var kmask2 = 0x0f0f0f0f;
+    var a0 = view.getUint32(offset, true) >>> 0;
+    var a1 = view.getUint32(offset + 4, true) >>> 0;
+    var tmp = view.getUint32(offset + 8, true) >>> 0;
+    var words = [
+      ((a0 & kmask2) | (((tmp >> 0) & kmask1) << 4)) >>> 0,
+      ((a1 & kmask2) | (((tmp >> 2) & kmask1) << 4)) >>> 0,
+      (((a0 >> 4) & kmask2) | (((tmp >> 4) & kmask1) << 4)) >>> 0,
+      (((a1 >> 4) & kmask2) | (((tmp >> 6) & kmask1) << 4)) >>> 0,
+    ];
+    var scales = new Int8Array(16);
+    for (var i = 0; i < 16; i += 1) {
+      var byte = (words[i >> 2] >>> ((i & 3) * 8)) & 0xff;
+      scales[i] = byte >= 128 ? byte - 256 : byte;
+    }
+    return scales;
+  }
+
   // ── GGUF reader ───────────────────────────────────────────────────────────
   var TYPE_F32 = 0;
   var TYPE_F16 = 1;
   var TYPE_Q4_0 = 2;
+  var TYPE_Q4_1 = 3;
   var TYPE_Q5_0 = 6;
+  var TYPE_Q5_1 = 7;
   var TYPE_Q8_0 = 8;
+  var TYPE_Q2_K = 10;
+  var TYPE_Q3_K = 11;
   var TYPE_Q4_K = 12;
+  var TYPE_Q5_K = 13;
   var TYPE_Q6_K = 14;
+  var TYPE_BF16 = 30;
 
   // bytes per block, and weights per block
   var BLOCK = {};
   BLOCK[TYPE_F32] = { bytes: 4, weights: 1 };
   BLOCK[TYPE_F16] = { bytes: 2, weights: 1 };
   BLOCK[TYPE_Q4_0] = { bytes: 18, weights: 32 };
+  BLOCK[TYPE_Q4_1] = { bytes: 20, weights: 32 };
   BLOCK[TYPE_Q5_0] = { bytes: 22, weights: 32 };
+  BLOCK[TYPE_Q5_1] = { bytes: 24, weights: 32 };
   BLOCK[TYPE_Q8_0] = { bytes: 34, weights: 32 };
+  BLOCK[TYPE_Q2_K] = { bytes: 84, weights: 256 };
+  BLOCK[TYPE_Q3_K] = { bytes: 110, weights: 256 };
   BLOCK[TYPE_Q4_K] = { bytes: 144, weights: 256 };
+  BLOCK[TYPE_Q5_K] = { bytes: 176, weights: 256 };
   BLOCK[TYPE_Q6_K] = { bytes: 210, weights: 256 };
+  BLOCK[TYPE_BF16] = { bytes: 2, weights: 1 };
 
   function Reader(bytes) {
     this.bytes = bytes;
@@ -308,6 +352,140 @@
           }
         }
         return out;
+      case TYPE_Q4_1:
+        for (block = 0; block < cols; block += 32) {
+          var q41base = base + (block / 32) * 20;
+          var d41 = f16(view.getUint16(q41base, true));
+          var m41 = f16(view.getUint16(q41base + 2, true));
+          for (i = 0; i < 16; i += 1) {
+            var q41 = view.getUint8(q41base + 4 + i);
+            out[block + i] = (q41 & 15) * d41 + m41;
+            out[block + i + 16] = (q41 >> 4) * d41 + m41;
+          }
+        }
+        return out;
+      case TYPE_Q5_1:
+        for (block = 0; block < cols; block += 32) {
+          var q51base = base + (block / 32) * 24;
+          var d51 = f16(view.getUint16(q51base, true));
+          var m51 = f16(view.getUint16(q51base + 2, true));
+          var qh51 = view.getUint32(q51base + 4, true);
+          for (i = 0; i < 16; i += 1) {
+            var q51 = view.getUint8(q51base + 8 + i);
+            out[block + i] = (((q51 & 15) | (((qh51 >> i) & 1) << 4))) * d51 + m51;
+            out[block + i + 16] = (((q51 >> 4) | (((qh51 >> (i + 16)) & 1) << 4))) * d51 + m51;
+          }
+        }
+        return out;
+      case TYPE_Q2_K:
+        for (var q2b = 0; q2b < cols; q2b += 256) {
+          var q2base = base + (q2b / 256) * 84;
+          var q2d = f16(view.getUint16(q2base + 80, true));
+          var q2min = f16(view.getUint16(q2base + 82, true));
+          var q2scales = q2base;
+          var q2qs = q2base + 16;
+          var q2is = 0;
+          var q2qpos = 0;
+          var q2vpos = q2b;
+          for (var q2n = 0; q2n < 256; q2n += 128) {
+            var q2shift = 0;
+            for (var q2j = 0; q2j < 4; q2j += 1) {
+              var q2sc = view.getUint8(q2scales + q2is);
+              q2is += 1;
+              var q2dl = q2d * (q2sc & 15);
+              var q2ml = q2min * (q2sc >> 4);
+              for (i = 0; i < 16; i += 1) {
+                out[q2vpos + i] = q2dl * ((view.getUint8(q2qs + q2qpos + i) >> q2shift) & 3) - q2ml;
+              }
+              q2vpos += 16;
+              var q2sc2 = view.getUint8(q2scales + q2is);
+              q2is += 1;
+              var q2dl2 = q2d * (q2sc2 & 15);
+              var q2ml2 = q2min * (q2sc2 >> 4);
+              for (i = 0; i < 16; i += 1) {
+                out[q2vpos + i] = q2dl2 * ((view.getUint8(q2qs + q2qpos + i + 16) >> q2shift) & 3) - q2ml2;
+              }
+              q2vpos += 16;
+              q2shift += 2;
+            }
+            q2qpos += 32;
+          }
+        }
+        return out;
+      case TYPE_Q3_K:
+        for (var q3b = 0; q3b < cols; q3b += 256) {
+          var q3base = base + (q3b / 256) * 110;
+          var q3d = f16(view.getUint16(q3base + 108, true));
+          var q3scales = q3Scales(view, q3base + 96);
+          var q3qs = q3base;
+          var q3hm = q3base + 64;
+          var q3m = 1;
+          var q3is = 0;
+          var q3qpos = 0;
+          var q3vpos = q3b;
+          for (var q3n = 0; q3n < 256; q3n += 128) {
+            var q3shift = 0;
+            for (var q3j = 0; q3j < 4; q3j += 1) {
+              var q3dl = q3d * (q3scales[q3is] - 32);
+              q3is += 1;
+              for (i = 0; i < 16; i += 1) {
+                var q3q = (view.getUint8(q3qs + q3qpos + i) >> q3shift) & 3;
+                out[q3vpos + i] = q3dl * (q3q - ((view.getUint8(q3hm + i) & q3m) ? 0 : 4));
+              }
+              q3vpos += 16;
+              var q3dl2 = q3d * (q3scales[q3is] - 32);
+              q3is += 1;
+              for (i = 0; i < 16; i += 1) {
+                var q3q2 = (view.getUint8(q3qs + q3qpos + i + 16) >> q3shift) & 3;
+                out[q3vpos + i] = q3dl2 * (q3q2 - ((view.getUint8(q3hm + i + 16) & q3m) ? 0 : 4));
+              }
+              q3vpos += 16;
+              q3shift += 2;
+              q3m <<= 1;
+            }
+            q3qpos += 32;
+          }
+        }
+        return out;
+      case TYPE_Q5_K:
+        for (var q5kb = 0; q5kb < cols; q5kb += 256) {
+          var q5kbase = base + (q5kb / 256) * 176;
+          var q5kd = f16(view.getUint16(q5kbase, true));
+          var q5kmin = f16(view.getUint16(q5kbase + 2, true));
+          var q5kscales = q5kbase + 4;
+          var q5kqh = q5kbase + 16;
+          var q5kqs = q5kbase + 48;
+          var q5kis = 0;
+          var q5kqpos = 0;
+          var q5kvpos = q5kb;
+          var q5ku1 = 1;
+          var q5ku2 = 2;
+          for (var q5kj = 0; q5kj < 4; q5kj += 1) {
+            var q5ks0 = scaleMinK4(view, q5kscales, q5kis);
+            var q5ks1 = scaleMinK4(view, q5kscales, q5kis + 1);
+            var q5kd1 = q5kd * q5ks0.d;
+            var q5km1 = q5kmin * q5ks0.m;
+            var q5kd2 = q5kd * q5ks1.d;
+            var q5km2 = q5kmin * q5ks1.m;
+            for (i = 0; i < 32; i += 1) {
+              var q5kql = view.getUint8(q5kqs + q5kqpos + i);
+              out[q5kvpos + i] = q5kd1 * ((q5kql & 15) + ((view.getUint8(q5kqh + q5kqpos + i) & q5ku1) ? 16 : 0)) - q5km1;
+            }
+            for (i = 0; i < 32; i += 1) {
+              var q5kql2 = view.getUint8(q5kqs + q5kqpos + i);
+              out[q5kvpos + 32 + i] = q5kd2 * ((q5kql2 >> 4) + ((view.getUint8(q5kqh + q5kqpos + i) & q5ku2) ? 16 : 0)) - q5km2;
+            }
+            q5kqpos += 32;
+            q5kvpos += 64;
+            q5kis += 2;
+            q5ku1 <<= 2;
+            q5ku2 <<= 2;
+          }
+        }
+        return out;
+      case TYPE_BF16:
+        for (i = 0; i < cols; i += 1) out[i] = bf16(view.getUint16(base + i * 2, true));
+        return out;
       default:
         throw new Error("cannot dequantize tensor type " + tensor.type);
     }
@@ -435,6 +613,144 @@
           }
         }
         return total;
+      case TYPE_Q4_1:
+        for (block = 0; block < cols; block += 32) {
+          var dq41base = base + (block / 32) * 20;
+          var dq41 = f16(view.getUint16(dq41base, true));
+          var mq41 = f16(view.getUint16(dq41base + 2, true));
+          sum = 0;
+          for (i = 0; i < 16; i += 1) {
+            var qq41 = view.getUint8(dq41base + 4 + i);
+            sum += ((qq41 & 15) * dq41 + mq41) * vec[block + i];
+            sum += ((qq41 >> 4) * dq41 + mq41) * vec[block + i + 16];
+          }
+          total += sum;
+        }
+        return total;
+      case TYPE_Q5_1:
+        for (block = 0; block < cols; block += 32) {
+          var dq51base = base + (block / 32) * 24;
+          var dq51 = f16(view.getUint16(dq51base, true));
+          var mq51 = f16(view.getUint16(dq51base + 2, true));
+          var qhq51 = view.getUint32(dq51base + 4, true);
+          sum = 0;
+          for (i = 0; i < 16; i += 1) {
+            var qq51 = view.getUint8(dq51base + 8 + i);
+            sum += (((qq51 & 15) | (((qhq51 >> i) & 1) << 4)) * dq51 + mq51) * vec[block + i];
+            sum += (((qq51 >> 4) | (((qhq51 >> (i + 16)) & 1) << 4)) * dq51 + mq51) * vec[block + i + 16];
+          }
+          total += sum;
+        }
+        return total;
+      case TYPE_Q2_K:
+        for (var dq2b = 0; dq2b < cols; dq2b += 256) {
+          var dq2base = base + (dq2b / 256) * 84;
+          var dq2d = f16(view.getUint16(dq2base + 80, true));
+          var dq2min = f16(view.getUint16(dq2base + 82, true));
+          var dq2scales = dq2base;
+          var dq2qs = dq2base + 16;
+          var dq2is = 0;
+          var dq2qpos = 0;
+          var dq2vpos = dq2b;
+          for (var dq2n = 0; dq2n < 256; dq2n += 128) {
+            var dq2shift = 0;
+            for (var dq2j = 0; dq2j < 4; dq2j += 1) {
+              var dq2sc = view.getUint8(dq2scales + dq2is);
+              dq2is += 1;
+              var dq2dl = dq2d * (dq2sc & 15);
+              var dq2ml = dq2min * (dq2sc >> 4);
+              for (i = 0; i < 16; i += 1) {
+                total += (dq2dl * ((view.getUint8(dq2qs + dq2qpos + i) >> dq2shift) & 3) - dq2ml) * vec[dq2vpos + i];
+              }
+              dq2vpos += 16;
+              var dq2sc2 = view.getUint8(dq2scales + dq2is);
+              dq2is += 1;
+              var dq2dl2 = dq2d * (dq2sc2 & 15);
+              var dq2ml2 = dq2min * (dq2sc2 >> 4);
+              for (i = 0; i < 16; i += 1) {
+                total += (dq2dl2 * ((view.getUint8(dq2qs + dq2qpos + i + 16) >> dq2shift) & 3) - dq2ml2) * vec[dq2vpos + i];
+              }
+              dq2vpos += 16;
+              dq2shift += 2;
+            }
+            dq2qpos += 32;
+          }
+        }
+        return total;
+      case TYPE_Q3_K:
+        for (var dq3b = 0; dq3b < cols; dq3b += 256) {
+          var dq3base = base + (dq3b / 256) * 110;
+          var dq3d = f16(view.getUint16(dq3base + 108, true));
+          var dq3scales = q3Scales(view, dq3base + 96);
+          var dq3qs = dq3base;
+          var dq3hm = dq3base + 64;
+          var dq3m = 1;
+          var dq3is = 0;
+          var dq3qpos = 0;
+          var dq3vpos = dq3b;
+          for (var dq3n = 0; dq3n < 256; dq3n += 128) {
+            var dq3shift = 0;
+            for (var dq3j = 0; dq3j < 4; dq3j += 1) {
+              var dq3dl = dq3d * (dq3scales[dq3is] - 32);
+              dq3is += 1;
+              for (i = 0; i < 16; i += 1) {
+                var dq3q = (view.getUint8(dq3qs + dq3qpos + i) >> dq3shift) & 3;
+                total += dq3dl * (dq3q - ((view.getUint8(dq3hm + i) & dq3m) ? 0 : 4)) * vec[dq3vpos + i];
+              }
+              dq3vpos += 16;
+              var dq3dl2 = dq3d * (dq3scales[dq3is] - 32);
+              dq3is += 1;
+              for (i = 0; i < 16; i += 1) {
+                var dq3q2 = (view.getUint8(dq3qs + dq3qpos + i + 16) >> dq3shift) & 3;
+                total += dq3dl2 * (dq3q2 - ((view.getUint8(dq3hm + i + 16) & dq3m) ? 0 : 4)) * vec[dq3vpos + i];
+              }
+              dq3vpos += 16;
+              dq3shift += 2;
+              dq3m <<= 1;
+            }
+            dq3qpos += 32;
+          }
+        }
+        return total;
+      case TYPE_Q5_K:
+        for (var dq5b = 0; dq5b < cols; dq5b += 256) {
+          var dq5base = base + (dq5b / 256) * 176;
+          var dq5d = f16(view.getUint16(dq5base, true));
+          var dq5min = f16(view.getUint16(dq5base + 2, true));
+          var dq5scales = dq5base + 4;
+          var dq5qh = dq5base + 16;
+          var dq5qs = dq5base + 48;
+          var dq5is = 0;
+          var dq5qpos = 0;
+          var dq5vpos = dq5b;
+          var dq5u1 = 1;
+          var dq5u2 = 2;
+          for (var dq5j = 0; dq5j < 4; dq5j += 1) {
+            var dq5s0 = scaleMinK4(view, dq5scales, dq5is);
+            var dq5s1 = scaleMinK4(view, dq5scales, dq5is + 1);
+            var dq5d1 = dq5d * dq5s0.d;
+            var dq5m1 = dq5min * dq5s0.m;
+            var dq5d2 = dq5d * dq5s1.d;
+            var dq5m2 = dq5min * dq5s1.m;
+            for (i = 0; i < 32; i += 1) {
+              var dq5ql = view.getUint8(dq5qs + dq5qpos + i);
+              total += (dq5d1 * ((dq5ql & 15) + ((view.getUint8(dq5qh + dq5qpos + i) & dq5u1) ? 16 : 0)) - dq5m1) * vec[dq5vpos + i];
+            }
+            for (i = 0; i < 32; i += 1) {
+              var dq5ql2 = view.getUint8(dq5qs + dq5qpos + i);
+              total += (dq5d2 * ((dq5ql2 >> 4) + ((view.getUint8(dq5qh + dq5qpos + i) & dq5u2) ? 16 : 0)) - dq5m2) * vec[dq5vpos + 32 + i];
+            }
+            dq5qpos += 32;
+            dq5vpos += 64;
+            dq5is += 2;
+            dq5u1 <<= 2;
+            dq5u2 <<= 2;
+          }
+        }
+        return total;
+      case TYPE_BF16:
+        for (i = 0; i < cols; i += 1) total += bf16(view.getUint16(base + i * 2, true)) * vec[i];
+        return total;
       default:
         throw new Error("cannot dot tensor type " + tensor.type);
     }
@@ -495,6 +811,23 @@
     this.encoder = new TextEncoder();
     this.decoder = new TextDecoder();
     this.pattern = new RegExp(PRETOKEN, "gu");
+    // `llama` is SentencePiece (llama.cpp's SPM path); `gpt2` is byte-level BPE
+    // (Qwen2, GPT-2, and relatives). Both are implemented here, so the engine
+    // is not tied to one tokenizer family either.
+    this.kind = typeof kv["tokenizer.ggml.model"] === "string" ? kv["tokenizer.ggml.model"] : "gpt2";
+    this.spm = this.kind === "llama" || this.kind === "spm";
+    this.scores = Array.isArray(kv["tokenizer.ggml.scores"]) ? kv["tokenizer.ggml.scores"] : [];
+    this.bos = kv["tokenizer.ggml.bos_token_id"];
+    this.eos = kv["tokenizer.ggml.eos_token_id"];
+    this.addBos =
+      typeof kv["tokenizer.ggml.add_bos_token"] === "boolean"
+        ? kv["tokenizer.ggml.add_bos_token"]
+        : this.spm;
+    this.maxTokenLength = 1;
+    for (var t = 0; t < this.tokens.length; t += 1) {
+      var length = this.tokens[t].length;
+      if (length <= 64 && length > this.maxTokenLength) this.maxTokenLength = length;
+    }
   }
 
   Tokenizer.prototype.pieces = function (text) {
@@ -536,6 +869,7 @@
   };
 
   Tokenizer.prototype.encode = function (text) {
+    if (this.spm) return this.encodeSpm(text);
     var ids = [];
     var pieces = this.pieces(text);
     if (pieces.length === 0) return ids;
@@ -564,7 +898,95 @@
     return ids;
   };
 
+  /** SentencePiece: Viterbi over the vocabulary by token score, with byte
+   *  fallback for characters the vocabulary does not cover. Deterministic. */
+  Tokenizer.prototype.encodeSpm = function (text) {
+    var normalized = text.replace(/ /g, "\u2581");
+    var n = normalized.length;
+    var best = new Array(n + 1);
+    var prev = new Array(n + 1);
+    var emit = new Array(n + 1);
+    for (var i = 0; i <= n; i += 1) {
+      best[i] = -Infinity;
+      prev[i] = -1;
+      emit[i] = null;
+    }
+    best[0] = 0;
+    var byteFor = function (byte) {
+      return this.ids.get("<0x" + (byte < 16 ? "0" : "") + byte.toString(16).toUpperCase() + ">");
+    };
+    for (i = 0; i < n; i += 1) {
+      if (best[i] === -Infinity) continue;
+      var maxLength = Math.min(this.maxTokenLength, n - i);
+      for (var length = 1; length <= maxLength; length += 1) {
+        var piece = normalized.slice(i, i + length);
+        var id = this.ids.get(piece);
+        if (id === undefined) continue;
+        var score = best[i] + (this.scores[id] || 0);
+        if (score > best[i + length]) {
+          best[i + length] = score;
+          prev[i + length] = i;
+          emit[i + length] = [id];
+        }
+      }
+      var codePoint = normalized.codePointAt(i);
+      var character = String.fromCodePoint(codePoint);
+      var bytes = this.encoder.encode(character);
+      var byteIds = [];
+      for (var b = 0; b < bytes.length; b += 1) {
+        var byteId = byteFor.call(this, bytes[b]);
+        if (byteId !== undefined) byteIds.push(byteId);
+      }
+      var end = i + character.length;
+      if (byteIds.length === bytes.length && best[i] > best[end]) {
+        best[end] = best[i];
+        prev[end] = i;
+        emit[end] = byteIds;
+      }
+    }
+    var ids = [];
+    if (this.addBos && typeof this.bos === "number") ids.push(this.bos);
+    if (best[n] === -Infinity) {
+      var raw = this.encoder.encode(normalized);
+      for (var r = 0; r < raw.length; r += 1) {
+        var rawId = byteFor.call(this, raw[r]);
+        if (rawId !== undefined) ids.push(rawId);
+      }
+      return ids;
+    }
+    var path = [];
+    var at = n;
+    while (at > 0) {
+      var from = prev[at];
+      if (from < 0) break;
+      path.unshift(emit[at]);
+      at = from;
+    }
+    for (var p = 0; p < path.length; p += 1) {
+      for (var q = 0; q < path[p].length; q += 1) ids.push(path[p][q]);
+    }
+    return ids;
+  };
+
+  Tokenizer.prototype.decodeSpm = function (ids) {
+    var bytes = [];
+    for (var i = 0; i < ids.length; i += 1) {
+      var token = this.tokens[ids[i]] || "";
+      var match = /^<0x([0-9A-Fa-f]{2})>$/.exec(token);
+      if (match !== null) {
+        bytes.push(parseInt(match[1], 16));
+        continue;
+      }
+      if (token === "<s>" || token === "</s>" || token === "<unk>") continue;
+      var text = token.replace(/\u2581/g, " ");
+      var encoded = this.encoder.encode(text);
+      for (var b = 0; b < encoded.length; b += 1) bytes.push(encoded[b]);
+    }
+    return this.decoder.decode(new Uint8Array(bytes));
+  };
+
   Tokenizer.prototype.decode = function (ids) {
+    if (this.spm) return this.decodeSpm(ids);
     var text = "";
     for (var i = 0; i < ids.length; i += 1) text += this.tokens[ids[i]] || "";
     var bytes = [];
@@ -659,21 +1081,30 @@
     var gguf = parseGguf(model.bytes);
     var kv = gguf.kv;
     var arch = kv["general.architecture"];
-    if (arch !== "qwen2") throw new Error("this rarext engine supports qwen2 GGUF; got " + String(arch));
+    var ARCHS = { qwen2: true, llama: true, mistral: true };
+    if (ARCHS[arch] !== true) {
+      throw new Error("this rarext engine supports qwen2/llama/mistral GGUF; got " + String(arch));
+    }
+    // Qwen2 pairs RoPE dimensions as halves (NeoX); Llama/Mistral pair adjacent
+    // dimensions. Both are GQA + SwiGLU with the same tensor layout here.
+    var neox = arch === "qwen2";
 
-    var nLayer = kv["qwen2.block_count"];
-    var nEmbd = kv["qwen2.embedding_length"];
-    var nHead = kv["qwen2.attention.head_count"];
-    var nHeadKv = kv["qwen2.attention.head_count_kv"];
-    var nFfn = kv["qwen2.feed_forward_length"];
-    var eps = kv["qwen2.attention.layer_norm_rms_epsilon"] || 1e-6;
-    var ropeBase = kv["qwen2.rope.freq_base"] || 10000;
+    var nLayer = kv[arch + ".block_count"];
+    var nEmbd = kv[arch + ".embedding_length"];
+    var nHead = kv[arch + ".attention.head_count"];
+    var nHeadKv = kv[arch + ".attention.head_count_kv"];
+    var nFfn = kv[arch + ".feed_forward_length"];
+    var eps = kv[arch + ".attention.layer_norm_rms_epsilon"] || 1e-6;
+    var ropeBase = kv[arch + ".rope.freq_base"] || 10000;
     var headDim = nEmbd / nHead;
     var group = nHead / nHeadKv;
 
     var tokenizer = new Tokenizer(gguf);
     var embd = tensorOrNull(gguf, "token_embd.weight");
     if (embd === undefined) throw new Error("GGUF has no token_embd.weight");
+    // Some architectures (Llama) ship a separate output matrix; others tie it to
+    // the embeddings. Use the separate one when present.
+    var output = tensorOrNull(gguf, "output.weight") || embd;
     var outputNorm = tensorOrNull(gguf, "output_norm.weight");
 
     var prompt = String(input.prompt == null ? "" : input.prompt);
@@ -695,7 +1126,7 @@
     var gate = new Float32Array(nFfn);
     var up = new Float32Array(nFfn);
     var hidden = new Float32Array(nEmbd);
-    var logits = new Float32Array(embd.rows);
+    var logits = new Float32Array(output.rows);
 
     // Per-layer KV cache: one Float32Array per position, for every layer.
     var cacheK = [];
@@ -723,8 +1154,8 @@
         matmul(gguf, tensorOrNull(gguf, prefix + "attn_v.weight"), norm, v);
         addBias(v, biasOrNull(gguf, prefix + "attn_v.bias", nHeadKv * headDim));
 
-        rope(q, nHead, headDim, position, ropeBase);
-        rope(k, nHeadKv, headDim, position, ropeBase);
+        rope(q, nHead, headDim, position, ropeBase, neox);
+        rope(k, nHeadKv, headDim, position, ropeBase, neox);
 
         cacheK[layerIndex].push(new Float32Array(k));
         cacheV[layerIndex].push(new Float32Array(v));
@@ -772,7 +1203,7 @@
       }
 
       rmsNorm(norm, x, dequantNorm(gguf, outputNorm, nEmbd), eps);
-      for (var row = 0; row < embd.rows; row += 1) logits[row] = dotRow(gguf, embd, row, norm);
+      for (var row = 0; row < output.rows; row += 1) logits[row] = dotRow(gguf, output, row, norm);
       return logits;
     }
 
@@ -799,16 +1230,17 @@
       position += 1;
       if (i === promptIds.length - 1) {
         var next = temperature > 0 ? sample(stepLogits, temperature, rng) : argmax(stepLogits);
-        generated.push(next);
+        if (next !== tokenizer.eos) generated.push(next);
       }
     }
     if (promptIds.length === 0) throw new Error("the prompt produced no tokens");
 
-    for (var step = 1; step < steps; step += 1) {
+    for (var step = 1; step < steps && generated.length < steps; step += 1) {
       var token = generated[generated.length - 1];
       var nextLogits = forward(token);
       position += 1;
       var nextToken = temperature > 0 ? sample(nextLogits, temperature, rng) : argmax(nextLogits);
+      if (nextToken === tokenizer.eos) break;
       generated.push(nextToken);
     }
 
@@ -820,7 +1252,7 @@
     };
   }
 
-  function rope(vector, heads, headDim, position, base) {
+  function rope(vector, heads, headDim, position, base, neox) {
     var half = headDim / 2;
     for (var h = 0; h < heads; h += 1) {
       var off = h * headDim;
@@ -828,17 +1260,35 @@
         var theta = position * Math.pow(base, (-2 * i) / headDim);
         var cos = Math.cos(theta);
         var sin = Math.sin(theta);
-        var x0 = vector[off + i];
-        var x1 = vector[off + i + half];
-        vector[off + i] = x0 * cos - x1 * sin;
-        vector[off + i + half] = x0 * sin + x1 * cos;
+        var a = neox ? off + i : off + 2 * i;
+        var b = neox ? off + i + half : off + 2 * i + 1;
+        var x0 = vector[a];
+        var x1 = vector[b];
+        vector[a] = x0 * cos - x1 * sin;
+        vector[b] = x0 * sin + x1 * cos;
       }
     }
   }
 
-  var api = { run: run, parseGguf: parseGguf, encode: function (model, text) {
-    return new Tokenizer(parseGguf(model.bytes)).encode(text);
-  } };
+  /** Dequantize one row for verification/testing. The engine's own `run` never
+   *  materializes a whole model; this hook lets a caller check one committed row
+   *  against the same code path the engine uses. */
+  function dequantTensor(model, name, row) {
+    var parsed = parseGguf(model.bytes);
+    var tensor = parsed.tensors[name];
+    if (tensor === undefined) throw new Error("no tensor " + name);
+    var out = new Float32Array(tensor.cols);
+    dequantRow(parsed, tensor, row || 0, out);
+    return out;
+  }
+  var api = {
+    run: run,
+    parseGguf: parseGguf,
+    dequantTensor: dequantTensor,
+    encode: function (model, text) {
+      return new Tokenizer(parseGguf(model.bytes)).encode(text);
+    },
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof globalThis !== "undefined") globalThis.RAREXT_GGUF = api;
 })();
