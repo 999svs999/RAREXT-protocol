@@ -9,6 +9,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  convertHfDirectory,
+  hparamsSection,
+  parseSentencePieceModel,
+} from "../../../scripts/convert-hf-safetensors.mjs";
+
+import {
   creditLeaf,
   creditLedgerRoot,
   inferenceCreditRecords,
@@ -6710,6 +6716,201 @@ test("the GGUF engine serves an IQ2_XXS quantized model through the quant-domain
     row.every((value) => Math.abs(value - 1) < 1e-6),
     "all-zero IQ2_XXS blocks with d=1 decode to all-ones weights",
   );
+});
+
+/** Minimal safetensors writer for tests: header JSON + raw tensor data. */
+function writeSafetensors(
+  path: string,
+  entries: { name: string; dtype: string; shape: number[]; bytes: Buffer }[],
+): void {
+  const header: Record<string, { dtype: string; shape: number[]; data_offsets: number[] }> = {};
+  const chunks: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    header[entry.name] = {
+      dtype: entry.dtype,
+      shape: entry.shape,
+      data_offsets: [offset, offset + entry.bytes.length],
+    };
+    chunks.push(entry.bytes);
+    offset += entry.bytes.length;
+  }
+  let json = Buffer.from(JSON.stringify(header), "utf8");
+  json = Buffer.concat([json, Buffer.alloc((8 - (json.length % 8)) % 8, 0x20)]);
+  const prefix = Buffer.alloc(8);
+  prefix.writeBigUInt64LE(BigInt(json.length), 0);
+  writeFileSync(path, Buffer.concat([prefix, json, ...chunks]));
+}
+
+/** The engine's tensor names, mapped back to Hugging Face names for the test. */
+const HF_LAYER_NAMES: Record<string, string> = {
+  "attn_q.weight": "self_attn.q_proj.weight",
+  "attn_k.weight": "self_attn.k_proj.weight",
+  "attn_v.weight": "self_attn.v_proj.weight",
+  "attn_output.weight": "self_attn.o_proj.weight",
+  "attn_q.bias": "self_attn.q_proj.bias",
+  "attn_k.bias": "self_attn.k_proj.bias",
+  "attn_v.bias": "self_attn.v_proj.bias",
+  "attn_norm.weight": "input_layernorm.weight",
+  "ffn_norm.weight": "post_attention_layernorm.weight",
+  "ffn_gate.weight": "mlp.gate_proj.weight",
+  "ffn_up.weight": "mlp.up_proj.weight",
+  "ffn_down.weight": "mlp.down_proj.weight",
+};
+const HF_TOP_NAMES: Record<string, string> = {
+  "token_embd.weight": "model.embed_tokens.weight",
+  "output_norm.weight": "model.norm.weight",
+  "output.weight": "lm_head.weight",
+};
+function ggufToHfName(name: string): string {
+  if (HF_TOP_NAMES[name] !== undefined) return HF_TOP_NAMES[name];
+  const match = name.match(/^blk\.(\d+)\.(.+)$/);
+  if (match !== null && HF_LAYER_NAMES[match[2]!] !== undefined) {
+    return `model.layers.${match[1]}.${HF_LAYER_NAMES[match[2]!]}`;
+  }
+  throw new Error(`no Hugging Face name for ${name}`);
+}
+
+test("a container built from safetensors by RAREXT's own converter decodes exactly like the GGUF", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({ arch: "qwen2", tokenizer: "gpt2" });
+  const ggufModel = { kind: "gguf" as const, bytes: new Uint8Array(ggufBytes) };
+  const reference = engine
+    .run(ggufModel, { prompt: "a b", steps: 3, temperature: 0 })
+    .tokens.join(",");
+
+  // Emit the fixture's exact tensors as Hugging Face safetensors.
+  const parsed = engine.parseGguf!(new Uint8Array(ggufBytes));
+  const source = new Uint8Array(ggufBytes);
+  const entries = Object.values(parsed.tensors).map((tensor) => {
+    const length = tensor.rowBytes * tensor.rows;
+    return {
+      name: ggufToHfName(tensor.name),
+      dtype: "F32",
+      shape: [tensor.rows, tensor.cols],
+      bytes: Buffer.from(source.subarray(parsed.dataStart + tensor.offset, parsed.dataStart + tensor.offset + length)),
+    };
+  });
+  const tokens = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const dir = mkdtempSync(join(tmpdir(), "rarext-hf-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "qwen2",
+      hidden_size: 8,
+      num_attention_heads: 2,
+      num_key_value_heads: 1,
+      intermediate_size: 16,
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({
+      model: { type: "BPE", vocab: Object.fromEntries(tokens.map((token, id) => [token, id])), merges: [] },
+      added_tokens: [],
+    }),
+  );
+  writeSafetensors(join(dir, "model.safetensors"), entries);
+
+  const container = convertHfDirectory(dir);
+  assert.deepEqual(container.ggmlTypes, ["F32"], "the container carries plain F32 weights");
+  const hfModel = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+  const served = engine.run(hfModel, { prompt: "a b", steps: 3, temperature: 0 }).tokens.join(",");
+  assert.equal(served, reference, "the converted container decodes exactly like the GGUF fixture");
+});
+
+test("the safetensors converter refuses architectures it does not implement", () => {
+  assert.throws(() => hparamsSection({ model_type: "gpt2" }), /only qwen2\/llama/);
+});
+
+/** Minimal protobuf writer for a SentencePiece ModelProto (pieces + scores). */
+function spmProto(pieces: string[], scores: number[]): Buffer {
+  const varint = (value: number): Buffer => {
+    const out: number[] = [];
+    let v = value;
+    for (;;) {
+      const byte = v & 0x7f;
+      v >>>= 7;
+      if (v === 0) {
+        out.push(byte);
+        return Buffer.from(out);
+      }
+      out.push(byte | 0x80);
+    }
+  };
+  const parts: Buffer[] = [];
+  for (let i = 0; i < pieces.length; i += 1) {
+    const text = Buffer.from(pieces[i]!, "utf8");
+    const score = Buffer.alloc(4);
+    score.writeFloatLE(scores[i]!, 0);
+    const piece = Buffer.concat([
+      Buffer.from([0x0a]), varint(text.length), text, // field 1: piece
+      Buffer.from([0x15]), score, // field 2: score (fixed32)
+      Buffer.from([0x18, 0x01]), // field 3: type = NORMAL
+    ]);
+    parts.push(Buffer.concat([Buffer.from([0x0a]), varint(piece.length), piece])); // field 1: SentencePiece
+  }
+  return Buffer.concat(parts);
+}
+
+test("SentencePiece tokenizer.model checkpoints are ingested natively and decode like the GGUF", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({ arch: "llama", tokenizer: "llama" });
+  const ggufModel = { kind: "gguf" as const, bytes: new Uint8Array(ggufBytes) };
+  const reference = engine
+    .run(ggufModel, { prompt: "a b", steps: 3, temperature: 0 })
+    .tokens.join(",");
+
+  const parsed = engine.parseGguf!(new Uint8Array(ggufBytes));
+  const source = new Uint8Array(ggufBytes);
+  const entries = Object.values(parsed.tensors).map((tensor) => {
+    const length = tensor.rowBytes * tensor.rows;
+    return {
+      name: ggufToHfName(tensor.name),
+      dtype: "F32",
+      shape: [tensor.rows, tensor.cols],
+      bytes: Buffer.from(source.subarray(parsed.dataStart + tensor.offset, parsed.dataStart + tensor.offset + length)),
+    };
+  });
+  const tokens = ["\u2581", "a", "b", "c", "d", "e", "f", "g"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const scores = tokens.map((_, index) => (index === 0 ? 0 : -index * 0.1));
+  const dir = mkdtempSync(join(tmpdir(), "rarext-spm-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "llama",
+      hidden_size: 8,
+      num_attention_heads: 2,
+      num_key_value_heads: 1,
+      intermediate_size: 16,
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(join(dir, "tokenizer.model"), spmProto(tokens, scores));
+  writeFileSync(join(dir, "tokenizer_config.json"), JSON.stringify({ add_bos_token: false }));
+  writeSafetensors(join(dir, "model.safetensors"), entries);
+
+  const proto = parseSentencePieceModel(readFileSync(join(dir, "tokenizer.model")));
+  assert.equal(proto.pieces.join(","), tokens.join(","), "the proto parser recovered the pieces");
+  assert.ok(Math.abs(proto.scores[3]! + 0.3) < 1e-6, "the proto parser recovered the scores");
+
+  const container = convertHfDirectory(dir);
+  const hfModel = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+  const served = engine.run(hfModel, { prompt: "a b", steps: 3, temperature: 0 }).tokens.join(",");
+  assert.equal(served, reference, "the SentencePiece container decodes exactly like the GGUF fixture");
 });
 
 test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + SentencePiece)", async () => {

@@ -657,9 +657,15 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
       throw new Error("--file <model file> is required (or pass --native with --vocab)");
     }
     bytes = readFileSync(resolve(fileFlag));
-    const isGguf = bytes.length >= 4 && bytes.toString("latin1", 0, 4) === "GGUF";
-    const engine = (flag(values, "engine") as EngineName | undefined) ?? (isGguf ? "rarext" : "ollama");
-    ownGgufEngine = isGguf && engine === "rarext";
+    // A GGUF file or a RAREXT-native "RXHF" container (built from safetensors by
+    // RAREXT's own converter) is served by RAREXT's own engine unless the caller
+    // explicitly asks for another engine.
+    const magic = bytes.length >= 4 ? bytes.toString("latin1", 0, 4) : "";
+    const isContainer = magic === "RXHF";
+    const ownFormat = magic === "GGUF" || isContainer;
+    const engine = (flag(values, "engine") as EngineName | undefined) ?? (ownFormat ? "rarext" : "ollama");
+    ownGgufEngine = ownFormat && engine === "rarext";
+    if (isContainer && flag(values, "format") === undefined) overrides.format = "rarext-hf";
     execution =
       executionFlag === "native"
         ? {

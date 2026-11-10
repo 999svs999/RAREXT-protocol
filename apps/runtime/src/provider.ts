@@ -34,7 +34,7 @@ import {
   fetchEngineBundleManifest,
   loadEngine,
 } from "./engine-bundle.ts";
-import type { EngineBundle, GgufModel, NativeEngine } from "./engine-bundle.ts";
+import type { EngineBundle, GgufModel, HfModel, NativeEngine } from "./engine-bundle.ts";
 import {
   fetchBundleChunks,
   fetchBundleCiphertext,
@@ -814,15 +814,19 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
   let native: XorshiftModel | null = null;
   let engineModel: string | null = null;
-  let gguf: GgufModel | null = null;
+  let gguf: GgufModel | HfModel | null = null;
   if (options.bundle.execution.kind === "native") {
     native = parseNativeModel(bytes);
   } else if (ownGguf) {
     if (loadedEngine === null) {
       throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");
     }
-    // The verified bytes stay in memory. The fetched engine parses them.
-    gguf = { kind: "gguf", bytes };
+    // The verified bytes stay in memory. The fetched engine parses them: GGUF,
+    // or the RAREXT-native "RXHF" container built from safetensors.
+    const isContainer =
+      bytes.length >= 4 &&
+      bytes[0] === 0x52 && bytes[1] === 0x58 && bytes[2] === 0x48 && bytes[3] === 0x46;
+    gguf = isContainer ? { kind: "hf", bytes } : { kind: "gguf", bytes };
   } else {
     if (options.engineEndpoint === undefined) {
       throw new Error("an engine bundle needs --engine-endpoint so the provider can load the model");

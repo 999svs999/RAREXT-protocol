@@ -66,6 +66,15 @@ Two runtimes ship in this repository:
   token ids are recorded as a `rarext.decode-trace.v1`, so a replay re-runs the
   same fetched engine and compares token-for-token.
 
+The same engine also serves a **RAREXT-native container** (`rarext.hf-container.v1`,
+magic `RXHF`) produced by RAREXT's own ingest
+(`scripts/convert-hf-safetensors.mjs`) straight from a Hugging Face checkpoint —
+`config.json`, `*.safetensors`, and a `tokenizer.json` (BPE) or `tokenizer.model`
+(SentencePiece) — with **no llama.cpp, no gguf-py and no third-party converter**. The converter maps the HF parameter names
+and config into the GGUF-style KV/tensor table the engine already consumes, so
+one engine runs both containers. `bundle --file model.rarext` detects the magic,
+defaults to RAREXT's engine and commits it, exactly like a GGUF.
+
 A container runtime would still be needed to carry a *third-party engine image*
 as the artifact. What is demonstrated is the invariant the objective names: **the
 AI — weights and engine — lives on the RAREXT network, and the machine that asks
@@ -1349,7 +1358,10 @@ why a large file is sharded rather than sent as one object.
   decode through the quant-domain dot path (all seven types), and real
   IQ-quantized GGUFs served end-to-end at 34/34 with a replayed decode trace
   (`Qwen2.5-0.5B-Instruct-IQ2_M`, IQ2_S+IQ3_S tensors; `…-IQ3_XS`, IQ3_S
-  tensors). The remaining third-party tie is the GGUF container itself: turning
-  Hugging Face safetensors into a servable model still uses llama.cpp's
-  converter, so a RAREXT-native safetensors ingest is the next thing to build.
-  The compute is the provider's.
+  tensors). Hugging Face safetensors are ingested by RAREXT's own converter into
+  the `RXHF` container, so no llama.cpp tooling is needed to serve them; that
+  ingest implements qwen2/llama with both a byte-level BPE `tokenizer.json` and a
+  **SentencePiece `tokenizer.model`**, whose protobuf it parses directly (no
+  `sentencepiece` dependency). It copies weights as F32/F16/BF16 — it does not
+  quantize — so a converted container is larger than a quantized GGUF. The
+  compute is the provider's.

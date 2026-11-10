@@ -231,10 +231,23 @@ export interface NativeEngine {
   ): { text: string; seed: number; steps: number; tokens: number[] };
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
+  /** Present on the GGUF runtime: parse a RAREXT "RXHF" container header. */
+  parseContainer?(bytes: Uint8Array): {
+    kv: Record<string, unknown>;
+    dataStart: number;
+    tensors: Record<
+      string,
+      { name: string; type: number; cols: number; rows: number; rowBytes: number; offset: number }
+    >;
+  };
   /** Present on the GGUF runtime: the parsed header/KV/tensor table. */
   parseGguf?(bytes: Uint8Array): {
     kv: Record<string, unknown>;
-    tensors: Record<string, { name: string; type: number; cols: number; rows: number; rowBytes: number }>;
+    dataStart: number;
+    tensors: Record<
+      string,
+      { name: string; type: number; cols: number; rows: number; rowBytes: number; offset: number }
+    >;
   };
   /** Present on the GGUF runtime: the rotary-position primitive, for tests. */
   rope?(
@@ -270,6 +283,12 @@ export interface GgufModel {
   bytes: Uint8Array;
 }
 
+/** A model handle for a RAREXT-native container ("RXHF") built from safetensors. */
+export interface HfModel {
+  kind: "hf";
+  bytes: Uint8Array;
+}
+
 /**
  * Evaluate a fetched engine artifact into a runnable engine. The module runs in
  * a fresh `node:vm` context with no `require` and no filesystem, and must export
@@ -296,6 +315,7 @@ export function loadEngine(source: Uint8Array): NativeEngine {
     run?: unknown;
     dequantTensor?: unknown;
     parseGguf?: unknown;
+    parseContainer?: unknown;
     rope?: unknown;
     layerNorm?: unknown;
     ropeFactors?: unknown;
@@ -311,6 +331,9 @@ export function loadEngine(source: Uint8Array): NativeEngine {
       : {}),
     ...(typeof exports.parseGguf === "function"
       ? { parseGguf: exports.parseGguf as NonNullable<NativeEngine["parseGguf"]> }
+      : {}),
+    ...(typeof exports.parseContainer === "function"
+      ? { parseContainer: exports.parseContainer as NonNullable<NativeEngine["parseContainer"]> }
       : {}),
     ...(typeof exports.rope === "function"
       ? { rope: exports.rope as NonNullable<NativeEngine["rope"]> }

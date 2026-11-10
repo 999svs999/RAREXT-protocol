@@ -24,7 +24,12 @@ const NAMES = {
 
 const bytes = readFileSync(path);
 const engine = loadEngine(readFileSync(new URL("../apps/runtime/engines/rarext-gguf-engine.js", import.meta.url)));
-const parsed = engine.parseGguf(new Uint8Array(bytes));
+const magic = bytes.length >= 4 ? bytes.toString("latin1", 0, 4) : "";
+const isContainer = magic === "RXHF";
+const parsed = isContainer
+  ? engine.parseContainer(new Uint8Array(bytes))
+  : engine.parseGguf(new Uint8Array(bytes));
+console.log("container:", isContainer ? "RXHF" : "GGUF");
 console.log("architecture:", parsed.kv["general.architecture"]);
 console.log("file_type:", parsed.kv["general.file_type"]);
 
@@ -36,7 +41,7 @@ for (const [type, count] of [...histogram].sort((a, b) => a[0] - b[0])) {
   console.log(`  ${(NAMES[type] ?? `type ${type}`).padEnd(9)} ${count}`);
 }
 
-const model = { kind: "gguf", bytes: new Uint8Array(bytes) };
+const model = { kind: isContainer ? "hf" : "gguf", bytes: new Uint8Array(bytes) };
 for (const type of [...histogram.keys()].sort((a, b) => a - b)) {
   const tensor = tensors.find((t) => t.type === type);
   const row = Array.from(engine.dequantTensor(model, tensor.name, 0));

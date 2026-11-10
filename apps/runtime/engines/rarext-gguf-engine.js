@@ -1148,6 +1148,62 @@
     return { kv: kv, tensors: tensors, dataStart: dataStart, bytes: bytes, view: reader.view };
   }
 
+  /**
+   * Parse a RAREXT-native container ("RXHF"): a JSON header that carries the
+   * same GGUF-style KV map and tensor table the engine already consumes, then
+   * the raw F32/F16/BF16 tensor data. RAREXT's own safetensors ingest writes it,
+   * so serving Hugging Face weights needs no GGUF or llama.cpp converter.
+   */
+  function parseContainer(bytes) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var magic = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+    if (magic !== "RXHF") throw new Error("not a RAREXT container (magic " + JSON.stringify(magic) + ")");
+    var version = view.getUint32(4, true);
+    if (version !== 1) throw new Error("unsupported RAREXT container version " + version);
+    var jsonLen = Number(view.getBigUint64(8, true));
+    var jsonBytes = new Uint8Array(bytes.buffer, bytes.byteOffset + 16, jsonLen);
+    var header = JSON.parse(new TextDecoder().decode(jsonBytes));
+    var kv = header.kv || {};
+    var entries = header.tensors || [];
+    var tensors = {};
+    for (var t = 0; t < entries.length; t += 1) {
+      var entry = entries[t];
+      var block = BLOCK[entry.type];
+      if (block === undefined) {
+        throw new Error("unsupported tensor type " + entry.type + " for " + entry.name);
+      }
+      var cols = entry.dims[0];
+      if (cols % block.weights !== 0) {
+        throw new Error("tensor " + entry.name + " has " + cols + " columns, not a multiple of " + block.weights);
+      }
+      var rowBytes = (cols / block.weights) * block.bytes;
+      var rows = 1;
+      for (var r = 1; r < entry.dims.length; r += 1) rows *= entry.dims[r];
+      tensors[entry.name] = {
+        name: entry.name,
+        type: entry.type,
+        dims: entry.dims,
+        cols: cols,
+        rows: rows,
+        rowBytes: rowBytes,
+        offset: entry.offset,
+      };
+    }
+    return {
+      kv: kv,
+      tensors: tensors,
+      dataStart: Math.ceil((16 + jsonLen) / 32) * 32,
+      bytes: bytes,
+      view: view,
+    };
+  }
+
+  /** Dispatch on the container magic: GGUF bytes or a RAREXT "RXHF" container. */
+  function parseModel(model) {
+    if (model.kind === "hf") return parseContainer(model.bytes);
+    return parseGguf(model.bytes);
+  }
+
   // ── quantized rows ────────────────────────────────────────────────────────
 
   /**
@@ -2312,10 +2368,10 @@
   }
 
   function run(model, input) {
-    if (!model || model.kind !== "gguf" || !ArrayBuffer.isView(model.bytes)) {
-      throw new Error('the rarext gguf engine needs a model { kind: "gguf", bytes: Uint8Array }');
+    if (!model || (model.kind !== "gguf" && model.kind !== "hf") || !ArrayBuffer.isView(model.bytes)) {
+      throw new Error('the rarext gguf engine needs a model { kind: "gguf" | "hf", bytes: Uint8Array }');
     }
-    var gguf = parseGguf(model.bytes);
+    var gguf = parseModel(model);
     var kv = gguf.kv;
     var arch = kv["general.architecture"];
     var ARCHS = { qwen2: true, llama: true, mistral: true, mixtral: true, gemma: true, phi3: true, phi2: true };
@@ -2690,7 +2746,7 @@
    *  materializes a whole model; this hook lets a caller check one committed row
    *  against the same code path the engine uses. */
   function dequantTensor(model, name, row) {
-    var parsed = parseGguf(model.bytes);
+    var parsed = parseModel(model);
     var tensor = parsed.tensors[name];
     if (tensor === undefined) throw new Error("no tensor " + name);
     var out = new Float32Array(tensor.cols);
@@ -2700,11 +2756,12 @@
   var api = {
     run: run,
     parseGguf: parseGguf,
+    parseContainer: parseContainer,
     dequantTensor: dequantTensor,
     rope: rope,
     layerNorm: layerNorm,
     ropeFactors: function (model, input) {
-      var g = parseGguf(model.bytes);
+      var g = parseModel(model);
       var arch = g.kv["general.architecture"];
       var prompt = String(input && input.prompt == null ? "" : input.prompt);
       var total = new Tokenizer(g).encode(prompt).length + Math.max(0, Number(input && input.steps) || 0);
@@ -2719,7 +2776,7 @@
       return { set: set, values: Array.from(values) };
     },
     encode: function (model, text) {
-      return new Tokenizer(parseGguf(model.bytes)).encode(text);
+      return new Tokenizer(parseModel(model)).encode(text);
     },
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
