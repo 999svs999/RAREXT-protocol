@@ -1,119 +1,127 @@
 {
   "manifest": {
     "version": 1,
-    "root": "a92827dc220732925c14227e1009c5dde878c182c30de95e6ed6b8c4344a8fa3",
+    "root": "6c7c88447df903fa93f3c1f265652aca8ad1ba60db825aa698e4b79a350b9e80",
     "leafVersion": 4,
-    "anchorId": "f2ea86fa-8199-4915-b214-d8dbf8f1b7da",
-    "anchorRoot": "a92827dc220732925c14227e1009c5dde878c182c30de95e6ed6b8c4344a8fa3",
-    "createdAt": "2026-11-10T05:17:16.345Z",
+    "anchorId": "6a9d3a69-fb6b-4cbf-9a40-499eebb41748",
+    "anchorRoot": "6c7c88447df903fa93f3c1f265652aca8ad1ba60db825aa698e4b79a350b9e80",
+    "createdAt": "2026-11-10T06:07:35.693Z",
     "publications": [
       {
-        "id": "77f6c4f8-d542-4136-9dbf-8c64d73c54bc",
-        "leaf": "e2d83f3c3be6092e5c5906ea62679839298268d7d5b3c2fb40039148bb589441"
+        "id": "8bcb0d58-2363-46ab-9898-652354113da7",
+        "leaf": "515f7bafb17b0a89661c817fc28117860b7b59f90df9e2a824437d400df3e071"
       },
       {
-        "id": "19912fd0-8b58-4bd5-bcf3-a5655aa7cf6c",
-        "leaf": "eb0b641aa2a74b005097cf7f4a41d296359a78ced7972e3c33ac28e441fe7b38"
+        "id": "37110170-5c70-473f-b6a6-a9e1cedc36f3",
+        "leaf": "ac5b604dd048b683fadb7f3884f2db5f8043b038db7308a53b5abf2b4d77ccb5"
       },
       {
-        "id": "7af693ab-0f63-4b53-8e8a-6f45f4d4dec5",
-        "leaf": "66d222125ee3db1597ddf053c5298a61f77f1d502e9fafcf0704b2ba6f2e28b3"
+        "id": "a78cee61-1158-47ab-a7f1-a235560b4007",
+        "leaf": "346b3d3f787768b6bba647306ab99f41d234e87856f25192687ef1120e9c04c2"
       },
       {
-        "id": "18e83fd4-8c95-4b92-9282-dac35512a1e3",
-        "leaf": "bdc45497899c9864e779e61f3fd406f399fb46498aa470e8e8aec81401a4ba85"
+        "id": "a63ade36-0b19-48aa-be7f-3470422a6e29",
+        "leaf": "082995fa460eb50358d566d5a02068d1f60491049ab4bda9cd2b623ada43ac63"
       },
       {
-        "id": "808106c3-45c8-4c95-9a98-a06f3a631227",
-        "leaf": "140414e637690f8c0022cb4653529503aab335b2ab8d1f2fa1ff6eb4505aad95"
+        "id": "01a17126-43ae-45af-b23e-cfbf99f6ce95",
+        "leaf": "534c716ada5f97b6eba2ea03c83c9c310ff04134c730520e95eb1a2b25a18a4f"
       },
       {
-        "id": "47a26111-9245-4458-a42e-186b6b2993d2",
-        "leaf": "88d9bfe630e642e52b70511147ff5023000da0f7a17ea30bce688cc2ae7668de"
+        "id": "56cef225-2592-46f7-bd7d-16164a2674f2",
+        "leaf": "58283357771356e76eb95c9eeddd924816504a8ae15712f502e8fbb4fb6b0dcd"
       },
       {
-        "id": "762297b4-e156-4b7d-b6c8-6616b94edaa2",
-        "leaf": "95cb594ba9f029c0e3695fb0df57b1da0bd36b9dee6a910a208c78d5c8988ad7"
+        "id": "93f372f2-b696-4948-a7cf-9d1d3ab2ffa8",
+        "leaf": "52275a971696a42582a7e5758e5184eb040d6dc117ea75b04519f6ef7aa3aef0"
       },
       {
-        "id": "99c860a0-66b6-4a58-a5e4-79e8855e1666",
-        "leaf": "61ff185279dbbfa94b8101f15ebb393edfb17bb29da6d927d405cd3365920ff2"
+        "id": "14daa2ca-72c4-46b9-b1d7-7763d48d07a6",
+        "leaf": "b543c92902cc3623c12442e4eae4948cbac9476d6c4885e82df64e40f0edc9a7"
       },
       {
-        "id": "c155d69e-15d4-43d1-b1d1-e875ed129ec1",
-        "leaf": "c345a9e9448b534cce74749fcf138ebac3761fac74013863e7c65c4b97361af6"
+        "id": "485383df-30a4-4bd4-af26-e8eaf4504c9a",
+        "leaf": "57c9a5e228917573ed8e095d388c98117e7d884b4874a163a5a5a69526cfa720"
       },
       {
-        "id": "a6ee56ec-1ccb-4f92-b0fa-1d501a94612d",
-        "leaf": "e0bf037e7b9aaca401ad85e74647a7715ea4d2b760f446f13b47645c85adf860"
+        "id": "d1d473f2-9a2d-48d5-9b93-7726817b538b",
+        "leaf": "7cd880cf39f882ade1f8d7ee38d5b0a3034c251677abd981ff1fc73e07a7e041"
       },
       {
-        "id": "689336e4-8443-4275-a20e-869857643a01",
-        "leaf": "decb16214519f70654ee32b7b9a7f4256a0a762d141ce7686b4817ffa62c5b94"
+        "id": "f0c383a8-1b78-4778-8aef-61b17a3134eb",
+        "leaf": "51faee757a90e3e4ccbe4a51628e50a8820b71b1aeeaec1e7c8ae1bf88ff0915"
       },
       {
-        "id": "79dfccbe-fd13-4687-85d8-11b8e2d512d9",
-        "leaf": "d87210b8f8cacbfc75c55fa6c8d491fc974cbfef86a5431b1d6e585821d51aaa"
+        "id": "1907d4c8-5844-4f84-9fe5-34149f3e5fe1",
+        "leaf": "e1649b52c6c6cc664f0648901a5828647f0dab03f7590d4c49fc165baac32377"
       },
       {
-        "id": "d0569f52-2abe-4e3f-9e85-ef41be4c06b9",
-        "leaf": "6a621b4df2ed33e7202110b78b20709738e79688e1e85aa86e15a141cdca261c"
+        "id": "d9ff6229-45f6-4d67-a5a2-c8ca6af689f2",
+        "leaf": "33a104059c6ec0e4afd510da06571c74e1391addab537b17513b9fa594ed48f2"
       },
       {
-        "id": "f2e91239-9e8c-41d7-9794-5426c96a10b9",
-        "leaf": "646f7209f9b458e5aaf6a806676018fa3567cd9f8bf1381674efde6659f38c88"
+        "id": "3cf43d0e-ab62-4c4f-b40f-9c07041b8342",
+        "leaf": "9b633eb5818ccc6e65cb4a1c1ec988b265cd56386e93e4d89e7107ede0956d7d"
       },
       {
-        "id": "53595b0d-b961-4148-8656-65b3d15f91dd",
-        "leaf": "75e44bacd22e0a652a137faa511a2d136673675ed7baf2ab75e2e051d83ad7e7"
+        "id": "42887125-8432-4cea-8322-bc3340f10a94",
+        "leaf": "312ddf2ed363e1f101f15e679a109f52f96f9de4acec3e0e188ae30819037515"
       },
       {
-        "id": "2c934b81-7725-4b99-ab4b-457883d767c2",
-        "leaf": "92cb3a479b3755fa41cf7e020c07e4081c171ec7bd1b2c7068b198ac6b36ae7d"
+        "id": "4b78b470-6551-4951-a39a-4273ac7c738f",
+        "leaf": "a3510f7bda0ab16bf416fc856b0189c9317c8b09e157732fff05db3b581f899b"
       },
       {
-        "id": "4910d255-d3ee-44c1-9089-5a0794ec6497",
-        "leaf": "27a77614dd8f41c49a5c8291bbe791fc1bdb7d3aefea5cfc383af6bbc3a13af9"
+        "id": "40a0c93f-0fbb-43cf-b33c-0bf4719e91c3",
+        "leaf": "8b59961bf2e9ae47a8590f0c9c6b5bd818e7d5b1c56766d8ca4b6675412468d7"
       },
       {
-        "id": "f6faab78-3b96-4cad-a339-434002a9de90",
-        "leaf": "69208f9ac46feef2a3f3a93d2ac29a19eb28495731e14fc92f90e8bd6d082190"
+        "id": "6d22f97a-def5-4ca5-85ee-d7e5476beeec",
+        "leaf": "3baa1516ce8b43b6b2a81f54e42fdc779859f41219c8c260a9307c64d61f8cc9"
       },
       {
-        "id": "208b1c78-95c7-46a1-93bd-d7c0969972c8",
-        "leaf": "5aed3bfa2e12075fc1536143398762ab2c7bb8bb46be86c2180c0e13cbde1af7"
+        "id": "c93259f1-c737-4964-bc54-7e4c1ea6fb3f",
+        "leaf": "f1392dd7ab020495a30552d7c6d59ef9bc60edb8ffb0452ba710f03b407471ce"
       },
       {
-        "id": "57efc1a2-62aa-448e-a0aa-c3ac02922f77",
-        "leaf": "fdb842dd411a123f1f5b812947ace4ffce6cf61df7db1dd0b55f77f6892a9e77"
+        "id": "a309cefb-f3ea-468a-acee-f1eeaa0f403b",
+        "leaf": "59ab8b3be722052890beba92d0d2170d813f428f1392e0e7f8a57c67025c3501"
       },
       {
-        "id": "b25b9ef6-ec4b-4f6d-9f65-7da0109aeb5c",
-        "leaf": "1f1f0dd968c7714c4983340ce3b4083dfa793237a97c128e78995b22e1f2fc97"
+        "id": "9fef8810-e4fa-4266-b6be-dbef31f243c8",
+        "leaf": "b2d5642c988d52fba8a5e2133016ae4f948b0c8b8a08a3bfdd1ed5a98fe04e33"
       },
       {
-        "id": "59da031e-5bee-402e-8a10-971d60f8c0ad",
-        "leaf": "1436290f36b8ecd943cd2305b29f28af233a8245eb5edf5fc18569e45cb2a9bc"
+        "id": "c9e01155-c51e-4e9b-9641-3df8ed1a4362",
+        "leaf": "a617ca76c3bd4a83590ada930cb94c20bbc73951aa25e4f7dc354f9f679ff19b"
       },
       {
-        "id": "c8f4ee98-9854-4657-9752-3c5d3adabd58",
-        "leaf": "c8bbea06e9af484444afaa1077143c5047777e06257c5b114844a7fcecca3cba"
+        "id": "dacaaa20-6ab8-47c9-9f2a-7153f9c9f3dc",
+        "leaf": "187117e50c5f0b15eb2d4a2386dde4522d2caf6782f27524465069c6cc408b1a"
       },
       {
-        "id": "86d937e0-a4a0-450c-8ef0-21d1e67624df",
-        "leaf": "6d3d81daf06eea833c4c783b0b2e31cbd21062ca8f6e1c60ac3db4c981add61a"
+        "id": "fdc4100c-587d-47b7-b034-b8e83b217b95",
+        "leaf": "f129bb1897c047e2a972930a1c76a34235721a059f1bd044c6b8fd0f7fa91db8"
+      },
+      {
+        "id": "f1d77d9c-3e02-41d1-94ec-018ad0fcfa9b",
+        "leaf": "382bc07ec9733b61a5c57c26e456102b6c42043822eb591951df9b7e275b2e2a"
+      },
+      {
+        "id": "58f7c471-c292-45fd-9fca-8fb3bd91b1ce",
+        "leaf": "99c9bbb5aec5b2649ed79a60d62eae45da63a46dfe0d29b0a1ed077fb7e9dd3c"
       },
       {
         "id": "pub-federation-commitment",
-        "leaf": "51a626b0919fc1c9a1bf827ef9a241d0f3b3c40bc3031c20393f3b5bd92b929d"
+        "leaf": "35c1f4277b39010fa0ed9f1db3246c932d018291e3d43b03299a882e01b8738d"
       },
       {
         "id": "pub-semantics-commitment",
-        "leaf": "3b702d16aacbdefddcee075c0b7f32fd8389b5eabe9f85f1eb0b07a8ab12994a"
+        "leaf": "928c25aa2a554616ed1f49942cf167dc59c0890284187bb5534311078baf1f5c"
       }
     ],
     "counts": {
-      "publications": 26,
+      "publications": 28,
       "anchors": 1,
       "challenges": 12,
       "semantics": 5
@@ -121,7 +129,7 @@
   },
   "publications": [
     {
-      "id": "77f6c4f8-d542-4136-9dbf-8c64d73c54bc",
+      "id": "8bcb0d58-2363-46ab-9898-652354113da7",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -170,13 +178,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.088Z",
-      "attestedAt": "2026-11-10T05:17:14.096Z",
+      "createdAt": "2026-11-10T06:07:32.330Z",
+      "attestedAt": "2026-11-10T06:07:32.340Z",
       "verified": true,
-      "signature": "W8JrRR8mU0fnph6+NXnUXBPQFRYE/eFCICulNSL+U7833dZclqsLsj5dtsCHvoR/EAEYNZEkDbwRBB2U4VcbYQ==",
-      "nonce": "bde92626-a3e4-4e7b-ad2b-cb298352aae6",
+      "signature": "3DTlqA9pBucCbHF9rxkEYI2e8TC5m0Tcb5LNnu62bVrNxH1phdnLVGPlkp+fw8/fDznV6LP9EHL7daddM+pE1A==",
+      "nonce": "0c26b799-88d9-4b63-9dd2-4d4d1e006d22",
       "attestation": {
-        "id": "4504cc4c-23a4-4726-bf56-5996443c6691",
+        "id": "2bbcb4ce-fc1b-4098-8adb-43514c682cbc",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -188,7 +196,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -196,14 +204,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.096Z"
+        "createdAt": "2026-11-10T06:07:32.340Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "19912fd0-8b58-4bd5-bcf3-a5655aa7cf6c",
+      "id": "37110170-5c70-473f-b6a6-a9e1cedc36f3",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -256,13 +264,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.099Z",
-      "attestedAt": "2026-11-10T05:17:14.101Z",
+      "createdAt": "2026-11-10T06:07:32.343Z",
+      "attestedAt": "2026-11-10T06:07:32.346Z",
       "verified": true,
-      "signature": "LOedBLr8etEjFloK5TKI7Oa4mpf99g0mxMN+g0iHSv/3pUgbk9j03TI7khqazp3OgzrRRQbkqwdvFQfUb/RigQ==",
-      "nonce": "4b78dbf0-b079-4c4a-92dc-0c7472232fc8",
+      "signature": "X+z1Z5ykt1qBkPSz6nb3tj2sOvbNtSnXC9MJJwe2pj8AfPRsBjFzU2UmZzKlhx6v2evPJ/j4Liy3ldrq4dfRUw==",
+      "nonce": "a70ca69a-2f6b-4e8c-8f72-88a11bf361c4",
       "attestation": {
-        "id": "977d0079-5ba5-4904-aa3c-ca41a83ae130",
+        "id": "5c068944-889d-467d-8dac-7816f299ec46",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -274,7 +282,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -282,14 +290,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.101Z"
+        "createdAt": "2026-11-10T06:07:32.346Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "7af693ab-0f63-4b53-8e8a-6f45f4d4dec5",
+      "id": "a78cee61-1158-47ab-a7f1-a235560b4007",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -342,13 +350,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.102Z",
-      "attestedAt": "2026-11-10T05:17:14.104Z",
+      "createdAt": "2026-11-10T06:07:32.347Z",
+      "attestedAt": "2026-11-10T06:07:32.350Z",
       "verified": true,
-      "signature": "pKjWnj6oatfsHTOUTYAKibOkKMpoDiE3/hpHlVty4TjB00QxYidoSpsFrQElI9jkN0F9xhWtMIRqswLyDTXmcQ==",
-      "nonce": "2795911a-852a-416c-90d6-8d738dfa2d0f",
+      "signature": "5sv83kOzjYtrKDAHwZ92OyN/iPFEas8UNIat6iDYLV0DWJ2mV8cVJK8O8GT63haoOGq3iPjD+Q/rNLiBuplDRw==",
+      "nonce": "92c47099-2445-4042-b500-5ed0d0a98ce8",
       "attestation": {
-        "id": "7c292a53-ffc2-4c18-9206-40af59b9f89a",
+        "id": "c148e34b-7592-44c9-a8d7-e627c5760833",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -360,7 +368,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -368,14 +376,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.104Z"
+        "createdAt": "2026-11-10T06:07:32.350Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "18e83fd4-8c95-4b92-9282-dac35512a1e3",
+      "id": "a63ade36-0b19-48aa-be7f-3470422a6e29",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -428,13 +436,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.105Z",
-      "attestedAt": "2026-11-10T05:17:14.107Z",
+      "createdAt": "2026-11-10T06:07:32.351Z",
+      "attestedAt": "2026-11-10T06:07:32.353Z",
       "verified": true,
-      "signature": "0YqituJOjBCS9ZggyOhWBdEEJliw9wKJcG1+uW7CL8qshBT5ygTCOt5lAtH/4SeMI+FNyYjUvv4TIfAIi3q7kw==",
-      "nonce": "f1d12e69-04b4-4dfe-b5dc-8490dc1553a4",
+      "signature": "SEjrDgh9g7pd91N/KkqWHgblwxBaak8ry0CVJ6bM8lvDRfsuHrjK0UxLwaJxlg5oMOcnE1DER9QbbSbKPlcuLA==",
+      "nonce": "4b283ecf-1351-4ee6-b72a-8816a24e0701",
       "attestation": {
-        "id": "441a01d5-4ab4-429a-9736-e7a66c8f867a",
+        "id": "cff91a30-045d-4164-93ff-993c1747f6ce",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -446,7 +454,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -454,14 +462,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.107Z"
+        "createdAt": "2026-11-10T06:07:32.353Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "808106c3-45c8-4c95-9a98-a06f3a631227",
+      "id": "01a17126-43ae-45af-b23e-cfbf99f6ce95",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -514,13 +522,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.108Z",
-      "attestedAt": "2026-11-10T05:17:14.109Z",
+      "createdAt": "2026-11-10T06:07:32.355Z",
+      "attestedAt": "2026-11-10T06:07:32.358Z",
       "verified": true,
-      "signature": "yneeQlkLoZinCEVr1gWVLnHpMg1XY+t8KN3woAuGYYPSGKEE4/QHSobJvx4dAv668/fRth2PIE2I017zX1uKmg==",
-      "nonce": "a69167b5-0981-46fe-8cd4-1110410cc826",
+      "signature": "yBNRfXKFCPMJX7mxfcrd4S3Y8WGNhP4FH3I2zlSDtWyF0ImAD6gXU/DnvptQdow+IYLJ7yOl4qrLsBw3GQ4+2Q==",
+      "nonce": "2916625c-9caa-465c-bbe5-0098d0abc6bf",
       "attestation": {
-        "id": "2f2cad56-36ab-4258-b9cb-9d5e0f1af5f6",
+        "id": "4d8df953-4eaa-4011-917c-9e3d5f9a0be7",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -532,7 +540,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -540,14 +548,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.109Z"
+        "createdAt": "2026-11-10T06:07:32.358Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "47a26111-9245-4458-a42e-186b6b2993d2",
+      "id": "56cef225-2592-46f7-bd7d-16164a2674f2",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -600,13 +608,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.110Z",
-      "attestedAt": "2026-11-10T05:17:14.112Z",
+      "createdAt": "2026-11-10T06:07:32.364Z",
+      "attestedAt": "2026-11-10T06:07:32.367Z",
       "verified": true,
-      "signature": "1hbwhRd3epMgYLdSADy89/3mYuwqjuMhmXszgP88/nlppG0qiVkRIlbHD9RMUl2UkEh2BgpUyHpnGBrRi8sPiA==",
-      "nonce": "fe9d3087-0a51-48c7-b78d-b4bd3c68ad7e",
+      "signature": "s94fvRKliyvrSImAOovc58T3EPzmfZ+SKA+c9fZj4XKHaOtHUQPHbtWafM/Mv0AnIjrG3GFtVVoB9/D+dNSgFw==",
+      "nonce": "07cc4b11-078d-4ebd-9d36-46e83fbf18ad",
       "attestation": {
-        "id": "b217dd13-1301-41cc-a75e-2748bafec6e9",
+        "id": "e54b4b0e-7ca5-4f83-b662-72297c80cba7",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -618,7 +626,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -626,14 +634,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.112Z"
+        "createdAt": "2026-11-10T06:07:32.367Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "762297b4-e156-4b7d-b6c8-6616b94edaa2",
+      "id": "93f372f2-b696-4948-a7cf-9d1d3ab2ffa8",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -686,13 +694,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.113Z",
-      "attestedAt": "2026-11-10T05:17:14.115Z",
+      "createdAt": "2026-11-10T06:07:32.369Z",
+      "attestedAt": "2026-11-10T06:07:32.371Z",
       "verified": true,
-      "signature": "vlqtbdIQG0W7Fp4PSPS9oD+nHlPyXQ+L5gMkCpgETnKIZNUaxidYkLB7Fnuqdki0FrlRDhH77Sb3JC0IHjUv7w==",
-      "nonce": "6d1d45eb-0962-4e31-afb9-3969ce040397",
+      "signature": "IIPt80Nt7kUxA5YLjjgbmBeu2pxkIG9tu34W8mxZoyyyNmChBDWp5bKrv9U/UKzRvK0zItynOpIpMokbsNWKWw==",
+      "nonce": "d7fd0656-bcbd-4742-816a-9c4592966706",
       "attestation": {
-        "id": "a2852aa6-f2c3-46f3-a362-47c821ca185e",
+        "id": "b47a6426-a062-4305-9a22-b21ebab02652",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -704,7 +712,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -712,14 +720,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.115Z"
+        "createdAt": "2026-11-10T06:07:32.371Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "99c860a0-66b6-4a58-a5e4-79e8855e1666",
+      "id": "14daa2ca-72c4-46b9-b1d7-7763d48d07a6",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -772,13 +780,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.116Z",
-      "attestedAt": "2026-11-10T05:17:14.117Z",
+      "createdAt": "2026-11-10T06:07:32.373Z",
+      "attestedAt": "2026-11-10T06:07:32.376Z",
       "verified": true,
-      "signature": "zXIkQXuoPbOpadsK1W7JFlr7CLYltD3ijGk1MzekfGRCgkpnEsXNqIlIRH/3BaO6Uhcq9tG6K5B0vsKvKc5dug==",
-      "nonce": "db537a5c-d4c2-4d5e-aac7-8e69d7fa233a",
+      "signature": "IZmcT0nl9qDMhT4UrTcK/fW6P19C3kIVQo/5sc23rTB1nkwAV567TZ02uAYuyDGVEVgvS+61ltvvHhc7EmrSIw==",
+      "nonce": "127dbdbb-9c41-4731-bfef-ac61ae95bd29",
       "attestation": {
-        "id": "e14f7cd1-b6b0-46d2-890d-140ba937b836",
+        "id": "edf4a9a1-fa80-40c2-a02a-163ef9142f6e",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -790,7 +798,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -798,14 +806,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.117Z"
+        "createdAt": "2026-11-10T06:07:32.376Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "c155d69e-15d4-43d1-b1d1-e875ed129ec1",
+      "id": "485383df-30a4-4bd4-af26-e8eaf4504c9a",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -855,13 +863,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.118Z",
-      "attestedAt": "2026-11-10T05:17:14.120Z",
+      "createdAt": "2026-11-10T06:07:32.377Z",
+      "attestedAt": "2026-11-10T06:07:32.380Z",
       "verified": true,
-      "signature": "5u8OsmIF+Q9pr+geAtSxclNYiheBNcACC97liu7VB+q42xapJ4uH9Ka7ienU/AG4HcEXSVaQ7QM5sl5T3xYTPA==",
-      "nonce": "460a3efd-fc4e-43b3-9dfd-20dfefcc72d1",
+      "signature": "U1ZCtMp/DA8KiZ3p9WN6erCOh4lKXIo4trkLg3O4LiK5XnDAH9oSn2xjaVEo5WCJIjbQt+6a20I+zEftj9pCaA==",
+      "nonce": "24125b50-ab88-4ca0-a7e7-0ca99424448b",
       "attestation": {
-        "id": "4c1026ec-b515-4258-96c6-b374cdbe2a3b",
+        "id": "99d65dcd-c064-48a7-9857-eef676e7c4ad",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -873,7 +881,7 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -881,14 +889,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.120Z"
+        "createdAt": "2026-11-10T06:07:32.380Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "a6ee56ec-1ccb-4f92-b0fa-1d501a94612d",
+      "id": "d1d473f2-9a2d-48d5-9b93-7726817b538b",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -930,13 +938,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.121Z",
-      "attestedAt": "2026-11-10T05:17:14.122Z",
+      "createdAt": "2026-11-10T06:07:32.382Z",
+      "attestedAt": "2026-11-10T06:07:32.384Z",
       "verified": true,
-      "signature": "kTs1Q6WBIVcD6n6CRF3PnEHZy3elFjlnZHor1DfBz+upyUCFt6CNwEAEwmjh4vogC7tMrFxlr1mZC6olvq8ieA==",
-      "nonce": "fce36776-b636-4ca3-a162-f8968e74ee4c",
+      "signature": "LqVsYcrfPgkUU40Dp77lem/+81Oqi20tQR7Lqk/7jyoBwfV0hjmx8o8qrqM2FvtsUZKqSuK1F2DFPVd3YX/HjQ==",
+      "nonce": "49bdec0e-3b7a-4169-b4aa-71293d424460",
       "attestation": {
-        "id": "2f1ad61d-1e23-4a85-841a-98f6c4321c04",
+        "id": "7a7e31d6-ff66-44d1-8f83-bc5ebd2419b6",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -948,7 +956,7 @@
         "gateCount": 1,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -956,14 +964,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.122Z"
+        "createdAt": "2026-11-10T06:07:32.384Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "689336e4-8443-4275-a20e-869857643a01",
+      "id": "f0c383a8-1b78-4778-8aef-61b17a3134eb",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1005,13 +1013,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.123Z",
-      "attestedAt": "2026-11-10T05:17:14.124Z",
+      "createdAt": "2026-11-10T06:07:32.386Z",
+      "attestedAt": "2026-11-10T06:07:32.388Z",
       "verified": true,
-      "signature": "gRM0JjC+6tyIRaif3VNcshjxgJ/9HsDzWTyXb2VhdiCJQAL5ypI3jlVBrQvvXh8DMU7NfIxT3QY/jOyXcMAJUg==",
-      "nonce": "9a4aeb97-9789-45b3-898a-1b3849879772",
+      "signature": "Go7zAagaDBXFLeWQQFs6YBY5EUNL4fUuBMlGKbGtxnpt/YXCWjvqQbK23I3zXAT0TTh+c0ArEKYwy2B5YNphqw==",
+      "nonce": "ff95946b-e1e9-4da4-8555-ccc3a063ee6d",
       "attestation": {
-        "id": "f21b82db-dbfd-4b9a-ae3c-89f64f75cecb",
+        "id": "ddab1eba-bfc7-4d71-8e57-78101e5b8a31",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -1023,7 +1031,7 @@
         "gateCount": 1,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1031,14 +1039,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.124Z"
+        "createdAt": "2026-11-10T06:07:32.388Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "79dfccbe-fd13-4687-85d8-11b8e2d512d9",
+      "id": "1907d4c8-5844-4f84-9fe5-34149f3e5fe1",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1080,13 +1088,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.125Z",
-      "attestedAt": "2026-11-10T05:17:14.126Z",
+      "createdAt": "2026-11-10T06:07:32.389Z",
+      "attestedAt": "2026-11-10T06:07:32.391Z",
       "verified": true,
-      "signature": "zRjEqkBgZ1SvEAQNS6XBZk9YV7LiJ3MeiWIQEASnjaasDOxQeHeqpb2LQ05wkTs/pEdBpJ/u6EvA9MiEvmjwPw==",
-      "nonce": "69bbf2f7-234d-4dcd-b8d9-37ad969237c1",
+      "signature": "5u9I8Tsn2498V6n+nWY6hyinD3h9WvST1OVtcUEb6PIKZAM6kJaHwwXRLlNxUyteN3U1zaMwJ7j2MM5fum5lXQ==",
+      "nonce": "514cc1dd-bea1-4eda-ac7b-23423f545ce4",
       "attestation": {
-        "id": "c9b5a269-0cd7-49ee-951f-ab5d7463e95d",
+        "id": "9c5f0ccc-0da0-4b66-8d21-3d5e12e6ce23",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -1098,7 +1106,7 @@
         "gateCount": 1,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1106,14 +1114,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.126Z"
+        "createdAt": "2026-11-10T06:07:32.391Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "d0569f52-2abe-4e3f-9e85-ef41be4c06b9",
+      "id": "d9ff6229-45f6-4d67-a5a2-c8ca6af689f2",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1161,13 +1169,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.127Z",
-      "attestedAt": "2026-11-10T05:17:14.128Z",
+      "createdAt": "2026-11-10T06:07:32.392Z",
+      "attestedAt": "2026-11-10T06:07:32.394Z",
       "verified": true,
-      "signature": "M4ILZZHuuVTHBmvSpU0lD1UW7xKCvyVNZ8MoHwOVPhWG+pLqRV4FW3ixVrIWZiaqVYjn1ha9PjLq4PzDeFQBQA==",
-      "nonce": "fcbe6098-585f-454b-938c-8110d707903c",
+      "signature": "5aTXjwmbU/8d6cF1Mo/R/QiJQmnQOGRNoX1KiQe7irLI/hGcTOmb7V5uOC+utuGE9bhz8WA5fPUO5SO72N2YeA==",
+      "nonce": "9734eff6-cd7f-4c8f-b190-19c66326165e",
       "attestation": {
-        "id": "68b03e71-e85f-4cca-a346-7ca4839b7d1d",
+        "id": "3bce9e64-cdc0-4887-9677-2312b79ddade",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -1179,7 +1187,7 @@
         "gateCount": 3,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1187,14 +1195,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.128Z"
+        "createdAt": "2026-11-10T06:07:32.394Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "f2e91239-9e8c-41d7-9794-5426c96a10b9",
+      "id": "3cf43d0e-ab62-4c4f-b40f-9c07041b8342",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1243,13 +1251,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.128Z",
-      "attestedAt": "2026-11-10T05:17:14.130Z",
+      "createdAt": "2026-11-10T06:07:32.395Z",
+      "attestedAt": "2026-11-10T06:07:32.397Z",
       "verified": true,
-      "signature": "+mJD1ykmKh9O1o+ja6RIKRpiJ6XrXpgZb4rKkNKHLCoNPr4a6qByyYfUJs2GP0KB3CUiupmd3AI/hm6rUFtvng==",
-      "nonce": "97c83572-9698-47ba-bd13-e91640e106f9",
+      "signature": "GDzbMCMtxLWI1WtTdOCOtetlUZBGfe+DYK0h1rhTGY4awnM+HvWyvknY1mbgMh5ocpu5ogP4kW+tTrW4m9Rq+w==",
+      "nonce": "bca6226b-28a9-4775-aa6c-8bea9044ecbe",
       "attestation": {
-        "id": "e291b2a3-9cfe-4b6f-a66c-b5b5d70ec00b",
+        "id": "363ae51a-ca56-44ea-80ff-05a3a86449e1",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -1261,7 +1269,7 @@
         "gateCount": 3,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1269,14 +1277,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.130Z"
+        "createdAt": "2026-11-10T06:07:32.397Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "53595b0d-b961-4148-8656-65b3d15f91dd",
+      "id": "42887125-8432-4cea-8322-bc3340f10a94",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1293,9 +1301,9 @@
         "body": {
           "site": "https://futuristiclive.pages.dev/",
           "title": "FUTURISTIC — we film the tomorrows we want to visit",
-          "published_at": "2026-11-10T05:17:15.192Z",
+          "published_at": "2026-11-10T06:07:33.536Z",
           "generator": "FUTURISTIC scripts/build_site.py",
-          "revision": "52dd8219f06cae2a33fd1ab2e780fa3411ab69cc",
+          "revision": "7d5f2e5a6fdb8b53d4b5049b06d1b0cabb14a6cb",
           "pages": [
             {
               "path": "/",
@@ -1337,25 +1345,25 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.262Z",
-      "attestedAt": "2026-11-10T05:17:15.264Z",
+      "createdAt": "2026-11-10T06:07:33.632Z",
+      "attestedAt": "2026-11-10T06:07:33.635Z",
       "verified": true,
-      "signature": "2X0+byxZtE21NotOLDKvILu7yNoGzRpQJYFu0zdvpPkRNhJwz+3sRNGxOMu1yaMu6/mImaOUJ+1RBNwrmJ4F8g==",
-      "nonce": "fe1aac70-39e2-4dcd-8c88-287acd86a138",
+      "signature": "FCXfu+ODNmQKB3QSi5whJ8P9yXgQ2Z0hqd0nknjcK8REJNPr9aGOUs5M8rPPCeCVxUn86CfLQMDZToc/zBQNIw==",
+      "nonce": "ec4628ab-624c-4d0e-9b95-f2d9544c09fb",
       "attestation": {
-        "id": "a36a2687-8f4a-4506-ae4b-99c993f4e50f",
+        "id": "b3704ae8-a554-4a9d-b247-5bffefceb349",
         "verifier": "structural-site-record-check",
         "app": "futuristic-site",
         "challengeId": "futuristic-site-published",
         "taskId": "futuristic-site-published",
-        "circuitHash": "8a1dc86495b4d71f7608f506e59527155b546d1168bdfd7dc0417ddd53a98106",
-        "traceHash": "fd3e852329c25c2090cf7cb623bc425e1a1e22604961b84e39f815e46899d107",
+        "circuitHash": "3fff33c5d9d7191c289c16f7be95d8d9b67f3566bc2ae8aa74e50bac61ed7126",
+        "traceHash": "165e6b2ee07e5e63bc37a5b533a9b1291acf156179d90f0fef9c0c4a22731164",
         "correct": true,
         "score": 1,
         "gateCount": 5,
         "semanticsId": "futuristic-site/futuristic-site-published",
         "semanticsVersion": 1,
-        "semanticsHash": "a7ebcee522656341484b45c6c368bc0faa88c80e3218800ad72d3aebd538be7b",
+        "semanticsHash": "7d25f87b509dba263a9ab116a7980457fb66dfbf562a856740c5f3ac3bddfb4c",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1363,14 +1371,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:15.264Z"
+        "createdAt": "2026-11-10T06:07:33.635Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "2c934b81-7725-4b99-ab4b-457883d767c2",
+      "id": "4b78b470-6551-4951-a39a-4273ac7c738f",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1413,13 +1421,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.265Z",
-      "attestedAt": "2026-11-10T05:17:15.267Z",
+      "createdAt": "2026-11-10T06:07:33.636Z",
+      "attestedAt": "2026-11-10T06:07:33.638Z",
       "verified": true,
-      "signature": "Mw6K2gEWFW1gget8ge8S3WY3T+ZF75Y2jnphbjHzmV5HVUfuOjj78zEkDUfUEcUcBMgSnJOh8B0OSeKuemkFJA==",
-      "nonce": "159e0513-9596-4724-859b-a57e0c5bd69b",
+      "signature": "semshSVdAo6gwpbht8VU7N+Et/KmrydkR37ODnmZpnuqBnJ5csj2AELm8MZKhFB0xv4kGSBTux7D+94WGkBQ4Q==",
+      "nonce": "2355920a-173e-46cb-9243-c66fce7a6abc",
       "attestation": {
-        "id": "cc1ecdb9-08ee-436e-8275-1a6eb2c881d5",
+        "id": "86f64124-e533-4fcf-85e6-96eb3c98b19f",
         "verifier": "structural-name-record-check",
         "app": "rarext-name",
         "challengeId": "rarext-name-published",
@@ -1431,7 +1439,7 @@
         "gateCount": 4,
         "semanticsId": "rarext-name/rarext-name-published",
         "semanticsVersion": 1,
-        "semanticsHash": "dc93d7ef27786d11570b796746129a447f585f780bcb1756b1e01e5ba6c4ac7c",
+        "semanticsHash": "ee8522eea579299c94d9c77e8bc50c6c48eafb9ef8aa486fdf6a886fa05d0706",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1439,14 +1447,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:15.267Z"
+        "createdAt": "2026-11-10T06:07:33.638Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "4910d255-d3ee-44c1-9089-5a0794ec6497",
+      "id": "40a0c93f-0fbb-43cf-b33c-0bf4719e91c3",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1492,13 +1500,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.281Z",
-      "attestedAt": "2026-11-10T05:17:15.285Z",
+      "createdAt": "2026-11-10T06:07:33.660Z",
+      "attestedAt": "2026-11-10T06:07:33.662Z",
       "verified": true,
-      "signature": "TrTpocIx6KkuQJbc4T5Ad8KRDBhTwiMxT4gQ8hgogTq/8YNoCDTqakZsQ6tvOyvE8GZ3NaPc0mLk6SEq4omjUg==",
-      "nonce": "6f354598-cf4e-4e7c-8c98-ec46e57b6f54",
+      "signature": "xCThOpE3pnkJtCG9+XBGRxg5M32rOfCtM61a94+aNIxGHGYuum+v/XpRbYeHzdNuH/p0kb3DUmvTi3inioJvNw==",
+      "nonce": "abce9115-8cea-4fef-826b-8a3e2e1196b4",
       "attestation": {
-        "id": "e74e4733-c005-42ac-af8b-3ce918e635c0",
+        "id": "47e129ca-75fc-4fe6-bfe4-83d4d1b6e186",
         "verifier": "xorshift32-replay",
         "app": "ai-generative",
         "challengeId": "gen-starter",
@@ -1518,14 +1526,14 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "eadd89f10861a56ba3d6db41220ace2a2e9c8349c106538689fe7f24aa549aff",
-        "createdAt": "2026-11-10T05:17:15.285Z"
+        "createdAt": "2026-11-10T06:07:33.662Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "f6faab78-3b96-4cad-a339-434002a9de90",
+      "id": "6d22f97a-def5-4ca5-85ee-d7e5476beeec",
       "author": "futuristic",
       "authorKey": "2bf0766621da1d3f46fd5e46a2a6ba62afacfab4db47f2e54609e17faf477a86",
       "delegatedBy": null,
@@ -1566,13 +1574,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.286Z",
-      "attestedAt": "2026-11-10T05:17:15.287Z",
+      "createdAt": "2026-11-10T06:07:33.664Z",
+      "attestedAt": "2026-11-10T06:07:33.666Z",
       "verified": true,
-      "signature": "ql2qV1XrA0Z4tcT5yoU1x+FbVvDyxVWC+rAyoaynD1PRxYjapOZqKGPMyOU5J7poVU82GMi3fb4zdHWomFbusw==",
-      "nonce": "f5be0d90-2143-4651-bfe1-704c60ea769a",
+      "signature": "Rjwlrm+fcqwEkfe5dR+cC3Yttu/w882Beq2HVK64TzlwvQp3cbyQpQq5fkwbPqWaMVTlaIquOvBc7N7thd3HLQ==",
+      "nonce": "2983d2e5-931d-42b9-8920-2fc236f13939",
       "attestation": {
-        "id": "a57b7071-1193-44d1-ab27-be270923901f",
+        "id": "ef350e5c-2c35-4826-8121-da756e105165",
         "verifier": "bounded-metric-replay",
         "app": "ai-bounded",
         "challengeId": "bounded-starter",
@@ -1594,14 +1602,14 @@
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
         "verifierHash": "65fbd3442f42f5d53673eae7e5e6ebc039d422603897e1428479e1e40438203b",
-        "createdAt": "2026-11-10T05:17:15.287Z"
+        "createdAt": "2026-11-10T06:07:33.666Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "208b1c78-95c7-46a1-93bd-d7c0969972c8",
+      "id": "c93259f1-c737-4964-bc54-7e4c1ea6fb3f",
       "author": "apesdaily",
       "authorKey": "01abd5b61bd99358fd97067a126ba85d5628d3c6cd9321f2668862560a0b0c75",
       "delegatedBy": null,
@@ -1618,7 +1626,7 @@
         "body": {
           "site": "https://apesdaily.com/",
           "title": "APESDAILY — AI crypto trading technology",
-          "published_at": "2026-11-10T05:17:15.913Z",
+          "published_at": "2026-11-10T06:07:34.963Z",
           "generator": "apesdaily-site-record",
           "pages": [
             {
@@ -1654,25 +1662,25 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.914Z",
-      "attestedAt": "2026-11-10T05:17:15.915Z",
+      "createdAt": "2026-11-10T06:07:34.963Z",
+      "attestedAt": "2026-11-10T06:07:34.965Z",
       "verified": true,
-      "signature": "mVGhFRWIlEx1gYz9wu+O4AI6qh05v4iiJTTCygqqtKlC8LoifmQ0KnVBVFbOOuBN7LiN3cf9e2zXX/rQChCXww==",
-      "nonce": "97b5c19b-2c70-47f2-973a-f87a2b489d5d",
+      "signature": "32a/XlHpZTRG5j6DH/TgJPw5aJxQsmNXKKF6u/5AMEV+u1+J3K0C3lVfpV6JAjv2D3fcrCG2r+iTypzusgF6PQ==",
+      "nonce": "b1116c84-c6e3-4020-a6d6-4797eca66d86",
       "attestation": {
-        "id": "ca81e65e-b051-442e-81d6-b334fe3e823f",
+        "id": "ebbfa29c-c5af-4919-be43-9092f65d4877",
         "verifier": "structural-site-record-check",
         "app": "apesdaily-site",
         "challengeId": "apesdaily-site-published",
         "taskId": "apesdaily-site-published",
-        "circuitHash": "d40840dbdbcdd094807d0b4de23798a7e4dd9a6ffa2127f33a0d5f8f548ac7d0",
-        "traceHash": "2ecb644e7815aa7222035a931a2019bc261a1107e6cf632fea168fb8c44052c9",
+        "circuitHash": "dc5134e5b85efea8461c131c59fbf2248ed8d4846ff39ba650526806e0925b65",
+        "traceHash": "437941ca467cc9f885fdfc670b9f0c2eecc67fa9d8ccd1e2828380a1052326f4",
         "correct": true,
         "score": 1,
         "gateCount": 5,
         "semanticsId": "apesdaily-site/apesdaily-site-published",
         "semanticsVersion": 1,
-        "semanticsHash": "d97182e98e85cf1627862e1d9a44ca10b155911b47c999501d6830105196d5e3",
+        "semanticsHash": "9045853d97b531e50f39953a5600d9f476e9831172df7c8aad63866fce9fae1d",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1680,14 +1688,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:15.915Z"
+        "createdAt": "2026-11-10T06:07:34.965Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "57efc1a2-62aa-448e-a0aa-c3ac02922f77",
+      "id": "a309cefb-f3ea-468a-acee-f1eeaa0f403b",
       "author": "apesdaily",
       "authorKey": "01abd5b61bd99358fd97067a126ba85d5628d3c6cd9321f2668862560a0b0c75",
       "delegatedBy": null,
@@ -1726,13 +1734,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:15.916Z",
-      "attestedAt": "2026-11-10T05:17:15.917Z",
+      "createdAt": "2026-11-10T06:07:34.966Z",
+      "attestedAt": "2026-11-10T06:07:34.967Z",
       "verified": true,
-      "signature": "QwbYxZ+Gi7yvATyLRzFgo1MnCgihKZuSeadDB8aBL88pWsmL/oD5Hw9RfiP9cV2nzn/iARHisnkC5QpOFTowMQ==",
-      "nonce": "3de62f7a-5781-4ce0-bbd9-7746bdd6861a",
+      "signature": "duUZEbJ8RLr3wA4GB2ByamzJ8HT51T7M+ppfZbdZnw9Y5SClIT2lQvULMvGE0W6LBkhoOVoytoRDM3dKjArmLA==",
+      "nonce": "d7bf6851-afad-4001-b968-0dfd4aa18302",
       "attestation": {
-        "id": "82b7bab2-b575-47ea-b0bb-edfacc6b1477",
+        "id": "0e167dc8-1e8b-44c1-a086-fb36c86cdcd7",
         "verifier": "structural-name-record-check",
         "app": "rarext-name",
         "challengeId": "rarext-name-published",
@@ -1744,7 +1752,7 @@
         "gateCount": 3,
         "semanticsId": "rarext-name/rarext-name-published",
         "semanticsVersion": 1,
-        "semanticsHash": "dc93d7ef27786d11570b796746129a447f585f780bcb1756b1e01e5ba6c4ac7c",
+        "semanticsHash": "ee8522eea579299c94d9c77e8bc50c6c48eafb9ef8aa486fdf6a886fa05d0706",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1752,14 +1760,157 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:15.917Z"
+        "createdAt": "2026-11-10T06:07:34.967Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "b25b9ef6-ec4b-4f6d-9f65-7da0109aeb5c",
+      "id": "9fef8810-e4fa-4266-b6be-dbef31f243c8",
+      "author": "bapeclub",
+      "authorKey": "f6866164d5826778b698475feb0b9f19933080559a909fc06360f4e8bd566128",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "bapeclub brand site — https://bapeclub.app/",
+      "body": "bapeclub's public presence pinned structurally: 2 page(s) by digest, signed by bapeclub's own key.",
+      "app": "bapeclub-site",
+      "challengeId": "bapeclub-site-published",
+      "artifact": {
+        "app": "bapeclub-site",
+        "kind": "bapeclub.site.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "site": "https://bapeclub.app/",
+          "title": "BAPECLUB — private members club",
+          "published_at": "2026-11-10T06:07:35.348Z",
+          "generator": "bapeclub-site-record",
+          "pages": [
+            {
+              "path": "/",
+              "sha256": "dcf71df2278a3a446fd27712d423cbd9ecd9135b7bc65673b873b33218d9a284",
+              "bytes": 66419
+            },
+            {
+              "path": "/robots.txt",
+              "sha256": "f5702f2912e2713bf872445f1028160f5c47c8c07eccd073b9ec72f972518370",
+              "bytes": 1505
+            }
+          ]
+        }
+      },
+      "taskId": "bapeclub-site-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-10T06:07:35.348Z",
+      "attestedAt": "2026-11-10T06:07:35.350Z",
+      "verified": true,
+      "signature": "s9iyzZ35kap0oOrMENir+9yatI4ZDnAoETsnnAHjg9Vg6hDqdhaNDcni8bCIUO2xiJ98zFYmIYTLWCJkWB2p5A==",
+      "nonce": "2332c4ea-e31b-4246-8b0a-e7a251053a43",
+      "attestation": {
+        "id": "b3a51d35-e210-4712-a3d3-30367d850950",
+        "verifier": "structural-site-record-check",
+        "app": "bapeclub-site",
+        "challengeId": "bapeclub-site-published",
+        "taskId": "bapeclub-site-published",
+        "circuitHash": "6c0d8f6a31f5a442abc781243dab3fe8ff31b771e468785fff9905a332caac58",
+        "traceHash": "256190fd89df6a114e1491502e6e0eb8e388a2f5df651178d8ef5c23bba9f640",
+        "correct": true,
+        "score": 1,
+        "gateCount": 2,
+        "semanticsId": "bapeclub-site/bapeclub-site-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "5091b14bfbae6e3280904f207bb831867dabdc29f9cfabda3942ed88a464957f",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "c644652f2eae3f7a9cbd0f16ec93ae3d6e7557a4916754860cabbc88e1b15a36",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-10T06:07:35.350Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "c9e01155-c51e-4e9b-9641-3df8ed1a4362",
+      "author": "bapeclub",
+      "authorKey": "f6866164d5826778b698475feb0b9f19933080559a909fc06360f4e8bd566128",
+      "delegatedBy": null,
+      "signatureAlgorithm": "ecdsa-p256",
+      "title": "rarext name: bapeclub",
+      "body": "The name \"bapeclub\" is claimed by identity f6866164d5826778… — bapeclub's own key. Forms: rar.bapeclub, bapeclub.rar.",
+      "app": "rarext-name",
+      "challengeId": "rarext-name-published",
+      "artifact": {
+        "app": "rarext-name",
+        "kind": "rarext.name.v1",
+        "version": 1,
+        "mediaType": "application/json",
+        "body": {
+          "name": "bapeclub",
+          "identityKey": "f6866164d5826778b698475feb0b9f19933080559a909fc06360f4e8bd566128",
+          "targets": [
+            {
+              "kind": "site",
+              "url": "https://bapeclub.app/"
+            },
+            {
+              "kind": "registry",
+              "url": "https://999svs999.github.io/RAREXT-protocol/registry/bundle.json"
+            },
+            {
+              "kind": "gallery",
+              "url": "https://bapeclub.app/"
+            }
+          ],
+          "note": "bapeclub — the private members club. This record covers the club surface only; the Shopify storefront is a separate property and is not claimed."
+        }
+      },
+      "taskId": "rarext-name-published",
+      "visibility": "public",
+      "artifactCommitment": null,
+      "parentId": null,
+      "source": null,
+      "createdAt": "2026-11-10T06:07:35.351Z",
+      "attestedAt": "2026-11-10T06:07:35.353Z",
+      "verified": true,
+      "signature": "1VzX9Vb/Xx7/hIQURC3EDYw3DwgsQxmpnaX6//EuF/pPLYr5A0/TUkeU4N0jNQ0Fl6+PVpXYx6KjHprtgGjCiQ==",
+      "nonce": "44c4e708-ff0b-4187-ac5b-73f1787a63f7",
+      "attestation": {
+        "id": "99366e24-0dbf-4063-9e57-556b38d73411",
+        "verifier": "structural-name-record-check",
+        "app": "rarext-name",
+        "challengeId": "rarext-name-published",
+        "taskId": "rarext-name-published",
+        "circuitHash": "5bdb5fae5067494b0145854ce7a00b0a9fd302d3db1988ac5c9d7b7789dcb367",
+        "traceHash": "71b7159dee7c4ee61c66a4f08ee2241bd0e55d459e7fd20c5428565838b41a1e",
+        "correct": true,
+        "score": 1,
+        "gateCount": 3,
+        "semanticsId": "rarext-name/rarext-name-published",
+        "semanticsVersion": 1,
+        "semanticsHash": "ee8522eea579299c94d9c77e8bc50c6c48eafb9ef8aa486fdf6a886fa05d0706",
+        "claimKind": "satisfies",
+        "representation": "exact",
+        "scope": null,
+        "verifierHash": "2cdb5cbdc852ce569c3c7eda73c6cad9f0d0e2ea1ca3521bbd0008da79f3232e",
+        "proofKind": "recomputable",
+        "signatureAlgorithm": "ecdsa-p256",
+        "cryptoProfile": "classical",
+        "createdAt": "2026-11-10T06:07:35.353Z"
+      },
+      "verification": "recomputed",
+      "attestationKeyId": null,
+      "attestationSignature": null
+    },
+    {
+      "id": "dacaaa20-6ab8-47c9-9f2a-7153f9c9f3dc",
       "author": "saikougoods",
       "authorKey": "877022ea7c2ad2327161d9e3054ee1bc2210e52b225c6be1db1965e9b8957ef4",
       "delegatedBy": null,
@@ -1776,12 +1927,12 @@
         "body": {
           "site": "https://saikougoods.pages.dev/",
           "title": "最高選物 — Saikou_Goods · curated consignment",
-          "published_at": "2026-11-10T05:17:16.184Z",
+          "published_at": "2026-11-10T06:07:35.510Z",
           "generator": "saikougoods-site-record",
           "pages": [
             {
               "path": "/",
-              "sha256": "c14d0a1dfcb1cabdde45e141226a15e776ba72a0c4c049524b426700fb5a4a6a",
+              "sha256": "459049e266cb280f13aad466cf317a32f6e02bcbb2cd0a8495b61e97478fbf05",
               "bytes": 7175
             }
           ]
@@ -1792,25 +1943,25 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:16.184Z",
-      "attestedAt": "2026-11-10T05:17:16.187Z",
+      "createdAt": "2026-11-10T06:07:35.510Z",
+      "attestedAt": "2026-11-10T06:07:35.513Z",
       "verified": true,
-      "signature": "F5NuYG09HpzrNgPIGUCqqEhSCBhFoP8MFYH0R3EFIGZCJadVicHJPDAWszwaY97wz/RpznGJkLLLNJeWq5V01Q==",
-      "nonce": "8a71b03b-dc5b-412f-b370-e909c9c7db5f",
+      "signature": "cWZgx0ekwQ9h6l6nD8XdjHqajhtnXtLgROeNwJwoYeUJppGtziNZWsOhScqavVgTdbfEiBwTcwoP3HQOOcQMiQ==",
+      "nonce": "d047b3e1-68a4-449a-aff1-9db5ef16828f",
       "attestation": {
-        "id": "843c99da-bc32-42f0-ae1a-0a21cba2ff48",
+        "id": "b0b0711f-cad3-4071-96c9-6308068f6390",
         "verifier": "structural-site-record-check",
         "app": "saikougoods-site",
         "challengeId": "saikougoods-site-published",
         "taskId": "saikougoods-site-published",
-        "circuitHash": "3ebd28a076985b168f5b6c76662fe8e3017f9102c8e7262f07a5eb2f5c03ea17",
-        "traceHash": "2f255d872666187cac4d49b4d13372611f4e889de6f63e23e90fbcda7401e112",
+        "circuitHash": "0c20f420363fd196603a985e88c6a3b4c586413b5f8f64334d74cf67d0b7136e",
+        "traceHash": "9859f7f569ecff365897d61b69e5bffb8c16695c8eeb4c360cb65f86ec41b9e9",
         "correct": true,
         "score": 1,
         "gateCount": 1,
         "semanticsId": "saikougoods-site/saikougoods-site-published",
         "semanticsVersion": 1,
-        "semanticsHash": "bb2698ad2f20784c2b01c020337caa926ac2007570de833aee0bcdcbbf6a80a8",
+        "semanticsHash": "61c616ffe4ef2b48d8cd41b2498e78394af3896613cd9cc7eb161f7582e3f28e",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1818,14 +1969,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:16.187Z"
+        "createdAt": "2026-11-10T06:07:35.513Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "59da031e-5bee-402e-8a10-971d60f8c0ad",
+      "id": "fdc4100c-587d-47b7-b034-b8e83b217b95",
       "author": "saikougoods",
       "authorKey": "877022ea7c2ad2327161d9e3054ee1bc2210e52b225c6be1db1965e9b8957ef4",
       "delegatedBy": null,
@@ -1860,13 +2011,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:16.188Z",
-      "attestedAt": "2026-11-10T05:17:16.189Z",
+      "createdAt": "2026-11-10T06:07:35.514Z",
+      "attestedAt": "2026-11-10T06:07:35.516Z",
       "verified": true,
-      "signature": "s2KmtGJY7zlMb+KXcbnETcscI8wX3H/52a9SpIm7KuatMDnyj2becpvKd+poBi80vDkbZmMsag1/qd0L8yr2wg==",
-      "nonce": "4356a4aa-09a2-4aad-82e3-4c9ceefadd6b",
+      "signature": "KGcKSiXQpKshF07oI5ylIO7Y+lxvG7pvJerM/6JSuI0+HC1aqTrTP/ZUWVdwg6ep+g/1YEje9+p3DMqTpg7YNw==",
+      "nonce": "009fcfda-c0f8-450e-8e38-323e7befdf43",
       "attestation": {
-        "id": "a06120b1-9c33-4140-b8d1-40bbb7bfb901",
+        "id": "508360b8-81c9-482b-ac00-06ceb2eb71ec",
         "verifier": "structural-name-record-check",
         "app": "rarext-name",
         "challengeId": "rarext-name-published",
@@ -1878,7 +2029,7 @@
         "gateCount": 2,
         "semanticsId": "rarext-name/rarext-name-published",
         "semanticsVersion": 1,
-        "semanticsHash": "dc93d7ef27786d11570b796746129a447f585f780bcb1756b1e01e5ba6c4ac7c",
+        "semanticsHash": "ee8522eea579299c94d9c77e8bc50c6c48eafb9ef8aa486fdf6a886fa05d0706",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1886,14 +2037,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:16.189Z"
+        "createdAt": "2026-11-10T06:07:35.516Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "c8f4ee98-9854-4657-9752-3c5d3adabd58",
+      "id": "f1d77d9c-3e02-41d1-94ec-018ad0fcfa9b",
       "author": "rarext",
       "authorKey": "7eceb65b6c5d781377b7c18b5bbd58d3c6cd822b7148f20b0afae295aa9c6ac4",
       "delegatedBy": null,
@@ -1910,7 +2061,7 @@
         "body": {
           "site": "https://rarext-com.pages.dev/",
           "title": "RAREXT — the protocol the ecosystem publishes on",
-          "published_at": "2026-11-10T05:17:16.334Z",
+          "published_at": "2026-11-10T06:07:35.682Z",
           "generator": "rarext-site-record",
           "pages": [
             {
@@ -1926,25 +2077,25 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:16.334Z",
-      "attestedAt": "2026-11-10T05:17:16.336Z",
+      "createdAt": "2026-11-10T06:07:35.682Z",
+      "attestedAt": "2026-11-10T06:07:35.683Z",
       "verified": true,
-      "signature": "eye+J7ZV5EuMTXYZPV/iHPILj4MfmVA8MptMchG4nm+s85U/5HsRqZHb6vEl9/R5pVolaLBbgesaJZQ/DZeanQ==",
-      "nonce": "2f308673-bbff-4c2a-9b28-fae3cfbae734",
+      "signature": "5I27UFKNvUtKfSX/oFKnX89Kp7OT9/WxkxGZ8i6Df5IEJWJ6LdSyjXxCv6uSBZkFKD8MqMnHv1Wrea1gY/8QeQ==",
+      "nonce": "8f188662-314c-402e-bb94-79314ae1f7a2",
       "attestation": {
-        "id": "f0a303e8-0cd3-4b13-b0a3-f0ce57b98e91",
+        "id": "3a71ca42-c0b9-4b7c-bc57-8103a1599743",
         "verifier": "structural-site-record-check",
         "app": "rarext-site",
         "challengeId": "rarext-site-published",
         "taskId": "rarext-site-published",
-        "circuitHash": "7d533750796ff0839b6245869b930a547221f6ff1a4bed147df2721e1e08f19e",
-        "traceHash": "05a78b338fb52a4fef22f27630ec8cb6b1f0d1e76fc42035c297d5fd1eb2f21e",
+        "circuitHash": "07fd01419f273e7d360e5e065fcc197e08888d263832ec461305d3d620f1d274",
+        "traceHash": "edc7c6f26bc57426e149b7127648a17b5993da07820ed63bb28fdbd2ac366803",
         "correct": true,
         "score": 1,
         "gateCount": 1,
         "semanticsId": "rarext-site/rarext-site-published",
         "semanticsVersion": 1,
-        "semanticsHash": "57a1fcdcd519d9785b1fbb51d3c42ac4d60507512b962f1db99b5ed2c2c10420",
+        "semanticsHash": "c93aeba2f3da6b1378050c81101d4c8273b1ebd014655c6c1e2d87616f57654a",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -1952,14 +2103,14 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:16.336Z"
+        "createdAt": "2026-11-10T06:07:35.683Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
       "attestationSignature": null
     },
     {
-      "id": "86d937e0-a4a0-450c-8ef0-21d1e67624df",
+      "id": "58f7c471-c292-45fd-9fca-8fb3bd91b1ce",
       "author": "rarext",
       "authorKey": "7eceb65b6c5d781377b7c18b5bbd58d3c6cd822b7148f20b0afae295aa9c6ac4",
       "delegatedBy": null,
@@ -1998,13 +2149,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:16.337Z",
-      "attestedAt": "2026-11-10T05:17:16.339Z",
+      "createdAt": "2026-11-10T06:07:35.684Z",
+      "attestedAt": "2026-11-10T06:07:35.686Z",
       "verified": true,
-      "signature": "HKsrtorxDBFKZeKiqtb+Gnf+X+u9eeLVqvnzF1S0hGLSig4lVp4ob+e4EtUTbCKdy/IPVX2n7xTuwj42clzqLQ==",
-      "nonce": "f7b122c0-5bfc-40df-9915-1b961e772eec",
+      "signature": "ffEVcSdslJv55dVDKH5GKBlMZYuczkXsJkzjBz3axewUfyJ+h9civV72igueLdL+ElxJZfN1Ag7U+fdb3RHRGg==",
+      "nonce": "be70d27f-5947-45d1-852d-e88bb68bdab9",
       "attestation": {
-        "id": "e891cbd4-cb87-406c-9649-7b635b183e79",
+        "id": "c3fbc957-4937-4c8a-a81b-7a3ace7431cc",
         "verifier": "structural-name-record-check",
         "app": "rarext-name",
         "challengeId": "rarext-name-published",
@@ -2016,7 +2167,7 @@
         "gateCount": 3,
         "semanticsId": "rarext-name/rarext-name-published",
         "semanticsVersion": 1,
-        "semanticsHash": "dc93d7ef27786d11570b796746129a447f585f780bcb1756b1e01e5ba6c4ac7c",
+        "semanticsHash": "ee8522eea579299c94d9c77e8bc50c6c48eafb9ef8aa486fdf6a886fa05d0706",
         "claimKind": "satisfies",
         "representation": "exact",
         "scope": null,
@@ -2024,7 +2175,7 @@
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:16.339Z"
+        "createdAt": "2026-11-10T06:07:35.686Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -2045,20 +2196,20 @@
         "kind": "registry-list-commitment",
         "version": 1,
         "mediaType": "application/json",
-        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-11-10T05:17:16.634Z\"}"
+        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-11-10T06:07:36.120Z\"}"
       },
       "taskId": "futuristic-published",
       "visibility": "public",
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.088Z",
-      "attestedAt": "2026-11-10T05:17:14.096Z",
+      "createdAt": "2026-11-10T06:07:32.330Z",
+      "attestedAt": "2026-11-10T06:07:32.340Z",
       "verified": true,
-      "signature": "W8JrRR8mU0fnph6+NXnUXBPQFRYE/eFCICulNSL+U7833dZclqsLsj5dtsCHvoR/EAEYNZEkDbwRBB2U4VcbYQ==",
-      "nonce": "bde92626-a3e4-4e7b-ad2b-cb298352aae6",
+      "signature": "3DTlqA9pBucCbHF9rxkEYI2e8TC5m0Tcb5LNnu62bVrNxH1phdnLVGPlkp+fw8/fDznV6LP9EHL7daddM+pE1A==",
+      "nonce": "0c26b799-88d9-4b63-9dd2-4d4d1e006d22",
       "attestation": {
-        "id": "4504cc4c-23a4-4726-bf56-5996443c6691",
+        "id": "2bbcb4ce-fc1b-4098-8adb-43514c682cbc",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -2070,14 +2221,14 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "scope": null,
         "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.096Z"
+        "createdAt": "2026-11-10T06:07:32.340Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -2105,13 +2256,13 @@
       "artifactCommitment": null,
       "parentId": null,
       "source": null,
-      "createdAt": "2026-11-10T05:17:14.088Z",
-      "attestedAt": "2026-11-10T05:17:14.096Z",
+      "createdAt": "2026-11-10T06:07:32.330Z",
+      "attestedAt": "2026-11-10T06:07:32.340Z",
       "verified": true,
-      "signature": "W8JrRR8mU0fnph6+NXnUXBPQFRYE/eFCICulNSL+U7833dZclqsLsj5dtsCHvoR/EAEYNZEkDbwRBB2U4VcbYQ==",
-      "nonce": "bde92626-a3e4-4e7b-ad2b-cb298352aae6",
+      "signature": "3DTlqA9pBucCbHF9rxkEYI2e8TC5m0Tcb5LNnu62bVrNxH1phdnLVGPlkp+fw8/fDznV6LP9EHL7daddM+pE1A==",
+      "nonce": "0c26b799-88d9-4b63-9dd2-4d4d1e006d22",
       "attestation": {
-        "id": "4504cc4c-23a4-4726-bf56-5996443c6691",
+        "id": "2bbcb4ce-fc1b-4098-8adb-43514c682cbc",
         "verifier": "structural-record-check",
         "app": "futuristic-video",
         "challengeId": "futuristic-published",
@@ -2123,14 +2274,14 @@
         "gateCount": 4,
         "semanticsId": "futuristic-video/futuristic-published",
         "semanticsVersion": 1,
-        "semanticsHash": "cc97bf50d691a683b6ad31ae923d46e16e7c4221e76888b2e49827f06091ff0d",
+        "semanticsHash": "cd12a9fd590791c26b1b2e35513f9e7f8a01b050488d9385ba492b0bdaabc785",
         "claimKind": "satisfies",
         "scope": null,
         "verifierHash": "299752fa1a8dc62123c68c68428c7f21c2dbdb92a6f53378b41896ae7bfaac70",
         "proofKind": "recomputable",
         "signatureAlgorithm": "ecdsa-p256",
         "cryptoProfile": "classical",
-        "createdAt": "2026-11-10T05:17:14.096Z"
+        "createdAt": "2026-11-10T06:07:32.340Z"
       },
       "verification": "recomputed",
       "attestationKeyId": null,
@@ -2139,46 +2290,48 @@
   ],
   "anchors": [
     {
-      "id": "f2ea86fa-8199-4915-b214-d8dbf8f1b7da",
-      "root": "a92827dc220732925c14227e1009c5dde878c182c30de95e6ed6b8c4344a8fa3",
+      "id": "6a9d3a69-fb6b-4cbf-9a40-499eebb41748",
+      "root": "6c7c88447df903fa93f3c1f265652aca8ad1ba60db825aa698e4b79a350b9e80",
       "publicationIds": [
-        "77f6c4f8-d542-4136-9dbf-8c64d73c54bc",
-        "19912fd0-8b58-4bd5-bcf3-a5655aa7cf6c",
-        "7af693ab-0f63-4b53-8e8a-6f45f4d4dec5",
-        "18e83fd4-8c95-4b92-9282-dac35512a1e3",
-        "808106c3-45c8-4c95-9a98-a06f3a631227",
-        "47a26111-9245-4458-a42e-186b6b2993d2",
-        "762297b4-e156-4b7d-b6c8-6616b94edaa2",
-        "99c860a0-66b6-4a58-a5e4-79e8855e1666",
-        "c155d69e-15d4-43d1-b1d1-e875ed129ec1",
-        "a6ee56ec-1ccb-4f92-b0fa-1d501a94612d",
-        "689336e4-8443-4275-a20e-869857643a01",
-        "79dfccbe-fd13-4687-85d8-11b8e2d512d9",
-        "d0569f52-2abe-4e3f-9e85-ef41be4c06b9",
-        "f2e91239-9e8c-41d7-9794-5426c96a10b9",
-        "53595b0d-b961-4148-8656-65b3d15f91dd",
-        "2c934b81-7725-4b99-ab4b-457883d767c2",
-        "4910d255-d3ee-44c1-9089-5a0794ec6497",
-        "f6faab78-3b96-4cad-a339-434002a9de90",
-        "208b1c78-95c7-46a1-93bd-d7c0969972c8",
-        "57efc1a2-62aa-448e-a0aa-c3ac02922f77",
-        "b25b9ef6-ec4b-4f6d-9f65-7da0109aeb5c",
-        "59da031e-5bee-402e-8a10-971d60f8c0ad",
-        "c8f4ee98-9854-4657-9752-3c5d3adabd58",
-        "86d937e0-a4a0-450c-8ef0-21d1e67624df",
+        "8bcb0d58-2363-46ab-9898-652354113da7",
+        "37110170-5c70-473f-b6a6-a9e1cedc36f3",
+        "a78cee61-1158-47ab-a7f1-a235560b4007",
+        "a63ade36-0b19-48aa-be7f-3470422a6e29",
+        "01a17126-43ae-45af-b23e-cfbf99f6ce95",
+        "56cef225-2592-46f7-bd7d-16164a2674f2",
+        "93f372f2-b696-4948-a7cf-9d1d3ab2ffa8",
+        "14daa2ca-72c4-46b9-b1d7-7763d48d07a6",
+        "485383df-30a4-4bd4-af26-e8eaf4504c9a",
+        "d1d473f2-9a2d-48d5-9b93-7726817b538b",
+        "f0c383a8-1b78-4778-8aef-61b17a3134eb",
+        "1907d4c8-5844-4f84-9fe5-34149f3e5fe1",
+        "d9ff6229-45f6-4d67-a5a2-c8ca6af689f2",
+        "3cf43d0e-ab62-4c4f-b40f-9c07041b8342",
+        "42887125-8432-4cea-8322-bc3340f10a94",
+        "4b78b470-6551-4951-a39a-4273ac7c738f",
+        "40a0c93f-0fbb-43cf-b33c-0bf4719e91c3",
+        "6d22f97a-def5-4ca5-85ee-d7e5476beeec",
+        "c93259f1-c737-4964-bc54-7e4c1ea6fb3f",
+        "a309cefb-f3ea-468a-acee-f1eeaa0f403b",
+        "9fef8810-e4fa-4266-b6be-dbef31f243c8",
+        "c9e01155-c51e-4e9b-9641-3df8ed1a4362",
+        "dacaaa20-6ab8-47c9-9f2a-7153f9c9f3dc",
+        "fdc4100c-587d-47b7-b034-b8e83b217b95",
+        "f1d77d9c-3e02-41d1-94ec-018ad0fcfa9b",
+        "58f7c471-c292-45fd-9fca-8fb3bd91b1ce",
         "pub-federation-commitment",
         "pub-semantics-commitment"
       ],
-      "leafCount": 26,
+      "leafCount": 28,
       "leafVersion": 4,
-      "createdAt": "2026-11-10T05:17:16.651Z",
+      "createdAt": "2026-11-10T06:07:36.147Z",
       "adapter": "local",
-      "reference": "local:a92827dc22073292",
+      "reference": "local:6c7c88447df903fa",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:a92827dc22073292"
+          "reference": "local:6c7c88447df903fa"
         },
         {
           "adapter": "trac",
@@ -2189,7 +2342,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreihdv4s6qwyi4zijxoy4hgvo56vjomxfr3z7wni64fh2ayf5lj76zq"
+          "reference": "cid:bafkreid3mkiccdboquu7j5zpocyiwar2bvj2k4ix7qpkjzdgyljymsttlq"
         }
       ]
     }
@@ -2645,7 +2798,7 @@
       },
       "semanticsId": "futuristic-video/futuristic-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.041Z",
+      "createdAt": "2026-11-10T06:07:32.253Z",
       "status": "open",
       "sponsor": null
     },
@@ -2660,7 +2813,7 @@
       },
       "semanticsId": "futuristic-site/futuristic-site-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     },
@@ -2675,7 +2828,7 @@
       },
       "semanticsId": "apesdaily-site/apesdaily-site-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     },
@@ -2690,7 +2843,7 @@
       },
       "semanticsId": "bapeclub-site/bapeclub-site-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     },
@@ -2705,7 +2858,7 @@
       },
       "semanticsId": "rarext-site/rarext-site-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     },
@@ -2720,7 +2873,7 @@
       },
       "semanticsId": "saikougoods-site/saikougoods-site-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     },
@@ -2735,7 +2888,7 @@
       },
       "semanticsId": "rarext-name/rarext-name-published",
       "semanticsVersion": 1,
-      "createdAt": "2026-11-10T05:17:14.043Z",
+      "createdAt": "2026-11-10T06:07:32.255Z",
       "status": "open",
       "sponsor": null
     }
