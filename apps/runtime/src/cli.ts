@@ -34,6 +34,7 @@ import {
 import type { UpstreamAuth, UpstreamShape } from "./cloud.ts";
 import { RunLedger, writeJsonFile } from "./ledger.ts";
 import { canonicalDigest } from "./digest.ts";
+import { comparableCompletion } from "./completion.ts";
 import { replayEngineRun } from "./replay.ts";
 import { imageManifestChainDepth, verifyImageManifest } from "./image-manifest.ts";
 import {
@@ -69,6 +70,7 @@ import {
   ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
   buildEngineBundle,
+  engineArtifactRef,
   uploadEngineBundle,
   verifyEngineBundle,
 } from "./engine-bundle.ts";
@@ -689,26 +691,11 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   }
 
   const chunkBytes = Number(flag(values, "chunk-bytes") ?? 8 * 1024 * 1024);
-  const { bundle, chunks } = buildModelBundle({
-    bytes,
-    model: modelRefFromFlags(values, overrides),
-    execution,
-    chunkBytes,
-    ...(sealKey === undefined ? {} : { sealKey }),
-    ...(wrapPublicKey === undefined ? {} : { wrapPublicKey }),
-  });
-  const errors = verifyModelBundle(bundle);
-  if (errors.length > 0) {
-    throw new Error(`refusing to store an invalid bundle: ${errors.join("; ")}`);
-  }
-
-  const uploaded = await uploadBundle({ registry, bundle, chunks });
-  const bundlePath = join(out, "model-bundle.json");
-  writeJsonFile(bundlePath, bundle);
 
   // The ENGINE as a RAREXT artifact: shard the engine module into RAREXT under
-  // one committed digest, so a provider fetches and verifies the engine it runs
-  // instead of using whatever the box already has.
+  // one committed digest. This happens BEFORE the model bundle so the bundle can
+  // NAME the engine artifact: the engine is then part of the model identity, and
+  // a provider fetches it with no out-of-band flag.
   const engineModuleFlag = flag(values, "engine-module");
   let engineBundle: EngineBundle | null = null;
   let engineManifestHash: string | null = null;
@@ -734,7 +721,30 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
     engineBundle = built.bundle;
     engineBundlePath = join(out, "engine-bundle.json");
     writeJsonFile(engineBundlePath, built.bundle);
+    if (execution.kind === "engine") {
+      execution = {
+        ...execution,
+        artifact: engineArtifactRef(engineBundle, engineManifestHash),
+      };
+    }
   }
+
+  const { bundle, chunks } = buildModelBundle({
+    bytes,
+    model: modelRefFromFlags(values, overrides),
+    execution,
+    chunkBytes,
+    ...(sealKey === undefined ? {} : { sealKey }),
+    ...(wrapPublicKey === undefined ? {} : { wrapPublicKey }),
+  });
+  const errors = verifyModelBundle(bundle);
+  if (errors.length > 0) {
+    throw new Error(`refusing to store an invalid bundle: ${errors.join("; ")}`);
+  }
+
+  const uploaded = await uploadBundle({ registry, bundle, chunks });
+  const bundlePath = join(out, "model-bundle.json");
+  writeJsonFile(bundlePath, bundle);
 
   if (bool(values, "json")) {
     console.log(
@@ -2144,7 +2154,14 @@ async function commandCompare(values: Record<string, unknown>): Promise<number> 
                     ?.message?.content ?? "",
                 )
               : "";
-          return { endpoint, responseDigest: canonicalDigest(json), text, error: null };
+          // Compare the ANSWER, not wall-clock metadata: `id` and `created` are
+          // minted per request, so digesting the raw envelope would report
+          // disagreement between two providers that said exactly the same thing.
+          const comparable =
+            typeof json === "object" && json !== null
+              ? comparableCompletion(json as Record<string, unknown>)
+              : json;
+          return { endpoint, responseDigest: canonicalDigest(comparable), text, error: null };
         } catch (error) {
           return {
             endpoint,
@@ -2372,6 +2389,7 @@ async function main(): Promise<number> {
       "engine-version": { type: "string" },
       "engine-digest": { type: "string" },
       "engine-module": { type: "string" },
+      "engine-runtime": { type: "string" },
       "engine-name": { type: "string" },
       "engine-bundle": { type: "string" },
       "engine-logprobs": { type: "boolean" },

@@ -9,8 +9,14 @@
  * verified model bytes and the request.
  *
  * Supported container: GGUF v2/v3 (little endian).
- * Supported tensor types: F32, F16, Q4_0, Q5_0, Q8_0, Q4_K, Q6_K.
- * Supported architecture: qwen2 (GQA + NeoX RoPE + SwiGLU + tied output).
+ * Supported tensor types: F32, F16, BF16, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0,
+ * Q2_K, Q3_K, Q4_K, Q5_K, Q6_K.
+ * Supported architectures: qwen2 (GQA + NeoX RoPE + SwiGLU + tied output),
+ * llama/mistral/mixtral (GQA + adjacent-pair RoPE + SwiGLU, optional output
+ * matrix; mixtral adds top-k expert routing) and gemma (NeoX RoPE + GeGLU +
+ * norm weights biased by +1 + sqrt(n_embd) embedding scale).
+ * Supported tokenizers: GPT-2 byte-level BPE (qwen2/gpt2) and SentencePiece
+ * (llama), both with byte fallback.
  *
  * Exports `run(model, input)` where `model` is `{ kind: "gguf", bytes }` and
  * `input` is `{ prompt, steps, seed, temperature }`. Returns
@@ -417,8 +423,8 @@
           var q3base = base + (q3b / 256) * 110;
           var q3d = f16(view.getUint16(q3base + 108, true));
           var q3scales = q3Scales(view, q3base + 96);
-          var q3qs = q3base;
-          var q3hm = q3base + 64;
+          var q3hm = q3base;
+          var q3qs = q3base + 32;
           var q3m = 1;
           var q3is = 0;
           var q3qpos = 0;
@@ -469,11 +475,11 @@
             var q5km2 = q5kmin * q5ks1.m;
             for (i = 0; i < 32; i += 1) {
               var q5kql = view.getUint8(q5kqs + q5kqpos + i);
-              out[q5kvpos + i] = q5kd1 * ((q5kql & 15) + ((view.getUint8(q5kqh + q5kqpos + i) & q5ku1) ? 16 : 0)) - q5km1;
+              out[q5kvpos + i] = q5kd1 * ((q5kql & 15) + ((view.getUint8(q5kqh + i) & q5ku1) ? 16 : 0)) - q5km1;
             }
             for (i = 0; i < 32; i += 1) {
               var q5kql2 = view.getUint8(q5kqs + q5kqpos + i);
-              out[q5kvpos + 32 + i] = q5kd2 * ((q5kql2 >> 4) + ((view.getUint8(q5kqh + q5kqpos + i) & q5ku2) ? 16 : 0)) - q5km2;
+              out[q5kvpos + 32 + i] = q5kd2 * ((q5kql2 >> 4) + ((view.getUint8(q5kqh + i) & q5ku2) ? 16 : 0)) - q5km2;
             }
             q5kqpos += 32;
             q5kvpos += 64;
@@ -682,8 +688,8 @@
           var dq3base = base + (dq3b / 256) * 110;
           var dq3d = f16(view.getUint16(dq3base + 108, true));
           var dq3scales = q3Scales(view, dq3base + 96);
-          var dq3qs = dq3base;
-          var dq3hm = dq3base + 64;
+          var dq3hm = dq3base;
+          var dq3qs = dq3base + 32;
           var dq3m = 1;
           var dq3is = 0;
           var dq3qpos = 0;
@@ -734,11 +740,11 @@
             var dq5m2 = dq5min * dq5s1.m;
             for (i = 0; i < 32; i += 1) {
               var dq5ql = view.getUint8(dq5qs + dq5qpos + i);
-              total += (dq5d1 * ((dq5ql & 15) + ((view.getUint8(dq5qh + dq5qpos + i) & dq5u1) ? 16 : 0)) - dq5m1) * vec[dq5vpos + i];
+              total += (dq5d1 * ((dq5ql & 15) + ((view.getUint8(dq5qh + i) & dq5u1) ? 16 : 0)) - dq5m1) * vec[dq5vpos + i];
             }
             for (i = 0; i < 32; i += 1) {
               var dq5ql2 = view.getUint8(dq5qs + dq5qpos + i);
-              total += (dq5d2 * ((dq5ql2 >> 4) + ((view.getUint8(dq5qh + dq5qpos + i) & dq5u2) ? 16 : 0)) - dq5m2) * vec[dq5vpos + 32 + i];
+              total += (dq5d2 * ((dq5ql2 >> 4) + ((view.getUint8(dq5qh + i) & dq5u2) ? 16 : 0)) - dq5m2) * vec[dq5vpos + 32 + i];
             }
             dq5qpos += 32;
             dq5vpos += 64;
@@ -1014,9 +1020,21 @@
     return x / (1 + Math.exp(-x));
   }
 
+  /** GELU, tanh approximation — Gemma's GeGLU gate. */
+  function geluTanh(x) {
+    return 0.5 * x * (1 + Math.tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)));
+  }
+
   /** y = W x, one quantized row at a time. */
   function matmul(model, tensor, x, y) {
     for (var row = 0; row < tensor.rows; row += 1) y[row] = dotRow(model, tensor, row, x);
+    return y;
+  }
+
+  /** One expert's slice of a stacked MoE matrix: rows [expert*n, (expert+1)*n). */
+  function matmulExpert(model, tensor, x, y, expert, expertRows) {
+    var base = expert * expertRows;
+    for (var row = 0; row < expertRows; row += 1) y[row] = dotRow(model, tensor, base + row, x);
     return y;
   }
 
@@ -1081,13 +1099,16 @@
     var gguf = parseGguf(model.bytes);
     var kv = gguf.kv;
     var arch = kv["general.architecture"];
-    var ARCHS = { qwen2: true, llama: true, mistral: true };
+    var ARCHS = { qwen2: true, llama: true, mistral: true, mixtral: true, gemma: true };
     if (ARCHS[arch] !== true) {
-      throw new Error("this rarext engine supports qwen2/llama/mistral GGUF; got " + String(arch));
+      throw new Error("this rarext engine supports qwen2/llama/mistral/mixtral/gemma GGUF; got " + String(arch));
     }
-    // Qwen2 pairs RoPE dimensions as halves (NeoX); Llama/Mistral pair adjacent
-    // dimensions. Both are GQA + SwiGLU with the same tensor layout here.
-    var neox = arch === "qwen2";
+    // Qwen2 and Gemma pair RoPE dimensions as halves (NeoX); Llama/Mistral/
+    // Mixtral pair adjacent dimensions. They share a GQA + SwiGLU layout, with
+    // the two architecture-specific differences handled below.
+    var neox = arch === "qwen2" || arch === "gemma";
+    var isGemma = arch === "gemma";
+    var isMoe = arch === "mixtral";
 
     var nLayer = kv[arch + ".block_count"];
     var nEmbd = kv[arch + ".embedding_length"];
@@ -1142,10 +1163,15 @@
 
     function forward(tokenId) {
       dequantRow(gguf, embd, tokenId, x);
+      // Gemma scales the input embedding by sqrt(n_embd) before the first block.
+      if (isGemma) {
+        var embScale = Math.sqrt(nEmbd);
+        for (var es = 0; es < nEmbd; es += 1) x[es] *= embScale;
+      }
       for (var layerIndex = 0; layerIndex < nLayer; layerIndex += 1) {
         var prefix = "blk." + layerIndex + ".";
         var attnNorm = tensorOrNull(gguf, prefix + "attn_norm.weight");
-        rmsNorm(norm, x, dequantNorm(gguf, attnNorm, nEmbd), eps);
+        rmsNorm(norm, x, normWeight(gguf, attnNorm, nEmbd), eps);
 
         matmul(gguf, tensorOrNull(gguf, prefix + "attn_q.weight"), norm, q);
         addBias(q, biasOrNull(gguf, prefix + "attn_q.bias", nEmbd));
@@ -1194,15 +1220,69 @@
         for (var a = 0; a < nEmbd; a += 1) x[a] += hidden[a];
 
         var ffnNorm = tensorOrNull(gguf, prefix + "ffn_norm.weight");
-        rmsNorm(norm, x, dequantNorm(gguf, ffnNorm, nEmbd), eps);
-        matmul(gguf, tensorOrNull(gguf, prefix + "ffn_gate.weight"), norm, gate);
-        matmul(gguf, tensorOrNull(gguf, prefix + "ffn_up.weight"), norm, up);
-        for (var f = 0; f < nFfn; f += 1) gate[f] = silu(gate[f]) * up[f];
-        matmul(gguf, tensorOrNull(gguf, prefix + "ffn_down.weight"), gate, hidden);
-        for (var r = 0; r < nEmbd; r += 1) x[r] += hidden[r];
+        rmsNorm(norm, x, normWeight(gguf, ffnNorm, nEmbd), eps);
+        if (isMoe) {
+          // Mixtral: the FFN is a sparse mixture of experts. The router scores
+          // every expert, the top-k are kept, and their SwiGLU outputs are
+          // combined by the (optionally renormalized) router weights.
+          var nExpert = kv[arch + ".expert_count"];
+          var topK = kv[arch + ".expert_used_count"] || 2;
+          var normTopk = kv[arch + ".expert_weights_norm"] !== false;
+          var router = new Float32Array(nExpert);
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_gate_inp.weight"), norm, router);
+          var maxR = -Infinity;
+          for (var re = 0; re < nExpert; re += 1) if (router[re] > maxR) maxR = router[re];
+          var sumR = 0;
+          for (var rs = 0; rs < nExpert; rs += 1) {
+            router[rs] = Math.exp(router[rs] - maxR);
+            sumR += router[rs];
+          }
+          for (var rn = 0; rn < nExpert; rn += 1) router[rn] /= sumR;
+          var chosen = [];
+          for (var rk = 0; rk < topK && rk < nExpert; rk += 1) {
+            var bestE = -1;
+            var bestV = -Infinity;
+            for (var rc = 0; rc < nExpert; rc += 1) {
+              if (router[rc] > bestV) {
+                bestV = router[rc];
+                bestE = rc;
+              }
+            }
+            if (bestE < 0) break;
+            chosen.push({ expert: bestE, weight: bestV });
+            router[bestE] = -Infinity;
+          }
+          var chosenSum = 0;
+          for (var cw = 0; cw < chosen.length; cw += 1) chosenSum += chosen[cw].weight;
+          var gateExps = tensorOrNull(gguf, prefix + "ffn_gate_exps.weight");
+          var upExps = tensorOrNull(gguf, prefix + "ffn_up_exps.weight");
+          var downExps = tensorOrNull(gguf, prefix + "ffn_down_exps.weight");
+          var expertOut = new Float32Array(nEmbd);
+          for (var r = 0; r < nEmbd; r += 1) hidden[r] = 0;
+          for (var ce = 0; ce < chosen.length; ce += 1) {
+            var expertIndex = chosen[ce].expert;
+            var expertWeight = chosen[ce].weight;
+            if (normTopk && chosenSum > 0) expertWeight /= chosenSum;
+            matmulExpert(gguf, gateExps, norm, gate, expertIndex, nFfn);
+            matmulExpert(gguf, upExps, norm, up, expertIndex, nFfn);
+            for (var f = 0; f < nFfn; f += 1) gate[f] = silu(gate[f]) * up[f];
+            matmulExpert(gguf, downExps, gate, expertOut, expertIndex, nEmbd);
+            for (var er = 0; er < nEmbd; er += 1) hidden[er] += expertWeight * expertOut[er];
+          }
+          for (var mr = 0; mr < nEmbd; mr += 1) x[mr] += hidden[mr];
+        } else {
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_gate.weight"), norm, gate);
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_up.weight"), norm, up);
+          // Gemma uses GeGLU (tanh-approx GELU); the others use SwiGLU.
+          for (var f = 0; f < nFfn; f += 1) {
+            gate[f] = (isGemma ? geluTanh(gate[f]) : silu(gate[f])) * up[f];
+          }
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_down.weight"), gate, hidden);
+          for (var r = 0; r < nEmbd; r += 1) x[r] += hidden[r];
+        }
       }
 
-      rmsNorm(norm, x, dequantNorm(gguf, outputNorm, nEmbd), eps);
+      rmsNorm(norm, x, normWeight(gguf, outputNorm, nEmbd), eps);
       for (var row = 0; row < output.rows; row += 1) logits[row] = dotRow(gguf, output, row, norm);
       return logits;
     }

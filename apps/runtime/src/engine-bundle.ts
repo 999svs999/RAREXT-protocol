@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { bundleShardsRoot } from "./model-bundle.ts";
-import type { BundleShard } from "./model-bundle.ts";
+import type { BundleShard, EngineArtifactRef } from "./model-bundle.ts";
 
 /**
  * The ENGINE as a RAREXT artifact.
@@ -280,6 +280,86 @@ export function loadEngine(source: Uint8Array): NativeEngine {
 /** A stable id for an engine bundle, for logging and pinning. */
 export function engineBundleId(bundle: EngineBundle): string {
   return `${bundle.name}@${bundle.engineVersion}:${bundle.artifactDigest.slice(0, 18)}`;
+}
+
+/**
+ * The reference a MODEL BUNDLE commits to name its engine: the artifact digest,
+ * the runtime, and the manifest hash a provider can fetch. This is what makes the
+ * engine part of the model identity instead of an out-of-band flag.
+ */
+export function engineArtifactRef(
+  bundle: EngineBundle,
+  manifestHash: string,
+): EngineArtifactRef {
+  return {
+    id: engineBundleId(bundle),
+    name: bundle.name,
+    engineVersion: bundle.engineVersion,
+    runtime: bundle.runtime,
+    artifactDigest: bundle.artifactDigest,
+    manifestHash,
+  };
+}
+
+/** Problems between a fetched engine bundle and the reference a model committed. */
+export function engineBundleMatchesRef(bundle: EngineBundle, ref: EngineArtifactRef): string[] {
+  const errors: string[] = [];
+  if (bundle.name !== ref.name) errors.push(`engine name ${bundle.name} != committed ${ref.name}`);
+  if (bundle.engineVersion !== ref.engineVersion) {
+    errors.push(`engine version ${bundle.engineVersion} != committed ${ref.engineVersion}`);
+  }
+  if (bundle.runtime !== ref.runtime) errors.push(`engine runtime ${bundle.runtime} != committed ${ref.runtime}`);
+  if (bundle.artifactDigest !== ref.artifactDigest) {
+    errors.push(`engine artifact ${bundle.artifactDigest} != committed ${ref.artifactDigest}`);
+  }
+  return errors;
+}
+
+/**
+ * Fetch an engine-bundle manifest by the hash a model bundle committed, verify
+ * the blob hashes to that manifest, and verify the bundle is well formed. This
+ * lets a provider serve a bundle with no `--engine-bundle` flag: the engine is
+ * wherever the model says it is, and a substituted manifest or artifact is
+ * refused rather than silently run.
+ */
+export async function fetchEngineBundleManifest(input: {
+  registries: readonly string[];
+  manifestHash: string;
+  fetchImpl?: typeof fetch;
+}): Promise<EngineBundle> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const attempts: string[] = [];
+  if (!/^[0-9a-f]{64}$/.test(input.manifestHash)) {
+    throw new Error("engine manifestHash must be a sha256 hex digest");
+  }
+  for (const base of input.registries) {
+    const registry = base.replace(/\/+$/, "");
+    try {
+      const response = await fetchImpl(`${registry}/v1/blobs/${input.manifestHash}/raw`);
+      if (!response.ok) {
+        attempts.push(`${base}: HTTP ${response.status}`);
+        continue;
+      }
+      const manifest = Buffer.from(await response.arrayBuffer());
+      if (sha256Hex(manifest) !== input.manifestHash) {
+        attempts.push(`${base}: manifest bytes do not hash to the committed hash`);
+        continue;
+      }
+      const parsed = JSON.parse(manifest.toString("utf8")) as unknown;
+      const problems = verifyEngineBundle(parsed);
+      if (problems.length > 0) {
+        attempts.push(`${base}: invalid engine bundle (${problems.join("; ")})`);
+        continue;
+      }
+      return parsed as EngineBundle;
+    } catch (error) {
+      attempts.push(`${base}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(
+    `the committed engine bundle ${input.manifestHash} is missing or invalid at every registry: ` +
+      attempts.join("; "),
+  );
 }
 
 /**

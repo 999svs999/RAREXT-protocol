@@ -29,7 +29,9 @@ import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
+  engineBundleMatchesRef,
   fetchEngineArtifact,
+  fetchEngineBundleManifest,
   loadEngine,
 } from "./engine-bundle.ts";
 import type { EngineBundle, GgufModel, NativeEngine } from "./engine-bundle.ts";
@@ -761,14 +763,40 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   const ownGguf =
     options.bundle.execution.kind === "engine" && options.bundle.execution.engine === "rarext";
 
+  // The engine can be committed BY THE MODEL BUNDLE (`execution.artifact`), so a
+  // provider needs no out-of-band `--engine-bundle` flag: it fetches the exact
+  // engine the bundle names and refuses a substituted manifest or artifact.
+  const committedEngine =
+    options.bundle.execution.kind === "engine"
+      ? (options.bundle.execution.artifact ?? null)
+      : null;
+  let engineBundle = options.engineBundle ?? null;
+  if (engineBundle === null && committedEngine !== null) {
+    engineBundle = await fetchEngineBundleManifest({
+      registries,
+      manifestHash: committedEngine.manifestHash,
+      fetchImpl,
+    });
+    const mismatches = engineBundleMatchesRef(engineBundle, committedEngine);
+    if (mismatches.length > 0) {
+      throw new Error(
+        `the fetched engine does not match the engine artifact this bundle commits: ${mismatches.join("; ")}`,
+      );
+    }
+    log(
+      `fetched the engine this bundle commits: ${engineBundle.name}@${engineBundle.engineVersion} ` +
+        `(${engineBundle.artifactDigest.slice(0, 18)}…)`,
+    );
+  }
+
   let loadedEngine: NativeEngine | null = null;
-  if (options.engineBundle !== undefined) {
+  if (engineBundle !== null) {
     if (options.bundle.execution.kind === "native") {
-      if (options.engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME) {
+      if (engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME) {
         throw new Error("the native class needs a native engine artifact");
       }
     } else if (ownGguf) {
-      if (options.engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
+      if (engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
         throw new Error("the RAREXT GGUF class needs a GGUF engine artifact");
       }
     } else {
@@ -776,11 +804,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         "a RAREXT engine artifact runs the native class or the RAREXT GGUF class; a third-party engine loads a model into itself",
       );
     }
-    const source = await fetchEngineArtifact({ registries, bundle: options.engineBundle });
+    const source = await fetchEngineArtifact({ registries, bundle: engineBundle });
     loadedEngine = loadEngine(source);
     log(
-      `loaded engine ${options.engineBundle.name}@${options.engineBundle.engineVersion} ` +
-        `(${options.engineBundle.artifactDigest.slice(0, 18)}…) from ${options.engineBundle.shards.length} RAREXT shard(s)`,
+      `loaded engine ${engineBundle.name}@${engineBundle.engineVersion} ` +
+        `(${engineBundle.artifactDigest.slice(0, 18)}…) from ${engineBundle.shards.length} RAREXT shard(s)`,
     );
   }
 
@@ -868,11 +896,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   // artifact's, so the fingerprint folds the engine-bundle digest into every run
   // and a replay refuses an engine that does not match the committed artifact.
   const engineDescriptor =
-    options.engineBundle !== undefined
+    engineBundle !== null
       ? {
-          name: options.engineBundle.name,
-          version: options.engineBundle.engineVersion,
-          digest: options.engineBundle.artifactDigest,
+          name: engineBundle.name,
+          version: engineBundle.engineVersion,
+          digest: engineBundle.artifactDigest,
         }
       : {
           name:

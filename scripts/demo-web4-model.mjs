@@ -57,9 +57,14 @@
  * sealed bytes into a mode-0600 file under the OS temp dir, lets the engine load
  * it, and removes it — never the provider's state dir, never a cached artifact.
  *
- * With a GGUF the provider reassembles the file from RAREXT shards, asks the
- * provider's own Ollama to load it, and serves that. The weights still come
- * from RAREXT; the engine is the provider's, not the caller's.
+ * By default a GGUF is served by the provider's own Ollama (interop). To remove
+ * that third-party engine from the whole path, run RAREXT's own engine:
+ *
+ *   RAREXT_WEB4_OWN_ENGINE=1 node scripts/demo-web4-model.mjs
+ *
+ * In that mode the engine itself is sharded into RAREXT; every provider fetches
+ * and verifies it, serves with NO engine endpoint, and the demo carries no
+ * Ollama, llama.cpp, native addon, or container at all.
  */
 
 import { createHash, generateKeyPairSync } from "node:crypto";
@@ -277,6 +282,11 @@ try {
   const seal = process.env.RAREXT_WEB4_SEAL === "1";
   const modelId = process.env.RAREXT_WEB4_MODEL ?? (real ? "rarext-web4-model" : "rarext-native-proof");
   const engineModel = process.env.RAREXT_WEB4_ENGINE_MODEL ?? "rarext-web4-model";
+  // `RAREXT_WEB4_OWN_ENGINE=1` runs the WHOLE real-GGUF path on RAREXT's own
+  // engine artifact: the provider is started with no engine endpoint and no
+  // Ollama, so the demo itself carries no third-party engine. The default keeps
+  // Ollama as interop for a machine that already has it.
+  const ownEngineMode = real && process.env.RAREXT_WEB4_OWN_ENGINE === "1";
   // Credits each distinct agreeing operator earns for the run. Payment is a
   // commitment the deployment (and therefore the challenge) names, not a
   // gateway setting.
@@ -365,10 +375,22 @@ try {
         gguf,
         "--model",
         modelId,
-        "--engine",
-        "ollama",
-        "--engine-model",
-        engineModel,
+        ...(ownEngineMode
+          ? [
+              "--engine",
+              "rarext",
+              // Commit RAREXT's own engine into the model bundle itself: no
+              // provider is told which engine to run out of band.
+              "--engine-module",
+              fileURLToPath(new URL("../apps/runtime/engines/rarext-gguf-engine.js", import.meta.url)),
+              "--engine-runtime",
+              "gguf",
+              "--engine-name",
+              "rarext-gguf-engine",
+              "--engine-version",
+              "1",
+            ]
+          : ["--engine", "ollama", "--engine-model", engineModel]),
         "--format",
         "gguf",
         "--quantization",
@@ -409,6 +431,16 @@ try {
     seal && sealKeyPath !== null
       ? Buffer.from(readFileSync(sealKeyPath, "utf8").trim(), "hex")
       : null;
+
+  // In own-engine mode the ENGINE is a RAREXT artifact too, and the model bundle
+  // COMMITS it: `bundle --engine-module` uploads the engine and names its digest
+  // in `execution.artifact`. Every provider therefore resolves the engine from
+  // the bundle with no out-of-band `--engine-bundle` flag.
+  const ownEngineBundle = ownEngineMode ? bundleReport.engineBundle : null;
+  const ownEngineBundlePath = ownEngineMode ? bundleReport.engineBundlePath : null;
+  if (ownEngineMode && (ownEngineBundle === null || ownEngineBundlePath === null)) {
+    throw new Error("own-engine mode produced no committed engine artifact");
+  }
 
   const listed = await getJson(`${startBase}/v1/blobs`);
   const shardHashes = new Set(bundle.shards.map((shard) => shard.hash));
@@ -486,9 +518,15 @@ try {
       teeLeaves[0].certPath,
       "--image-manifest",
       codeManifestPath,
-      "--engine-logprobs",
+      ...(ownEngineMode
+        ? []
+        : [
+            "--engine-logprobs",
+            ...(real
+              ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"]
+              : []),
+          ]),
       ...(seal ? ["--seal-key-file", sealKeyPath] : []),
-      ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
     ],
     {},
     (line) => {
@@ -501,10 +539,12 @@ try {
 
   // The native model is cheap enough to run on a second independent provider,
   // which is what makes the response-agreement phase meaningful. A real GGUF
-  // shares the host's Ollama, so the demo keeps one provider there.
+  // using a shared host Ollama has one engine, so the demo keeps one provider
+  // there. RAREXT's own engine has no shared bottleneck: every provider runs
+  // its own fetched engine, so own-engine mode uses two providers too.
   let providerBUrl = null;
   let cardB = null;
-  if (!real) {
+  if (!real || ownEngineMode) {
     const providerBPort = await freePort();
     providerB = spawnProcess(
       [
@@ -1046,9 +1086,15 @@ try {
           String(witnessPort),
           "--handle",
           "provider-witness",
-          "--engine-logprobs",
+          ...(ownEngineMode
+            ? []
+            : [
+                "--engine-logprobs",
+                ...(real
+                  ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"]
+                  : []),
+              ]),
           ...(seal ? ["--seal-key-file", sealKeyPath] : []),
-          ...(real ? ["--engine-endpoint", process.env.RAREXT_WEB4_ENGINE_ENDPOINT ?? "http://127.0.0.1:11434"] : []),
         ],
         {},
         (line) => {
@@ -1352,18 +1398,32 @@ try {
         : `trace self=${String(traceSelfConsistent)} matches=${String(traceMatches)} diverge=${String(divergenceDetected)}`;
     }
   } else {
-    // An engine run is checked at the decode level: the run recorded a token +
-    // logprob judgment, and replay re-runs on the pinned engine and compares it.
+    // An engine run is checked at the decode level: the run recorded a token
+    // trace (or a token + logprob judgment for an external engine), and replay
+    // re-runs on the pinned engine and compares it.
     const replayed = publishedBody
       ? await replayEngineRun({ body: publishedBody, endpoint: providerUrls[0] })
       : null;
     const runTrace = publishedBody?.response?.body?.rarext_trace;
-    const judgmentRecorded =
-      runTrace?.kind === "rarext.judgment.v1" && Array.isArray(runTrace.tokens) && runTrace.tokens.length > 0;
-    replayOk = judgmentRecorded && replayed?.ok === true && replayed?.traceMatches === true;
-    replayDetail = replayOk
-      ? `replayed the GGUF run on the pinned engine; its decode judgment (${runTrace.tokens.length} tokens with logprobs) matched`
-      : `judgment=${String(judgmentRecorded)} replay=${String(replayed?.reason ?? replayed?.reproduced)}`;
+    if (ownEngineMode) {
+      // RAREXT's own engine records the generated token ids. Replaying it on the
+      // same fetched engine artifact must reproduce the same decode trace.
+      const traceRecorded =
+        runTrace?.kind === "rarext.decode-trace.v1" &&
+        Array.isArray(runTrace.tokens) &&
+        runTrace.tokens.length > 0;
+      replayOk = traceRecorded && replayed?.ok === true && replayed?.traceMatches === true;
+      replayDetail = replayOk
+        ? `replayed the GGUF run on RAREXT's own fetched engine; its decode trace (${runTrace.tokens.length} tokens) matched`
+        : `trace=${String(traceRecorded)} replay=${String(replayed?.reason ?? replayed?.reproduced)}`;
+    } else {
+      const judgmentRecorded =
+        runTrace?.kind === "rarext.judgment.v1" && Array.isArray(runTrace.tokens) && runTrace.tokens.length > 0;
+      replayOk = judgmentRecorded && replayed?.ok === true && replayed?.traceMatches === true;
+      replayDetail = replayOk
+        ? `replayed the GGUF run on the pinned engine; its decode judgment (${runTrace.tokens.length} tokens with logprobs) matched`
+        : `judgment=${String(judgmentRecorded)} replay=${String(replayed?.reason ?? replayed?.reproduced)}`;
+    }
   }
   phase("replay", replayOk, replayDetail);
 
@@ -1968,6 +2028,53 @@ try {
           `engine (trace ${String(engineTokens)}), and a tampered artifact was refused`
         : `fingerprintFolds=${String(fingerprintFolds)} status=${engineAnswer.status} tokens=${JSON.stringify(engineTokens)} ` +
           `tamperRefused=${String(tamperRefused)}`;
+    } else if (ownEngineMode) {
+      // The MAIN bundle already runs on RAREXT's own engine in this mode. Every
+      // provider fetched and verified `ownEngineBundle` and serves with no engine
+      // endpoint. Prove the served trace came from that artifact, reproduce it,
+      // and refuse a tampered artifact — without uploading a second copy of the
+      // weights.
+      const ownHealth = await getJson(`${providerUrl}/health`);
+      const fingerprintFolds =
+        ownHealth.engineFingerprint ===
+        engineDescriptorFingerprint({
+          name: ownEngineBundle.name,
+          version: ownEngineBundle.engineVersion,
+          digest: ownEngineBundle.artifactDigest,
+        });
+      const askOwn = () =>
+        fetch(`${providerUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: bundle.model.id,
+            messages: [{ role: "user", content: "Hello" }],
+            max_tokens: 2,
+            temperature: 0,
+            seed: 7,
+          }),
+        });
+      const firstAnswer = await askOwn();
+      const firstJson = await firstAnswer.json();
+      const secondJson = await (await askOwn()).json();
+      const traceA = firstJson?.rarext_trace?.tokens;
+      const traceB = secondJson?.rarext_trace?.tokens;
+      const traceKind = firstJson?.rarext_trace?.kind;
+      const deterministic =
+        traceKind === "rarext.decode-trace.v1" &&
+        Array.isArray(traceA) &&
+        traceA.length === 2 &&
+        traceA.every((token) => Number.isSafeInteger(token)) &&
+        JSON.stringify(traceA) === JSON.stringify(traceB);
+      engineArtifactOk =
+        fingerprintFolds && firstAnswer.status === 200 && deterministic && tamperRefused;
+      engineArtifactDetail = engineArtifactOk
+        ? `the engine is RAREXT's own GGUF artifact (${ownEngineBundle.shards.length} shard(s) under ` +
+          `${ownEngineBundle.artifactDigest.slice(0, 18)}…): every provider fetched and verified it, ran it over ` +
+          `the committed GGUF with NO engine endpoint (no Ollama/llama.cpp/container), folded its digest into the ` +
+          `engine fingerprint, reproduced trace ${JSON.stringify(traceA)} twice, and refused a tampered artifact`
+        : `fingerprintFolds=${String(fingerprintFolds)} status=${firstAnswer.status} kind=${String(traceKind)} ` +
+          `traceA=${JSON.stringify(traceA)} traceB=${JSON.stringify(traceB)} tamperRefused=${String(tamperRefused)}`;
     } else {
       // The engine class CAN be RAREXT's own. RAREXT's GGUF engine artifact
       // parses the committed GGUF and runs the transformer in the provider's

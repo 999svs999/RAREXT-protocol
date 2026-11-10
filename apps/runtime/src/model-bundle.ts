@@ -42,6 +42,26 @@ export type { ProviderCertificate };
 export const MODEL_BUNDLE_KIND = "rarext.model-bundle.v1";
 export const MODEL_PROVIDER_KIND = "rarext.model-provider.v1";
 
+/**
+ * The engine ARTIFACT a bundle commits, when the engine is RAREXT's own. This
+ * makes the engine part of the model's content identity: the bundle names the
+ * exact artifact digest, runtime, and the registry manifest that carries its
+ * shard list, so a provider can fetch and verify the engine without being told
+ * out of band which one to run. A substituted engine is a different bundle.
+ */
+export interface EngineArtifactRef {
+  /** The engine bundle's id (name@version). */
+  id: string;
+  name: string;
+  engineVersion: string;
+  /** How the artifact is executed. */
+  runtime: string;
+  /** `sha256:<hex>` of the reassembled engine artifact. */
+  artifactDigest: string;
+  /** sha256 hex of the canonical engine-bundle manifest stored on RAREXT. */
+  manifestHash: string;
+}
+
 /** The execution classes a provider can serve. */
 export type ExecutionRef =
   | {
@@ -58,6 +78,8 @@ export type ExecutionRef =
       engine: EngineName;
       /** Engine-native name the provider creates from the fetched weights. */
       engineModel: string | null;
+      /** Present when the engine itself is a RAREXT artifact this bundle names. */
+      artifact?: EngineArtifactRef | null;
     };
 
 export interface BundleShard {
@@ -584,6 +606,34 @@ export function executionProblems(execution: unknown): string[] {
     if (execution.engineModel !== null && typeof execution.engineModel !== "string") {
       errors.push("execution.engineModel must be a string or null");
     }
+    if (execution.artifact !== undefined && execution.artifact !== null) {
+      errors.push(...engineArtifactProblems(execution.artifact));
+    }
+  }
+  return errors;
+}
+
+const ENGINE_ARTIFACT_RUNTIMES = new Set([
+  "rarext.native-engine.node-cjs.v1",
+  "rarext.gguf-engine.node-cjs.v1",
+]);
+
+function engineArtifactProblems(value: unknown): string[] {
+  if (!isRecord(value)) return ["execution.artifact must be an object or null"];
+  const errors: string[] = [];
+  for (const key of ["id", "name", "engineVersion", "runtime"] as const) {
+    if (typeof value[key] !== "string" || (value[key] as string).length === 0) {
+      errors.push(`execution.artifact.${key} must be a non-empty string`);
+    }
+  }
+  if (typeof value.runtime === "string" && !ENGINE_ARTIFACT_RUNTIMES.has(value.runtime)) {
+    errors.push("execution.artifact.runtime is not a known engine runtime");
+  }
+  if (typeof value.artifactDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value.artifactDigest)) {
+    errors.push("execution.artifact.artifactDigest must be sha256:<hex>");
+  }
+  if (typeof value.manifestHash !== "string" || !/^[0-9a-f]{64}$/.test(value.manifestHash)) {
+    errors.push("execution.artifact.manifestHash must be a sha256 hex digest");
   }
   return errors;
 }

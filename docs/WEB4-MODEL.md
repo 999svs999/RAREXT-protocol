@@ -31,18 +31,26 @@ checks. The demo's `engine` phase serves with a fetched engine (and shows the se
 trace is the fetched engine's, not the built-in one) and refuses a tampered artifact.
 
 `bundle --engine-module <file> --engine-runtime native|gguf --engine-name <n>`
-shards the engine; `provider --engine-bundle <manifest>` fetches and runs it. The
-artifact is a JavaScript engine module evaluated in a `node:vm` context with no
-`require` and no filesystem.
+shards the engine and **commits it into the model bundle** (`execution.artifact`:
+name, version, runtime, artifact digest, and the manifest hash). The engine is
+therefore part of the model's content identity: a provider fetches the exact
+engine the bundle names, verifies it against that digest, and needs no
+out-of-band `--engine-bundle` flag. A bundle that names a different artifact is a
+different bundle and is refused. `provider --engine-bundle <manifest>` remains
+available to pin an engine explicitly. The artifact is a JavaScript engine module
+evaluated in a `node:vm` context with no `require` and no filesystem.
 
 Two runtimes ship in this repository:
 
 - `rarext.native-engine.node-cjs.v1` runs the committed xorshift32 model.
 - `rarext.gguf-engine.node-cjs.v1` is **RAREXT's own GGUF transformer**
   (`apps/runtime/engines/rarext-gguf-engine.js`). It parses the GGUF header, KV,
-  and tensor table, dequantizes the committed weights (F32/F16/Q4_0/Q5_0/Q8_0/
-  Q4_K/Q6_K), and runs the qwen2 transformer — RMSNorm, GQA attention, NeoX RoPE,
-  SwiGLU, and tied output — inside the provider. A GGUF execution named
+  and tensor table, dequantizes the committed weights (F32/F16/BF16/Q4_0/Q4_1/
+  Q5_0/Q5_1/Q8_0/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K), and runs the qwen2 or llama/mistral
+  transformer — RMSNorm, GQA attention, NeoX or adjacent-pair RoPE, SwiGLU,
+  optional output matrix — inside the provider. Both GPT-2 byte-level BPE and
+  SentencePiece tokenizers are implemented, so the engine covers the two common
+  GGUF families rather than one. A GGUF execution named
   `engine: "rarext"` therefore needs **no Ollama, no llama.cpp, no native addon,
   and no container runtime**, and no engine endpoint at all: both the weights and
   the engine are fetched from RAREXT and verified before serving. The generated
@@ -63,7 +71,7 @@ runs the whole path with a deterministic native model in seconds:
 infer -> publish -> compare -> weights -> trace -> deterministic -> determinism ->
 engine -> replay -> anchor -> discover-deploy -> discover -> tamper -> verify`.
 
-To put a real GGUF through the same path:
+To put a real GGUF through the same path (served by the provider's own Ollama):
 
 ```bash
 RAREXT_WEB4_GGUF=/path/to/model.gguf \
@@ -81,6 +89,22 @@ RAREXT's **own** GGUF engine artifact, with **no engine endpoint**: the provider
 fetches and verifies both the weights and the engine, runs the transformer
 itself, reproduces the same token trace twice, and refuses a tampered engine
 artifact. The reference GGUF is 397,807,936 bytes (`qwen2.5:0.5b`, Q4_K_M).
+
+Set `RAREXT_WEB4_OWN_ENGINE=1` to remove Ollama from the **whole** path, not just
+the `engine` phase. The main bundle then names `engine: "rarext"` and **commits
+the engine artifact itself** (`execution.artifact`): `bundle --engine-module`
+shards and uploads RAREXT's GGUF engine before the model bundle is built, so the
+engine's digest is part of the model identity. Every provider resolves the engine
+from the bundle and verifies it, with no `--engine-bundle` flag and no engine
+endpoint. Two providers run the fetched engine independently, so quorum,
+determinism, and replay all run on RAREXT's own engine:
+
+```bash
+RAREXT_WEB4_GGUF=/path/to/model.gguf \
+RAREXT_WEB4_MODEL=qwen2.5:0.5b \
+RAREXT_WEB4_OWN_ENGINE=1 \
+node scripts/demo-web4-model.mjs
+```
 
 ## What is committed
 

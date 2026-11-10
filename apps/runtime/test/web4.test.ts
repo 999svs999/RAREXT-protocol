@@ -26,6 +26,7 @@ import { PlacementRegistry } from "../../api/src/placements.ts";
 import { BlobStore } from "../../api/src/storage.ts";
 import { RarextStore } from "../../api/src/store.ts";
 import { RunLedger } from "../src/ledger.ts";
+import { comparableCompletion } from "../src/completion.ts";
 import { challengeFor, challengesFile, RuntimePublisher } from "../src/publisher.ts";
 import { startGateway } from "../src/gateway.ts";
 import { discoverBundle, fetchAnchoredBundles, fetchVerifiedProvidersAcrossRegistries, verifiedProviders } from "../src/discovery.ts";
@@ -86,12 +87,12 @@ import { engineDescriptorFingerprint } from "../src/engine-pin.ts";
 import {
   ENGINE_ARTIFACT_RUNTIME_GGUF,
   buildEngineBundle,
+  engineArtifactRef,
   fetchEngineArtifact,
   loadEngine,
   uploadEngineBundle,
   verifyEngineBundle,
 } from "../src/engine-bundle.ts";
-import { comparableCompletion } from "../src/completion.ts";
 import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
 import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
@@ -6225,6 +6226,120 @@ test("a GGUF is served by RAREXT's own fetched engine, with no external engine",
   }
 });
 
+test("a model bundle can commit its engine artifact, so a provider needs no out-of-band engine flag", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    // Shard and upload RAREXT's own GGUF engine first, so its manifest hash can
+    // be committed by the model bundle.
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    const { manifestHash } = await uploadEngineBundle({
+      registry: reg.base,
+      bundle: engineBundle,
+      chunks: engineChunks,
+    });
+
+    const bytes = tinyGgufModel();
+    const model: ModelRef = {
+      id: "tiny-qwen2-committed-engine",
+      family: "qwen2",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = {
+      kind: "engine",
+      engine: "rarext",
+      engineModel: null,
+      artifact: engineArtifactRef(engineBundle, manifestHash),
+    };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    assert.deepEqual(verifyModelBundle(bundle), []);
+    assert.equal(bundle.execution.kind, "engine");
+    assert.equal(
+      bundle.execution.kind === "engine" ? bundle.execution.artifact?.artifactDigest : null,
+      engineBundle.artifactDigest,
+      "the bundle commits the engine artifact digest",
+    );
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    // NO engineBundle option: the provider resolves the engine from the bundle.
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "committed-engine"),
+      port: 0,
+    });
+    const health = (await (await fetch(`${provider.url}/health`)).json()) as {
+      engineFingerprint: string;
+      execution: string;
+    };
+    assert.equal(health.execution, "engine");
+    assert.equal(
+      health.engineFingerprint,
+      engineDescriptorFingerprint({
+        name: "rarext-gguf-engine",
+        version: "1",
+        digest: engineBundle.artifactDigest,
+      }),
+      "the committed artifact's digest is the engine fingerprint",
+    );
+
+    const answer = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "ab" }],
+        max_tokens: 2,
+        temperature: 0,
+      }),
+    });
+    assert.equal(answer.status, 200);
+    const json = (await answer.json()) as { rarext_trace?: { kind?: string; tokens?: number[] } };
+    assert.equal(json.rarext_trace?.kind, "rarext.decode-trace.v1");
+    assert.equal(json.rarext_trace?.tokens?.length, 2);
+
+    // A bundle that commits a DIFFERENT artifact digest is refused: the manifest
+    // is real, but it is not the engine the model named.
+    const tamperedExecution: ExecutionRef = {
+      ...execution,
+      artifact: { ...engineArtifactRef(engineBundle, manifestHash), artifactDigest: `sha256:${"0".repeat(64)}` },
+    };
+    const { bundle: tampered, chunks: tamperedChunks } = buildModelBundle({
+      bytes,
+      model: { ...model, id: "tiny-qwen2-wrong-engine" },
+      execution: tamperedExecution,
+      chunkBytes: 1024,
+    });
+    assert.deepEqual(verifyModelBundle(tampered), []);
+    await uploadBundle({ registry: reg.base, bundle: tampered, chunks: tamperedChunks });
+    await assert.rejects(
+      () =>
+        startProvider({
+          bundle: tampered,
+          registry: reg.base,
+          stateDir: join(reg.root, "committed-engine-wrong"),
+          port: 0,
+        }),
+      /does not match the engine artifact this bundle commits/,
+    );
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 test("the GGUF engine dequantizes every quantization it advertises", () => {
   const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
   assert.ok(engine.dequantTensor !== undefined);
@@ -6390,6 +6505,42 @@ test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + S
     if (provider !== null) await provider.close();
     await reg.close();
   }
+});
+
+
+test("two providers agreeing on an answer agree even when their envelopes were minted a second apart", () => {
+  // A completion carries per-request metadata: `id` includes a wall clock and
+  // `created` is a timestamp. Two providers that said exactly the same thing can
+  // finish in different seconds, so comparing the RAW envelope reports a false
+  // disagreement. The protocol compares (and receipts sign) the comparable part.
+  const base = {
+    object: "chat.completion",
+    model: "qwen2.5:0.5b",
+    choices: [{ index: 0, message: { role: "assistant", content: "I am a computer." }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 5, completion_tokens: 4, total_tokens: 9 },
+    rarext_trace: { kind: "rarext.decode-trace.v1", tokens: [198, 40, 1079, 264], digest: "abc" },
+  };
+  const first = { ...base, id: "chatcmpl-aaa", created: 1_700_000_000 };
+  const second = { ...base, id: "chatcmpl-bbb", created: 1_700_000_001 };
+  assert.notEqual(canonicalDigest(first), canonicalDigest(second), "the raw envelopes differ");
+  assert.equal(
+    canonicalDigest(comparableCompletion(first)),
+    canonicalDigest(comparableCompletion(second)),
+    "the answers compare equal",
+  );
+  // The volatile fields are exactly the ones stripped; the trace is retained, so
+  // a divergence in the decode is still caught.
+  assert.equal(
+    "rarext_trace" in comparableCompletion(first),
+    true,
+    "the comparable form keeps the decode trace",
+  );
+  const diverged = { ...second, rarext_trace: { ...base.rarext_trace, tokens: [1, 2, 3] } };
+  assert.notEqual(
+    canonicalDigest(comparableCompletion(first)),
+    canonicalDigest(comparableCompletion(diverged)),
+    "a different decode is still a disagreement",
+  );
 });
 
 test("the engine itself is a RAREXT artifact a provider fetches, verifies, and runs", async () => {
