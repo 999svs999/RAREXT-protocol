@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>6c7c88447df903fa93f3c1f265652aca8ad1ba60db825aa698e4b79a350b9e80</div>
+        <div class="address"><b>rarext:futuristic@</b>d8f13ee131857f84dbd4e334941a4144725acc2529b6d71e556a5b7b451fcb61</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -62,9 +62,9 @@
       <section id="site">
     <article class="card site">
       <h3><a href="https://futuristiclive.pages.dev/" rel="noopener">FUTURISTIC — we film the tomorrows we want to visit</a></h3>
-      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 39526 bytes anchored · rev 7d5f2e5a6fdb</p>
+      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 39548 bytes anchored · rev 4f069c2fa9f5</p>
       <div class="chips">
-        <span>/ · 15656b</span>
+        <span>/ · 15678b</span>
         <span>/styles.css · 16342b</span>
         <span>/app.js · 5462b</span>
         <span>/favicon.svg · 476b</span>
@@ -236,7 +236,7 @@
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=6c7c88447df903fa93f3c1f265652aca8ad1ba60db825aa698e4b79a350b9e80">run the pinned verifier</a> ·
+        <a href="./verify.html?root=d8f13ee131857f84dbd4e334941a4144725acc2529b6d71e556a5b7b451fcb61">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -250,7 +250,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · 6c7c88447df9…";
+            status.textContent = "ROOT VERIFIED · d8f13ee13185…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;

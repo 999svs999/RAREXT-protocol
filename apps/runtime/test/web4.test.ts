@@ -162,15 +162,39 @@ function singleTensorGguf(type: number, dims: number[], data: Buffer): Buffer {
  * tied output. Every tensor is F32 so the fixture stays readable.
  */
 function tinyGgufModel(
-  options: { arch?: "qwen2" | "llama"; tokenizer?: "gpt2" | "llama" } = {},
+  options: {
+    arch?: "qwen2" | "llama" | "gemma" | "mixtral" | "phi3" | "phi2";
+    tokenizer?: "gpt2" | "llama";
+    /** Force every norm weight to this value (default: random near 1). */
+    normValue?: number;
+    /** Override `general.architecture` while keeping this layout (negative tests). */
+    archOverride?: string;
+    /** Quantize weight tensors to this type (default: F32). */
+    quant?: "IQ4_NL";
+    nEmbd?: number;
+    nHead?: number;
+    nHeadKv?: number;
+    nFfn?: number;
+    /** Phi-3 rotary dimensions (default: the full head size). */
+    nRot?: number;
+    /** Phi-3 fused QKV/ffn_up (default) or the equivalent separate tensors. */
+    phi3Layout?: "fused" | "separate";
+    /** Add Phi LongRoPE factor tensors (negative test: must be refused). */
+    longRope?: boolean;
+  } = {},
 ): Buffer {
   const arch = options.arch ?? "qwen2";
   const tokenizerModel = options.tokenizer ?? "gpt2";
+  const isMoe = arch === "mixtral";
+  const isPhi3 = arch === "phi3";
+  const isPhi2 = arch === "phi2";
+  const phi3Fused = isPhi3 && (options.phi3Layout ?? "fused") === "fused";
+  const expertCount = 4;
   const vocabSize = 32;
-  const nEmbd = 8;
-  const nHead = 2;
-  const nHeadKv = 1;
-  const nFfn = 16;
+  const nEmbd = options.nEmbd ?? 8;
+  const nHead = options.nHead ?? 2;
+  const nHeadKv = options.nHeadKv ?? 1;
+  const nFfn = options.nFfn ?? nEmbd * 2;
   const tokens: string[] =
     tokenizerModel === "llama"
       ? ["\u2581", "a", "b", "c", "d", "e", "f", "g"]
@@ -212,51 +236,160 @@ function tinyGgufModel(
     dims: number[];
     kind: "weight" | "norm" | "bias";
   }
+  const kvDim = nHeadKv * (nEmbd / nHead);
   const specs: TensorSpec[] = [
     { name: "token_embd.weight", dims: [nEmbd, vocabSize], kind: "weight" },
     { name: "blk.0.attn_norm.weight", dims: [nEmbd], kind: "norm" },
-    { name: "blk.0.attn_q.weight", dims: [nEmbd, nEmbd], kind: "weight" },
-    { name: "blk.0.attn_k.weight", dims: [nEmbd, nHeadKv * (nEmbd / nHead)], kind: "weight" },
-    { name: "blk.0.attn_v.weight", dims: [nEmbd, nHeadKv * (nEmbd / nHead)], kind: "weight" },
-    { name: "blk.0.attn_q.bias", dims: [nEmbd], kind: "bias" },
-    { name: "blk.0.attn_k.bias", dims: [nHeadKv * (nEmbd / nHead)], kind: "bias" },
-    { name: "blk.0.attn_v.bias", dims: [nHeadKv * (nEmbd / nHead)], kind: "bias" },
+    ...(isPhi2
+      ? ([{ name: "blk.0.attn_norm.bias", dims: [nEmbd], kind: "bias" }] as TensorSpec[])
+      : []),
+    ...(phi3Fused
+      ? ([
+          // Phi-3's fused QKV: rows [Q; K; V].
+          { name: "blk.0.attn_qkv.weight", dims: [nEmbd, nEmbd + 2 * kvDim], kind: "weight" },
+        ] as TensorSpec[])
+      : ([
+          { name: "blk.0.attn_q.weight", dims: [nEmbd, nEmbd], kind: "weight" },
+          { name: "blk.0.attn_k.weight", dims: [nEmbd, kvDim], kind: "weight" },
+          { name: "blk.0.attn_v.weight", dims: [nEmbd, kvDim], kind: "weight" },
+        ] as TensorSpec[])),
+    // Qwen2 and Phi-2 carry attention biases; the other families here do not.
+    ...(arch === "qwen2" || isPhi2
+      ? ([
+          { name: "blk.0.attn_q.bias", dims: [nEmbd], kind: "bias" },
+          { name: "blk.0.attn_k.bias", dims: [kvDim], kind: "bias" },
+          { name: "blk.0.attn_v.bias", dims: [kvDim], kind: "bias" },
+        ] as TensorSpec[])
+      : []),
     { name: "blk.0.attn_output.weight", dims: [nEmbd, nEmbd], kind: "weight" },
-    { name: "blk.0.ffn_norm.weight", dims: [nEmbd], kind: "norm" },
-    { name: "blk.0.ffn_gate.weight", dims: [nEmbd, nFfn], kind: "weight" },
-    { name: "blk.0.ffn_up.weight", dims: [nEmbd, nFfn], kind: "weight" },
-    { name: "blk.0.ffn_down.weight", dims: [nFfn, nEmbd], kind: "weight" },
+    ...(isPhi2
+      ? ([{ name: "blk.0.attn_output.bias", dims: [nEmbd], kind: "bias" }] as TensorSpec[])
+      : []),
+    // Phi-2 has no separate FFN norm: its FFN reads the attention norm output.
+    ...(isPhi2
+      ? []
+      : ([{ name: "blk.0.ffn_norm.weight", dims: [nEmbd], kind: "norm" }] as TensorSpec[])),
+    // Mixtral replaces the dense FFN with a stacked, routed expert bank.
+    ...(isMoe
+      ? ([
+          { name: "blk.0.ffn_gate_inp.weight", dims: [nEmbd, expertCount], kind: "weight" },
+          { name: "blk.0.ffn_gate_exps.weight", dims: [nEmbd, nFfn, expertCount], kind: "weight" },
+          { name: "blk.0.ffn_up_exps.weight", dims: [nEmbd, nFfn, expertCount], kind: "weight" },
+          { name: "blk.0.ffn_down_exps.weight", dims: [nFfn, nEmbd, expertCount], kind: "weight" },
+        ] as TensorSpec[])
+      : isPhi2
+        ? ([
+            // Sequential GELU FFN with biases and no gate.
+            { name: "blk.0.ffn_up.weight", dims: [nEmbd, nFfn], kind: "weight" },
+            { name: "blk.0.ffn_up.bias", dims: [nFfn], kind: "bias" },
+            { name: "blk.0.ffn_down.weight", dims: [nFfn, nEmbd], kind: "weight" },
+            { name: "blk.0.ffn_down.bias", dims: [nEmbd], kind: "bias" },
+          ] as TensorSpec[])
+        : phi3Fused
+          ? ([
+              // Fused gate/up: first half is the gate, second half the up.
+              { name: "blk.0.ffn_up.weight", dims: [nEmbd, 2 * nFfn], kind: "weight" },
+              { name: "blk.0.ffn_down.weight", dims: [nFfn, nEmbd], kind: "weight" },
+            ] as TensorSpec[])
+          : ([
+              { name: "blk.0.ffn_gate.weight", dims: [nEmbd, nFfn], kind: "weight" },
+              { name: "blk.0.ffn_up.weight", dims: [nEmbd, nFfn], kind: "weight" },
+              { name: "blk.0.ffn_down.weight", dims: [nFfn, nEmbd], kind: "weight" },
+            ] as TensorSpec[])),
+    ...(options.longRope
+      ? ([
+          { name: "blk.0.rope_factors_long.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "weight" },
+          { name: "blk.0.rope_factors_short.weight", dims: [((options.nRot ?? nEmbd / nHead) / 2)], kind: "weight" },
+        ] as TensorSpec[])
+      : []),
+    ...(isPhi2
+      ? ([
+          // Phi-2 ships a separate output matrix with a bias.
+          { name: "output.weight", dims: [nEmbd, vocabSize], kind: "weight" },
+          { name: "output.bias", dims: [vocabSize], kind: "bias" },
+        ] as TensorSpec[])
+      : []),
     { name: "output_norm.weight", dims: [nEmbd], kind: "norm" },
+    ...(isPhi2
+      ? ([{ name: "output_norm.bias", dims: [nEmbd], kind: "bias" }] as TensorSpec[])
+      : []),
   ];
+
+  // IQ4_NL values, matching ggml's kvalues_iq4nl.
+  const IQ4NL = [-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113];
+  const nearestIq4 = (scaled: number): number => {
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let index = 0; index < IQ4NL.length; index += 1) {
+      const distance = Math.abs(IQ4NL[index]! - scaled);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    return best;
+  };
+  // Encode rows of 32 floats as IQ4_NL blocks with a fixed half scale 2^-4
+  // (0x2c00). The weights are tiny, so this stays well inside the table.
+  const quantIq4nl = (values: number[], cols: number): Buffer => {
+    const rows = values.length / cols;
+    const blocksPerRow = cols / 32;
+    const out = Buffer.alloc(rows * blocksPerRow * 18);
+    let written = 0;
+    for (let row = 0; row < rows; row += 1) {
+      for (let block = 0; block < blocksPerRow; block += 1) {
+        const base = row * cols + block * 32;
+        out.writeUInt16LE(0x2c00, written);
+        for (let j = 0; j < 16; j += 1) {
+          const low = nearestIq4(values[base + j]! / 0.0625);
+          const high = nearestIq4(values[base + j + 16]! / 0.0625);
+          out.writeUInt8((high << 4) | low, written + 2 + j);
+        }
+        written += 18;
+      }
+    }
+    return out;
+  };
 
   const datas: Buffer[] = [];
   let offset = 0;
   const infos: Buffer[] = [];
   for (const spec of specs) {
     const count = spec.dims.reduce((total, dim) => total * dim, 1);
-    const floats = Buffer.alloc(count * 4);
+    const values: number[] = [];
     for (let i = 0; i < count; i += 1) {
       let value: number;
-      if (spec.kind === "norm") value = 1 + (rand() - 0.5) * 0.1;
+      if (spec.kind === "norm") value = options.normValue ?? 1 + (rand() - 0.5) * 0.1;
       else if (spec.kind === "bias") value = (rand() - 0.5) * 0.1;
       else value = (rand() - 0.5) * 0.2;
-      floats.writeFloatLE(value, i * 4);
+      values.push(value);
     }
-    datas.push(floats);
+    const quantize =
+      options.quant === "IQ4_NL" &&
+      spec.kind === "weight" &&
+      spec.dims[0]! % 32 === 0;
+    const data = quantize
+      ? quantIq4nl(values, spec.dims[0]!)
+      : (() => {
+          const floats = Buffer.alloc(count * 4);
+          for (let i = 0; i < count; i += 1) floats.writeFloatLE(values[i]!, i * 4);
+          return floats;
+        })();
+    datas.push(data);
     infos.push(
       Buffer.concat([
         str(spec.name),
         u32(spec.dims.length),
         ...spec.dims.map(u64),
-        u32(0), // GGML_TYPE_F32
+        u32(quantize ? 20 : 0), // GGML_TYPE_IQ4_NL vs GGML_TYPE_F32
         u64(offset),
       ]),
     );
-    offset += floats.length;
+    offset += data.length;
   }
 
   const kvs = [
-    kv("general.architecture", 8, str(arch)),
+    kv("general.architecture", 8, str(options.archOverride ?? arch)),
     kv("general.file_type", 4, u32(0)),
     kv(`${arch}.block_count`, 4, u32(1)),
     kv(`${arch}.context_length`, 4, u32(64)),
@@ -264,8 +397,19 @@ function tinyGgufModel(
     kv(`${arch}.feed_forward_length`, 4, u32(nFfn)),
     kv(`${arch}.attention.head_count`, 4, u32(nHead)),
     kv(`${arch}.attention.head_count_kv`, 4, u32(nHeadKv)),
-    kv(`${arch}.attention.layer_norm_rms_epsilon`, 6, f32(1e-6)),
+    ...(isPhi2
+      ? [kv(`${arch}.attention.layer_norm_epsilon`, 6, f32(1e-5))]
+      : [kv(`${arch}.attention.layer_norm_rms_epsilon`, 6, f32(1e-6))]),
     kv(`${arch}.rope.freq_base`, 6, f32(10000)),
+    ...(isPhi3
+      ? [kv(`${arch}.rope.dimension_count`, 4, u32(options.nRot ?? nEmbd / nHead))]
+      : []),
+    ...(isMoe
+      ? [
+          kv(`${arch}.expert_count`, 4, u32(expertCount)),
+          kv(`${arch}.expert_used_count`, 4, u32(2)),
+        ]
+      : []),
     kv("tokenizer.ggml.model", 8, str(tokenizerModel)),
     kv("tokenizer.ggml.pre", 8, str(arch === "qwen2" ? "qwen2" : "default")),
     kv("tokenizer.ggml.tokens", 9, array(8, tokens.map(str))),
@@ -6445,6 +6589,38 @@ test("the GGUF engine dequantizes every quantization it advertises", () => {
     Buffer.concat([Buffer.alloc(128, 0), Buffer.alloc(64, 0), Buffer.alloc(16, 1), half(H1)]),
     repeat(-32, 256),
   );
+
+  // Q8_K: float32 delta 1, int8 quants cycling -8..7 (bsums are not used to
+  // dequantize). 292 = 4 (f32 d) + 256 (qs) + 32 (bsums).
+  const q8k = Buffer.concat([
+    (() => {
+      const out = Buffer.alloc(4);
+      out.writeFloatLE(1, 0);
+      return out;
+    })(),
+    Buffer.from(Array.from({ length: 256 }, (_, i) => (i % 16) - 8)),
+    Buffer.alloc(32, 0),
+  ]);
+  check(15, [256], q8k, Array.from({ length: 256 }, (_, i) => (i % 16) - 8));
+
+  // IQ4_NL: d = 1, qs[i] = i. The low nibble selects IQ4NL[i]; the high nibble
+  // of every byte in 0..15 is 0, so the second half is IQ4NL[0] = -127.
+  const iq4nlTable = [-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113];
+  check(
+    20,
+    [32],
+    Buffer.concat([half(H1), Buffer.from(Array.from({ length: 16 }, (_, i) => i))]),
+    [...iq4nlTable, ...repeat(-127, 16)],
+  );
+
+  // IQ4_XS: d = 1, scales_h = 0, scales_l = 0 => every sub-block scale is
+  // (0 - 32); qs all 0 selects IQ4NL[0] = -127 for both nibbles.
+  check(
+    23,
+    [256],
+    Buffer.concat([half(H1), Buffer.alloc(2, 0), Buffer.alloc(4, 0), Buffer.alloc(128, 0)]),
+    repeat(-32 * -127, 256),
+  );
 });
 
 test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + SentencePiece)", async () => {
@@ -6507,6 +6683,380 @@ test("a Llama-family GGUF is served by the same RAREXT engine (standard RoPE + S
   }
 });
 
+
+test("RAREXT's own engine serves a Gemma GGUF (GeGLU, norm+1, sqrt(n_embd) embedding scale)", async () => {
+  const serve = async (arch: "gemma", tokenizer: "llama"): Promise<void> => {
+    const reg = await registry();
+    let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+    try {
+      const bytes = tinyGgufModel({ arch, tokenizer });
+      const model: ModelRef = {
+        id: `tiny-${arch}`,
+        family: arch,
+        parameters: "tiny",
+        quantization: "F32",
+        format: "gguf",
+        sizeBytes: null,
+        weightsDigest: null,
+        contextLength: 64,
+      };
+      const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+      const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+      await uploadBundle({ registry: reg.base, bundle, chunks });
+      const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+        source: readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+        name: "rarext-gguf-engine",
+        engineVersion: "1",
+        runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+        chunkBytes: 4096,
+      });
+      await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+      provider = await startProvider({
+        bundle,
+        registry: reg.base,
+        stateDir: join(reg.root, `own-${arch}-engine`),
+        port: 0,
+        engineBundle,
+      });
+      const ask = async (): Promise<Response> =>
+        fetch(`${provider!.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: bundle.model.id,
+            messages: [{ role: "user", content: "a b" }],
+            max_tokens: 2,
+            temperature: 0,
+            seed: 5,
+          }),
+        });
+      const first = await ask();
+      assert.equal(first.status, 200, "the gemma model is served by RAREXT's own engine");
+      const firstJson = (await first.json()) as { rarext_trace?: { tokens?: number[] } };
+      assert.equal(firstJson.rarext_trace?.tokens?.length, 2);
+      const secondJson = (await (await ask()).json()) as { rarext_trace?: { tokens?: number[] } };
+      assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
+    } finally {
+      if (provider !== null) await provider.close();
+      await reg.close();
+    }
+  };
+  await serve("gemma", "llama");
+});
+
+test("RAREXT's own engine routes a Mixtral GGUF through its expert bank", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ arch: "mixtral", tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-mixtral",
+      family: "mixtral",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "own-mixtral-engine"),
+      port: 0,
+      engineBundle,
+    });
+    const ask = async (): Promise<Response> =>
+      fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "a b" }],
+          max_tokens: 2,
+          temperature: 0,
+          seed: 5,
+        }),
+      });
+    const first = await ask();
+    assert.equal(first.status, 200, "the mixtral MoE model is served by RAREXT's own engine");
+    const firstJson = (await first.json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.equal(firstJson.rarext_trace?.tokens?.length, 2);
+    const secondJson = (await (await ask()).json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the architecture branch is real: Gemma applies norm+1 where Llama applies norm", () => {
+  // With all norm weights forced to 0, a plain RMSNorm zeroes the residual
+  // stream, so Llama's logits are all zero and it always picks token 0. Gemma's
+  // RMSNorm uses (w + 1), so the same committed tensors produce a real decode.
+  // If the +1 branch were not applied, both would collapse to token 0.
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  const run = (arch: "llama" | "gemma"): number[] => {
+    const bytes = tinyGgufModel({ arch, tokenizer: "llama", normValue: 0 });
+    return engine.run(
+      { kind: "gguf", bytes: new Uint8Array(bytes) },
+      { prompt: "a b", steps: 3, temperature: 0 },
+    ).tokens;
+  };
+  const llamaTokens = run("llama");
+  const gemmaTokens = run("gemma");
+  // The engine runs in a `node:vm` context, so its arrays carry that realm's
+  // Array prototype; compare by value, not by prototype identity.
+  assert.equal(llamaTokens.join(","), "0,0,0", "zero norms zero the Llama residual stream");
+  assert.equal(gemmaTokens.length, 3);
+  assert.ok(
+    gemmaTokens.some((token) => token !== 0),
+    `Gemma's norm+1 kept the residual stream alive; got ${JSON.stringify(gemmaTokens)}`,
+  );
+});
+
+test("an unsupported architecture is refused instead of being silently mis-served", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  // A valid Llama layout relabeled as an architecture the engine does not know.
+  const bytes = tinyGgufModel({ arch: "llama", tokenizer: "llama", archOverride: "phi" });
+  assert.throws(
+    () =>
+      engine.run(
+        { kind: "gguf", bytes: new Uint8Array(bytes) },
+        { prompt: "a b", steps: 1, temperature: 0 },
+      ),
+    /qwen2\/llama\/mistral\/mixtral\/gemma\/phi3\/phi2 GGUF; got phi/,
+  );
+});
+
+test("RAREXT's own engine serves an IQ4_NL-quantized GGUF through the quant-domain dot path", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  // nEmbd = 32 and MHA make every weight row a whole 32-value IQ4_NL block, so
+  // the serving path exercises the non-linear 4-bit dot, not a float fallback.
+  const bytes = tinyGgufModel({ arch: "qwen2", quant: "IQ4_NL", nEmbd: 32, nHead: 2, nHeadKv: 2 });
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+  const first = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  const second = engine.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.equal(first.tokens.length, 3);
+  assert.equal(first.tokens.join(","), second.tokens.join(","), "the IQ4_NL run is deterministic");
+
+  // The committed tensor really is IQ4_NL: every dequantized value is the block
+  // scale (2^-4) times a table entry, not the original float.
+  const iq4 = [-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113];
+  const row = engine.dequantTensor!(model, "blk.0.attn_q.weight", 0);
+  for (const value of Array.from(row)) {
+    const entry = value / 0.0625;
+    assert.ok(
+      iq4.some((candidate) => Math.abs(candidate - entry) < 1e-9),
+      `${value} is 2^-4 times an IQ4_NL table entry`,
+    );
+  }
+});
+
+test("RAREXT's own engine serves a Phi-3 GGUF (partial NeoX RoPE, fused QKV, fused gate/up)", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ arch: "phi3", tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-phi3",
+      family: "phi3",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "own-phi3-engine"),
+      port: 0,
+      engineBundle,
+    });
+    const ask = async (): Promise<Response> =>
+      fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "a b" }],
+          max_tokens: 2,
+          temperature: 0,
+          seed: 5,
+        }),
+      });
+    const first = await ask();
+    assert.equal(first.status, 200, "the phi3 model is served by RAREXT's own engine");
+    const firstJson = (await first.json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.equal(firstJson.rarext_trace?.tokens?.length, 2);
+    const secondJson = (await (await ask()).json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("Phi-3's fused QKV and gate/up tensors decode exactly like the equivalent separate ones", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  const run = (phi3Layout: "fused" | "separate"): string => {
+    const bytes = tinyGgufModel({ arch: "phi3", tokenizer: "llama", phi3Layout });
+    return engine
+      .run(
+        { kind: "gguf", bytes: new Uint8Array(bytes) },
+        { prompt: "a b", steps: 3, temperature: 0 },
+      )
+      .tokens.join(",");
+  };
+  // The fixture's PRNG is seeded, and the fused rows are the same value
+  // sequence as Q,K,V (or gate,up). A wrong split, order, or bias would show.
+  assert.equal(run("fused"), run("separate"));
+});
+
+test("Phi-3 applies RoPE to only the declared rotary dimensions", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  // Head layout [d0 d1 d2 d3]; NeoX pairs (i, i + nRot/2) inside the head.
+  const rotated = (nRot: number): number[] => {
+    const vector = Float32Array.from([1, 0, 0, 0]);
+    engine.rope!(vector, 1, 4, nRot, 1, 10000, true);
+    return Array.from(vector);
+  };
+  const half = rotated(2);
+  assert.ok(Math.abs(half[0]! - Math.cos(1)) < 1e-6, "d0 rotates");
+  assert.ok(Math.abs(half[1]! - Math.sin(1)) < 1e-6, "d1 rotates");
+  assert.equal(half[2], 0, "d2 is outside the 2 rotary dims and is untouched");
+  assert.equal(half[3], 0, "d3 is outside the 2 rotary dims and is untouched");
+
+  const full = rotated(4);
+  assert.ok(Math.abs(full[0]! - Math.cos(1)) < 1e-6, "d0 rotates");
+  assert.ok(Math.abs(full[2]! - Math.sin(1)) < 1e-6, "d2 is now inside the rotary span and rotates");
+  assert.equal(full[1], 0, "d1 has no source value to rotate");
+  assert.equal(full[3], 0, "d3 has no source value to rotate");
+});
+
+test("Phi LongRoPE factors are refused instead of silently ignored", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  const bytes = tinyGgufModel({ arch: "phi3", tokenizer: "llama", longRope: true });
+  assert.throws(
+    () =>
+      engine.run(
+        { kind: "gguf", bytes: new Uint8Array(bytes) },
+        { prompt: "a b", steps: 1, temperature: 0 },
+      ),
+    /LongRoPE scaling factors/,
+  );
+});
+
+test("RAREXT's own engine serves a Phi-2 GGUF (LayerNorm, GELU, parallel FFN residual)", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ arch: "phi2", tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-phi2",
+      family: "phi2",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "own-phi2-engine"),
+      port: 0,
+      engineBundle,
+    });
+    const ask = async (): Promise<Response> =>
+      fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "a b" }],
+          max_tokens: 2,
+          temperature: 0,
+          seed: 5,
+        }),
+      });
+    const first = await ask();
+    assert.equal(first.status, 200, "the phi2 model is served by RAREXT's own engine");
+    const firstJson = (await first.json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.equal(firstJson.rarext_trace?.tokens?.length, 2);
+    const secondJson = (await (await ask()).json()) as { rarext_trace?: { tokens?: number[] } };
+    assert.equal(secondJson.rarext_trace?.tokens?.length, 2);
+    assert.deepEqual(secondJson.rarext_trace?.tokens, firstJson.rarext_trace?.tokens);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("Phi-2's LayerNorm subtracts the mean where RMSNorm cannot", () => {
+  const engine = loadEngine(
+    readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)),
+  );
+  const x = Float32Array.from([1, 2, 3, 4]);
+  const weight = Float32Array.from([1, 1, 1, 1]);
+  const out = engine.layerNorm!(new Float32Array(4), x, weight, undefined, 0);
+  const mean = Array.from(out).reduce((total, value) => total + value, 0) / out.length;
+  const variance =
+    Array.from(out).reduce((total, value) => total + (value - mean) * (value - mean), 0) / out.length;
+  assert.ok(Math.abs(mean) < 1e-5, "LayerNorm output has zero mean");
+  assert.ok(Math.abs(variance - 1) < 1e-4, "LayerNorm output has unit variance");
+  // Every input is positive, so a negative output can only come from the mean
+  // subtraction that RMSNorm does not perform.
+  assert.ok(out[0]! < 0, `expected a mean-shifted negative value, got ${out[0]}`);
+});
 
 test("two providers agreeing on an answer agree even when their envelopes were minted a second apart", () => {
   // A completion carries per-request metadata: `id` includes a wall clock and

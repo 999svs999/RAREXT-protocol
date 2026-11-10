@@ -621,6 +621,10 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   let bytes: Buffer;
   let execution: ExecutionRef;
   const overrides: Partial<ModelRef> = {};
+  // A GGUF file is served by RAREXT's own engine unless the caller asks for a
+  // different engine explicitly. This keeps the default path free of Ollama,
+  // llama.cpp, and any other third-party runtime.
+  let ownGgufEngine = false;
 
   if (native) {
     if (executionFlag === "engine") throw new Error("--native and --execution engine cannot be combined");
@@ -653,7 +657,9 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
       throw new Error("--file <model file> is required (or pass --native with --vocab)");
     }
     bytes = readFileSync(resolve(fileFlag));
-    const engine = (flag(values, "engine") as EngineName | undefined) ?? "ollama";
+    const isGguf = bytes.length >= 4 && bytes.toString("latin1", 0, 4) === "GGUF";
+    const engine = (flag(values, "engine") as EngineName | undefined) ?? (isGguf ? "rarext" : "ollama");
+    ownGgufEngine = isGguf && engine === "rarext";
     execution =
       executionFlag === "native"
         ? {
@@ -697,17 +703,30 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   // NAME the engine artifact: the engine is then part of the model identity, and
   // a provider fetches it with no out-of-band flag.
   const engineModuleFlag = flag(values, "engine-module");
+  // With no explicit engine module, a GGUF bundle commits RAREXT's own engine:
+  // the model identity then includes the engine, and no provider needs an
+  // out-of-band engine choice or a third-party runtime.
+  const autoEngineModule =
+    engineModuleFlag === undefined && ownGgufEngine && execution.kind === "engine"
+      ? new URL("../engines/rarext-gguf-engine.js", import.meta.url)
+      : undefined;
   let engineBundle: EngineBundle | null = null;
   let engineManifestHash: string | null = null;
   let engineBundlePath: string | null = null;
-  if (engineModuleFlag !== undefined) {
-    const runtimeFlag = flag(values, "engine-runtime") ?? "native";
+  if (engineModuleFlag !== undefined || autoEngineModule !== undefined) {
+    const runtimeFlag =
+      autoEngineModule !== undefined ? "gguf" : (flag(values, "engine-runtime") ?? "native");
     if (runtimeFlag !== "native" && runtimeFlag !== "gguf") {
       throw new Error("--engine-runtime must be native or gguf");
     }
     const built = buildEngineBundle({
-      source: readFileSync(resolve(engineModuleFlag)),
-      name: flag(values, "engine-name") ?? "rarext-native-engine",
+      source:
+        engineModuleFlag !== undefined
+          ? readFileSync(resolve(engineModuleFlag))
+          : readFileSync(autoEngineModule!),
+      name:
+        flag(values, "engine-name") ??
+        (autoEngineModule !== undefined ? "rarext-gguf-engine" : "rarext-native-engine"),
       engineVersion: flag(values, "engine-version") ?? "1",
       runtime:
         runtimeFlag === "gguf" ? ENGINE_ARTIFACT_RUNTIME_GGUF : ENGINE_ARTIFACT_RUNTIME,

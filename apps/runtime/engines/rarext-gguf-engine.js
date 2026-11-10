@@ -13,8 +13,9 @@
  * Q2_K, Q3_K, Q4_K, Q5_K, Q6_K.
  * Supported architectures: qwen2 (GQA + NeoX RoPE + SwiGLU + tied output),
  * llama/mistral/mixtral (GQA + adjacent-pair RoPE + SwiGLU, optional output
- * matrix; mixtral adds top-k expert routing) and gemma (NeoX RoPE + GeGLU +
- * norm weights biased by +1 + sqrt(n_embd) embedding scale).
+ * matrix; mixtral adds top-k expert routing), gemma (NeoX RoPE + GeGLU +
+ * norm weights biased by +1 + sqrt(n_embd) embedding scale) and phi3 (NeoX
+ * RoPE with optional partial rotary, fused QKV and fused gate/up FFN).
  * Supported tokenizers: GPT-2 byte-level BPE (qwen2/gpt2) and SentencePiece
  * (llama), both with byte fallback.
  *
@@ -90,7 +91,15 @@
   var TYPE_Q4_K = 12;
   var TYPE_Q5_K = 13;
   var TYPE_Q6_K = 14;
+  var TYPE_Q8_K = 15;
+  var TYPE_IQ4_NL = 20;
+  var TYPE_IQ4_XS = 23;
   var TYPE_BF16 = 30;
+
+  // Non-linear 4-bit values, shared by IQ4_NL and IQ4_XS (ggml's kvalues_iq4nl).
+  var IQ4NL = new Int8Array([
+    -127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113,
+  ]);
 
   // bytes per block, and weights per block
   var BLOCK = {};
@@ -106,6 +115,9 @@
   BLOCK[TYPE_Q4_K] = { bytes: 144, weights: 256 };
   BLOCK[TYPE_Q5_K] = { bytes: 176, weights: 256 };
   BLOCK[TYPE_Q6_K] = { bytes: 210, weights: 256 };
+  BLOCK[TYPE_Q8_K] = { bytes: 292, weights: 256 };
+  BLOCK[TYPE_IQ4_NL] = { bytes: 18, weights: 32 };
+  BLOCK[TYPE_IQ4_XS] = { bytes: 136, weights: 256 };
   BLOCK[TYPE_BF16] = { bytes: 2, weights: 1 };
 
   function Reader(bytes) {
@@ -489,6 +501,44 @@
           }
         }
         return out;
+      case TYPE_Q8_K:
+        for (var q8kb = 0; q8kb < cols; q8kb += 256) {
+          var q8kbase = base + (q8kb / 256) * 292;
+          var q8kd = view.getFloat32(q8kbase, true);
+          for (i = 0; i < 256; i += 1) out[q8kb + i] = q8kd * view.getInt8(q8kbase + 4 + i);
+        }
+        return out;
+      case TYPE_IQ4_NL:
+        for (block = 0; block < cols; block += 32) {
+          var nlbase = base + (block / 32) * 18;
+          var nld = f16(view.getUint16(nlbase, true));
+          for (i = 0; i < 16; i += 1) {
+            var nlq = view.getUint8(nlbase + 2 + i);
+            out[block + i] = nld * IQ4NL[nlq & 15];
+            out[block + i + 16] = nld * IQ4NL[nlq >> 4];
+          }
+        }
+        return out;
+      case TYPE_IQ4_XS:
+        for (var xs = 0; xs < cols; xs += 256) {
+          var xsbase = base + (xs / 256) * 136;
+          var xsd = f16(view.getUint16(xsbase, true));
+          var xsH = view.getUint16(xsbase + 2, true);
+          var xsL = xsbase + 4;
+          var xsQ = xsbase + 8;
+          for (var xsIb = 0; xsIb < 8; xsIb += 1) {
+            var xsLs =
+              ((view.getUint8(xsL + (xsIb >> 1)) >> (4 * (xsIb & 1))) & 15) |
+              (((xsH >> (2 * xsIb)) & 3) << 4);
+            var xsDl = xsd * (xsLs - 32);
+            for (i = 0; i < 16; i += 1) {
+              var xq = view.getUint8(xsQ + xsIb * 16 + i);
+              out[xs + xsIb * 32 + i] = xsDl * IQ4NL[xq & 15];
+              out[xs + xsIb * 32 + i + 16] = xsDl * IQ4NL[xq >> 4];
+            }
+          }
+        }
+        return out;
       case TYPE_BF16:
         for (i = 0; i < cols; i += 1) out[i] = bf16(view.getUint16(base + i * 2, true));
         return out;
@@ -754,6 +804,50 @@
           }
         }
         return total;
+      case TYPE_Q8_K:
+        for (var dq8kb = 0; dq8kb < cols; dq8kb += 256) {
+          var dq8kbase = base + (dq8kb / 256) * 292;
+          var dq8kd = view.getFloat32(dq8kbase, true);
+          sum = 0;
+          for (i = 0; i < 256; i += 1) sum += view.getInt8(dq8kbase + 4 + i) * vec[dq8kb + i];
+          total += dq8kd * sum;
+        }
+        return total;
+      case TYPE_IQ4_NL:
+        for (block = 0; block < cols; block += 32) {
+          var dnlbase = base + (block / 32) * 18;
+          var dnld = f16(view.getUint16(dnlbase, true));
+          sum = 0;
+          for (i = 0; i < 16; i += 1) {
+            var dnlq = view.getUint8(dnlbase + 2 + i);
+            sum += IQ4NL[dnlq & 15] * vec[block + i];
+            sum += IQ4NL[dnlq >> 4] * vec[block + i + 16];
+          }
+          total += dnld * sum;
+        }
+        return total;
+      case TYPE_IQ4_XS:
+        for (var dxs = 0; dxs < cols; dxs += 256) {
+          var dxsbase = base + (dxs / 256) * 136;
+          var dxsd = f16(view.getUint16(dxsbase, true));
+          var dxsH = view.getUint16(dxsbase + 2, true);
+          var dxsL = dxsbase + 4;
+          var dxsQ = dxsbase + 8;
+          for (var dxsIb = 0; dxsIb < 8; dxsIb += 1) {
+            var dxsLs =
+              ((view.getUint8(dxsL + (dxsIb >> 1)) >> (4 * (dxsIb & 1))) & 15) |
+              (((dxsH >> (2 * dxsIb)) & 3) << 4);
+            var dxsDl = dxsd * (dxsLs - 32);
+            sum = 0;
+            for (i = 0; i < 16; i += 1) {
+              var dxq = view.getUint8(dxsQ + dxsIb * 16 + i);
+              sum += IQ4NL[dxq & 15] * vec[dxs + dxsIb * 32 + i];
+              sum += IQ4NL[dxq >> 4] * vec[dxs + dxsIb * 32 + i + 16];
+            }
+            total += dxsDl * sum;
+          }
+        }
+        return total;
       case TYPE_BF16:
         for (i = 0; i < cols; i += 1) total += bf16(view.getUint16(base + i * 2, true)) * vec[i];
         return total;
@@ -1016,6 +1110,24 @@
     return out;
   }
 
+  /** LayerNorm (mean/variance), with the bias Phi-2 carries. */
+  function layerNorm(out, x, weight, bias, eps) {
+    var mean = 0;
+    for (var i = 0; i < x.length; i += 1) mean += x[i];
+    mean /= x.length;
+    var variance = 0;
+    for (var v = 0; v < x.length; v += 1) {
+      var delta = x[v] - mean;
+      variance += delta * delta;
+    }
+    variance /= x.length;
+    var scale = 1 / Math.sqrt(variance + eps);
+    for (var j = 0; j < x.length; j += 1) {
+      out[j] = (x[j] - mean) * scale * weight[j] + (bias === undefined ? 0 : bias[j]);
+    }
+    return out;
+  }
+
   function silu(x) {
     return x / (1 + Math.exp(-x));
   }
@@ -1099,25 +1211,45 @@
     var gguf = parseGguf(model.bytes);
     var kv = gguf.kv;
     var arch = kv["general.architecture"];
-    var ARCHS = { qwen2: true, llama: true, mistral: true, mixtral: true, gemma: true };
+    var ARCHS = { qwen2: true, llama: true, mistral: true, mixtral: true, gemma: true, phi3: true, phi2: true };
     if (ARCHS[arch] !== true) {
-      throw new Error("this rarext engine supports qwen2/llama/mistral/mixtral/gemma GGUF; got " + String(arch));
+      throw new Error("this rarext engine supports qwen2/llama/mistral/mixtral/gemma/phi3/phi2 GGUF; got " + String(arch));
     }
-    // Qwen2 and Gemma pair RoPE dimensions as halves (NeoX); Llama/Mistral/
-    // Mixtral pair adjacent dimensions. They share a GQA + SwiGLU layout, with
-    // the two architecture-specific differences handled below.
-    var neox = arch === "qwen2" || arch === "gemma";
+    // Qwen2, Gemma and Phi-2/Phi-3 pair RoPE dimensions as halves (NeoX);
+    // Llama/Mistral/Mixtral pair adjacent dimensions. They share a GQA +
+    // gated-FFN layout, with the architecture-specific parts handled below.
+    var neox = arch === "qwen2" || arch === "gemma" || arch === "phi3" || arch === "phi2";
     var isGemma = arch === "gemma";
     var isMoe = arch === "mixtral";
+    var isPhi3 = arch === "phi3";
+    // Phi-2 uses LayerNorm (with bias) and GELU in a sequential FFN, and its
+    // FFN reads the same normalized input as attention (parallel residual).
+    var isPhi2 = arch === "phi2";
 
     var nLayer = kv[arch + ".block_count"];
     var nEmbd = kv[arch + ".embedding_length"];
     var nHead = kv[arch + ".attention.head_count"];
     var nHeadKv = kv[arch + ".attention.head_count_kv"];
     var nFfn = kv[arch + ".feed_forward_length"];
-    var eps = kv[arch + ".attention.layer_norm_rms_epsilon"] || 1e-6;
+    var eps =
+      kv[arch + ".attention.layer_norm_epsilon"] ||
+      kv[arch + ".attention.layer_norm_rms_epsilon"] ||
+      1e-6;
     var ropeBase = kv[arch + ".rope.freq_base"] || 10000;
     var headDim = nEmbd / nHead;
+    // Phi-3 can apply RoPE to only part of each head; the rest passes through.
+    var nRot = kv[arch + ".rope.dimension_count"] || headDim;
+    if (nRot > headDim || nRot <= 0 || nRot % 2 !== 0) {
+      throw new Error(arch + " declares " + nRot + " rotary dimensions, not an even part of " + headDim);
+    }
+    // Long-context Phi-3 files carry per-dimension long/short RoPE factors
+    // (LongRoPE). Refuse rather than silently applying an unscaled rope.
+    if (
+      tensorOrNull(gguf, "blk.0.rope_factors_long.weight") !== undefined ||
+      tensorOrNull(gguf, "blk.0.rope_factors_short.weight") !== undefined
+    ) {
+      throw new Error("this rarext engine does not yet apply Phi LongRoPE scaling factors");
+    }
     var group = nHead / nHeadKv;
 
     var tokenizer = new Tokenizer(gguf);
@@ -1141,11 +1273,14 @@
     var x = new Float32Array(nEmbd);
     var norm = new Float32Array(nEmbd);
     var q = new Float32Array(nEmbd);
-    var k = new Float32Array(nHeadKv * headDim);
-    var v = new Float32Array(nHeadKv * headDim);
+    var kvDim = nHeadKv * headDim;
+    var k = new Float32Array(kvDim);
+    var v = new Float32Array(kvDim);
+    var fusedQkv = new Float32Array(nEmbd + 2 * kvDim);
     var attn = new Float32Array(nEmbd);
     var gate = new Float32Array(nFfn);
-    var up = new Float32Array(nFfn);
+    // Phi-3 fuses gate and up into one 2*n_ff matrix; the buffer holds both.
+    var up = new Float32Array(2 * nFfn);
     var hidden = new Float32Array(nEmbd);
     var logits = new Float32Array(output.rows);
 
@@ -1171,17 +1306,42 @@
       for (var layerIndex = 0; layerIndex < nLayer; layerIndex += 1) {
         var prefix = "blk." + layerIndex + ".";
         var attnNorm = tensorOrNull(gguf, prefix + "attn_norm.weight");
-        rmsNorm(norm, x, normWeight(gguf, attnNorm, nEmbd), eps);
+        if (isPhi2) {
+          layerNorm(
+            norm,
+            x,
+            dequantNorm(gguf, attnNorm, nEmbd),
+            biasOrNull(gguf, prefix + "attn_norm.bias", nEmbd),
+            eps,
+          );
+        } else {
+          rmsNorm(norm, x, normWeight(gguf, attnNorm, nEmbd), eps);
+        }
 
-        matmul(gguf, tensorOrNull(gguf, prefix + "attn_q.weight"), norm, q);
-        addBias(q, biasOrNull(gguf, prefix + "attn_q.bias", nEmbd));
-        matmul(gguf, tensorOrNull(gguf, prefix + "attn_k.weight"), norm, k);
-        addBias(k, biasOrNull(gguf, prefix + "attn_k.bias", nHeadKv * headDim));
-        matmul(gguf, tensorOrNull(gguf, prefix + "attn_v.weight"), norm, v);
-        addBias(v, biasOrNull(gguf, prefix + "attn_v.bias", nHeadKv * headDim));
+        var qkv = tensorOrNull(gguf, prefix + "attn_qkv.weight");
+        if (qkv !== undefined) {
+          // Fused QKV (Phi-3): one matrix, rows [Q; K; V].
+          matmul(gguf, qkv, norm, fusedQkv);
+          for (var qi = 0; qi < nEmbd; qi += 1) q[qi] = fusedQkv[qi];
+          for (var ki = 0; ki < kvDim; ki += 1) k[ki] = fusedQkv[nEmbd + ki];
+          for (var vi = 0; vi < kvDim; vi += 1) v[vi] = fusedQkv[nEmbd + kvDim + vi];
+          var fusedBias = biasOrNull(gguf, prefix + "attn_qkv.bias", nEmbd + 2 * kvDim);
+          if (fusedBias !== undefined) {
+            for (var qbi = 0; qbi < nEmbd; qbi += 1) q[qbi] += fusedBias[qbi];
+            for (var kbi = 0; kbi < kvDim; kbi += 1) k[kbi] += fusedBias[nEmbd + kbi];
+            for (var vbi = 0; vbi < kvDim; vbi += 1) v[vbi] += fusedBias[nEmbd + kvDim + vbi];
+          }
+        } else {
+          matmul(gguf, tensorOrNull(gguf, prefix + "attn_q.weight"), norm, q);
+          addBias(q, biasOrNull(gguf, prefix + "attn_q.bias", nEmbd));
+          matmul(gguf, tensorOrNull(gguf, prefix + "attn_k.weight"), norm, k);
+          addBias(k, biasOrNull(gguf, prefix + "attn_k.bias", kvDim));
+          matmul(gguf, tensorOrNull(gguf, prefix + "attn_v.weight"), norm, v);
+          addBias(v, biasOrNull(gguf, prefix + "attn_v.bias", kvDim));
+        }
 
-        rope(q, nHead, headDim, position, ropeBase, neox);
-        rope(k, nHeadKv, headDim, position, ropeBase, neox);
+        rope(q, nHead, headDim, nRot, position, ropeBase, neox);
+        rope(k, nHeadKv, headDim, nRot, position, ropeBase, neox);
 
         cacheK[layerIndex].push(new Float32Array(k));
         cacheV[layerIndex].push(new Float32Array(v));
@@ -1217,8 +1377,20 @@
         }
 
         matmul(gguf, tensorOrNull(gguf, prefix + "attn_output.weight"), attn, hidden);
+        addBias(hidden, biasOrNull(gguf, prefix + "attn_output.bias", nEmbd));
         for (var a = 0; a < nEmbd; a += 1) x[a] += hidden[a];
 
+        if (isPhi2) {
+          // Phi-2's FFN reads the SAME normalized input as attention and adds
+          // its output to the same residual stream (parallel residual), using a
+          // sequential GELU up/down pair with biases.
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_up.weight"), norm, up);
+          addBias(up, biasOrNull(gguf, prefix + "ffn_up.bias", nFfn));
+          for (var pf2 = 0; pf2 < nFfn; pf2 += 1) up[pf2] = geluTanh(up[pf2]);
+          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_down.weight"), up, hidden);
+          addBias(hidden, biasOrNull(gguf, prefix + "ffn_down.bias", nEmbd));
+          for (var r2 = 0; r2 < nEmbd; r2 += 1) x[r2] += hidden[r2];
+        } else {
         var ffnNorm = tensorOrNull(gguf, prefix + "ffn_norm.weight");
         rmsNorm(norm, x, normWeight(gguf, ffnNorm, nEmbd), eps);
         if (isMoe) {
@@ -1271,19 +1443,40 @@
           }
           for (var mr = 0; mr < nEmbd; mr += 1) x[mr] += hidden[mr];
         } else {
-          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_gate.weight"), norm, gate);
-          matmul(gguf, tensorOrNull(gguf, prefix + "ffn_up.weight"), norm, up);
-          // Gemma uses GeGLU (tanh-approx GELU); the others use SwiGLU.
-          for (var f = 0; f < nFfn; f += 1) {
-            gate[f] = (isGemma ? geluTanh(gate[f]) : silu(gate[f])) * up[f];
+          var ffnGate = tensorOrNull(gguf, prefix + "ffn_gate.weight");
+          var ffnUp = tensorOrNull(gguf, prefix + "ffn_up.weight");
+          if (isPhi3 && ffnGate === undefined && ffnUp !== undefined && ffnUp.rows === 2 * nFfn) {
+            // Phi-3's fused gate/up matrix: the first half is the gate, the
+            // second half is the up projection (HF chunk(2, dim=-1)).
+            matmul(gguf, ffnUp, norm, up);
+            for (var pf = 0; pf < nFfn; pf += 1) gate[pf] = silu(up[pf]) * up[nFfn + pf];
+          } else {
+            matmul(gguf, ffnGate, norm, gate);
+            matmul(gguf, ffnUp, norm, up);
+            // Gemma uses GeGLU (tanh-approx GELU); the others use SwiGLU.
+            for (var f = 0; f < nFfn; f += 1) {
+              gate[f] = (isGemma ? geluTanh(gate[f]) : silu(gate[f])) * up[f];
+            }
           }
           matmul(gguf, tensorOrNull(gguf, prefix + "ffn_down.weight"), gate, hidden);
           for (var r = 0; r < nEmbd; r += 1) x[r] += hidden[r];
         }
+        }
       }
 
-      rmsNorm(norm, x, normWeight(gguf, outputNorm, nEmbd), eps);
+      if (isPhi2) {
+        layerNorm(
+          norm,
+          x,
+          dequantNorm(gguf, outputNorm, nEmbd),
+          biasOrNull(gguf, "output_norm.bias", nEmbd),
+          eps,
+        );
+      } else {
+        rmsNorm(norm, x, normWeight(gguf, outputNorm, nEmbd), eps);
+      }
       for (var row = 0; row < output.rows; row += 1) logits[row] = dotRow(gguf, output, row, norm);
+      if (isPhi2) addBias(logits, biasOrNull(gguf, "output.bias", output.rows));
       return logits;
     }
 
@@ -1301,6 +1494,18 @@
       var tensor = tensorOrNull(g, name);
       if (tensor === undefined) return undefined;
       return dequantNorm(g, tensor, size);
+    }
+    // Gemma stores norm weights as (1 - w), so the applied weight is w + 1.
+    var gemmaNormCache = new Map();
+    function normWeight(g, tensor, size) {
+      var base = dequantNorm(g, tensor, size);
+      if (!isGemma) return base;
+      var cached = gemmaNormCache.get(tensor.name);
+      if (cached !== undefined) return cached;
+      var out = new Float32Array(size);
+      for (var i = 0; i < size; i += 1) out[i] = base[i] + 1;
+      gemmaNormCache.set(tensor.name, out);
+      return out;
     }
 
     for (var i = 0; i < promptIds.length; i += 1) {
@@ -1332,12 +1537,12 @@
     };
   }
 
-  function rope(vector, heads, headDim, position, base, neox) {
-    var half = headDim / 2;
+  function rope(vector, heads, headDim, nRot, position, base, neox) {
+    var half = nRot / 2;
     for (var h = 0; h < heads; h += 1) {
       var off = h * headDim;
       for (var i = 0; i < half; i += 1) {
-        var theta = position * Math.pow(base, (-2 * i) / headDim);
+        var theta = position * Math.pow(base, (-2 * i) / nRot);
         var cos = Math.cos(theta);
         var sin = Math.sin(theta);
         var a = neox ? off + i : off + 2 * i;
@@ -1365,6 +1570,8 @@
     run: run,
     parseGguf: parseGguf,
     dequantTensor: dequantTensor,
+    rope: rope,
+    layerNorm: layerNorm,
     encode: function (model, text) {
       return new Tokenizer(parseGguf(model.bytes)).encode(text);
     },

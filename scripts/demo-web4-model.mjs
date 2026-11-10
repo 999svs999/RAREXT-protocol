@@ -283,10 +283,12 @@ try {
   const modelId = process.env.RAREXT_WEB4_MODEL ?? (real ? "rarext-web4-model" : "rarext-native-proof");
   const engineModel = process.env.RAREXT_WEB4_ENGINE_MODEL ?? "rarext-web4-model";
   // `RAREXT_WEB4_OWN_ENGINE=1` runs the WHOLE real-GGUF path on RAREXT's own
-  // engine artifact: the provider is started with no engine endpoint and no
-  // Ollama, so the demo itself carries no third-party engine. The default keeps
-  // Ollama as interop for a machine that already has it.
-  const ownEngineMode = real && process.env.RAREXT_WEB4_OWN_ENGINE === "1";
+  // engine artifact, committing it explicitly. `=default` leaves the engine
+  // choice to the CLI: a GGUF file defaults to RAREXT's own engine and the
+  // bundle commits it, so no third-party runtime and no engine flag is used.
+  const ownEngineEnv = process.env.RAREXT_WEB4_OWN_ENGINE;
+  const ownEngineMode = real && (ownEngineEnv === "1" || ownEngineEnv === "default");
+  const ownEngineImplicit = ownEngineMode && ownEngineEnv === "default";
   // Credits each distinct agreeing operator earns for the run. Payment is a
   // commitment the deployment (and therefore the challenge) names, not a
   // gateway setting.
@@ -376,20 +378,22 @@ try {
         "--model",
         modelId,
         ...(ownEngineMode
-          ? [
-              "--engine",
-              "rarext",
-              // Commit RAREXT's own engine into the model bundle itself: no
-              // provider is told which engine to run out of band.
-              "--engine-module",
-              fileURLToPath(new URL("../apps/runtime/engines/rarext-gguf-engine.js", import.meta.url)),
-              "--engine-runtime",
-              "gguf",
-              "--engine-name",
-              "rarext-gguf-engine",
-              "--engine-version",
-              "1",
-            ]
+          ? ownEngineImplicit
+            ? []
+            : [
+                "--engine",
+                "rarext",
+                // Commit RAREXT's own engine into the model bundle itself: no
+                // provider is told which engine to run out of band.
+                "--engine-module",
+                fileURLToPath(new URL("../apps/runtime/engines/rarext-gguf-engine.js", import.meta.url)),
+                "--engine-runtime",
+                "gguf",
+                "--engine-name",
+                "rarext-gguf-engine",
+                "--engine-version",
+                "1",
+              ]
           : ["--engine", "ollama", "--engine-model", engineModel]),
         "--format",
         "gguf",

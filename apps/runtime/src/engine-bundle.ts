@@ -231,6 +231,24 @@ export interface NativeEngine {
   ): { text: string; seed: number; steps: number; tokens: number[] };
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
+  /** Present on the GGUF runtime: the rotary-position primitive, for tests. */
+  rope?(
+    vector: Float32Array,
+    heads: number,
+    headDim: number,
+    nRot: number,
+    position: number,
+    base: number,
+    neox: boolean,
+  ): void;
+  /** Present on the GGUF runtime: LayerNorm (Phi-2), for tests. */
+  layerNorm?(
+    out: Float32Array,
+    x: Float32Array,
+    weight: Float32Array,
+    bias: Float32Array | undefined,
+    eps: number,
+  ): Float32Array;
 }
 
 /** A model handle for the GGUF runtime: the verified bytes, nothing else. */
@@ -264,6 +282,8 @@ export function loadEngine(source: Uint8Array): NativeEngine {
   const exports = module.exports as {
     run?: unknown;
     dequantTensor?: unknown;
+    rope?: unknown;
+    layerNorm?: unknown;
   };
   const run = exports.run;
   if (typeof run !== "function") {
@@ -273,6 +293,12 @@ export function loadEngine(source: Uint8Array): NativeEngine {
     run: run as NativeEngine["run"],
     ...(typeof exports.dequantTensor === "function"
       ? { dequantTensor: exports.dequantTensor as NonNullable<NativeEngine["dequantTensor"]> }
+      : {}),
+    ...(typeof exports.rope === "function"
+      ? { rope: exports.rope as NonNullable<NativeEngine["rope"]> }
+      : {}),
+    ...(typeof exports.layerNorm === "function"
+      ? { layerNorm: exports.layerNorm as NonNullable<NativeEngine["layerNorm"]> }
       : {}),
   };
 }

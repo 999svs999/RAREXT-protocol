@@ -46,11 +46,19 @@ Two runtimes ship in this repository:
 - `rarext.gguf-engine.node-cjs.v1` is **RAREXT's own GGUF transformer**
   (`apps/runtime/engines/rarext-gguf-engine.js`). It parses the GGUF header, KV,
   and tensor table, dequantizes the committed weights (F32/F16/BF16/Q4_0/Q4_1/
-  Q5_0/Q5_1/Q8_0/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K), and runs the qwen2 or llama/mistral
-  transformer — RMSNorm, GQA attention, NeoX or adjacent-pair RoPE, SwiGLU,
-  optional output matrix — inside the provider. Both GPT-2 byte-level BPE and
-  SentencePiece tokenizers are implemented, so the engine covers the two common
-  GGUF families rather than one. A GGUF execution named
+  Q5_0/Q5_1/Q8_0/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K/Q8_K and the non-linear 4-bit IQ4_NL
+  and IQ4_XS), and runs the transformer inside the
+  provider: qwen2, llama/mistral, **mixtral** (top-k MoE routing), **gemma**
+  (GeGLU, norm+1, `sqrt(n_embd)` embedding scale), **phi3** (optional partial
+  NeoX rotary, fused QKV, fused gate/up) and **phi2** (LayerNorm with bias, GELU
+  sequential FFN, parallel FFN residual, output bias) — RMSNorm/LayerNorm, GQA
+  attention, NeoX or adjacent-pair RoPE, SwiGLU/GeGLU/GELU, optional output
+  matrix. Both GPT-2
+  byte-level BPE and SentencePiece tokenizers are implemented, so the engine
+  covers the common GGUF families rather than one. A GGUF `bundle` therefore
+  defaults to this engine and commits it into the model bundle; Ollama is only
+  used when `--engine ollama` is passed explicitly as interop. A GGUF execution
+  named
   `engine: "rarext"` therefore needs **no Ollama, no llama.cpp, no native addon,
   and no container runtime**, and no engine endpoint at all: both the weights and
   the engine are fetched from RAREXT and verified before serving. The generated
@@ -1329,6 +1337,13 @@ why a large file is sharded rather than sent as one object.
   outside this repository is carrying a **third-party engine binary/image** as the
   artifact: executing that safely needs a container runtime, which this
   environment does not provide, so the provider refuses to run a JS artifact as
-  such an engine rather than serve under a false identity. The engine supports
-  qwen2 GGUF and the listed tensor types; another architecture or quantization
-  needs another engine artifact. The compute is the provider's.
+  such an engine rather than serve under a false identity. RAREXT's own engine now
+  covers qwen2, llama/mistral, **mixtral** (top-k expert routing over a stacked
+  expert bank) and **gemma** (GeGLU, norm weights biased by +1, and the
+  `sqrt(n_embd)` embedding scale), **phi3** (partial NeoX rotary, fused QKV,
+  fused gate/up) and **phi2** (LayerNorm with bias, GELU, parallel FFN
+  residual), plus the listed tensor types and the non-linear IQ4_NL/IQ4_XS 4-bit
+  family. What it still does not cover — Phi LongRoPE scaling factors and the
+  IQ2/IQ3/IQ1 grid quants — needs the missing grid tables, the scaling math, or
+  a real fixture before it can be claimed; a model using them is refused rather
+  than mis-served. The compute is the provider's.
