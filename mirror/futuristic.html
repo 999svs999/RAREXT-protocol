@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>bf987dbe72ac30efa5b62aa941de6dae2c1ab7183c4e611b9f5ded9647211637</div>
+        <div class="address"><b>rarext:futuristic@</b>be6e3581eaa5d032ae75633ebc72bb857e16cfbe6857a2979631507ff38998f5</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -74,7 +74,7 @@
     </article>
       </section>
 
-      <h2>Published record — 15 runs</h2>
+      <h2>Published record — 14 runs</h2>
       <section id="gallery">
     <article class="card">
       <h3>FUTURISTIC 20260821T133842-3ea13d</h3>
@@ -232,22 +232,11 @@
         <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/archive/20261109T124526-d2b203.mp4" rel="noopener">R2 ▸</a>
       </div>
     </article>
-    <article class="card">
-      <h3>What we should learn from our ance — learn from ancestors #Shorts</h3>
-      <p class="prompt">What we should learn from our ancestors</p>
-      <p class="meta">run 20261110T005720-fdd992 · Lightricks/LTX-2.5 · 5.04s · 3 platforms</p>
-      <div class="chips">
-        <a class="yt" href="https://youtu.be/plAHvemQYlQ" rel="noopener">YouTube ▸</a>
-        <span>instagram: 17945962467385034</span>
-        <span>facebook: 1679355320235451</span>
-        <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/archive/20261110T005720-fdd992.mp4" rel="noopener">R2 ▸</a>
-      </div>
-    </article>
       </section>
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=bf987dbe72ac30efa5b62aa941de6dae2c1ab7183c4e611b9f5ded9647211637">run the pinned verifier</a> ·
+        <a href="./verify.html?root=be6e3581eaa5d032ae75633ebc72bb857e16cfbe6857a2979631507ff38998f5">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -261,7 +250,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · bf987dbe72ac…";
+            status.textContent = "ROOT VERIFIED · be6e3581eaa5…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
