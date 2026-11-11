@@ -1,6 +1,9 @@
 # Model runtime deployment examples
 
-Drop-in supervisors for `rarext-runtime`, in both placements.
+Drop-in supervisors for `rarext-runtime`, in the local and remote placements.
+(The third placement, storage-native `web4`, needs no engine supervisor: a
+provider fetches and runs the committed weights and engine from RAREXT. See
+[`docs/WEB4-MODEL.md`](../../docs/WEB4-MODEL.md).)
 
 Local: the engine stays a separate process; keep it and the runtime on the same
 host so the engine endpoint is loopback.

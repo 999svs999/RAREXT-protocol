@@ -40,7 +40,9 @@ Rewards come from **demand**, not dilution:
 - A challenge carries a bounty — somebody who needs it verified pays for it.
 - Storage is paid by the person whose data it is.
 - Model inference is paid by the buyer: a deployment commits a bounty and a run
-  pays the distinct operators that agreed, settled in the same credit ledger.
+  pays the distinct operators that agreed, settled in the same credit ledger. In
+  the storage-native path those operators are providers that fetched and verified
+  the committed weights and engine before serving ([WEB4-MODEL.md](WEB4-MODEL.md)).
 - Mirroring and relaying are paid from the protocol's fee share.
 
 So there is no emission treadmill, and no reflexivity between "the token price funds

@@ -1,7 +1,8 @@
 # @rarext/runtime
 
-Deploy a large model — on hardware you own or at a remote provider — then
-publish every inference as a RAREXT-verifiable exact transcript.
+Deploy a large model — on hardware you own, at a remote provider, or as
+content-addressed RAREXT artifacts — then publish every inference as a
+RAREXT-verifiable exact transcript.
 
 The runtime is a control plane, not another inference kernel. It wraps an
 OpenAI-compatible engine ([Ollama](https://ollama.com),
@@ -10,9 +11,12 @@ OpenAI-compatible engine ([Ollama](https://ollama.com),
 forwards to a remote OpenAI/Anthropic-compatible endpoint. It adds a deployment
 commitment, an attested gateway, a hash-chained local ledger, and a registry
 verifier. In a remote deployment it holds no weights, downloads no model files,
-and runs no inference.
+and runs no inference. In a **storage-native** (`web4`) deployment the weights
+**and the engine** are sharded RAREXT blobs: a provider fetches, verifies, and
+runs both, and the asking machine runs nothing.
 
-Full guides: [`docs/MODEL-RUNTIME.md`](../../docs/MODEL-RUNTIME.md) and
+Full guides: [`docs/MODEL-RUNTIME.md`](../../docs/MODEL-RUNTIME.md),
+[`docs/WEB4-MODEL.md`](../../docs/WEB4-MODEL.md), and
 [`docs/CLOUD-RUNTIME.md`](../../docs/CLOUD-RUNTIME.md).
 
 ```bash
@@ -66,8 +70,36 @@ node apps/runtime/src/cli.ts serve \
 node apps/runtime/src/cli.ts anchor --registry https://registry.example.com
 ```
 
+Storage-native: the weights and the engine are RAREXT artifacts, and a provider
+fetches and verifies both before serving. A GGUF or RAREXT-native `RXHF`
+container defaults to RAREXT's own engine and commits it into the bundle.
+
+```bash
+# shard the weights + engine into RAREXT and commit execution.artifact
+node apps/runtime/src/cli.ts bundle --file model.gguf --model qwen2.5:0.5b \
+  --registry http://127.0.0.1:8787 --out model-bundle.json
+
+# a provider with no host engine: it fetches the bundle, verifies every shard and
+# the engine artifact, then runs the committed engine over the committed weights
+node apps/runtime/src/cli.ts provider --bundle model-bundle.json --registry http://127.0.0.1:8787
+```
+
+A deployment can declare the generation it serves under — a declared rung of
+`rarext.generations.v1` that is folded into the manifest digest, so a run records
+it and a reader recomputes it (see [`docs/GENERATIONS.md`](../../docs/GENERATIONS.md)):
+
+```bash
+node apps/runtime/src/cli.ts deploy --endpoint http://127.0.0.1:11434 \
+  --model qwen2.5:0.5b --generation network=5G,model=1G,web=web4,protocol=gen-4
+```
+
+An undeclared id is refused (`parseGenerationSpec` / `validateDeployment`), so a
+typo cannot be folded silently into a digest.
+
 The end-to-end local proof is `npm run demo:model-runtime`, the cloud proof is
-`npm run demo:cloud-runtime`, and the tests are `npm run test:runtime`.
+`npm run demo:cloud-runtime`, the storage-native proof is
+`npm run demo:web4-model` (and `npm run demo:ai-on-rarext` for a portable engine
+with no host engine at all), and the tests are `npm run test:runtime`.
 
 ## Endpoints
 

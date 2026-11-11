@@ -43,12 +43,12 @@ welcome.
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, the [storage benchmark](bench/storage/README.md) that gates it, and the [1 GB repair measurement](bench/repair/README.md) that records where the current code sits.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
-- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) takes the next step: deploy a large model on hardware you own (Ollama, Strata, FreeToken, or any OpenAI-compatible engine) and publish every inference as an exact, replayable transcript. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote OpenAI/Anthropic-compatible endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely.
+- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote OpenAI/Anthropic-compatible endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
 disagree with a decision, the RFC folder is where the argument happens.
 
-**Status: pre-alpha.** The artifact protocol, logic simulator and scorer, agent API, web workbench, registry feed, persistent store, signed identities, Merkle anchoring, source/network adapters, semantic layer, AI verification (generative replay and bounded metric, with seeded AI challenges), and MCP server work. Logic is the built-in app; other apps can register a challenge set and an external HTTP verifier in any language. There is no bridge. Trac anchoring runs locally or through a configurable webhook; TapeOut is read-only and disabled until RPC/contract env vars are set; GitHub imports are pinned to exact commits.
+**Status: pre-alpha.** The artifact protocol, logic simulator and scorer, agent API, web workbench, registry feed, persistent store, signed identities, Merkle anchoring, source/network adapters, semantic layer, AI verification (generative replay and bounded metric, with seeded AI challenges), storage-native AI (the weights **and the engine** are content-addressed RAREXT artifacts that a provider fetches, verifies, and runs with no host engine), and MCP server work. Logic is the built-in app; other apps can register a challenge set and an external HTTP verifier in any language. There is no bridge. Trac anchoring runs locally or through a configurable webhook; TapeOut is read-only and disabled until RPC/contract env vars are set; GitHub imports are pinned to exact commits.
 
 **Apps can launch tokens; the protocol does not sell them.** A launchpad built on this protocol publishes a launch as an artifact and certifies it against a pinned, published policy, so a buyer can check the claim instead of trusting a badge. See [fair launches](docs/FAIR-LAUNCH.md) and the [`examples/launchpad`](examples/launchpad) app.
 
@@ -111,11 +111,14 @@ Other entry points:
 npm run dev:api    # API only
 npm run dev:mcp    # MCP stdio server for agents
 npm run dev:examples # every example app: board games, fair launch, one registry
-npm run test       # core + agent SDK + API + web i18n tests
-npm run test:examples # board-game and fair-launch verifier tests
+npm run test       # core, SDK, API, runtime, web, chain, storage/repair, contracts
+npm run test:examples # board-game, launchpad, storage, and market verifier tests
 npm run demo:ai    # end-to-end proof that AI lives on RAREXT
 npm run demo:model-runtime # deploy a real local model and publish a verified run
-npm run demo:web4-model # store the weights as RAREXT blobs, served by a provider node
+npm run demo:web4-model # weights + engine are RAREXT blobs, served by provider nodes
+npm run demo:ai-on-rarext # weights + a portable engine, with no host engine at all
+npm run demo:generations # the network/model/web/protocol generation ladder, as one recomputable commitment
+npm run demo:live      # an agent + its AI living on RAREXT, rebuilt with the node stopped
 npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
 ```
 
@@ -154,12 +157,48 @@ See [the cloud runtime guide](docs/CLOUD-RUNTIME.md).
 
 `npm run demo:web4-model` removes the last third party. The model file is sharded
 into content-addressed RAREXT blobs; provider nodes fetch every shard, verify the
-committed digest, and only then serve inference. The runtime publishes a provider
-card for each, commits them as a quorum, records which providers agreed on the
-response, and can deploy from cards discovered in RAREXT instead of a URL. It
-replays the native model from the bundle after deleting the source file. The
-default model is a deterministic `xorshift32`; set `RAREXT_WEB4_GGUF` to put a
-real GGUF through the same path. See [the web4 model guide](docs/WEB4-MODEL.md).
+committed digest, and only then serve inference. The engine is a RAREXT artifact
+too: the bundle commits `execution.artifact`, providers fetch and verify it, and
+the run is replayable against the exact engine. Four portable runtimes ship —
+RAREXT's own native and GGUF/RXHF transformers, a WebAssembly engine, and a
+foreign engine program on a sandboxed worker thread — so no provider needs
+Ollama, llama.cpp, a native addon, a container runtime, a GPU, or a hardware root
+of trust. The runtime publishes a provider card for each node, commits them as a
+quorum, records which providers agreed on the response, and can deploy from cards
+discovered in RAREXT instead of a URL. It replays the model from the bundle after
+deleting the source file. The default model is a deterministic `xorshift32`; set
+`RAREXT_WEB4_GGUF` to put a real GGUF through the same path, and
+`RAREXT_WEB4_OWN_ENGINE=1` to keep Ollama out of the whole run. See [the web4
+model guide](docs/WEB4-MODEL.md).
+
+`npm run demo:ai-on-rarext` is the pure-network proof in one command. Given a
+committed `RXHF`/GGUF container, it shards the weights **and** the engine into
+RAREXT, starts two independent nodes with no host engine, runs real inference
+from the committed bytes on a sandboxed worker, checks that both nodes commit the
+same trace, replays it, and then commits a **perturbed** copy of the same weights
+to show the same engine answers differently — the output is driven by the
+network's artifacts, not a constant. No third-party software, no container, no
+GPU, no TEE.
+
+`npm run demo:generations` writes the forward-compatibility ladder that "and the
+generations after it" means, as one canonical `rarext.generations.v1` object with
+one sha256: the network generations (5G→8G), the model-size classes (1G→8G), the
+web generations (web4→web8), and the publication-leaf generations (gen-4→gen-8).
+It is **declared, not measured** — shipped entries are marked (the `1G` model
+class is shipped; 6G/7G/8G are targets) and it prints a plan (`networkMeets`,
+`planModelShards`) recomputed from the same bytes on every surface. See
+[the generations guide](docs/GENERATIONS.md).
+
+`npm run demo:live` answers the question directly: can an AI — and an agent — live
+on RAREXT? It gives a real agent a residence made only of content-addressed bytes
+(its public key as a blob, a signed generative AI claim, the generations charter,
+and a **storage-native run** whose weights and engine are committed to RAREXT and
+run by a provider with no host engine), fetches every byte back by hash, then
+**stops the node and the provider** and rebuilds the whole residence from those
+bytes alone — the key id re-hashes, the Merkle root rebuilds, every AI claim
+replays, and the committed engine re-run over the committed weights reproduces the
+recorded trace digest with no server. See
+[live on RAREXT](docs/LIVE-ON-RAREXT.md).
 
 The MCP path is the primary agent workflow. On first use, call `rarext_agent_register` once to create a local P-256 key, then `rarext_agent_publish` to sign and publish verified builds. The private key is written to `RAREXT_AGENT_KEY` or `~/.rarext/agent-key.json` with mode `0600`; it is never returned by a tool. The same server exposes `rarext_storage_put`, `rarext_storage_get`, `rarext_storage_challenge`, `rarext_storage_audit`, and `rarext_storage_pin`; configure `RAREXT_STORAGE_HOLDERS` (or `RAREXT_HOLDERS`) and `RAREXT_PIN_URL` first. The [MCP storage example](examples/mcp-storage) runs the whole path locally, including token-protected holders and a pin service; `apps/api/test/mcp-storage-agent.test.ts` runs that external-client path as part of `npm test`.
 

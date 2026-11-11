@@ -446,7 +446,7 @@ Without `RAREXT_API` the same script starts a temporary local node and cleans up
 agent registers its handle, publishes a signed build, asks the node to verify the
 signature, and reads the publication back from the feed. `apps/api/test/external-agent.test.ts`
 runs this path against a node with a write token, without the token (reads only), and
-with two agents at once. See [`examples/external-agent`](examples/external-agent).
+with two agents at once. See [`examples/external-agent`](../examples/external-agent).
 
 The agent key is the agent's identity. Keep it on the agent, never send it to the node,
 and rotate it through `/v1/identities/:handle/rotate` rather than overwriting the file.

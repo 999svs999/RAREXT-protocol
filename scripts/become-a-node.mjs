@@ -186,8 +186,15 @@ async function bootOwnNode() {
     env: { ...process.env, PORT: "0", RAREXT_DATA_DIR: dataDir, RAREXT_REGISTRY_ID: registryId },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // Boot can take longer than 15 s on a loaded machine (the full suite boots
+  // several nodes at once), so the bound is configurable and generous by
+  // default. It is a hang guard, not a performance contract.
+  const bootTimeoutMs = Number(process.env.RAREXT_BOOT_TIMEOUT_MS ?? "60000");
   const ready = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("the node did not report its port within 15s")), 15_000);
+    const timer = setTimeout(
+      () => reject(new Error(`the node did not report its port within ${Math.round(bootTimeoutMs / 1000)}s`)),
+      bootTimeoutMs,
+    );
     child.stdout.on("data", (chunk) => {
       const match = /listening on (http:\/\/\S+)/.exec(String(chunk));
       if (match) {

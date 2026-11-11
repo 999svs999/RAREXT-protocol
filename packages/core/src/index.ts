@@ -288,3 +288,27 @@ export {
   withSemanticsCommitment,
 } from "./semantics.ts";
 export type { SemanticsCommitmentStatus } from "./semantics.ts";
+export {
+  GENERATIONS,
+  GENERATIONS_KIND,
+  MODEL_SHARD_BYTES,
+  axisLadder,
+  generationsDigest,
+  generationsProblems,
+  networkMeets,
+  nextGeneration,
+  parseGenerations,
+  planModelShards,
+  shippedGeneration,
+} from "./generations.ts";
+export type {
+  GenerationAxis,
+  Generations,
+  ModelGeneration,
+  ModelShardPlan,
+  NetworkGeneration,
+  NetworkProfile,
+  NetworkRequirement,
+  ProtocolGeneration,
+  WebGeneration,
+} from "./generations.ts";

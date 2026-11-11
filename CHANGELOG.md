@@ -11,6 +11,73 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The AI lives on RAREXT, engine included.** The engine that turns tokens is now
+  a content-addressed RAREXT artifact, sharded and committed beside the weights in
+  `rarext.engine-bundle.v1` and named by the model bundle (`execution.artifact`).
+  A provider fetches, verifies, and runs the committed engine, and its digest is
+  folded into the engine fingerprint every run records and every replay checks. A
+  model is now one identity over weights **and** engine, with no out-of-band engine
+  flag and no engine endpoint. `npm run demo:web4-model` runs the full 34-phase
+  path; `npm run demo:ai-on-rarext` starts two independent nodes with no host
+  engine, runs real inference from the committed `RXHF`/GGUF bytes, replays the
+  trace, and commits a perturbed copy of the same weights to show the answer
+  changes. See [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md).
+- **Four portable engine runtimes — no host capability required.** RAREXT's own
+  native model and its GGUF/RXHF transformer (`rarext.gguf-engine.node-cjs.v1`),
+  a third-party WebAssembly engine instantiated with an empty import object
+  (`rarext.wasm-engine.wasm.v1`), and a foreign engine program on a worker thread
+  inside `node:vm` with no `require`, `process`, or filesystem
+  (`rarext.worker-engine.node-cjs.v1`). All four are in
+  `PORTABLE_ENGINE_RUNTIMES`; none needs a container runtime, GPU, or hardware
+  root of trust. A raw ELF/Mach-O image is refused rather than run unsandboxed.
+- **RAREXT's own Hugging Face ingest and quantization.**
+  `scripts/convert-hf-safetensors.mjs` reads `config.json`, `*.safetensors`, and a
+  BPE `tokenizer.json` or SentencePiece `tokenizer.model` (its protobuf parsed
+  directly) and emits the native `rarext.hf-container.v1` (`RXHF`) container — no
+  llama.cpp, gguf-py, or third-party converter. It quantizes with RAREXT's own
+  `Q8_0`, `Q4_0`, `IQ4_NL`, and `Q4_K` encoders, keeping norms/biases in the
+  checkpoint dtype and falling back to `Q8_0` for rows too narrow for a `Q4_K`
+  super-block.
+- **Every engine must emit a replayable trace.** A token-hiding engine is recorded
+  as a `rarext.output-trace.v1` over the exact completion text; a token-emitting
+  engine as `rarext.decode-trace.v1`. A replay refuses a diverging trace even when
+  the text happens to match, for any runtime, not just RAREXT's own.
+- **A published AI proof can no longer lose a rendition to the inline budget.** The
+  mirror embeds AI rendition blobs first and skips a blob that does not fit instead
+  of ending the scan, so a large unrelated blob cannot keep the bounded picture out
+  of `blobs.json`. `npm run demo:ai` re-derives both renditions and fails if either
+  is missing.
+- **The generations ladder, as one commitment.** `rarext.generations.v1` writes
+  what "and the generations after it" means — the network generations (5G→8G), the
+  model-size classes (1G→8G), the web generations (web4→web8), and the
+  publication-leaf generations (gen-4→gen-8) — into one canonical object with one
+  sha256. `@rarext/core` ships the object, a validator that refuses a renumbered or
+  duplicated ladder, and pure helpers (`networkMeets`, `planModelShards`,
+  `nextGeneration`, `shippedGeneration`). It is **declared, not measured**: each
+  entry carries `shipped` — the `1G` model class (GGUFs/RXHF under 1 GiB) is
+  shipped, and no 6/7/8 GB class is claimed as served. `npm run demo:generations`
+  prints it and recomputes the digest, and the FUTURISTIC brand demo carries the
+  same ladder. See [docs/GENERATIONS.md](docs/GENERATIONS.md).
+- **A deployment commits its generation, and the ladder answers the 6/7/8G
+  question honestly.** `rarext-runtime deploy --generation
+  network=5G,model=1G,web=web4,protocol=gen-4` folds a declared rung into the
+  deployment manifest and its digest; an undeclared id is refused
+  (`parseGenerationSpec`, `validateDeployment`). `npm run demo:generations` also
+  prints whether **this** host can serve each model class (weights ×2 vs total
+  memory), so a 6/7/8 GB class is reported as too large on a small host rather
+  than pretended.
+- **An agent can live on RAREXT — and its thought is a network-engine inference.**
+  `npm run demo:live` gives a real agent a residence made only of content-addressed
+  bytes: its public key as a blob, a signed generative AI claim, the generations
+  charter, and a **storage-native run** whose weights *and* engine are sharded into
+  RAREXT and run by a provider with no host engine. It fetches every byte back by
+  hash, **stops the node and the provider**, then rebuilds the residence from those
+  bytes alone: the key id re-hashes, the charter revalidates, the publication
+  leaves rebuild the anchored Merkle root, every AI claim replays with
+  `replayBundleAi`, the weights and engine reassemble and verify every digest and
+  shard root, and the **committed engine re-run over the committed weights
+  reproduces the recorded trace digest**. See
+  [docs/LIVE-ON-RAREXT.md](docs/LIVE-ON-RAREXT.md).
 - **The surface is published, not just described.** `GET`-able at `/schema/routes.json`
   (kind `rarext.routes.v1`), generated from `docs/ARCHITECTURE.md`'s route table by
   `scripts/build-route-index.mjs`: every route with its method, path (query string included — an

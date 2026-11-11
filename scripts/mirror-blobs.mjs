@@ -72,15 +72,27 @@ export async function writeMirrorBlobs({
     const listResponse = await fetchImpl(`${base}/v1/blobs`);
     const list = listResponse.ok ? await listResponse.json() : [];
     const records = Array.isArray(list) ? list : [];
+    // Renditions are the evidence an AI claim points at, and they are tiny. Put
+    // them first so a large unrelated blob cannot consume the budget before they
+    // are reached (the store lists blobs by hash, not by relevance).
+    const recordsWithClaim = records.filter(
+      (record) => record && typeof record.hash === "string" && ai.has(record.hash),
+    );
+    const recordsWithoutClaim = records.filter(
+      (record) => !(record && typeof record.hash === "string" && ai.has(record.hash)),
+    );
+    const ordered = [...recordsWithClaim, ...recordsWithoutClaim];
 
-    for (const record of records) {
+    for (const record of ordered) {
       if (!record || typeof record !== "object") continue;
       const hash = record.hash;
       const size = record.size;
       if (typeof hash !== "string" || !HASH.test(hash)) continue;
       if (!Number.isSafeInteger(size) || size < 0) continue;
       if (size > EMBED_PER_BLOB) continue;
-      if (embeddedTotal + size > EMBED_TOTAL) break;
+      // Skip this one, do not stop: a later (small) blob may still fit, and the
+      // budget must not decide which evidence the mirror carries.
+      if (embeddedTotal + size > EMBED_TOTAL) continue;
 
       const detail = await fetchImpl(`${base}/v1/blobs/${hash}`);
       if (!detail.ok) continue;

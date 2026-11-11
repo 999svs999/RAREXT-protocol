@@ -5,6 +5,7 @@
  * RAREXT web4 network with a unique link address, where visitors can
  * interact and verify claims in their browser.
  */
+import { createHash } from "node:crypto";
 
 // The brand's unique address on the RAREXT web4 network
 // Format: rarext:brand-name@64-hex-root
@@ -63,12 +64,32 @@ async function brandDemo() {
   console.log(`   - The new type of AI uses the same infrastructure`);
   console.log(`   - Compute and reasoning may be rule-based, not traditional AI`);
 
+  console.log(`\n5. GENERATIONS (6G/7G/8G and beyond)`);
+  const root = new URL("..", import.meta.url).pathname;
+  const core = await import(root + "packages/core/src/index.ts");
+  const digest = core.generationsDigest(
+    (bytes) => new Uint8Array(createHash("sha256").update(bytes).digest()),
+  );
+  const ladder = (axis) =>
+    (core.GENERATIONS[axis]).map((entry) => `${entry.id}${entry.shipped ? "*" : ""}`).join(" → ");
+  console.log(`   One canonical object, one digest: ${core.GENERATIONS_KIND}`);
+  console.log(`   sha256:${digest}`);
+  console.log(`   web:      ${ladder("web")}`);
+  console.log(`   network:  ${ladder("network")}`);
+  console.log(`   model:    ${ladder("model")}`);
+  console.log(`   protocol: ${ladder("protocol")}`);
+  console.log(`   - Declared (status: ${core.GENERATIONS.status}), not measured: shipped entries are marked *`);
+  console.log(`   - 8G transport meets a 1 ms / 10 Gbps / edge budget: ${core.networkMeets("8G", { maxLatencyMsP50: 1, downlinkMbps: 10000, edge: true })}`);
+  console.log(`   - 8G model class = ${core.planModelShards("8G").shards} × ${core.planModelShards("8G").shardBytes} B shards`);
+  console.log("   - Any surface recomputes the digest from the same bytes — \`npm run demo:generations\` prints it");
+
   console.log(`\n=== FUTURISTIC VISION REALIZED ===`);
   console.log(`   - Brand: unique content-addressed address ✓`);
   console.log(`   - Visitor verification: browser-recomputed ✓`);
   console.log(`   - Stranger access: one-file API surface ✓`);
   console.log(`   - AI on RAREXT: rule-based + all types ✓`);
   console.log(`   - web4: innovative storage + transportation ✓`);
+  console.log(`   - generations: 6G/7G/8G network, model, web and protocol ladder ✓`);
 }
 
 brandDemo().catch(console.error);

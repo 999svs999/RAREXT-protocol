@@ -116,6 +116,23 @@ export interface HardwareRef {
   arch: string;
 }
 
+/**
+ * The generation a deployment declares it serves under. Every field names a
+ * declared rung of `rarext.generations.v1` (see GENERATIONS.md); the commitment
+ * is folded into the manifest digest, so a run records the generation it ran
+ * under and a reader recomputes the same value from the same bytes.
+ */
+export interface DeploymentGeneration {
+  /** A network generation: `5G`, `6G`, `7G`, `8G`. */
+  network: string;
+  /** A model-size class: `1G`, `6G`, `7G`, `8G`. */
+  model: string;
+  /** A web generation: `web4` … `web8`. */
+  web: string;
+  /** A publication-leaf generation: `gen-4` … `gen-8`. */
+  protocol: string;
+}
+
 export interface DeploymentManifest {
   kind: typeof DEPLOYMENT_KIND;
   /** Stable slug for this deployment, derived from model id unless supplied. */
@@ -123,6 +140,11 @@ export interface DeploymentManifest {
   engine: EngineRef;
   model: ModelRef;
   hardware: HardwareRef;
+  /**
+   * The generation this deployment declares. Optional and absent on manifests
+   * written before the ladder existed, so those keep their exact old digest.
+   */
+  generation?: DeploymentGeneration;
   /**
    * Where the engine runs. Omitted on manifests written before cloud
    * deployment existed; absent means local, which is what those manifests were.

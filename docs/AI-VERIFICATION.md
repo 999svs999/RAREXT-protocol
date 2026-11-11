@@ -113,14 +113,23 @@ all committed before the artifact is verified.
 
 ## Running a model on RAREXT
 
-Verification needs something to verify. [MODEL-RUNTIME.md](MODEL-RUNTIME.md)
-describes the deployment side: probe a local engine (Ollama, Strata, FreeToken,
-or any OpenAI-compatible server), commit the deployment manifest and weight
-digest as a challenge, and put the attested gateway in front of it. Every
-completion becomes an `ai.model-run` artifact whose request, response, text, and
-deployment are committed by digest; the registry verifier recomputes them, and a
-holder of the same weights can replay a deterministic run and compare the output
-byte for byte. The demo is `npm run demo:model-runtime`.
+Verification needs something to verify. [WEB4-MODEL.md](WEB4-MODEL.md) is the
+storage-native path: the **weights and the engine** are content-addressed RAREXT
+artifacts, a provider fetches and verifies both before serving, and the machine
+asking the question runs no model and holds no weights. The engine may be RAREXT's
+own transformer (native or GGUF/RXHF), a WebAssembly module, or a foreign engine
+program on a sandboxed worker thread — none needs a third-party model server, a
+container runtime, a GPU, or a hardware root of trust. The demos are
+`npm run demo:web4-model` and `npm run demo:ai-on-rarext`.
+
+[MODEL-RUNTIME.md](MODEL-RUNTIME.md) describes the deployment side for a machine
+that already has an engine: probe a local engine (Ollama, Strata, FreeToken, or
+any OpenAI-compatible server), commit the deployment manifest and weight digest
+as a challenge, and put the attested gateway in front of it. Every completion
+becomes an `ai.model-run` artifact whose request, response, text, and deployment
+are committed by digest; the registry verifier recomputes them, and a holder of
+the same weights can replay a deterministic run and compare the output byte for
+byte. The demo is `npm run demo:model-runtime`.
 
 ## Where the evidence is committed
 
@@ -255,8 +264,11 @@ the model it demonstrates.
 
 - No on-chain training, no gradient flow, no token streaming in the registry. RAREXT commits
   and verifies AI *artifacts and their provenance*; the registry does not execute models.
-  A model runs in a local engine behind [the model runtime](MODEL-RUNTIME.md), which records
-  the exact transcript the registry verifies. The gateway does stream; the registry does not.
+  A model runs on a network provider from committed RAREXT artifacts
+  ([WEB4-MODEL.md](WEB4-MODEL.md)), or in a local engine behind
+  [the model runtime](MODEL-RUNTIME.md) when the operator has one; either way the
+  exact transcript is recorded and the registry verifies it. A gateway does stream; the
+  registry does not.
 - The `xorshift32` replay class is deliberately tiny. Larger model classes enter through
   `bounded` (metric-thresholded reconstructions) or the `exact` model-run transcript, with a
   local `replay` check when the engine is deterministic. A future generative class with more

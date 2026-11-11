@@ -94,9 +94,13 @@ import { runtimeCodeMeasurement } from "../src/code-measurement.ts";
 import { attestationForReceipt } from "../src/certificates.ts";
 import { engineDescriptorFingerprint } from "../src/engine-pin.ts";
 import {
+  ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
   ENGINE_ARTIFACT_RUNTIME_WASM,
+  ENGINE_ARTIFACT_RUNTIME_WORKER,
   buildEngineBundle,
+  isPortableEngineRuntime,
+  loadWorkerEngine,
   engineArtifactRef,
   fetchEngineArtifact,
   loadEngine,
@@ -6517,6 +6521,93 @@ test("a third-party WebAssembly engine runs with NO container runtime", async ()
   }
 });
 
+test("a non-RAREXT native engine runs sandboxed on a worker and replays", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    // A foreign "native" engine program: a self-contained JS module. It reports
+    // whether the sandbox exposed require/process, so isolation is observable.
+    const engineSource = [
+      "module.exports.run = function (model, input) {",
+      "  var sandboxed = typeof require === 'undefined' && typeof process === 'undefined';",
+      "  var prompt = String(input.prompt == null ? '' : input.prompt);",
+      "  return { text: 'native shim[' + (sandboxed ? 'sandboxed' : 'exposed') + ']:' + prompt.length,",
+      "           seed: 0, steps: Number(input.steps) || 1, tokens: [] };",
+      "};",
+    ].join("\n");
+
+    const bytes = Buffer.from(JSON.stringify({ kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] }));
+    const model: ModelRef = {
+      id: "native-engine-model",
+      family: "native-shim",
+      parameters: "tiny",
+      quantization: "none",
+      format: "json",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: Buffer.from(engineSource, "utf8"),
+      name: "third-party-native-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_WORKER,
+      chunkBytes: 256,
+    });
+    assert.deepEqual(verifyEngineBundle(engineBundle), []);
+    const uploaded = await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    const execution: ExecutionRef = {
+      kind: "engine",
+      engine: "rarext",
+      engineModel: null,
+      artifact: engineArtifactRef(engineBundle, uploaded.manifestHash),
+    };
+    const built = buildModelBundle({ bytes, model, execution, chunkBytes: 256 });
+    await uploadBundle({ registry: reg.base, bundle: built.bundle, chunks: built.chunks });
+
+    provider = await startProvider({
+      bundle: built.bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "native-engine"),
+      port: 0,
+    });
+    const health = (await (await fetch(`${provider.url}/health`)).json()) as { engineFingerprint: string };
+    const request = {
+      model: built.bundle.model.id,
+      messages: [{ role: "user", content: "hello" }],
+      max_tokens: 8,
+      temperature: 0,
+      seed: 7,
+    };
+    const response = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const bodyText = await response.text();
+    assert.equal(response.status, 200, bodyText);
+    const json = JSON.parse(bodyText) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      rarext_trace?: { kind: string; digest: string };
+    };
+    // The foreign engine ran on a worker thread with no require/process.
+    assert.match(json.choices?.[0]?.message?.content ?? "", /^native shim\[sandboxed\]:5$/);
+    assert.equal(json.rarext_trace?.kind, "rarext.output-trace.v1");
+
+    const body = {
+      replay: { request, api: "openai" as const },
+      response: { text: json.choices?.[0]?.message?.content ?? "", body: json },
+      engine: { fingerprint: health.engineFingerprint },
+    } as unknown as Parameters<typeof replayEngineRun>[0]["body"];
+    const replay = await replayEngineRun({ body, endpoint: provider.url });
+    assert.equal(replay.ok, true, replay.reason ?? "");
+    assert.equal(replay.traceMatches, true);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 test("an engine that hides its tokens still commits a replayable trace, and a divergent one is refused", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -6613,6 +6704,48 @@ test("an engine that hides its tokens still commits a replayable trace, and a di
     if (provider !== null) await provider.close();
     await reg.close();
   }
+});
+
+test("a sandboxed worker engine computes real inference from the committed bytes, and the weights drive it", async () => {
+  const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+  const inProcess = loadEngine(source);
+  const sandboxed = loadWorkerEngine(source);
+  const bytes = tinyGgufModel({ arch: "qwen2", nEmbd: 256, nHead: 4, nHeadKv: 4, nFfn: 512 });
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+
+  // The engine runs on a worker thread with no host engine, yet reproduces the
+  // in-process transformer token-for-token from the SAME bytes.
+  const workerRun = await sandboxed.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  const localRun = inProcess.run(model, { prompt: "a b", steps: 3, temperature: 0 });
+  assert.ok(workerRun.tokens.length > 0, "the sandboxed engine produced a real decode");
+  assert.equal(workerRun.tokens.join(","), localRun.tokens.join(","), "the sandboxed engine matches the in-process engine");
+
+  // Different committed weights => a different decode: the output is computed
+  // from the bytes, not a constant.
+  const mutated = Buffer.from(bytes);
+  for (let offset = Math.floor(mutated.length / 3); offset < mutated.length; offset += 7) {
+    mutated[offset] = mutated[offset]! ^ 0xff;
+  }
+  const mutatedRun = await sandboxed.run(
+    { kind: "gguf", bytes: new Uint8Array(mutated) },
+    { prompt: "a b", steps: 3, temperature: 0 },
+  );
+  assert.notEqual(mutatedRun.tokens.join(","), workerRun.tokens.join(","), "perturbed weights changed the decode");
+});
+
+test("every engine runtime the network carries is portable, so no host capability is a prerequisite", () => {
+  // The AI lives on RAREXT: an engine is a portable artifact the network fetches,
+  // not something the host must already have (no container runtime, GPU or TEE).
+  for (const runtime of [
+    ENGINE_ARTIFACT_RUNTIME,
+    ENGINE_ARTIFACT_RUNTIME_GGUF,
+    ENGINE_ARTIFACT_RUNTIME_WASM,
+    ENGINE_ARTIFACT_RUNTIME_WORKER,
+  ]) {
+    assert.equal(isPortableEngineRuntime(runtime), true, `${runtime} runs with nothing but the provider`);
+  }
+  assert.equal(isPortableEngineRuntime("rarext.native-image.elf.v1"), false, "a host ELF launcher is not portable");
+  assert.equal(isPortableEngineRuntime("ollama"), false, "a third-party software provider is not an engine artifact");
 });
 
 test("a model bundle can commit its engine artifact, so a provider needs no out-of-band engine flag", async () => {

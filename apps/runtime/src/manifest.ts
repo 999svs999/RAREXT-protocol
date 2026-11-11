@@ -1,10 +1,14 @@
 import os from "node:os";
 
+import { GENERATIONS } from "../../../packages/core/src/generations.ts";
+import type { GenerationAxis } from "../../../packages/core/src/generations.ts";
+
 import { canonicalDigest } from "./digest.ts";
 import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import type {
   ApiShape,
   DeploymentCommitment,
+  DeploymentGeneration,
   DeploymentManifest,
   EngineName,
   EngineProbe,
@@ -14,6 +18,49 @@ import type {
   Placement,
 } from "./types.ts";
 import { DEPLOYMENT_KIND } from "./types.ts";
+
+/**
+ * The declared ids per axis, so a manifest can only commit a rung the ladder
+ * actually names. Built from the same object `generationsDigest` covers, so the
+ * runtime's rule and the ladder cannot drift.
+ */
+const GENERATION_IDS: Record<GenerationAxis, Set<string>> = {
+  web: new Set(GENERATIONS.web.map((entry) => entry.id)),
+  network: new Set(GENERATIONS.network.map((entry) => entry.id)),
+  model: new Set(GENERATIONS.model.map((entry) => entry.id)),
+  protocol: new Set(GENERATIONS.protocol.map((entry) => entry.id)),
+};
+
+const GENERATION_AXES: GenerationAxis[] = ["network", "model", "web", "protocol"];
+
+/**
+ * Parse a `--generation` spec such as `network=5G,model=1G,web=web5,protocol=gen-6`
+ * into a commitment. Every axis is required and every id must be a declared rung,
+ * so a typo is refused here rather than folded silently into a digest.
+ */
+export function parseGenerationSpec(spec: string): DeploymentGeneration {
+  const chosen: Partial<Record<GenerationAxis, string>> = {};
+  for (const part of spec.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "")) {
+    const [axis, id] = part.split("=").map((entry) => entry.trim());
+    if (!axis || !id) throw new Error(`--generation entries must be axis=id: ${part}`);
+    if (!GENERATION_AXES.includes(axis as GenerationAxis)) {
+      throw new Error(`--generation axis must be one of ${GENERATION_AXES.join(", ")}: ${axis}`);
+    }
+    if (!GENERATION_IDS[axis as GenerationAxis].has(id)) {
+      throw new Error(`--generation ${axis}=${id} is not a declared ${axis} generation`);
+    }
+    chosen[axis as GenerationAxis] = id;
+  }
+  for (const axis of GENERATION_AXES) {
+    if (chosen[axis] === undefined) throw new Error(`--generation must name all four axes (missing ${axis})`);
+  }
+  return {
+    network: chosen.network!,
+    model: chosen.model!,
+    web: chosen.web!,
+    protocol: chosen.protocol!,
+  };
+}
 
 export function normalizeEndpoint(value: string): string {
   let endpoint = value.trim();
@@ -219,6 +266,7 @@ export function buildDeployment(input: {
   placement?: Placement;
   apis?: ApiShape[];
   id?: string;
+  generation?: DeploymentGeneration;
   labels?: Record<string, string>;
   notes?: string;
   createdAt?: string;
@@ -226,6 +274,7 @@ export function buildDeployment(input: {
   return {
     kind: DEPLOYMENT_KIND,
     id: input.id ?? `${slugify(input.probe.model.id)}-${input.probe.engine.name}`,
+    ...(input.generation === undefined ? {} : { generation: input.generation }),
     // A fingerprint pins the engine only when the caller knows it: a local or
     // remote probe can, and a web4 deployment pins the PROVIDER's engine in a
     // label instead (the serving shape here is not the provider's engine).
@@ -370,6 +419,20 @@ export function validateDeployment(value: unknown): string[] {
     for (const api of value.apis) {
       if (typeof api !== "string" || !API_SHAPES.has(api as ApiShape)) {
         errors.push(`manifest.apis entries must be one of ${[...API_SHAPES].join(", ")}`);
+      }
+    }
+  }
+
+  if (value.generation !== undefined) {
+    const generation = value.generation;
+    if (!isRecord(generation)) {
+      errors.push("manifest.generation must be an object");
+    } else {
+      for (const axis of GENERATION_AXES) {
+        const id = generation[axis];
+        if (typeof id !== "string" || !GENERATION_IDS[axis].has(id)) {
+          errors.push(`manifest.generation.${axis} must be a declared ${axis} generation`);
+        }
       }
     }
   }

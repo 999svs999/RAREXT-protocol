@@ -30,27 +30,32 @@ Those are names, not links, so every document is linked once in the reference be
 | [APP-PROTOCOL.md](APP-PROTOCOL.md) | How does an app publish an artifact, get it verified, and read it back over HTTP? |
 | [AI-VERIFICATION.md](AI-VERIFICATION.md) | How does RAREXT verify AI artifacts — exact, generative, and bounded claims — and how do I check one myself? |
 | [MODEL-RUNTIME.md](MODEL-RUNTIME.md) | How do I deploy a large model (local engine, remote provider, or RAREXT network) and publish every inference as an exact, replayable RAREXT transcript? |
-| [WEB4-MODEL.md](WEB4-MODEL.md) | How do the weights themselves live on RAREXT — model bundles, sharded blobs, a provider node that fetches and verifies them, and a run a stranger can replay? |
+| [WEB4-MODEL.md](WEB4-MODEL.md) | How do the weights and the engine themselves live on RAREXT — model bundles, sharded blobs, portable engine runtimes, a provider node that fetches and verifies both, and a run a stranger can replay? |
 | [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md) | How do I run the model entirely in the cloud — remote endpoint, no local weights or inference, a public gateway, and the registry/mirror/anchor/discover path? |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What are the components, what talks to what, and which parts are still target-state? |
 | [BRANDING.md](BRANDING.md) | Which brand is speaking, and what may each one claim? |
 | [CHAINS.md](CHAINS.md) | How is an anchor written to a chain, and how is it read back independently? |
+| [CLAIMS.md](CLAIMS.md) | Which published claims are mechanically checked against the code, and which documents are deliberately prose? |
 | [CRYPTO.md](CRYPTO.md) | What does the protocol assume cryptographically, and what breaks under a quantum adversary? |
 | [FAIR-LAUNCH.md](FAIR-LAUNCH.md) | How does a token launch become a checkable trajectory instead of a badge? |
+| [GENERATIONS.md](GENERATIONS.md) | What are the network (5G→8G), model-size (6G→8G), web, and protocol generations, and how is the ladder a recomputable commitment? |
 | [GLOSSARY.md](GLOSSARY.md) | What does this protocol mean by adapter, anchor, attestation, build, or holder? |
 | [HARDENING.md](HARDENING.md) | What storage failures are tested, what is recovered, and what is still not handled? |
 | [LITEPAPER.md](LITEPAPER.md) | What is the thesis, and what is explicitly not being sold? |
+| [LIVE-ON-RAREXT.md](LIVE-ON-RAREXT.md) | Can an AI, and an agent, live on RAREXT — an existence of content-addressed bytes that survives the node that served it? |
 | [MARKET.md](MARKET.md) | How can agents, robots, and people trade on the same terms without the protocol knowing what they are? |
 | [MIRRORS.md](MIRRORS.md) | Can the registry survive its operator, and what exactly does a mirror prove? |
 | [OPERATIONS.md](OPERATIONS.md) | What must an operator back up, restore, migrate, and monitor? |
 | [OPERATOR.md](OPERATOR.md) | How do I run holders, the API, pinning, and GC, and what is still missing? |
 | [PRIOR-ART.md](PRIOR-ART.md) | What already exists, what does it not do, and what narrow composition is actually new? |
 | [PRIVACY.md](PRIVACY.md) | How do unlisted and sealed artifacts stay out of the feed while remaining addressable? |
+| [RESOLVE-JSON.md](RESOLVE-JSON.md) | How does a machine consume a RAREXT resolution verdict — the invocation, the outcome schema, and the exit codes — without reading the resolver's source? |
 | [SEMANTICS.md](SEMANTICS.md) | What does a passing verifier result mean, who owns that meaning, and how is drift detected? |
 | [STORAGE.md](STORAGE.md) | What storage runs today, what was measured, and what the measurements do not prove? |
 | [STORAGE-ECONOMY.md](STORAGE-ECONOMY.md) | How do erasure coding, placement, retention proofs, repair, and metering fit together? |
 | [STORAGE-FRONTIER.md](STORAGE-FRONTIER.md) | Which compression and representation questions are open, and what would count as an honest answer? |
 | [STORAGE-SECURITY.md](STORAGE-SECURITY.md) | What storage attacks are handled, what do tokens mean, and which security findings are still open? |
+| [TRANSITION.md](TRANSITION.md) | How does a site that already answers on a DNS name publish a RAREXT statement, with no migration, new server, or install? |
 | [WEB4.md](WEB4.md) | What is web4 here, and which primitive is still missing? |
 | [WORK.md](WORK.md) | What work can a person or agent do, how is it checked, and what does it pay? |
 

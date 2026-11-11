@@ -91,6 +91,12 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] MCP storage verbs: put, get, challenge, audit, and pin, with a runnable example
 - [x] Durability tier and an auditable replica count on the publication itself
 - [x] Independent verifier operators
+- [x] AI on RAREXT: the weights **and the engine** are content-addressed blobs; a provider fetches and verifies both before serving, and the asking machine runs nothing ([WEB4-MODEL.md](docs/WEB4-MODEL.md))
+  - [x] Four portable engine runtimes — RAREXT's native and GGUF/RXHF transformers, a WebAssembly engine, and a sandboxed worker engine — so no third-party model server, container runtime, GPU, or hardware root of trust is required
+  - [x] RAREXT's own Hugging Face safetensors ingest (`rarext.hf-container.v1`, magic `RXHF`) with its own `Q8_0`/`Q4_0`/`IQ4_NL`/`Q4_K` quantization
+  - [x] The engine artifact is committed into the model bundle (`execution.artifact`) and folded into the engine fingerprint a replay checks
+  - [x] Enforced decode/output traces, so any engine's run is replayable and a diverging trace is refused
+  - [x] `npm run demo:ai-on-rarext` — two nodes, real inference from the committed bytes, replay, and a perturbed-weights proof
 - [ ] Native Trac anchoring transport (spike: transport boundary + webhook shipped, native path blocked by the RESET/trac-peer wire format — see [RFC 0001 §4](rfcs/0001-trac-integration.md))
 - [x] Task registry on Trac — read-only `GET /v1/tracregistry` over the Trac adapter: lists task handles with status and metadata, or one handle by id
 - [x] $BEM read-only balance in the UI
@@ -106,6 +112,23 @@ This is a public, changeable plan. Dates are targets, not promises. Material cha
 - [x] Migration plan for game-native state ([RFC 0017](rfcs/0017-game-native-state-migration.md)) — deferred preservation plan; target schema is the remaining gate
 
 Graduation to v3 requires sustained blockspace demand that anchoring cannot serve, plus a published cost and security analysis. There is no target date.
+
+## Generations — the forward-compatibility ladder (declared)
+
+- [x] One canonical ladder for the network (5G→8G), model-size (1G→8G), web
+  (web4→web8), and publication-leaf (gen-4→gen-8) generations as
+  `rarext.generations.v1`, with a validator and pure helpers
+  (`networkMeets`, `planModelShards`, `nextGeneration`) — [GENERATIONS.md](docs/GENERATIONS.md)
+- [x] `npm run demo:generations` — print the ladder, recompute its digest from the same bytes every surface uses, and report whether this host can serve each model class
+- [x] A deployment commits a declared generation (`--generation network=…,model=…,web=…,protocol=…`), folded into the manifest digest and refused when undeclared
+- [x] `npm run demo:live` — an agent's whole residence (identity, anchored AI claim, charter, and a **storage-native weights+engine thought**) rebuilt from bytes with the node and provider stopped; the committed engine re-run over the committed weights reproduces the recorded trace ([LIVE-ON-RAREXT.md](docs/LIVE-ON-RAREXT.md))
+- [ ] Serve a 6 GB / 7 GB / 8 GB model class end to end through the storage-native
+  path, then flip that class's `shipped` flag
+- [ ] Carry a network/model generation commitment in the publication leaf (gen-6)
+  and replay a run across generations (gen-7)
+
+Every entry carries `shipped`; the unchecked boxes are the targets, and the ladder
+says so rather than implying the project already runs on them.
 
 ## Research track — representation (long horizon)
 

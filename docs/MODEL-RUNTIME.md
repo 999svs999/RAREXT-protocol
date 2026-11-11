@@ -27,8 +27,15 @@ The one-command proof is:
 ```bash
 npm run demo:model-runtime     # local engine (Ollama today)
 npm run demo:cloud-runtime     # remote endpoint, no local weights or inference
-npm run demo:web4-model        # weights are RAREXT blobs, served by a provider node
+npm run demo:web4-model        # weights + engine are RAREXT blobs, served by provider nodes
+npm run demo:ai-on-rarext      # weights + a portable engine, no host engine at all
 ```
+
+A deployment can also commit the **generation** it serves under — a declared rung
+of `rarext.generations.v1` (a network, model-size, web, and protocol generation),
+folded into the manifest digest by `--generation
+network=5G,model=1G,web=web4,protocol=gen-4`. See
+[GENERATIONS.md](GENERATIONS.md).
 
 The runtime has three placements. A **local** deployment probes an engine on the
 same host; a **remote** deployment commits an OpenAI- or Anthropic-compatible
@@ -38,8 +45,9 @@ blobs and forwards to a provider that fetched and verified them. The rest of thi
 document describes the control plane all three share. The cloud-only path —
 provider commands, public gateway binding, TLS, the registry/mirror/anchor/discover
 route, and what it does and does not prove — is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
-The storage-native path — model bundles, sharding, provider cards, and the
-verification chain — is in [WEB4-MODEL.md](WEB4-MODEL.md).
+The storage-native path — model bundles, sharding, provider cards, engine
+artifacts, the four portable engine runtimes, and the verification chain — is in
+[WEB4-MODEL.md](WEB4-MODEL.md).
 
 ## Why these two engines are the reference
 
@@ -60,6 +68,12 @@ and exposing a local API.
 Both projects are engines. RAREXT is the record. A user can keep using either
 engine's desktop app or CLI; `rarext-runtime` points at its endpoint and wraps
 it.
+
+That is the local-placement story. In the storage-native placement there is no
+engine to point at: the weights and the engine are RAREXT artifacts, and the
+provider runs the committed engine itself — RAREXT's own native or GGUF/RXHF
+transformer, a WebAssembly module, or a sandboxed worker program. See
+[WEB4-MODEL.md](WEB4-MODEL.md).
 
 ## Architecture
 
@@ -449,9 +463,11 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 - One deployment per manifest. A multi-model engine gets one manifest and one
   challenge per model, which is the intended shape: the weights, not the
   process, are the subject.
-- The registry's verifier checks the transcript, not the tensor math. Full
-  generative replay for large models is the next representation class — the
-  transcript is the commitment it will build on.
+- The registry's verifier checks the transcript, not the tensor math. The
+  storage-native path ([WEB4-MODEL.md](WEB4-MODEL.md)) goes further: it replays a
+  run from the committed weights and the committed engine artifact. In the
+  local/remote deployment path the transcript is the commitment, and full
+  generative replay for a foreign engine remains the next representation class.
 - A remote provider that reports no weight digest is recorded honestly with
   `null`; the deployment is pinned to its id and endpoint, not to bytes the
   provider never named.
@@ -459,10 +475,11 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 ## Tests
 
 ```bash
-npm run test:runtime       # 57 unit/integration tests, no model needed
+npm run test:runtime       # 137 unit/integration tests, no model needed
 npm run demo:model-runtime # local Ollama path
 npm run demo:cloud-runtime # remote path, no local engine or weights
-npm run demo:web4-model    # weights are RAREXT blobs, served by a provider node
+npm run demo:web4-model    # weights + engine are RAREXT blobs, served by provider nodes
+npm run demo:ai-on-rarext  # weights + a portable engine, no host engine at all
 ```
 
 The unit tests use mock engine streams and cover: manifest digest stability,

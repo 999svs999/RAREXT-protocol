@@ -30,18 +30,25 @@ into the `engineFingerprint` the deployment commits, every run records, and a re
 checks. The demo's `engine` phase serves with a fetched engine (and shows the served
 trace is the fetched engine's, not the built-in one) and refuses a tampered artifact.
 
-`bundle --engine-module <file> --engine-runtime native|gguf --engine-name <n>`
+`bundle --engine-module <file> --engine-runtime native|gguf|wasm|worker --engine-name <n>`
 shards the engine and **commits it into the model bundle** (`execution.artifact`:
 name, version, runtime, artifact digest, and the manifest hash). The engine is
 therefore part of the model's content identity: a provider fetches the exact
 engine the bundle names, verifies it against that digest, and needs no
 out-of-band `--engine-bundle` flag. A bundle that names a different artifact is a
 different bundle and is refused. `provider --engine-bundle <manifest>` remains
-available to pin an engine explicitly. The artifact is a JavaScript engine module
-evaluated in a `node:vm` context with no `require` and no filesystem.
+available to pin an engine explicitly. A JavaScript engine artifact is evaluated
+in a `node:vm` context with no `require` and no filesystem; a WebAssembly engine
+artifact is instantiated with an empty import object.
 
-Three runtimes ship in this repository:
+Four runtimes ship in this repository:
 
+- `rarext.worker-engine.node-cjs.v1` runs a **non-RAREXT native engine program**
+  (a self-contained JS module) on a dedicated **worker thread** inside a
+  `node:vm` context with no `require`, no `process`, no filesystem and no
+  network — the host path for a foreign engine binary without a container. The
+  engine is digest-pinned in the bundle and in the engine fingerprint, and its
+  output trace makes the run replayable like any other.
 - `rarext.wasm-engine.wasm.v1` instantiates a **third-party engine shipped as a
   WebAssembly binary** inside the provider process with an *empty import object* —
   no OS process, no syscall surface, no container runtime. The module exports
@@ -84,21 +91,56 @@ one engine runs both containers. `bundle --file model.rarext` detects the magic,
 defaults to RAREXT's engine and commits it, exactly like a GGUF. Weight
 quantization is RAREXT's own (`Q8_0`/`Q4_0`/`IQ4_NL`/`Q4_K`), not a llama.cpp pass.
 
-A container runtime would still be needed to carry a *third-party engine image*
-as the artifact. What is demonstrated is the invariant the objective names: **the
-AI — weights and engine — lives on the RAREXT network, and the machine that asks
-runs nothing.**
+### The AI lives on RAREXT, purely — no host capability required
+
+The point is not *which* box ran it. Both the **weights** and the **engine** are
+content-addressed RAREXT artifacts; a node fetches, verifies and runs them, and
+the run is replayable from the committed artifacts alone. Nothing about the host
+is a prerequisite:
+
+- **no third-party software** — not Ollama, not llama.cpp, not gguf-py, not a
+  converter. The engine is either RAREXT's own transformer or a **portable engine
+  artifact** the network carries (`rarext.worker-engine.node-cjs.v1`,
+  `rarext.wasm-engine.wasm.v1`). The portable engine *reads the committed
+  weights*: it parses the `RXHF` container out of the model bytes and computes
+  the transformer itself — the run is driven by the network's artifacts, and a
+  perturbed copy of the same weights produces a different run, which
+  `demo:ai-on-rarext` shows explicitly;
+- **no container runtime / OS sandbox** — a foreign engine is a portable artifact
+  (a wasm module, or a native program run on a sandboxed worker thread), so it
+  needs no ELF/Mach-O launcher on the host;
+- **no GPU, no accelerator** — the compute is just the provider's, whatever it is;
+- **no hardware root of trust is *required*** — a TEE/attestation is an optional
+  *assurance level* a deployment may demand, not a prerequisite of the network. A
+  node with no TEE still participates, serves and replays; a deployment that needs
+  a hardware root says so explicitly and refuses nodes without it.
+
+That is the invariant to hold onto: **the AI — weights and engine — lives on the
+RAREXT network, and the machine that asks runs nothing.** The engine being a
+*portable network artifact* is what removes the hardware and software limits: the
+network does not depend on what any particular node happens to have installed.
 
 ```bash
-npm run demo:web4-model
+npm run demo:web4-model          # 34 phases: weights + RAREXT's own engine on the network
+# weights + a PORTABLE engine (RAREXT's own transformer) on a sandboxed worker:
+# real inference, two nodes agree and replay, and perturbed weights change the run
+RAREXT_WEB4_GGUF=/path/to/model.rarext npm run demo:ai-on-rarext
 ```
 
-runs the whole path with a deterministic native model in seconds:
-`storage -> 2 providers -> deploy -> registry -> card -> announce -> serve ->
-infer -> publish -> compare -> weights -> trace -> deterministic -> determinism ->
-engine -> replay -> anchor -> discover-deploy -> discover -> tamper -> verify`.
+The demo uses a prompt every fixture can tokenize (`abcdefgh`); set
+`RAREXT_WEB4_PROMPT` for a model that needs another prompt. It also needs a model
+whose greedy decode varies — a degenerate model that emits one repeated token
+cannot demonstrate weight-dependence, and the demo says so rather than pretend.
 
-To put a real GGUF through the same path (served by the provider's own Ollama):
+runs the whole path with a deterministic native model in seconds:
+`storage -> sealed -> provider -> deploy -> registry -> card -> announce -> serve ->
+infer -> publish -> receipt -> attribute -> trace -> deterministic -> determinism ->
+pay -> compare -> weights -> replay -> discover-deploy -> discover -> settle ->
+redeem -> independence -> engine -> measure -> quote -> isolation -> rotate ->
+engine-pin -> enclave -> mirror -> tamper -> verify` — 34 phases.
+
+To put a real GGUF through the same path (by default served by the provider's own
+Ollama as interop; see `RAREXT_WEB4_OWN_ENGINE=1` below):
 
 ```bash
 RAREXT_WEB4_GGUF=/path/to/model.gguf \
@@ -149,7 +191,19 @@ A model is a **bundle**, not a vendor id:
     "sizeBytes": 397807936,
     "weightsDigest": "sha256:c5396e06…"
   },
-  "execution": { "kind": "engine", "engine": "ollama", "engineModel": "rarext-web4-qwen" },
+  "execution": {
+    "kind": "engine",
+    "engine": "rarext",
+    "engineModel": null,
+    "artifact": {
+      "id": "rarext-gguf-engine@1",
+      "name": "rarext-gguf-engine",
+      "engineVersion": "1",
+      "runtime": "rarext.gguf-engine.node-cjs.v1",
+      "artifactDigest": "sha256:…",
+      "manifestHash": "<sha256 of the engine-bundle manifest>"
+    }
+  },
   "shards": [{ "index": 0, "hash": "<sha256>", "size": 8388608 }, "…"],
   "totalBytes": 397807936,
   "shardsRoot": "<sha256 over the shard list>",
@@ -157,6 +211,12 @@ A model is a **bundle**, not a vendor id:
   "digest": "<sha256 over the canonical bundle>"
 }
 ```
+
+`execution.artifact` is what makes the engine part of the model's identity; the
+canonical bundle therefore commits weights **and** engine. A bundle built with
+`--engine ollama` names an interop engine instead (`"engine": "ollama"`, no
+`artifact`), and the provider then needs an engine endpoint. The portable default
+is an engine artifact, so the same bundle works with no engine endpoint at all.
 
 Every shard is a normal RAREXT blob (`POST /v1/blobs/raw`), addressed by the
 sha256 of its own bytes. The bundle manifest is a blob too, so a reader fetches
@@ -177,8 +237,9 @@ different ones.
 3. reassemble the file and check it against `model.weightsDigest` — or, for a
    sealed bundle, open each shard in memory with the key and check the plaintext
    against the same digest;
-4. only then load the model — parse the committed native model, or write the
-   verified file and ask the provider's Ollama to create it;
+4. only then load the model — parse the committed native model, run the fetched
+   engine artifact over the verified bytes, or (interop) write the verified file
+   and ask the provider's Ollama to create it;
 5. serve an OpenAI-compatible `/v1/chat/completions` and `/v1/models`;
 6. publish a provider card at `/v1/provider-card` naming the bundle, the shard
    commitment, the manifest address, the model, and the execution class.
@@ -1362,8 +1423,9 @@ why a large file is sharded rather than sent as one object.
   protocol can do is hand over cash or prove the external ledger is honest: an
   inclusion proof shows the movement is in a signed STATE, and the ledger's key is
   the receipt of that state, not the funds.
-- **The engine can be a RAREXT artifact, a third-party WASM binary, or RAREXT's
-  own GGUF engine — no container runtime is needed for any of them.** The engine
+- **The engine can be a RAREXT artifact, a third-party WASM binary, a sandboxed
+  worker program, or RAREXT's own GGUF/RXHF engine — no container runtime is
+  needed for any of them.** The engine
   is sharded into RAREXT (`rarext.engine-bundle.v1`), the provider fetches and
   verifies it, runs the fetched engine, and folds the artifact digest into the
   engine fingerprint — so the engine is a RAREXT artifact, not the box's. A
@@ -1372,10 +1434,13 @@ why a large file is sharded rather than sent as one object.
   module runs in a `node:vm` context with no `require` and no filesystem; and the
   GGUF runtime (`rarext.gguf-engine.node-cjs.v1`) is RAREXT's own transformer. So
   a qwen2 GGUF is served with no Ollama, llama.cpp, native addon, or container,
-  and no engine endpoint: weights and engine both come from RAREXT. What is still
-  outside this repository is a *native ELF/Mach-O* engine image, which would need
-  an OS sandbox this environment does not provide; the supported non-container
-  path for a foreign binary is WebAssembly. RAREXT's own engine now
+  and no engine endpoint: weights and engine both come from RAREXT. A foreign
+  native engine *program* runs sandboxed on a worker thread
+  (`rarext.worker-engine.node-cjs.v1`), and a foreign *binary* runs as WebAssembly
+  (`rarext.wasm-engine.wasm.v1`). What remains genuinely blocked here is a raw
+  **ELF/Mach-O image**: executing machine code needs a kernel/OS sandbox — a
+  container runtime, seccomp/`sandbox-exec`, or a VM — and this environment
+  provides none, so the provider refuses it rather than pretend. RAREXT's own engine now
   covers qwen2, llama/mistral, **mixtral** (top-k expert routing over a stacked
   expert bank) and **gemma** (GeGLU, norm weights biased by +1, and the
   `sqrt(n_embd)` embedding scale), **phi3** (partial NeoX rotary, fused QKV,

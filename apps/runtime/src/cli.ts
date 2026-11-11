@@ -47,6 +47,7 @@ import {
   hardwareFromNetwork,
   isLoopbackEndpoint,
   normalizeEndpoint,
+  parseGenerationSpec,
   requireValidDeployment,
 } from "./manifest.ts";
 import {
@@ -170,7 +171,8 @@ Common options:
   --engine-version <v>  the serving engine's version, pinned by its fingerprint
   --engine-digest <hex> the serving engine's image digest, pinned by its fingerprint
   --engine-module <f>   bundle: shard an engine module into RAREXT as a runnable engine artifact
-  --engine-runtime <r>  bundle: native | gguf (default native) engine artifact runtime
+  --engine-runtime <r>  bundle: native | gguf | wasm | worker (default native)
+  --generation <spec>   deploy: a declared generation, e.g. network=5G,model=1G,web=web4,protocol=gen-4
   --engine-name <n>     bundle: the engine artifact's family name
   --engine-bundle <p>   provider: fetch/verify this RAREXT engine artifact before serving
   --engine-logprobs     ask the engine for token logprobs and record a decode judgment
@@ -1402,12 +1404,15 @@ async function commandDeployWeb4(values: Record<string, unknown>): Promise<numbe
   };
 
   const out = resolve(flag(values, "out") ?? ".rarext-runtime");
+  const generationSpec = flag(values, "generation");
+  const generation = generationSpec === undefined ? undefined : parseGenerationSpec(generationSpec);
   const manifest = commitDeployment(
     buildDeployment({
       probe,
       hardware: hardwareFromNetwork(primary),
       placement: "web4",
       id: flag(values, "id"),
+      generation,
       labels: {
         execution: "web4",
         bundle: bundle.digest,
@@ -1597,12 +1602,15 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
     });
     probe = await probeEngine({ endpoint, engine, model });
   }
+  const generationSpec = flag(values, "generation");
+  const generation = generationSpec === undefined ? undefined : parseGenerationSpec(generationSpec);
   const manifest = commitDeployment(
     buildDeployment({
       probe,
       hardware: remote ? hardwareFromCloud(endpoint) : hardwareFromHost(backend, device),
       placement: remote ? "remote" : undefined,
       id: flag(values, "id"),
+      generation,
       ...(remote
         ? {
             labels: {

@@ -848,10 +848,15 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     native = parseNativeModel(bytes);
   } else if (ownSandbox) {
     if (loadedEngine === null) {
-      throw new Error("a wasm engine needs its committed artifact");
+      throw new Error("a sandboxed engine needs its committed artifact");
     }
-    // The committed model bytes go to the wasm engine's optional load() hook.
-    wasmModel = { kind: "gguf", bytes };
+    // The committed model bytes are handed to the sandboxed engine: GGUF, or the
+    // RAREXT-native "RXHF" container built from safetensors, so an engine that
+    // reads the weights gets the right container kind.
+    const isContainer =
+      bytes.length >= 4 &&
+      bytes[0] === 0x52 && bytes[1] === 0x58 && bytes[2] === 0x48 && bytes[3] === 0x46;
+    wasmModel = isContainer ? { kind: "hf", bytes } : { kind: "gguf", bytes };
   } else if (ownGguf) {
     if (loadedEngine === null) {
       throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");

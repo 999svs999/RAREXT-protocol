@@ -19,18 +19,26 @@ import type { BundleShard, EngineArtifactRef } from "./model-bundle.ts";
  * missing artifact, or a module that does not expose the engine interface is
  * refused, so the engine the provider runs is the engine RAREXT committed.
  *
- * What this does NOT do here: execute an arbitrary downloaded native binary in a
- * sandbox. The reference artifact is a JavaScript engine module evaluated in a
- * `node:vm` context (no `require`, no filesystem); a container runtime would let
- * the same shape carry an engine IMAGE and run only the verified bytes. The
- * protocol shape — shard, commit, fetch, verify, refuse-on-mismatch, bind into
- * the run — is the same either way.
+ * What this does NOT do here: execute a raw ELF/Mach-O image. Doing that needs a
+ * kernel/OS sandbox (a container runtime, seccomp/sandbox-exec, or a VM), which
+ * this environment does not provide, so the provider refuses it rather than run
+ * machine code unsandboxed. A foreign engine program runs on a sandboxed worker
+ * thread, and a foreign binary runs as WebAssembly — both are portable artifacts,
+ * so neither needs a host capability. The protocol shape — shard, commit, fetch,
+ * verify, refuse-on-mismatch, bind into the run — is the same either way.
  *
- * RAREXT ships two runtimes in this repository:
+ * RAREXT ships four runtimes in this repository:
  *   - `rarext.native-engine.node-cjs.v1` — the xorshift32 class.
- *   - `rarext.gguf-engine.node-cjs.v1` — RAREXT's own GGUF transformer
- *     (`apps/runtime/engines/rarext-gguf-engine.js`), so a GGUF model needs no
- *     Ollama, no llama.cpp, and no container runtime on the provider.
+ *   - `rarext.gguf-engine.node-cjs.v1` — RAREXT's own GGUF/RXHF transformer
+ *     (`apps/runtime/engines/rarext-gguf-engine.js`), so a model needs no Ollama,
+ *     no llama.cpp, and no container runtime on the provider.
+ *   - `rarext.wasm-engine.wasm.v1` — a foreign engine shipped as WebAssembly,
+ *     instantiated with an empty import object.
+ *   - `rarext.worker-engine.node-cjs.v1` — a foreign engine program run on a
+ *     worker thread inside `node:vm` with no `require`, `process`, or filesystem.
+ *
+ * All four are in `PORTABLE_ENGINE_RUNTIMES`: they run with nothing but the
+ * provider process, which is what lets the AI live on the network.
  */
 
 export const ENGINE_BUNDLE_KIND = "rarext.engine-bundle.v1";
@@ -65,6 +73,26 @@ export type EngineArtifactRuntime =
   | typeof ENGINE_ARTIFACT_RUNTIME_GGUF
   | typeof ENGINE_ARTIFACT_RUNTIME_WASM
   | typeof ENGINE_ARTIFACT_RUNTIME_WORKER;
+
+/**
+ * Every runtime RAREXT can carry is PORTABLE: a JS module run in a sandboxed vm,
+ * a wasm module, or a native program run on a sandboxed worker. None requires a
+ * host capability (container runtime, GPU, TEE), which is what lets the AI live
+ * on the network rather than on a particular box. A runtime that needed the host
+ * to launch an ELF/Mach-O image would not be in this set.
+ */
+export const PORTABLE_ENGINE_RUNTIMES: readonly EngineArtifactRuntime[] = [
+  ENGINE_ARTIFACT_RUNTIME,
+  ENGINE_ARTIFACT_RUNTIME_GGUF,
+  ENGINE_ARTIFACT_RUNTIME_WASM,
+  ENGINE_ARTIFACT_RUNTIME_WORKER,
+] as const;
+
+/** Whether a runtime can run with nothing but the provider process — no host
+ *  container runtime, no accelerator, no hardware root of trust. */
+export function isPortableEngineRuntime(runtime: string): boolean {
+  return (PORTABLE_ENGINE_RUNTIMES as readonly string[]).includes(runtime);
+}
 
 export interface EngineBundle {
   kind: typeof ENGINE_BUNDLE_KIND;
