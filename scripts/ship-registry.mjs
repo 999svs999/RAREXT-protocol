@@ -224,9 +224,20 @@ try {
 // ---- ship -------------------------------------------------------------------
 const steps = [];
 function step(name, cmd, args, opts = {}) {
-  const out = run(cmd, args, opts);
-  steps.push({ name, ok: true });
-  return out;
+  try {
+    const out = run(cmd, args, opts);
+    steps.push({ name, ok: true });
+    return out;
+  } catch (e) {
+    // execFileSync throws with the child's own output attached, as Buffers for
+    // binary-ish output. String()-ing a Buffer prints a wall of hex ('f 6b 22 3a'),
+    // which is a failure message that tells you nothing — decode it.
+    const text = (v) => (Buffer.isBuffer(v) ? v.toString("utf8") : String(v ?? ""));
+    const said = [text(e.stdout), text(e.stderr)].filter(Boolean).join("\n").trim();
+    const err = new Error(said ? `${name}: ${said.slice(-900)}` : `${name}: ${e.message}`);
+    err.step = name;
+    throw err;
+  }
 }
 
 try {
@@ -293,5 +304,7 @@ try {
   }
 } catch (error) {
   const tail = String(error?.stderr ?? error?.message ?? error).slice(-400);
-  fail(`ship failed after [${steps.map((s) => s.name).join(" → ")}]: ${tail}`, { root: outcome.root });
+  const done = steps.map((s) => s.name);
+  const where = error?.step && !done.includes(error.step) ? [...done, `${error.step} ✗`] : done;
+  fail(`ship failed after [${where.join(" → ")}]: ${tail}`, { root: outcome.root });
 }
