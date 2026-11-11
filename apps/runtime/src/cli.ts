@@ -70,6 +70,7 @@ import {
   ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
   ENGINE_ARTIFACT_RUNTIME_WASM,
+  ENGINE_ARTIFACT_RUNTIME_WORKER,
   buildEngineBundle,
   engineArtifactRef,
   uploadEngineBundle,
@@ -723,8 +724,13 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   if (engineModuleFlag !== undefined || autoEngineModule !== undefined) {
     const runtimeFlag =
       autoEngineModule !== undefined ? "gguf" : (flag(values, "engine-runtime") ?? "native");
-    if (runtimeFlag !== "native" && runtimeFlag !== "gguf" && runtimeFlag !== "wasm") {
-      throw new Error("--engine-runtime must be native, gguf or wasm");
+    if (
+      runtimeFlag !== "native" &&
+      runtimeFlag !== "gguf" &&
+      runtimeFlag !== "wasm" &&
+      runtimeFlag !== "worker"
+    ) {
+      throw new Error("--engine-runtime must be native, gguf, wasm or worker");
     }
     const built = buildEngineBundle({
       source:
@@ -740,7 +746,9 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
           ? ENGINE_ARTIFACT_RUNTIME_GGUF
           : runtimeFlag === "wasm"
             ? ENGINE_ARTIFACT_RUNTIME_WASM
-            : ENGINE_ARTIFACT_RUNTIME,
+            : runtimeFlag === "worker"
+              ? ENGINE_ARTIFACT_RUNTIME_WORKER
+              : ENGINE_ARTIFACT_RUNTIME,
       chunkBytes,
     });
     const engineErrors = verifyEngineBundle(built.bundle);

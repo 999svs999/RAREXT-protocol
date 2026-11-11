@@ -431,7 +431,10 @@ if (typeof run !== "function") {
 export function loadWorkerEngine(source: Uint8Array): NativeEngine {
   const code = new TextDecoder().decode(source);
   return {
-    run(model, input) {
+    run(
+      model: unknown,
+      input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
+    ) {
       return new Promise((resolve, reject) => {
         const worker = new Worker(WORKER_ENGINE_BOOTSTRAP, {
           eval: true,
@@ -472,7 +475,7 @@ export function loadWorkerEngine(source: Uint8Array): NativeEngine {
         });
       });
     },
-  };
+  } as unknown as NativeEngine;
 }
 
 export function loadEngine(
