@@ -164,18 +164,21 @@ function isGenerativeSpec(value) {
   const spec = value;
   return Number.isInteger(spec.steps) && spec.steps >= 1 && spec.steps <= MAX_GENERATIVE_STEPS;
 }
-function generate(model, seed, steps) {
+function generateTokens(model, seed, steps) {
   const { a, b, c } = model.params;
   let state = seed >>> 0;
-  let out = "";
+  const tokens = [];
   for (let i = 0; i < steps; i++) {
     state ^= state << a >>> 0;
     state ^= state >>> b;
     state ^= state << c >>> 0;
     state >>>= 0;
-    out += model.vocab[state % model.vocab.length];
+    tokens.push(state % model.vocab.length);
   }
-  return out;
+  return tokens;
+}
+function generate(model, seed, steps) {
+  return generateTokens(model, seed, steps).map((token) => model.vocab[token]).join("");
 }
 function verifyGenerativeReplay(body, spec) {
   if (!isGenerativeBody(body) || !isGenerativeSpec(spec)) {
