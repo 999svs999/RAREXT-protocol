@@ -234,6 +234,32 @@ try {
   const summaryStart = pub.indexOf("{");
   outcome.publisher = JSON.parse(pub.slice(summaryStart, pub.lastIndexOf("}") + 1));
 
+  // The proof step reads the bundle that publish just pushed, so running it immediately
+  // is a race: when GitHub Pages has not served the new tree yet the step exits non-zero
+  // and prints NOTHING, which is why every failure looked like
+  // "ship failed after [publish → proof]:" with an empty tail. Wait for the published
+  // commit to be visible before proving it.
+  // publish --json reports `root` (the bundle root hash), not a commit, so wait for the
+  // published root to be served rather than for a sha that never arrives.
+  const publishedSha = (outcome.publisher && (outcome.publisher.root || outcome.publisher.commit)) || "";
+  if (publishedSha) {
+    const deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch("https://999svs999.github.io/RAREXT-protocol/registry/bundle.json",
+                                { headers: { "cache-control": "no-cache" } });
+        if (res.ok) {
+          const live = await res.json();
+          const served = String(live.root || live.bundleRoot || "");
+          if (served && (served === publishedSha || served.includes(publishedSha.slice(0, 12)))) break;
+        }
+      } catch {
+        /* keep polling */
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+
   const proof = step("proof", "node", ["scripts/publish-futuristic-proof.mjs"]);
   for (const line of proof.split("\n")) {
     if (line.startsWith("published FUTURISTIC proof ")) outcome.root = line.split(" ").pop().trim();

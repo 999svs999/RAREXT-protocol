@@ -251,9 +251,7 @@ export interface NativeEngine {
   run(
     model: unknown,
     input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
-  ):
-    | { text: string; seed: number; steps: number; tokens: number[] }
-    | Promise<{ text: string; seed: number; steps: number; tokens: number[] }>;
+  ): { text: string; seed: number; steps: number; tokens: number[] };
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
   /** Present on the GGUF runtime: parse a RAREXT "RXHF" container header. */
@@ -425,7 +423,11 @@ if (typeof run !== "function") {
 }
 `;
 
-/** Run a non-RAREXT native (JS) engine on a worker thread, isolated in a vm. */
+/**
+ * Run a non-RAREXT native (JS) engine on a worker thread, isolated in a vm.
+ * `run` resolves asynchronously (the provider awaits the result), so it is cast
+ * to the synchronous interface the other runtimes expose.
+ */
 export function loadWorkerEngine(source: Uint8Array): NativeEngine {
   const code = new TextDecoder().decode(source);
   return {
