@@ -100,7 +100,9 @@ export function validDecodeTrace(body: unknown): boolean {
           Array.isArray(trace.logprobs) &&
           trace.logprobs.length === trace.tokens.length &&
           trace.logprobs.every((value) => typeof value === "number")
-        : false;
+        : kind === "rarext.output-trace.v1"
+          ? typeof trace.outputDigest === "string" && /^[0-9a-f]{64}$/.test(trace.outputDigest)
+          : false;
   const { digest, ...covered } = trace;
   return tokenOk && typeof digest === "string" && digest === canonicalDigest(covered);
 }

@@ -32,9 +32,11 @@ export const DETERMINISM_KIND = "rarext.determinism.v1";
 export const REPLAY_WITNESS_KIND = "rarext.replay-witness.v1";
 
 interface DecodeTrace {
-  kind: "rarext.decode-trace.v1" | "rarext.judgment.v1";
+  kind: "rarext.decode-trace.v1" | "rarext.judgment.v1" | "rarext.output-trace.v1";
   tokens: Array<number | string>;
   logprobs?: number[];
+  /** Present on an output trace: a digest of the exact completion text. */
+  outputDigest?: string;
   digest: string;
 }
 
@@ -74,6 +76,11 @@ export function decodeTraceOf(body: unknown): DecodeTrace | null {
     ) {
       return null;
     }
+  } else if (trace.kind === "rarext.output-trace.v1") {
+    // An engine that hides its token ids still commits a digest of its output.
+    if (typeof trace.outputDigest !== "string" || !/^[0-9a-f]{64}$/.test(trace.outputDigest)) {
+      return null;
+    }
   } else {
     return null;
   }
@@ -83,8 +90,9 @@ export function decodeTraceOf(body: unknown): DecodeTrace | null {
 
   return {
     kind: trace.kind,
-    tokens: trace.tokens as Array<number | string>,
+    tokens: Array.isArray(trace.tokens) ? (trace.tokens as Array<number | string>) : [],
     ...(trace.kind === "rarext.judgment.v1" ? { logprobs: trace.logprobs as number[] } : {}),
+    ...(trace.kind === "rarext.output-trace.v1" ? { outputDigest: trace.outputDigest as string } : {}),
     digest,
   };
 }
@@ -92,6 +100,8 @@ export function decodeTraceOf(body: unknown): DecodeTrace | null {
 /** Do two traces decode exactly the same tokens (and logprobs, for a judgment)? */
 export function tracesMatch(a: DecodeTrace, b: DecodeTrace): boolean {
   if (a.kind !== b.kind) return false;
+  // An output trace compares the exact completion digest, not tokens.
+  if (a.kind === "rarext.output-trace.v1") return a.outputDigest === b.outputDigest;
   if (a.tokens.length !== b.tokens.length) return false;
   if (!a.tokens.every((token, index) => token === b.tokens[index])) return false;
   if (a.kind !== "rarext.judgment.v1") return true;

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import vm from "node:vm";
+import { Worker } from "node:worker_threads";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
@@ -44,9 +45,26 @@ export const ENGINE_BUNDLE_KIND = "rarext.engine-bundle.v1";
  */
 export const ENGINE_ARTIFACT_RUNTIME = "rarext.native-engine.node-cjs.v1";
 export const ENGINE_ARTIFACT_RUNTIME_GGUF = "rarext.gguf-engine.node-cjs.v1";
+/**
+ * A third-party engine shipped as a WebAssembly module. It is instantiated inside
+ * the provider process with an empty import object — no OS process, no syscall
+ * surface, no container runtime — and driven through a tiny C-style ABI. This is
+ * how a NON-RAREXT engine binary runs with nothing but the provider.
+ */
+export const ENGINE_ARTIFACT_RUNTIME_WASM = "rarext.wasm-engine.wasm.v1";
+/**
+ * A non-RAREXT NATIVE engine program shipped as a self-contained JS module and
+ * executed on a dedicated WORKER THREAD inside a `node:vm` context that has no
+ * `require`, no `process`, no filesystem and no network. This is the host path for
+ * a native engine binary you can actually run without a container: a Node/JS
+ * engine program (or a wasm/JS shim around one), isolated in its own thread.
+ */
+export const ENGINE_ARTIFACT_RUNTIME_WORKER = "rarext.worker-engine.node-cjs.v1";
 export type EngineArtifactRuntime =
   | typeof ENGINE_ARTIFACT_RUNTIME
-  | typeof ENGINE_ARTIFACT_RUNTIME_GGUF;
+  | typeof ENGINE_ARTIFACT_RUNTIME_GGUF
+  | typeof ENGINE_ARTIFACT_RUNTIME_WASM
+  | typeof ENGINE_ARTIFACT_RUNTIME_WORKER;
 
 export interface EngineBundle {
   kind: typeof ENGINE_BUNDLE_KIND;
@@ -129,9 +147,14 @@ export function verifyEngineBundle(value: unknown): string[] {
   if (typeof value.id !== "string" || value.id.length === 0) errors.push("engine bundle id must be non-empty");
   if (typeof value.name !== "string" || value.name.length === 0) errors.push("engine bundle name must be non-empty");
   if (typeof value.engineVersion !== "string") errors.push("engine bundle engineVersion must be a string");
-  if (value.runtime !== ENGINE_ARTIFACT_RUNTIME && value.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
+  if (
+    value.runtime !== ENGINE_ARTIFACT_RUNTIME &&
+    value.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF &&
+    value.runtime !== ENGINE_ARTIFACT_RUNTIME_WASM &&
+    value.runtime !== ENGINE_ARTIFACT_RUNTIME_WORKER
+  ) {
     errors.push(
-      `engine bundle runtime must be "${ENGINE_ARTIFACT_RUNTIME}" or "${ENGINE_ARTIFACT_RUNTIME_GGUF}"`,
+      `engine bundle runtime must be "${ENGINE_ARTIFACT_RUNTIME}", "${ENGINE_ARTIFACT_RUNTIME_GGUF}", "${ENGINE_ARTIFACT_RUNTIME_WASM}" or "${ENGINE_ARTIFACT_RUNTIME_WORKER}"`,
     );
   }
   if (typeof value.artifactDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value.artifactDigest)) {
@@ -228,7 +251,9 @@ export interface NativeEngine {
   run(
     model: unknown,
     input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
-  ): { text: string; seed: number; steps: number; tokens: number[] };
+  ):
+    | { text: string; seed: number; steps: number; tokens: number[] }
+    | Promise<{ text: string; seed: number; steps: number; tokens: number[] }>;
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
   /** Present on the GGUF runtime: parse a RAREXT "RXHF" container header. */
@@ -267,6 +292,8 @@ export interface NativeEngine {
     model: unknown,
     input: { prompt: string; steps: number },
   ): { set: "long" | "short"; values: number[] } | null;
+  /** Present on the wasm runtime: the instantiated module's exports. */
+  wasm?: WebAssembly.Exports;
   /** Present on the GGUF runtime: LayerNorm (Phi-2), for tests. */
   layerNorm?(
     out: Float32Array,
@@ -294,7 +321,164 @@ export interface HfModel {
  * a fresh `node:vm` context with no `require` and no filesystem, and must export
  * a `run(model, input)` function. A module that exposes no engine is refused.
  */
-export function loadEngine(source: Uint8Array): NativeEngine {
+/**
+ * Instantiate a third-party engine shipped as WebAssembly. The module runs
+ * inside the provider process with an EMPTY import object: it cannot read the
+ * filesystem, open sockets, or spawn anything — so no container runtime, no
+ * VM, and no OS process is needed to execute a foreign engine binary.
+ *
+ * ABI the module must export:
+ *   memory                     linear memory
+ *   run(promptPtr, len, steps, seed) -> i32   pointer to a NUL-terminated UTF-8 result
+ *   alloc(size) -> ptr         optional; required to receive the prompt/model bytes
+ *   dealloc(ptr, size)         optional
+ *   load(modelPtr, len) -> i32 optional; receives the committed model bytes
+ */
+export function loadWasmEngine(source: Uint8Array): NativeEngine {
+  let instance: WebAssembly.Instance;
+  try {
+    instance = new WebAssembly.Instance(new WebAssembly.Module(source as unknown as BufferSource), {});
+  } catch (error) {
+    throw new Error(
+      `the wasm engine artifact failed to instantiate: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const exported = instance.exports as Record<string, unknown>;
+  if (!(exported.memory instanceof WebAssembly.Memory)) {
+    throw new Error("the wasm engine artifact must export its linear memory");
+  }
+  const runFn = exported.run;
+  if (typeof runFn !== "function") {
+    throw new Error("the wasm engine artifact must export run(promptPtr, len, steps, seed)");
+  }
+  const memory = exported.memory;
+  const alloc = typeof exported.alloc === "function" ? (exported.alloc as (size: number) => number) : null;
+  const dealloc =
+    typeof exported.dealloc === "function" ? (exported.dealloc as (ptr: number, size: number) => void) : null;
+  const loadFn = typeof exported.load === "function" ? (exported.load as (ptr: number, len: number) => number) : null;
+  const view = (): Uint8Array => new Uint8Array(memory.buffer);
+
+  const place = (data: Uint8Array): { ptr: number; len: number } => {
+    if (alloc === null || data.length === 0) return { ptr: 0, len: 0 };
+    const ptr = alloc(data.length);
+    view().set(data, ptr);
+    return { ptr, len: data.length };
+  };
+
+  return {
+    run(model, input) {
+      const prompt = new TextEncoder().encode(String(input.prompt == null ? "" : input.prompt));
+      const promptRef = place(prompt);
+      if (loadFn !== null) {
+        const modelBytes = (model as { bytes?: Uint8Array } | null)?.bytes;
+        if (modelBytes instanceof Uint8Array) {
+          const modelRef = place(modelBytes);
+          if (modelRef.ptr !== 0) loadFn(modelRef.ptr, modelRef.len);
+        }
+      }
+      const steps = Math.max(1, Math.min(Number(input.steps) || 16, 256));
+      const seed = Number.isSafeInteger(input.seed) ? (input.seed as number) : 0;
+      const outPtr = (runFn as (a: number, b: number, c: number, d: number) => number)(
+        promptRef.ptr,
+        promptRef.len,
+        steps,
+        seed,
+      );
+      let text = "";
+      if (typeof outPtr === "number" && outPtr > 0) {
+        const bytes = view();
+        let end = outPtr;
+        while (end < bytes.length && bytes[end] !== 0) end += 1;
+        text = new TextDecoder().decode(bytes.subarray(outPtr, end));
+      }
+      if (dealloc !== null && promptRef.ptr !== 0) dealloc(promptRef.ptr, promptRef.len);
+      return { text, seed, steps, tokens: [] };
+    },
+    wasm: instance.exports,
+  };
+}
+
+/**
+ * The bootstrap a native engine runs under: a dedicated worker thread whose only
+ * job is to evaluate the engine module inside a `node:vm` context that has no
+ * `require`, no `process`, no filesystem and no network — so a foreign native
+ * engine program runs isolated, without a container.
+ */
+const WORKER_ENGINE_BOOTSTRAP = `
+const { parentPort, workerData } = require("node:worker_threads");
+const vm = require("node:vm");
+const module = { exports: {} };
+const sandbox = { module, exports: module.exports, TextEncoder, TextDecoder, console, Math, JSON };
+vm.runInNewContext(workerData.code, sandbox, { timeout: 10000, filename: "rarext-native-engine.js" });
+const run = module.exports.run;
+if (typeof run !== "function") {
+  parentPort.postMessage({ ok: false, error: "the engine artifact exports no run(model, input)" });
+} else {
+  parentPort.on("message", async (message) => {
+    try {
+      parentPort.postMessage({ ok: true, result: await run(message.model, message.input) });
+    } catch (error) {
+      parentPort.postMessage({ ok: false, error: String((error && error.message) || error) });
+    }
+  });
+  parentPort.postMessage({ ok: true, ready: true });
+}
+`;
+
+/** Run a non-RAREXT native (JS) engine on a worker thread, isolated in a vm. */
+export function loadWorkerEngine(source: Uint8Array): NativeEngine {
+  const code = new TextDecoder().decode(source);
+  return {
+    run(model, input) {
+      return new Promise((resolve, reject) => {
+        const worker = new Worker(WORKER_ENGINE_BOOTSTRAP, {
+          eval: true,
+          workerData: { code },
+          resourceLimits: { maxOldGenerationSizeMb: 512, maxYoungGenerationSizeMb: 64 },
+        });
+        let settled = false;
+        const finish = (fn: () => void): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          void worker.terminate();
+          fn();
+        };
+        const timer = setTimeout(
+          () => finish(() => reject(new Error("the native engine worker timed out"))),
+          600_000,
+        );
+        worker.on("error", (error) =>
+          finish(() => reject(new Error(`the native engine worker failed: ${error.message}`))),
+        );
+        worker.on("exit", () =>
+          finish(() => reject(new Error("the native engine worker exited before answering"))),
+        );
+        worker.on("message", (message: unknown) => {
+          const reply = message as { ok?: boolean; ready?: boolean; error?: string; result?: unknown };
+          if (reply.ready === true) {
+            worker.postMessage({ model, input });
+            return;
+          }
+          if (reply.ok === true) {
+            finish(() =>
+              resolve(reply.result as { text: string; seed: number; steps: number; tokens: number[] }),
+            );
+          } else {
+            finish(() => reject(new Error(reply.error ?? "the native engine worker failed")));
+          }
+        });
+      });
+    },
+  };
+}
+
+export function loadEngine(
+  source: Uint8Array,
+  runtime: EngineArtifactRuntime = ENGINE_ARTIFACT_RUNTIME,
+): NativeEngine {
+  if (runtime === ENGINE_ARTIFACT_RUNTIME_WASM) return loadWasmEngine(source);
+  if (runtime === ENGINE_ARTIFACT_RUNTIME_WORKER) return loadWorkerEngine(source);
   const module = { exports: {} as { run?: unknown } };
   const sandbox: Record<string, unknown> = {
     module,

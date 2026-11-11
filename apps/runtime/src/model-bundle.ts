@@ -616,6 +616,7 @@ export function executionProblems(execution: unknown): string[] {
 const ENGINE_ARTIFACT_RUNTIMES = new Set([
   "rarext.native-engine.node-cjs.v1",
   "rarext.gguf-engine.node-cjs.v1",
+  "rarext.wasm-engine.wasm.v1",
 ]);
 
 function engineArtifactProblems(value: unknown): string[] {

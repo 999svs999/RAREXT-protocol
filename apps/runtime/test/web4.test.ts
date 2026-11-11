@@ -70,7 +70,7 @@ import {
   hardwareFromNetwork,
   validateDeployment,
 } from "../src/manifest.ts";
-import { startProvider } from "../src/provider.ts";
+import { startProvider, traceFor } from "../src/provider.ts";
 import { replayEngineRun } from "../src/replay.ts";
 import {
   attestationBindsEnclaveKey,
@@ -95,6 +95,7 @@ import { attestationForReceipt } from "../src/certificates.ts";
 import { engineDescriptorFingerprint } from "../src/engine-pin.ts";
 import {
   ENGINE_ARTIFACT_RUNTIME_GGUF,
+  ENGINE_ARTIFACT_RUNTIME_WASM,
   buildEngineBundle,
   engineArtifactRef,
   fetchEngineArtifact,
@@ -104,7 +105,8 @@ import {
 } from "../src/engine-bundle.ts";
 import { canonicalDigest } from "../src/digest.ts";
 import { signImageManifest, verifyImageManifest } from "../src/image-manifest.ts";
-import { verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
+import { validDecodeTrace, verifyDeploymentBody, verifyRunBody } from "../src/transcript.ts";
+import { decodeTraceOf, tracesMatch } from "../src/determinism.ts";
 import { createVerifierServer, runSpecFromChallenge, verifierConfig } from "../src/verifier.ts";
 import type { EngineProbe, ModelRef, RunProviderAttestation } from "../src/types.ts";
 
@@ -6400,6 +6402,213 @@ test("a GGUF is served by RAREXT's own fetched engine, with no external engine",
         }),
       /needs a native engine artifact/,
     );
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+/**
+ * Assemble a minimal WebAssembly module that exports `memory` and
+ * `run(promptPtr, len, steps, seed) -> i32`, returning a pointer to `text`.
+ * This is a foreign engine BINARY, not a JS module: it proves the provider can
+ * run a non-RAREXT engine with no container runtime.
+ */
+function wasmEngineModule(text: string): Uint8Array {
+  const uleb = (value: number): number[] => {
+    const out: number[] = [];
+    let v = value;
+    let byte: number;
+    do {
+      byte = v & 0x7f;
+      v >>>= 7;
+      if (v !== 0) byte |= 0x80;
+      out.push(byte);
+    } while (v !== 0);
+    return out;
+  };
+  const utf8 = (value: string): number[] => Array.from(Buffer.from(value, "utf8"));
+  const section = (id: number, body: number[]): number[] => [id, ...uleb(body.length), ...body];
+  const dataOffset = 16;
+  const dataBytes = [...utf8(text), 0];
+  return Uint8Array.from([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    // type: (i32,i32,i32,i32) -> i32
+    ...section(1, [1, 0x60, 4, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7f]),
+    // function: one function of type 0
+    ...section(3, [1, 0]),
+    // memory: one page
+    ...section(5, [1, 0x00, 0x01]),
+    // exports: "memory" (mem 0) and "run" (func 0)
+    ...section(7, [
+      2,
+      ...uleb(6), ...utf8("memory"), 0x02, 0x00,
+      ...uleb(3), ...utf8("run"), 0x00, 0x00,
+    ]),
+    // code: return i32.const dataOffset
+    ...section(10, [1, ...uleb(4), 0x00, 0x41, ...uleb(dataOffset), 0x0b]),
+    // data: the result string at dataOffset
+    ...section(11, [1, 0x00, 0x41, ...uleb(dataOffset), 0x0b, ...uleb(dataBytes.length), ...dataBytes]),
+  ]);
+}
+
+test("a third-party WebAssembly engine runs with NO container runtime", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = Buffer.from(JSON.stringify({ kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] }));
+    const model: ModelRef = {
+      id: "wasm-served-model",
+      family: "wasm-echo",
+      parameters: "tiny",
+      quantization: "none",
+      format: "json",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+
+    // The engine artifact is a wasm BINARY, committed to RAREXT like any other.
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: wasmEngineModule("wasm engine online"),
+      name: "third-party-wasm-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_WASM,
+      chunkBytes: 256,
+    });
+    assert.deepEqual(verifyEngineBundle(engineBundle), []);
+    const uploadedEngine = await uploadEngineBundle({
+      registry: reg.base,
+      bundle: engineBundle,
+      chunks: engineChunks,
+    });
+
+    const execution: ExecutionRef = {
+      kind: "engine",
+      engine: "rarext",
+      engineModel: null,
+      artifact: engineArtifactRef(engineBundle, uploadedEngine.manifestHash),
+    };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 256 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "wasm-engine"),
+      port: 0,
+    });
+    const response = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: bundle.model.id, messages: [{ role: "user", content: "hi" }], max_tokens: 4 }),
+    });
+    const bodyText = await response.text();
+    assert.equal(response.status, 200, bodyText);
+    const json = JSON.parse(bodyText) as { choices?: Array<{ message?: { content?: string } }> };
+    assert.equal(
+      json.choices?.[0]?.message?.content,
+      "wasm engine online",
+      "the provider ran the third-party wasm engine in-process",
+    );
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("an engine that hides its tokens still commits a replayable trace, and a divergent one is refused", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = Buffer.from(JSON.stringify({ kind: "xorshift32", params: { a: 13, b: 17, c: 5 }, vocab: ["a", "b"] }));
+    const model: ModelRef = {
+      id: "wasm-output-trace",
+      family: "wasm-echo",
+      parameters: "tiny",
+      quantization: "none",
+      format: "json",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source: wasmEngineModule("wasm engine online"),
+      name: "hiding-wasm-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_WASM,
+      chunkBytes: 256,
+    });
+    const uploaded = await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    const execution: ExecutionRef = {
+      kind: "engine",
+      engine: "rarext",
+      engineModel: null,
+      artifact: engineArtifactRef(engineBundle, uploaded.manifestHash),
+    };
+    const built = buildModelBundle({ bytes, model, execution, chunkBytes: 256 });
+    await uploadBundle({ registry: reg.base, bundle: built.bundle, chunks: built.chunks });
+
+    provider = await startProvider({
+      bundle: built.bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "hiding-engine"),
+      port: 0,
+    });
+    const health = (await (await fetch(`${provider.url}/health`)).json()) as { engineFingerprint: string };
+    const request = {
+      model: built.bundle.model.id,
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 8,
+      temperature: 0,
+      seed: 7,
+    };
+    const response = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const json = (await response.json()) as Record<string, unknown>;
+    const trace = json.rarext_trace as { kind: string; outputDigest: string; digest: string } | undefined;
+
+    // The engine exposed no token ids, yet the run is still traceable: an output
+    // digest of the exact completion, accepted by the shared trace validator.
+    assert.equal(trace?.kind, "rarext.output-trace.v1");
+    assert.ok(typeof trace?.outputDigest === "string" && /^[0-9a-f]{64}$/.test(trace.outputDigest));
+    assert.equal(validDecodeTrace(json), true, "the output trace is a valid decode trace");
+    const decoded = decodeTraceOf(json);
+    assert.ok(decoded !== null);
+    assert.equal(decoded!.kind, "rarext.output-trace.v1");
+
+    // Two output traces match only when the completion digest matches.
+    const other = traceFor({ text: "something else", tokens: [] });
+    assert.equal(tracesMatch(decoded!, decodeTraceOf({ rarext_trace: { ...other, digest: canonicalDigest(other) } })!), false);
+
+    const body = {
+      replay: { request, api: "openai" as const },
+      response: { text: "wasm engine online", body: json },
+      engine: { fingerprint: health.engineFingerprint },
+    } as unknown as Parameters<typeof replayEngineRun>[0]["body"];
+
+    // A faithful replay re-runs the foreign engine and matches its output digest.
+    const good = await replayEngineRun({ body, endpoint: provider.url });
+    assert.equal(good.ok, true, good.reason ?? "");
+    assert.equal(good.traceMatches, true);
+
+    // A trace the re-execution does not reproduce is refused EVEN THOUGH the
+    // text still matches: bit-for-bit enforcement, not a text coincidence.
+    const diverged = {
+      ...body,
+      response: {
+        ...body.response,
+        body: { ...json, rarext_trace: { ...trace!, digest: "0".repeat(64) } },
+      },
+    } as unknown as Parameters<typeof replayEngineRun>[0]["body"];
+    const bad = await replayEngineRun({ body: diverged, endpoint: provider.url });
+    assert.equal(bad.reproduced, true, "the text still matches");
+    assert.equal(bad.traceMatches, false);
+    assert.equal(bad.ok, false);
+    assert.match(bad.reason ?? "", /trace diverged/);
   } finally {
     if (provider !== null) await provider.close();
     await reg.close();

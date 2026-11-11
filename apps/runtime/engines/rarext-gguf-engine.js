@@ -46,14 +46,24 @@
     return F16_TABLE[bits & 0xffff];
   }
 
-  /** bfloat16 is the top 16 bits of an IEEE-754 float32. */
+  /**
+   * bfloat16 is the top 16 bits of an IEEE-754 float32, so the conversion is a
+   * free bit shift. This used to recompute the value with Math.pow per element,
+   * which made a 16-bit-heavy model far too slow; a 64K lookup table built once
+   * (as `f16` already does) keeps the dot and dequant paths to one array read.
+   */
+  var BF16_TABLE = null;
   function bf16(bits) {
-    var sign = (bits & 0x8000) !== 0 ? -1 : 1;
-    var exponent = (bits >> 7) & 0xff;
-    var mantissa = bits & 0x7f;
-    if (exponent === 0) return sign * (mantissa / 128) * Math.pow(2, -126);
-    if (exponent === 255) return mantissa === 0 ? sign * Infinity : NaN;
-    return sign * (1 + mantissa / 128) * Math.pow(2, exponent - 127);
+    if (BF16_TABLE === null) {
+      BF16_TABLE = new Float32Array(65536);
+      var scratch = new Float32Array(1);
+      var u32 = new Uint32Array(scratch.buffer);
+      for (var i = 0; i < 65536; i += 1) {
+        u32[0] = i << 16;
+        BF16_TABLE[i] = scratch[0];
+      }
+    }
+    return BF16_TABLE[bits & 0xffff];
   }
 
   /** Q3_K stores 16 signed 6-bit scales packed into 12 bytes with two extra

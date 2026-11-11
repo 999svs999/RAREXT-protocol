@@ -69,6 +69,7 @@ import type { ExecutionRef, ModelBundle, ProviderCertificate } from "./model-bun
 import {
   ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
+  ENGINE_ARTIFACT_RUNTIME_WASM,
   buildEngineBundle,
   engineArtifactRef,
   uploadEngineBundle,
@@ -722,8 +723,8 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
   if (engineModuleFlag !== undefined || autoEngineModule !== undefined) {
     const runtimeFlag =
       autoEngineModule !== undefined ? "gguf" : (flag(values, "engine-runtime") ?? "native");
-    if (runtimeFlag !== "native" && runtimeFlag !== "gguf") {
-      throw new Error("--engine-runtime must be native or gguf");
+    if (runtimeFlag !== "native" && runtimeFlag !== "gguf" && runtimeFlag !== "wasm") {
+      throw new Error("--engine-runtime must be native, gguf or wasm");
     }
     const built = buildEngineBundle({
       source:
@@ -735,7 +736,11 @@ async function commandBundle(values: Record<string, unknown>): Promise<number> {
         (autoEngineModule !== undefined ? "rarext-gguf-engine" : "rarext-native-engine"),
       engineVersion: flag(values, "engine-version") ?? "1",
       runtime:
-        runtimeFlag === "gguf" ? ENGINE_ARTIFACT_RUNTIME_GGUF : ENGINE_ARTIFACT_RUNTIME,
+        runtimeFlag === "gguf"
+          ? ENGINE_ARTIFACT_RUNTIME_GGUF
+          : runtimeFlag === "wasm"
+            ? ENGINE_ARTIFACT_RUNTIME_WASM
+            : ENGINE_ARTIFACT_RUNTIME,
       chunkBytes,
     });
     const engineErrors = verifyEngineBundle(built.bundle);

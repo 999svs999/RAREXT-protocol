@@ -40,8 +40,16 @@ different bundle and is refused. `provider --engine-bundle <manifest>` remains
 available to pin an engine explicitly. The artifact is a JavaScript engine module
 evaluated in a `node:vm` context with no `require` and no filesystem.
 
-Two runtimes ship in this repository:
+Three runtimes ship in this repository:
 
+- `rarext.wasm-engine.wasm.v1` instantiates a **third-party engine shipped as a
+  WebAssembly binary** inside the provider process with an *empty import object* —
+  no OS process, no syscall surface, no container runtime. The module exports
+  `memory` and `run(promptPtr, len, steps, seed) -> i32` (a NUL-terminated UTF-8
+  result), plus optional `alloc`/`dealloc`/`load` so the committed model bytes can
+  be handed in; `scripts/make-wasm-engine.mjs` emits a working example. The same
+  artifact digest and engine fingerprint pin it, so a foreign binary is committed,
+  fetched, verified and replayed like any other engine.
 - `rarext.native-engine.node-cjs.v1` runs the committed xorshift32 model.
 - `rarext.gguf-engine.node-cjs.v1` is **RAREXT's own GGUF transformer**
   (`apps/runtime/engines/rarext-gguf-engine.js`). It parses the GGUF header, KV,
@@ -1069,9 +1077,24 @@ DECODE, not just the text. The provider records the token ids it emitted as a
 "rarext_trace": { "kind": "rarext.decode-trace.v1", "tokens": [3, 7, 1, …], "digest": "…" }
 ```
 
+An engine that exposes no token ids (a **wasm or custom engine that returns only
+text**) is not exempt: the provider records a `rarext.output-trace.v1` carrying a
+digest of the exact completion text, so every engine commits *something* a replay
+can check bit-for-bit:
+
+```json
+"rarext_trace": { "kind": "rarext.output-trace.v1", "outputDigest": "…", "digest": "…" }
+```
+
+Both kinds are validated by one shared `validDecodeTrace`/`decodeTraceOf`, so a
+`--require-trace` deployment, the gateway, and the verifier agree on what a trace
+is, and `tracesMatch` compares token ids for a decode trace or the output digest
+for an output trace.
+
 The `digest` binds the tokens to the response, so the verifier recomputes it —
 editing the tokens is caught in the transcript. A replay re-runs, digests its own
-token ids, and **refuses when the trace diverges** from the committed one, even if
+token ids (or output), and **refuses when the trace diverges** from the committed
+one, even if
 the text happened to match: the point is that the same bytes were decoded, not
 that a similar string came out. `replay` reports `traceMatches`, and a divergence
 ends the replay by name.
@@ -1313,13 +1336,15 @@ why a large file is sharded rather than sent as one object.
   every run must then carry an independently recorded witness — a second run from a
   provider outside the run's own set — whose decode trace matches token-for-token,
   signed by that provider, so the claim rests on a second signature rather than one.
-  What is still not proven is that the engine's arithmetic IS the model's — an
-  arbitrary GGUF is not reproduced bit-for-bit by the protocol alone, two co-located
-  witness providers are two keys and not two machines, and an engine that exposes
-  neither tokens nor logprobs can only record a trace if `--engine-logprobs` is set
-  and the engine honors it. For such an engine the protocol pins the engine
-  (`engine.fingerprint`) and refuses a replay whose provider runs a different
-  engine: a checked re-execution under a named engine, not a proof of determinism.
+  An engine that exposes neither tokens nor logprobs is not traceable-free: it
+  records a `rarext.output-trace.v1` (a digest of the exact completion) by default,
+  and a replay whose output diverges is refused bit-for-bit — a text coincidence
+  does not pass. What is still not proven is that the engine's arithmetic IS the
+  model's: an arbitrary GGUF is not *independently* reproduced by the protocol
+  alone, and two co-located witness providers are two keys and not two machines.
+  For such an engine the protocol pins the engine (`engine.fingerprint`) and
+  refuses a replay whose provider runs a different engine: a checked re-execution
+  under a named engine, not an independent proof of determinism.
 - **Credits move on the ledger, and can leave it against an external
   reference — but the protocol does not move real value.** A committed bounty is
   recorded and settled in RAREXT's credit ledger; the run commits who was paid, the
@@ -1337,18 +1362,20 @@ why a large file is sharded rather than sent as one object.
   protocol can do is hand over cash or prove the external ledger is honest: an
   inclusion proof shows the movement is in a signed STATE, and the ledger's key is
   the receipt of that state, not the funds.
-- **The engine can be a RAREXT artifact, and RAREXT now carries its own GGUF
-  engine — but a THIRD-PARTY engine IMAGE still needs a container runtime.** The
-  engine is sharded into RAREXT (`rarext.engine-bundle.v1`), the provider fetches
-  and verifies it, runs the fetched engine, and folds the artifact digest into the
-  engine fingerprint — so the engine is a RAREXT artifact, not the box's. The
-  GGUF runtime (`rarext.gguf-engine.node-cjs.v1`) is RAREXT's own transformer, so
+- **The engine can be a RAREXT artifact, a third-party WASM binary, or RAREXT's
+  own GGUF engine — no container runtime is needed for any of them.** The engine
+  is sharded into RAREXT (`rarext.engine-bundle.v1`), the provider fetches and
+  verifies it, runs the fetched engine, and folds the artifact digest into the
+  engine fingerprint — so the engine is a RAREXT artifact, not the box's. A
+  foreign engine compiled to WebAssembly runs in-process under the
+  `rarext.wasm-engine.wasm.v1` runtime with an empty import object; a JS engine
+  module runs in a `node:vm` context with no `require` and no filesystem; and the
+  GGUF runtime (`rarext.gguf-engine.node-cjs.v1`) is RAREXT's own transformer. So
   a qwen2 GGUF is served with no Ollama, llama.cpp, native addon, or container,
-  and no engine endpoint: weights and engine both come from RAREXT. What remains
-  outside this repository is carrying a **third-party engine binary/image** as the
-  artifact: executing that safely needs a container runtime, which this
-  environment does not provide, so the provider refuses to run a JS artifact as
-  such an engine rather than serve under a false identity. RAREXT's own engine now
+  and no engine endpoint: weights and engine both come from RAREXT. What is still
+  outside this repository is a *native ELF/Mach-O* engine image, which would need
+  an OS sandbox this environment does not provide; the supported non-container
+  path for a foreign binary is WebAssembly. RAREXT's own engine now
   covers qwen2, llama/mistral, **mixtral** (top-k expert routing over a stacked
   expert bank) and **gemma** (GeGLU, norm weights biased by +1, and the
   `sqrt(n_embd)` embedding scale), **phi3** (partial NeoX rotary, fused QKV,
@@ -1368,6 +1395,10 @@ why a large file is sharded rather than sent as one object.
   scales and 8 six-bit mins packed the way ggml reads them). A 2-D weight matrix
   is quantized when its columns span whole blocks — 32 values for Q4_0/Q8_0/IQ4_NL
   and 256 for Q4_K. Under `Q4_K`, a weight row too narrow for a 256 super-block
-  falls back to `Q8_0` (like a GGUF "K_M" mix) instead of staying 16-bit, and
+  falls back to `Q8_0` (a GGUF "K_M" mix) for a smaller container, and
   norms/biases keep the checkpoint's F16/BF16/F32 dtype, so the container always
-  decodes. The compute is the provider's.
+  decodes. Sixteen-bit weights are not a slow path: the engine converts F16 and
+  BF16 through precomputed 64K tables (BF16 is just the top half of a float32),
+  so a 16-bit-heavy container fits the gateway's upstream window without any
+  fallback — a 0.5 B model runs ~3 s/token, not ~86 s. The compute is the
+  provider's.

@@ -29,6 +29,8 @@ import { engineDescriptorFingerprint } from "./engine-pin.ts";
 import {
   ENGINE_ARTIFACT_RUNTIME,
   ENGINE_ARTIFACT_RUNTIME_GGUF,
+  ENGINE_ARTIFACT_RUNTIME_WASM,
+  ENGINE_ARTIFACT_RUNTIME_WORKER,
   engineBundleMatchesRef,
   fetchEngineArtifact,
   fetchEngineBundleManifest,
@@ -283,7 +285,22 @@ export function runNativeModel(
  */
 export type TraceData =
   | { kind: "rarext.decode-trace.v1"; tokens: number[] }
-  | { kind: "rarext.judgment.v1"; tokens: string[]; logprobs: number[] };
+  | { kind: "rarext.judgment.v1"; tokens: string[]; logprobs: number[] }
+  | { kind: "rarext.output-trace.v1"; outputDigest: string };
+
+/**
+ * EVERY engine records a replayable trace. An engine that exposes token ids gets
+ * a decode trace; an engine that hides them (a wasm or custom engine returning
+ * only text) still gets an output trace: a digest of the exact completion text,
+ * so a replay that produces a different string is refused bit-for-bit rather than
+ * passing on a text coincidence.
+ */
+export function traceFor(result: { text: string; tokens: unknown }): TraceData {
+  if (Array.isArray(result.tokens) && result.tokens.length > 0) {
+    return { kind: "rarext.decode-trace.v1", tokens: result.tokens as number[] };
+  }
+  return { kind: "rarext.output-trace.v1", outputDigest: canonicalDigest({ text: result.text }) };
+}
 
 /**
  * The decode trace a run records: the trace fields plus a digest over them. A
@@ -789,12 +806,23 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     );
   }
 
+  // A third-party engine that needs no container: a WebAssembly module
+  // instantiated in-process, or a native (JS) engine program run on a sandboxed
+  // worker thread.
+  const ownSandbox =
+    options.bundle.execution.kind === "engine" &&
+    engineBundle !== null &&
+    (engineBundle.runtime === ENGINE_ARTIFACT_RUNTIME_WASM ||
+      engineBundle.runtime === ENGINE_ARTIFACT_RUNTIME_WORKER);
+
   let loadedEngine: NativeEngine | null = null;
   if (engineBundle !== null) {
     if (options.bundle.execution.kind === "native") {
       if (engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME) {
         throw new Error("the native class needs a native engine artifact");
       }
+    } else if (ownSandbox) {
+      // Any wasm module implementing the ABI is accepted.
     } else if (ownGguf) {
       if (engineBundle.runtime !== ENGINE_ARTIFACT_RUNTIME_GGUF) {
         throw new Error("the RAREXT GGUF class needs a GGUF engine artifact");
@@ -805,7 +833,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       );
     }
     const source = await fetchEngineArtifact({ registries, bundle: engineBundle });
-    loadedEngine = loadEngine(source);
+    loadedEngine = loadEngine(source, engineBundle.runtime);
     log(
       `loaded engine ${engineBundle.name}@${engineBundle.engineVersion} ` +
         `(${engineBundle.artifactDigest.slice(0, 18)}…) from ${engineBundle.shards.length} RAREXT shard(s)`,
@@ -815,8 +843,15 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   let native: XorshiftModel | null = null;
   let engineModel: string | null = null;
   let gguf: GgufModel | HfModel | null = null;
+  let wasmModel: unknown = null;
   if (options.bundle.execution.kind === "native") {
     native = parseNativeModel(bytes);
+  } else if (ownSandbox) {
+    if (loadedEngine === null) {
+      throw new Error("a wasm engine needs its committed artifact");
+    }
+    // The committed model bytes go to the wasm engine's optional load() hook.
+    wasmModel = { kind: "gguf", bytes };
   } else if (ownGguf) {
     if (loadedEngine === null) {
       throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");
@@ -984,7 +1019,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       // The engine is the RAREXT artifact when one was committed: the provider
       // runs what it fetched and verified, not a local implementation.
       const result = loadedEngine !== null
-        ? loadedEngine.run(native, { prompt, steps, seed })
+        ? await loadedEngine.run(native, { prompt, steps, seed })
         : runNativeModel(native, { prompt, steps, seed });
       if (
         result === null ||
@@ -1001,12 +1036,12 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         text: result.text,
         seed: result.seed,
         steps: result.steps,
-        trace: { kind: "rarext.decode-trace.v1", tokens: result.tokens },
+        trace: traceFor(result),
       };
     }
 
-    if (gguf !== null) {
-      if (loadedEngine === null) throw new Error("the RAREXT GGUF engine was not loaded");
+    if (gguf !== null || wasmModel !== null) {
+      if (loadedEngine === null) throw new Error("the RAREXT engine was not loaded");
       const seed =
         typeof body.seed === "number" && Number.isSafeInteger(body.seed)
           ? (body.seed as number)
@@ -1018,7 +1053,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           : 0;
       // The provider runs the engine it fetched from RAREXT over the weights it
       // fetched from RAREXT. No Ollama, llama.cpp, native addon, or container.
-      const result = loadedEngine.run(gguf, { prompt, steps, seed, temperature });
+      const result = await loadedEngine.run(gguf ?? wasmModel, { prompt, steps, seed, temperature });
       if (
         result === null ||
         typeof result !== "object" ||
@@ -1028,13 +1063,13 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         !Array.isArray(result.tokens) ||
         !result.tokens.every((token) => Number.isSafeInteger(token))
       ) {
-        throw new Error("the RAREXT GGUF engine returned a malformed result");
+        throw new Error("the RAREXT engine returned a malformed result");
       }
       return {
         text: result.text,
         seed: result.seed,
         steps: result.steps,
-        trace: { kind: "rarext.decode-trace.v1", tokens: result.tokens },
+        trace: traceFor(result),
       };
     }
 
