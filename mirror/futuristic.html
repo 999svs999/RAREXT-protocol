@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>f37691d7f3eae989d8562a2bacdf796d71096dfca25875cf2d982853055cd465</div>
+        <div class="address"><b>rarext:futuristic@</b>bfd51331d0d7b8156433376a4b3c40f09f49c69b25dabe84db11fb921ed8276f</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -74,7 +74,7 @@
     </article>
       </section>
 
-      <h2>Published record — 15 runs</h2>
+      <h2>Published record — 16 runs</h2>
       <section id="gallery">
     <article class="card">
       <h3>FUTURISTIC 20260821T133842-3ea13d</h3>
@@ -243,11 +243,20 @@
         <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/archive/20261111T123054-01a2a8.mp4" rel="noopener">R2 ▸</a>
       </div>
     </article>
+    <article class="card">
+      <h3>Robots and AI working alongside people — 12 Nov 06:26 #Shorts</h3>
+      <p class="prompt">Robots and AI working alongside people</p>
+      <p class="meta">run 20261112T062615-1c6b46 · agnes-video-2.5-flash · 5.04s · 1 platform</p>
+      <div class="chips">
+        <a class="yt" href="https://youtu.be/STChBQogs7Q" rel="noopener">YouTube ▸</a>
+        <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/archive/20261112T062615-1c6b46.mp4" rel="noopener">R2 ▸</a>
+      </div>
+    </article>
       </section>
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=f37691d7f3eae989d8562a2bacdf796d71096dfca25875cf2d982853055cd465">run the pinned verifier</a> ·
+        <a href="./verify.html?root=bfd51331d0d7b8156433376a4b3c40f09f49c69b25dabe84db11fb921ed8276f">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -261,7 +270,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · f37691d7f3ea…";
+            status.textContent = "ROOT VERIFIED · bfd51331d0d7…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
