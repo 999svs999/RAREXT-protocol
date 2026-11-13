@@ -6671,6 +6671,82 @@ test("an OpenAI request controls decoding end to end: temperature, top_k, stop, 
       legacyJson.choices[0]!.text ?? "",
       "streamed text concatenates to the non-stream completion",
     );
+
+    // logit_bias and min_p reach the engine over HTTP.
+    const biasedRun = await ask({ temperature: 0, logit_bias: { "3": 100 } });
+    assert.equal(biasedRun.rarext_trace?.tokens?.[0], 3, "logit_bias forced the first token");
+    const minPRun = await ask({ temperature: 1, seed: 9, min_p: 0.5, logprobs: true, top_logprobs: 1 });
+    const minPEntries = minPRun.choices[0]!.logprobs!.content;
+    assert.equal(minPEntries.length, minPRun.rarext_trace?.tokens?.length);
+    for (const entry of minPEntries) {
+      const ratio = Math.exp(entry.logprob - entry.top_logprobs[0]!.logprob);
+      assert.ok(ratio >= 0.5 - 1e-9, `min_p kept a token below the floor (${ratio})`);
+    }
+
+    // n: one choice per requested index, each with its own trace and seed.
+    type MultiResponse = {
+      choices: Array<{
+        index: number;
+        message: { content: string };
+        finish_reason: string;
+        rarext_trace?: { kind?: string; tokens?: number[] };
+      }>;
+      usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    };
+    const askMulti = async () =>
+      (await (
+        await fetch(`${provider!.url}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: bundle.model.id,
+            messages: [{ role: "user", content: "ab" }],
+            max_tokens: 4,
+            temperature: 0.9,
+            top_k: 8,
+            n: 3,
+            seed: 12,
+          }),
+        })
+      ).json()) as MultiResponse;
+    const multi = await askMulti();
+    assert.deepEqual(multi.choices.map((choice) => choice.index), [0, 1, 2]);
+    assert.ok(multi.choices.every((choice) => choice.finish_reason === "length"));
+    assert.ok(
+      multi.choices.every(
+        (choice) => choice.rarext_trace?.kind === "rarext.decode-trace.v1" && choice.rarext_trace.tokens?.length === 4,
+      ),
+      "every choice carries its own decode trace",
+    );
+    assert.equal(multi.usage.completion_tokens, 12, "usage sums the choices");
+    assert.equal(multi.usage.total_tokens, multi.usage.prompt_tokens + 12);
+    const multiAgain = await askMulti();
+    assert.deepEqual(
+      multiAgain.choices.map((choice) => choice.message.content),
+      multi.choices.map((choice) => choice.message.content),
+      "each choice is reproducible from its own seed",
+    );
+
+    // stream_options.include_usage: a final usage chunk with no choices.
+    const usageStream = await fetch(`${provider!.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "ab" }],
+        max_tokens: 3,
+        temperature: 0,
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
+    });
+    const usageChunks = (await events(usageStream)) as Array<{
+      choices: unknown[];
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    }>;
+    const usageChunk = usageChunks.at(-1)!;
+    assert.equal(usageChunk.choices.length, 0, "the usage chunk carries no choices");
+    assert.deepEqual(usageChunk.usage, { prompt_tokens: 1, completion_tokens: 3, total_tokens: 4 });
   } finally {
     if (provider !== null) await provider.close();
     await reg.close();
@@ -8362,6 +8438,9 @@ test("OpenAI decoding fields are parsed with defaults, clamps, and stop truncati
     temperature: 0,
     topK: 0,
     topP: 1,
+    minP: 0,
+    typicalP: 1,
+    logitBias: [],
     repetitionPenalty: 1,
     presencePenalty: 0,
     frequencyPenalty: 0,
@@ -8399,6 +8478,20 @@ test("OpenAI decoding fields are parsed with defaults, clamps, and stop truncati
     [3, 5],
   );
   assert.equal(decodingParams({ logprobs: true, top_logprobs: 99 }).topLogprobs, 20);
+
+  // logit_bias: OpenAI's string-keyed map, clamped and filtered.
+  assert.deepEqual(
+    decodingParams({ logit_bias: { "3": 100, "-1": 5, x: 2, "4": "no" } }).logitBias,
+    [[3, 100]],
+    "only non-negative integer ids with numeric values are honoured",
+  );
+  assert.deepEqual(decodingParams({ logit_bias: { "0": 1000, "1": -1000 } }).logitBias, [
+    [0, 100],
+    [1, -100],
+  ]);
+  assert.equal(decodingParams({ min_p: -1 }).minP, 0);
+  assert.equal(decodingParams({ min_p: 2 }).minP, 1);
+  assert.equal(decodingParams({ typical_p: 0.5 }).typicalP, 0.5);
 
   // A hostile or sloppy client cannot make a run unbounded or non-finite.
   assert.equal(decodingParams({ temperature: -5 }).temperature, 0);
@@ -8662,4 +8755,184 @@ test("the engine reports its own logprobs, aligned with the tokens it emitted", 
     topLogprobs: 4,
   });
   assert.deepEqual(again.logprobs, run.logprobs);
+});
+
+test("decoding controls: logit bias, min-p, and typical-p all shape the sampler", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama" })) };
+
+  // logit_bias: a large boost makes a token certain, and the reported logprob
+  // agrees because the bias is applied to the logits the sampler used.
+  const forced = engine.run(model, {
+    prompt: "ab",
+    steps: 1,
+    temperature: 0,
+    seed: 0,
+    logitBias: [[3, 1000]],
+    logprobs: true,
+    topLogprobs: 1,
+  });
+  assert.equal(forced.tokens[0], 3);
+  assert.ok(
+    forced.logprobs![0]!.logprob > -1e-9,
+    `the biased token is near-certain (${forced.logprobs![0]!.logprob})`,
+  );
+  const removed = engine.run(model, { prompt: "ab", steps: 1, temperature: 0, seed: 0, logitBias: [[3, -1000]] });
+  assert.notEqual(removed.tokens[0], 3, "a large negative bias removes the token");
+  // An out-of-vocabulary id is ignored, not fatal.
+  const ignored = engine.run(model, { prompt: "ab", steps: 3, temperature: 0, seed: 0, logitBias: [[999999, 5]] });
+  assert.deepEqual(ignored.tokens, engine.run(model, { prompt: "ab", steps: 3, temperature: 0, seed: 0 }).tokens);
+
+  // min-p is an invariant of the draw: every chosen token keeps at least `minP`
+  // of the best token's probability.
+  const minP = 0.5;
+  const sampled = engine.run(model, {
+    prompt: "ab",
+    steps: 12,
+    temperature: 1,
+    seed: 9,
+    minP,
+    logprobs: true,
+    topLogprobs: 1,
+  });
+  assert.equal(sampled.logprobs!.length, sampled.tokens.length);
+  for (const entry of sampled.logprobs!) {
+    const ratio = Math.exp(entry.logprob - entry.top[0]!.logprob);
+    assert.ok(ratio >= minP - 1e-9, `min-p kept a token below the floor (${ratio} < ${minP})`);
+  }
+
+  // typical-p restricts the draw and stays seed-deterministic.
+  const plain = engine.run(model, { prompt: "ab", steps: 12, temperature: 1, seed: 9 });
+  const typical = engine.run(model, { prompt: "ab", steps: 12, temperature: 1, seed: 9, typicalP: 0.4 });
+  assert.notDeepEqual(typical.tokens, plain.tokens, "typical-p changed the sampled sequence");
+  const typicalAgain = engine.run(model, { prompt: "ab", steps: 12, temperature: 1, seed: 9, typicalP: 0.4 });
+  assert.deepEqual(typicalAgain.tokens, typical.tokens, "typical-p is seed-deterministic");
+});
+
+test("the embeddings endpoint returns deterministic, normalized vectors from the verified weights", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-embed",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "embeddings"),
+      port: 0,
+      engineBundle,
+    });
+
+    type EmbeddingResponse = {
+      object: string;
+      data: Array<{ object: string; index: number; embedding: number[] | string }>;
+      model: string;
+      usage: { prompt_tokens: number; total_tokens: number };
+    };
+    const embed = async (input: unknown, extra: Record<string, unknown> = {}): Promise<EmbeddingResponse> => {
+      const response = await fetch(`${provider!.url}/v1/embeddings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: bundle.model.id, input, ...extra }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as EmbeddingResponse;
+    };
+
+    const one = await embed("ab");
+    assert.equal(one.object, "list");
+    assert.equal(one.data.length, 1);
+    assert.equal(one.data[0]!.object, "embedding");
+    assert.equal(one.data[0]!.index, 0);
+    assert.equal(one.model, bundle.model.id);
+    assert.ok(one.usage.prompt_tokens > 0 && one.usage.total_tokens === one.usage.prompt_tokens);
+    const vector = one.data[0]!.embedding as number[];
+    assert.equal(vector.length, 8, "the dimension is the model's n_embd");
+    const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+    assert.ok(Math.abs(norm - 1) < 1e-5, `the vector is L2-normalized (norm=${norm})`);
+
+    // Deterministic across requests and across processes: no RNG is involved.
+    const again = await embed("ab");
+    assert.deepEqual(again.data[0]!.embedding, vector, "the same input gives the same vector");
+
+    // The vector is exactly the normalized mean of the token embedding rows,
+    // recomputed independently through the engine's own dequantizer.
+    const engine = loadEngine(source);
+    const engineModel = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+    const ids = engine.encode!(engineModel, "ab");
+    const rows = ids.map((id) =>
+      Array.from(engine.dequantTensor!(engineModel, "token_embd.weight", id)),
+    );
+    const mean = rows[0]!.map(
+      (_, column) => rows.reduce((sum, row) => sum + row[column]!, 0) / rows.length,
+    );
+    const meanNorm = Math.sqrt(mean.reduce((sum, value) => sum + value * value, 0));
+    vector.forEach((value, column) => {
+      assert.ok(
+        Math.abs(value - mean[column]! / meanNorm) < 1e-6,
+        `dimension ${column} is the normalized mean of the token rows`,
+      );
+    });
+
+    // An array input yields one vector per entry, indexed in order, and
+    // different text gives a different vector.
+    const many = await embed(["a", "b"]);
+    assert.equal(many.data.length, 2);
+    assert.deepEqual(many.data.map((entry) => entry.index), [0, 1]);
+    const single = await embed("a");
+    assert.equal(
+      many.usage.prompt_tokens,
+      2 * single.usage.prompt_tokens,
+      "usage sums the tokens of every input",
+    );
+    assert.notDeepEqual(many.data[0]!.embedding, many.data[1]!.embedding);
+
+    // Token ids are accepted and agree with the text form.
+    const byIds = await embed(ids);
+    assert.deepEqual(byIds.data[0]!.embedding, vector);
+
+    // base64 encoding_format decodes to the same floats.
+    const base64 = await embed("ab", { encoding_format: "base64" });
+    const raw = Buffer.from(base64.data[0]!.embedding as string, "base64");
+    const decoded = Array.from(
+      new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)),
+    );
+    decoded.forEach((value, column) => {
+      assert.ok(Math.abs(value - vector[column]!) < 1e-9, `base64 dimension ${column}`);
+    });
+
+    // Malformed input is refused, not silently embedded.
+    const bad = await fetch(`${provider.url}/v1/embeddings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: bundle.model.id, input: { not: "a string" } }),
+    });
+    assert.equal(bad.status, 400);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
 });

@@ -256,6 +256,12 @@ export interface DecodingParams {
   temperature: number;
   topK: number;
   topP: number;
+  /** Drop tokens below this fraction of the best token's probability (0 = off). */
+  minP: number;
+  /** Locally-typical mass to keep (1 = off). */
+  typicalP: number;
+  /** Additive per-token bias as [tokenId, bias] pairs, from OpenAI's logit_bias. */
+  logitBias: Array<[number, number]>;
   repetitionPenalty: number;
   presencePenalty: number;
   frequencyPenalty: number;
@@ -264,6 +270,26 @@ export interface DecodingParams {
   logprobs: boolean;
   /** How many alternatives to include per token (0-20). */
   topLogprobs: number;
+}
+
+/**
+ * OpenAI's `logit_bias` is an object keyed by token id string. A token id must
+ * be a non-negative safe integer, the bias a finite number clamped to
+ * [-100, 100], and at most 1024 entries are honoured — a hostile body cannot
+ * grow the work per token without bound or reach a token that does not exist.
+ */
+function parseLogitBias(raw: unknown): Array<[number, number]> {
+  if (!isRecord(raw)) return [];
+  const out: Array<[number, number]> = [];
+  for (const [key, value] of Object.entries(raw)) {
+    if (out.length >= 1024) break;
+    if (!/^\d+$/.test(key)) continue;
+    const id = Number(key);
+    if (!Number.isSafeInteger(id)) continue;
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    out.push([id, Math.min(100, Math.max(-100, value))]);
+  }
+  return out;
 }
 
 /**
@@ -291,6 +317,9 @@ export function decodingParams(body: Record<string, unknown>): DecodingParams {
     temperature: Math.max(0, num(body.temperature, 0)),
     topK: rawTopK > 0 ? Math.min(4096, Math.floor(rawTopK)) : 0,
     topP: Math.min(1, Math.max(0, num(body.top_p, 1))),
+    minP: Math.min(1, Math.max(0, num(body.min_p, 0))),
+    typicalP: Math.min(1, Math.max(0, num(body.typical_p, 1))),
+    logitBias: parseLogitBias(body.logit_bias),
     repetitionPenalty: Math.max(0.01, num(body.repetition_penalty, 1)),
     presencePenalty: num(body.presence_penalty, 0),
     frequencyPenalty: num(body.frequency_penalty, 0),
@@ -560,6 +589,49 @@ function completionLogprobs(result: { logprobs?: RunLogprob[] }): Record<string,
       top_logprobs: topLogprobs,
     },
   };
+}
+
+/** How many completions the request asks for (1-8; `n` is capped). */
+function requestedChoices(body: Record<string, unknown>): number {
+  const raw = body.n;
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? Math.min(8, raw) : 1;
+}
+
+/** Whether a streaming request asked for a final usage chunk. */
+function wantsStreamUsage(body: Record<string, unknown>): boolean {
+  return body.stream === true && isRecord(body.stream_options) && body.stream_options.include_usage === true;
+}
+
+function promptTokenCount(body: Record<string, unknown>): number {
+  return lastUserText(body).split(/\s+/).filter(Boolean).length;
+}
+
+/** Aggregate usage across choices, in the OpenAI chat shape. */
+function fixedUsage(
+  promptTokens: number,
+  results: Array<{ steps: number }>,
+): { prompt_tokens: number; completion_tokens: number; total_tokens: number } {
+  const completionTokens = results.reduce((total, choice) => total + choice.steps, 0);
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+  };
+}
+
+/**
+ * The body for choice `index`. With `n > 1` every choice gets its own seed, so
+ * the choices differ when sampling and remain individually reproducible; the
+ * base seed is the one the client sent, or the prompt-derived default the native
+ * model uses.
+ */
+function choiceBody(body: Record<string, unknown>, index: number, n: number): Record<string, unknown> {
+  if (n === 1) return body;
+  const base =
+    typeof body.seed === "number" && Number.isSafeInteger(body.seed)
+      ? body.seed >>> 0
+      : parseInt(sha256Hex(lastUserText(body)).slice(0, 8), 16) >>> 0;
+  return { ...body, seed: (base + index) >>> 0 };
 }
 
 function longestToken(model: XorshiftModel): number {
@@ -1353,6 +1425,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             temperature: decoding.temperature,
             topK: decoding.topK,
             topP: decoding.topP,
+            minP: decoding.minP,
+            typicalP: decoding.typicalP,
+            logitBias: decoding.logitBias,
             repetitionPenalty: decoding.repetitionPenalty,
             presencePenalty: decoding.presencePenalty,
             frequencyPenalty: decoding.frequencyPenalty,
@@ -1422,6 +1497,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         temperature: decoding.temperature,
         topK: decoding.topK,
         topP: decoding.topP,
+        minP: decoding.minP,
+        typicalP: decoding.typicalP,
+        logitBias: decoding.logitBias,
         repetitionPenalty: decoding.repetitionPenalty,
         presencePenalty: decoding.presencePenalty,
         frequencyPenalty: decoding.frequencyPenalty,
@@ -1620,6 +1698,109 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/embeddings") {
+        const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
+        const modelId = options.bundle.model.id;
+
+        if (loadedEngine === null || typeof loadedEngine.embed !== "function") {
+          sendJson(response, 400, {
+            error: "this deployment's engine exposes no embedding matrix",
+          });
+          return;
+        }
+        // The engine reads the token embedding matrix from the same verified
+        // bytes it serves completions from; there is no second model.
+        const embeddingModel = gguf ?? wasmModel ?? native;
+        if (embeddingModel === null) {
+          sendJson(response, 400, { error: "no native model is loaded for embeddings" });
+          return;
+        }
+
+        // OpenAI accepts a string, an array of strings, a token-id array, an
+        // array of token-id arrays, and an array of token counts.
+        const raw = body.input;
+        const inputs: Array<{ text?: string; ids?: number[] }> = [];
+        const asIds = (value: unknown): number[] | null =>
+          Array.isArray(value) && value.length > 0 && value.every((id) => Number.isSafeInteger(id))
+            ? (value as number[])
+            : null;
+        if (typeof raw === "string") {
+          inputs.push({ text: raw });
+        } else if (Array.isArray(raw)) {
+          const single = asIds(raw);
+          if (single !== null) {
+            inputs.push({ ids: single });
+          } else {
+            for (const entry of raw) {
+              if (typeof entry === "string") {
+                inputs.push({ text: entry });
+              } else {
+                const ids = asIds(entry);
+                if (ids === null) {
+                  sendJson(response, 400, {
+                    error: "input must be a string, an array of strings, or token id arrays",
+                  });
+                  return;
+                }
+                inputs.push({ ids });
+              }
+            }
+          }
+        } else {
+          sendJson(response, 400, {
+            error: "input must be a string, an array of strings, or token id arrays",
+          });
+          return;
+        }
+        if (inputs.length === 0) {
+          sendJson(response, 400, { error: "input must not be empty" });
+          return;
+        }
+
+        let promptTokens = 0;
+        const vectors: number[][] = [];
+        try {
+          for (const entry of inputs) {
+            const result = loadedEngine.embed.call(loadedEngine, embeddingModel, entry);
+            if (
+              result === null ||
+              typeof result !== "object" ||
+              !Array.isArray(result.embedding) ||
+              !result.embedding.every((value) => typeof value === "number" && Number.isFinite(value))
+            ) {
+              throw new Error("the engine returned a malformed embedding");
+            }
+            vectors.push(result.embedding);
+            promptTokens += Number.isSafeInteger(result.tokens) ? result.tokens : 0;
+          }
+        } catch (error) {
+          sendJson(response, 400, {
+            error: error instanceof Error ? error.message : "embedding failed",
+          });
+          return;
+        }
+
+        const encodeBase64 = (vector: number[]): string =>
+          Buffer.from(Float32Array.from(vector).buffer).toString("base64");
+        const asBase64 = body.encoding_format === "base64";
+        const payload = {
+          object: "list",
+          data: vectors.map((vector, index) => ({
+            object: "embedding",
+            index,
+            embedding: asBase64 ? encodeBase64(vector) : vector.map((value) => value),
+          })),
+          model: modelId,
+          usage: { prompt_tokens: promptTokens, total_tokens: promptTokens },
+          // The vectors are recomputable: same committed bytes, same input,
+          // same numbers. The trace digest binds the response to the model.
+          rarext_bundle: options.bundle.digest,
+        };
+        response.setHeader("x-rarext-receipt", receiptHeader(body, payload));
+        sendJson(response, 200, payload);
+        return;
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
         const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
         const modelId = options.bundle.model.id;
@@ -1675,60 +1856,88 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           return;
         }
 
-        const result = await complete(body);
+        const n = requestedChoices(body);
+        const results: Array<Awaited<ReturnType<typeof complete>>> = [];
+        for (let index = 0; index < n; index += 1) {
+          results.push(await complete(choiceBody(body, index, n)));
+        }
+        const result = results[0]!;
         const created = Math.floor(Date.now() / 1000);
+        const usage = fixedUsage(promptTokenCount(body), results);
 
         if (body.stream === true) {
-          const deltas = result.deltas ?? (result.text === "" ? [] : [result.text]);
-          const id = `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`;
-          const chunks: unknown[] = deltas.map((delta, index) => ({
-            id,
-            object: "chat.completion.chunk",
-            created,
-            model: modelId,
-            choices: [
-              {
-                index: 0,
-                delta: { ...(index === 0 ? { role: "assistant" } : {}), content: delta },
-                finish_reason: null,
-                ...chatChunkLogprobs(result, index, deltas.length),
-              },
-            ],
-          }));
-          // The final chunk carries the truth about how the run ended; the
-          // content chunks always say `null`.
-          chunks.push({
-            id: "chatcmpl-final",
-            object: "chat.completion.chunk",
-            created,
-            model: modelId,
-            choices: [{ index: 0, delta: {}, finish_reason: result.finishReason }],
+          const chunks: unknown[] = [];
+          results.forEach((choice, index) => {
+            const deltas = choice.deltas ?? (choice.text === "" ? [] : [choice.text]);
+            const id = `chatcmpl-${sha256Hex(`${created}:${choice.text}`).slice(0, 24)}`;
+            deltas.forEach((delta, at) => {
+              chunks.push({
+                id,
+                object: "chat.completion.chunk",
+                created,
+                model: modelId,
+                choices: [
+                  {
+                    index,
+                    delta: { ...(at === 0 ? { role: "assistant" } : {}), content: delta },
+                    finish_reason: null,
+                    ...chatChunkLogprobs(choice, at, deltas.length),
+                  },
+                ],
+              });
+            });
+            // The final chunk carries the truth about how the choice ended; the
+            // content chunks always say `null`.
+            chunks.push({
+              id: n === 1 ? "chatcmpl-final" : `chatcmpl-final-${index}`,
+              object: "chat.completion.chunk",
+              created,
+              model: modelId,
+              choices: [{ index, delta: {}, finish_reason: choice.finishReason }],
+            });
           });
+          if (wantsStreamUsage(body)) {
+            chunks.push({
+              id: "chatcmpl-usage",
+              object: "chat.completion.chunk",
+              created,
+              model: modelId,
+              choices: [],
+              usage,
+            });
+          }
           sendSse(response, chunks);
           return;
         }
 
         response.setHeader("x-rarext-bundle", options.bundle.digest);
         if (result.seed !== null) response.setHeader("x-rarext-seed", String(result.seed));
+        const chatChoices =
+          n === 1
+            ? [
+                {
+                  index: 0,
+                  message: { role: "assistant", content: result.text },
+                  finish_reason: result.finishReason,
+                  ...chatLogprobs(result),
+                },
+              ]
+            : results.map((choice, index) => ({
+                index,
+                message: { role: "assistant", content: choice.text },
+                finish_reason: choice.finishReason,
+                ...chatLogprobs(choice),
+                // Each choice carries its own trace, so a multi-choice answer is
+                // as replayable as a single one.
+                ...decodeTrace(choice.trace),
+              }));
         const completionBody = {
           id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
           object: "chat.completion",
           created,
           model: modelId,
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: result.text },
-              finish_reason: result.finishReason,
-              ...chatLogprobs(result),
-            },
-          ],
-          usage: {
-            prompt_tokens: lastUserText(body).split(/\s+/).filter(Boolean).length,
-            completion_tokens: result.steps,
-            total_tokens:
-              lastUserText(body).split(/\s+/).filter(Boolean).length + result.steps,
-          },
+          choices: chatChoices,
+          usage,
           ...decodeTrace(result.trace),
         };
         response.setHeader("x-rarext-receipt", receiptHeader(body, completionBody));
@@ -1738,31 +1947,60 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
       if (request.method === "POST" && url.pathname === "/v1/completions") {
         const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
-        const result = await complete(body, "completions");
+        const n = requestedChoices(body);
+        const results: Array<Awaited<ReturnType<typeof complete>>> = [];
+        for (let index = 0; index < n; index += 1) {
+          results.push(await complete(choiceBody(body, index, n), "completions"));
+        }
+        const result = results[0]!;
         const created = Math.floor(Date.now() / 1000);
+        const promptTokens = promptTokenCount(body);
+        const completionTokens = results.reduce((total, choice) => total + choice.steps, 0);
+        // The legacy completions endpoint reports total as the completion count
+        // (its historical shape here), for one choice or many.
+        const usage = {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: completionTokens,
+        };
         if (body.stream === true) {
-          const deltas = result.deltas ?? (result.text === "" ? [] : [result.text]);
-          const chunks: unknown[] = deltas.map((text, index) => ({
-            id: "cmpl-stream",
-            object: "text_completion",
-            created,
-            model: options.bundle.model.id,
-            choices: [
-              {
-                index: 0,
-                text,
-                finish_reason: null,
-                ...completionChunkLogprobs(result, index, deltas.length),
-              },
-            ],
-          }));
-          chunks.push({
-            id: "cmpl-final",
-            object: "text_completion",
-            created,
-            model: options.bundle.model.id,
-            choices: [{ index: 0, text: "", finish_reason: result.finishReason }],
+          const chunks: unknown[] = [];
+          results.forEach((choice, index) => {
+            const deltas = choice.deltas ?? (choice.text === "" ? [] : [choice.text]);
+            deltas.forEach((text, at) => {
+              chunks.push({
+                id: "cmpl-stream",
+                object: "text_completion",
+                created,
+                model: options.bundle.model.id,
+                choices: [
+                  {
+                    index,
+                    text,
+                    finish_reason: null,
+                    ...completionChunkLogprobs(choice, at, deltas.length),
+                  },
+                ],
+              });
+            });
+            chunks.push({
+              id: n === 1 ? "cmpl-final" : `cmpl-final-${index}`,
+              object: "text_completion",
+              created,
+              model: options.bundle.model.id,
+              choices: [{ index, text: "", finish_reason: choice.finishReason }],
+            });
           });
+          if (wantsStreamUsage(body)) {
+            chunks.push({
+              id: "cmpl-usage",
+              object: "text_completion",
+              created,
+              model: options.bundle.model.id,
+              choices: [],
+              usage,
+            });
+          }
           sendSse(response, chunks);
           return;
         }
@@ -1771,19 +2009,24 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           object: "text_completion",
           created,
           model: options.bundle.model.id,
-          choices: [
-            {
-              index: 0,
-              text: result.text,
-              finish_reason: result.finishReason,
-              ...completionLogprobs(result),
-            },
-          ],
-          usage: {
-            prompt_tokens: lastUserText(body).split(/\s+/).filter(Boolean).length,
-            completion_tokens: result.steps,
-            total_tokens: result.steps,
-          },
+          choices:
+            n === 1
+              ? [
+                  {
+                    index: 0,
+                    text: result.text,
+                    finish_reason: result.finishReason,
+                    ...completionLogprobs(result),
+                  },
+                ]
+              : results.map((choice, index) => ({
+                  index,
+                  text: choice.text,
+                  finish_reason: choice.finishReason,
+                  ...completionLogprobs(choice),
+                  ...decodeTrace(choice.trace),
+                })),
+          usage,
           ...decodeTrace(result.trace),
         };
         response.setHeader("x-rarext-receipt", receiptHeader(body, textCompletion));

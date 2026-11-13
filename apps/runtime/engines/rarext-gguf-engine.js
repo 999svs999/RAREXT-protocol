@@ -21,9 +21,9 @@
  * (llama), both with byte fallback.
  *
  * Exports `run(model, input)` where `model` is `{ kind: "gguf", bytes }` and
- * `input` is `{ prompt, steps, seed, temperature, topK, topP,
- * repetitionPenalty, presencePenalty, frequencyPenalty, stop, logprobs,
- * topLogprobs }`. Returns
+ * `input` is `{ prompt, steps, seed, temperature, topK, topP, minP, typicalP,
+ * logitBias, repetitionPenalty, presencePenalty, frequencyPenalty, stop,
+ * logprobs, topLogprobs }`. Returns
  * `{ text, seed, steps, tokens, finishReason, logprobs? }`; `tokens` are the
  * generated token ids, so the run carries a decode trace a replay can re-check
  * token for token. Every decoding control has the OpenAI default, so omitting one
@@ -31,6 +31,10 @@
  * SAMPLED run is replayable too, not only a greedy one. When `logprobs` is set,
  * each generated token carries the model's own log-probability (before the
  * sampler reshapes the distribution) and its `topLogprobs` alternatives.
+ *
+ * Also exports `embed(model, { text } | { ids })`: a mean-pooled, L2-normalized
+ * vector from the model's own token embedding matrix, deterministic and
+ * replayable — the same committed bytes give the same vector anywhere.
  *
  * Context is bounded: the run reads `${arch}.context_length` from the container
  * and truncates an oversized prompt to its most recent tokens (keeping BOS at
@@ -2420,13 +2424,44 @@
    * request reproduces the same tokens, which is what makes a sampled run
    * replayable too.
    */
+  /**
+   * Additive per-token bias, before penalties and sampling. Applied to the
+   * logits in place, so logprobs report the biased distribution the sampler
+   * actually used. `bias` is a list of [tokenId, value] pairs; an id outside the
+   * vocabulary is ignored rather than corrupting the run.
+   */
+  function applyLogitBias(logits, bias) {
+    if (bias === null || bias === undefined || bias.length === 0) return;
+    for (var i = 0; i < bias.length; i += 1) {
+      var id = bias[i][0];
+      var value = bias[i][1];
+      if (typeof id === "number" && id >= 0 && id < logits.length && typeof value === "number") {
+        logits[id] += value;
+      }
+    }
+  }
+
+  /**
+   * Pick the next token under greedy or sampled decoding.
+   *
+   * Filters stack in the order a modern local engine applies them:
+   * logit_bias and the penalties first (they change the distribution), then
+   * top-k, then min-p (drop everything below `minP` of the best token), then
+   * typical-p (locally typical sampling: keep the tokens whose surprisal is
+   * closest to the entropy, until `typicalP` of the mass is kept), then the
+   * top-p nucleus. Every filter keeps at least one token, so no combination can
+   * empty the distribution. The draw uses the run's seeded RNG, so a sampled run
+   * with any of these controls is still reproducible.
+   */
   function chooseToken(logits, opts, counts, rng) {
+    applyLogitBias(logits, opts.logitBias);
     applyPenalties(logits, counts, opts.repetitionPenalty, opts.presencePenalty, opts.frequencyPenalty);
     if (!(opts.temperature > 0)) return argmax(logits);
 
     var n = logits.length;
     var max = -Infinity;
-    for (var i = 0; i < n; i += 1) if (logits[i] > max) max = logits[i];
+    var i;
+    for (i = 0; i < n; i += 1) if (logits[i] > max) max = logits[i];
 
     var candidates;
     var k = opts.topK > 0 ? Math.min(opts.topK, n) : 0;
@@ -2441,29 +2476,85 @@
     }
 
     var probs = new Array(candidates.length);
-    var total = 0;
     for (var c = 0; c < candidates.length; c += 1) {
-      var p = Math.exp((candidates[c].v - max) / opts.temperature);
-      probs[c] = p;
-      total += p;
+      probs[c] = Math.exp((candidates[c].v - max) / opts.temperature);
     }
 
-    var cutoff = opts.topP > 0 && opts.topP < 1 ? opts.topP * total : total;
-    var kept = [];
-    var keptSum = 0;
-    for (var m = 0; m < probs.length; m += 1) {
-      kept.push(m);
-      keptSum += probs[m];
-      if (keptSum >= cutoff) break;
+    function sumOf(values) {
+      var total = 0;
+      for (var t = 0; t < values.length; t += 1) total += values[t];
+      return total;
+    }
+    /** Keep only `keep` (indices into candidates/probs), preserving order. */
+    function restrict(keep) {
+      var nextCandidates = new Array(keep.length);
+      var nextProbs = new Array(keep.length);
+      for (var r = 0; r < keep.length; r += 1) {
+        nextCandidates[r] = candidates[keep[r]];
+        nextProbs[r] = probs[keep[r]];
+      }
+      candidates = nextCandidates;
+      probs = nextProbs;
     }
 
-    var target = rng() * keptSum;
+    // min-p: a token must hold at least `minP` of the best token's probability.
+    if (opts.minP > 0 && opts.minP < 1 && probs.length > 1) {
+      var best = 0;
+      for (i = 0; i < probs.length; i += 1) if (probs[i] > best) best = probs[i];
+      var floor = opts.minP * best;
+      var above = [];
+      for (i = 0; i < probs.length; i += 1) if (probs[i] >= floor) above.push(i);
+      if (above.length > 0 && above.length < probs.length) restrict(above);
+    }
+
+    // typical-p: keep the tokens whose surprisal is closest to the entropy of
+    // the current distribution, until `typicalP` of the mass is kept.
+    if (opts.typicalP > 0 && opts.typicalP < 1 && probs.length > 1) {
+      var total = sumOf(probs);
+      var entropy = 0;
+      for (i = 0; i < probs.length; i += 1) {
+        var q = probs[i] / total;
+        if (q > 0) entropy -= q * Math.log(q);
+      }
+      var ranked = [];
+      for (i = 0; i < probs.length; i += 1) {
+        var qi = probs[i] / total;
+        ranked.push({ at: i, d: Math.abs(-Math.log(qi) - entropy) });
+      }
+      ranked.sort(function (a, b) {
+        return a.d - b.d || a.at - b.at;
+      });
+      var kept = [];
+      var keptSum = 0;
+      for (i = 0; i < ranked.length; i += 1) {
+        kept.push(ranked[i].at);
+        keptSum += probs[ranked[i].at];
+        if (keptSum >= opts.typicalP * total) break;
+      }
+      kept.sort(function (a, b) {
+        return a - b;
+      });
+      if (kept.length < probs.length) restrict(kept);
+    }
+
+    // top-p nucleus over what survived.
+    var remaining = sumOf(probs);
+    var cutoff = opts.topP > 0 && opts.topP < 1 ? opts.topP * remaining : remaining;
+    var nucleus = [];
+    var nucleusSum = 0;
+    for (i = 0; i < probs.length; i += 1) {
+      nucleus.push(i);
+      nucleusSum += probs[i];
+      if (nucleusSum >= cutoff) break;
+    }
+
+    var target = rng() * nucleusSum;
     var running = 0;
-    for (var q = 0; q < kept.length; q += 1) {
-      running += probs[kept[q]];
-      if (running >= target) return candidates[kept[q]].i;
+    for (var m = 0; m < nucleus.length; m += 1) {
+      running += probs[nucleus[m]];
+      if (running >= target) return candidates[nucleus[m]].i;
     }
-    return candidates[kept[kept.length - 1]].i;
+    return candidates[nucleus[nucleus.length - 1]].i;
   }
 
   /**
@@ -2607,6 +2698,16 @@
         typeof input.topLogprobs === "number" && input.topLogprobs > 0
           ? Math.min(20, Math.floor(input.topLogprobs))
           : 0,
+      // min-p and typical-p are probabilities in [0, 1]; 0 and 1 disable them.
+      minP:
+        typeof input.minP === "number" && Number.isFinite(input.minP)
+          ? Math.min(1, Math.max(0, input.minP))
+          : 0,
+      typicalP:
+        typeof input.typicalP === "number" && Number.isFinite(input.typicalP)
+          ? Math.min(1, Math.max(0, input.typicalP))
+          : 1,
+      logitBias: Array.isArray(input.logitBias) ? input.logitBias : [],
     };
 
     var x = new Float32Array(nEmbd);
@@ -3002,8 +3103,75 @@
     dequantRow(parsed, tensor, row || 0, out);
     return out;
   }
+  /**
+   * Mean-pooled, L2-normalized text embedding.
+   *
+   * This is the model's OWN embedding matrix (`token_embd.weight`), not a
+   * separate model: every token's row is dequantized through the same code path
+   * a forward pass uses, averaged, scaled the way the architecture scales its
+   * input embeddings (Gemma), and normalized to unit length. Deterministic:
+   * there is no RNG and no dropout, so the same text yields the same vector on
+   * every machine that holds the same committed bytes. `ids` may be given
+   * directly (an embedding of a token sequence) instead of `text`.
+   */
+  function embed(model, input) {
+    var gguf = parseModel(model);
+    var kv = gguf.kv;
+    var arch = kv["general.architecture"];
+    var table = tensorOrNull(gguf, "token_embd.weight");
+    if (table === undefined) throw new Error("GGUF has no token_embd.weight to embed with");
+    var ids;
+    if (input && Array.isArray(input.ids)) {
+      ids = [];
+      for (var a = 0; a < input.ids.length; a += 1) {
+        var id = input.ids[a];
+        if (typeof id !== "number" || id < 0 || id >= table.rows || Math.floor(id) !== id) {
+          throw new Error("embed got a token id outside the vocabulary: " + String(id));
+        }
+        ids.push(id);
+      }
+    } else {
+      var text = String(input && input.text == null ? "" : input.text);
+      ids = new Tokenizer(gguf).encode(text);
+      if (ids.length === 0) {
+        var bos = kv["tokenizer.ggml.bos_token_id"];
+        if (typeof bos === "number") ids.push(bos);
+      }
+    }
+    if (ids.length === 0) throw new Error("embed needs at least one token");
+
+    var nEmbd = table.cols;
+    var row = new Float32Array(nEmbd);
+    var sum = new Float64Array(nEmbd);
+    var i;
+    for (i = 0; i < ids.length; i += 1) {
+      dequantRow(gguf, table, ids[i], row);
+      for (var j = 0; j < nEmbd; j += 1) sum[j] += row[j];
+    }
+    var out = new Float32Array(nEmbd);
+    for (i = 0; i < nEmbd; i += 1) out[i] = sum[i] / ids.length;
+    // Gemma scales the input embedding by sqrt(n_embd) before the first block;
+    // mirror it so the vector means the same thing a forward pass would use.
+    if (arch === "gemma") {
+      var scale = Math.sqrt(nEmbd);
+      for (i = 0; i < nEmbd; i += 1) out[i] *= scale;
+    }
+    var normSq = 0;
+    for (i = 0; i < nEmbd; i += 1) normSq += out[i] * out[i];
+    var norm = Math.sqrt(normSq);
+    if (norm > 0) {
+      for (i = 0; i < nEmbd; i += 1) out[i] /= norm;
+    }
+    return {
+      embedding: Array.prototype.slice.call(out),
+      dimensions: nEmbd,
+      tokens: ids.length,
+    };
+  }
+
   var api = {
     run: run,
+    embed: embed,
     parseGguf: parseGguf,
     parseContainer: parseContainer,
     dequantTensor: dequantTensor,

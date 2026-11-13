@@ -1192,6 +1192,67 @@ Two consequences matter for the protocol:
   or `"length"` (the step budget), and the stop text is not returned. A response
   can no longer claim `"stop"` for a run that was truncated by `max_tokens`.
 
+The sampler also speaks the rest of the control vocabulary a local engine user
+expects, applied in the order a modern engine stacks them:
+
+- **`logit_bias`** — OpenAI's string-keyed map, applied to the logits before
+  penalties, so the reported logprobs describe the biased distribution the
+  sampler actually used. Ids are checked, biases clamped to `[-100, 100]`, and at
+  most 1024 entries honoured.
+- **`min_p`** — drop every token below `min_p ×` the best token's probability.
+- **`typical_p`** — locally typical sampling: keep the tokens whose surprisal is
+  closest to the entropy of the distribution, until `typical_p` of the mass is
+  kept.
+- **`top_k` / `top_p` / `temperature` / penalties / `stop`** — as above.
+
+Every filter keeps at least one token, so no combination can empty the
+distribution, and every one of them still draws from the run's seeded RNG — a
+sampled run with any control is reproducible. A test asserts min-p as an
+*invariant of the draw* (each chosen token keeps at least `min_p` of the best
+token's probability, checked through the reported logprobs), that a `+1000`
+logit bias makes a token certain while `-1000` removes it, and that `typical_p`
+changes the sample yet stays seed-deterministic.
+
+### Several choices
+
+`n` is honoured: the provider runs the model `n` times (1–8) and returns `n`
+completions. With `n > 1` every choice gets its own seed — the client's seed plus
+the choice index, or a prompt-derived base — so the choices differ when sampling
+yet each is individually reproducible; a test re-issues the same `n: 3` request
+and gets identical choices. Every choice carries its own `rarext_trace`, so a
+multi-choice answer is as replayable as a single one, and `usage` sums the
+choices.
+
+On a stream, `n > 1` emits each choice's token chunks tagged with its `index`
+and its own final `finish_reason` chunk; `stream_options: { "include_usage":
+true }` appends one usage chunk with no choices. A test asserts three choices,
+`[0, 1, 2]`, matching traces, summed usage, and the usage-only chunk.
+
+### Embeddings
+
+`POST /v1/embeddings` returns vectors from the model's **own** token embedding
+matrix (`token_embd.weight`) — there is no second model and no second set of
+bytes to trust. Each token's row is dequantized through the same code path a
+forward pass uses, averaged (mean pooling), scaled the way the architecture
+scales its input embeddings (Gemma's `sqrt(n_embd)`), and L2-normalized to unit
+length.
+
+The result is deterministic: no RNG, no dropout, so the same committed bytes and
+the same input give the same vector on any machine, and a test recomputes the
+expected vector independently from the engine's own `dequantTensor` to prove it
+is exactly the normalized mean of the token rows. The endpoint accepts OpenAI's
+input shapes — a string, an array of strings, a token-id array, an array of
+token-id arrays — and `encoding_format: "base64"`, and reports `usage`. On real
+weights:
+
+```
+embeddings  dims 16 · tokens 6 · L2 norm 1.000000
+```
+
+Malformed input is refused (`400`) rather than silently embedded, and a
+deployment whose engine exposes no embedding matrix says so instead of inventing
+a vector.
+
 ### Confidence: logprobs
 
 The engine can report its own per-token log-probability, and the provider exposes

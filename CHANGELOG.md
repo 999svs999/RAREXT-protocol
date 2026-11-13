@@ -11,6 +11,34 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Embeddings come from the model you already verified.** `POST /v1/embeddings`
+  returns vectors from the deployment's **own** token embedding matrix
+  (`token_embd.weight`) — no second model, no second set of bytes. Each token row
+  is dequantized through the same code path a forward pass uses, mean-pooled,
+  scaled as the architecture scales its input embeddings (`gemma`'s
+  `sqrt(n_embd)`), and L2-normalized. It is deterministic (no RNG), so the same
+  committed bytes and input give the same vector anywhere; a test recomputes the
+  expected vector independently from the engine's own `dequantTensor` and
+  confirms it is exactly the normalized mean of the token rows. The endpoint
+  accepts OpenAI's input shapes (string, string array, token-id array,
+  token-id-array array) and `encoding_format: "base64"`, reports `usage`, and
+  refuses malformed input rather than inventing a vector. `npm run demo:decoding`
+  shows `dims 16 · tokens 6 · L2 norm 1.000000` on real weights. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#embeddings).
+- **The API surface reaches parity with the control vocabulary clients expect.**
+  The provider now honours `n` (1–8 choices, each with its own seed, its own
+  `rarext_trace`, and summed usage), `stream_options.include_usage` (a final
+  usage-only chunk), OpenAI's `logit_bias` (string-keyed, validated, clamped to
+  `[-100, 100]`, capped at 1024 entries), and the sampler controls `min_p` and
+  `typical_p`. The engine applies them the way a modern local engine stacks them
+  — logit bias and penalties, then top-k, then min-p, then typical-p, then the
+  top-p nucleus — every filter keeping at least one token and every draw still
+  seeded, so a sampled run with any control stays reproducible. Tests assert
+  min-p as an invariant of the draw through the reported logprobs, a `+1000`
+  bias making a token certain and `-1000` removing it, `typical_p` changing the
+  sample yet remaining seed-deterministic, three choices with distinct traces and
+  summed usage, and the usage-only stream chunk. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#several-choices).
 - **Streaming is one chunk per generated token, not one chunk per response.**
   `stream: true` used to send the whole completion in a single SSE `delta`. The
   provider now emits **one chunk per token** for chat and completions, each with

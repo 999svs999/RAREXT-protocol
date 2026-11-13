@@ -187,9 +187,10 @@ Every completion becomes a `rarext.model-run.v1` body:
 
 The record digest is `sha256(canonicalize(body))`. The `sampling` block is a
 summary; the exact decode is in `request.body`, which carries every control the
-client sent — `temperature`, `top_p`, `top_k`, `repetition_penalty`,
-`presence_penalty`, `frequency_penalty`, `stop`, and `logprobs`/`top_logprobs` — so
-a replay re-issues the same decode rather than an approximation of it. The
+client sent — `temperature`, `top_p`, `top_k`, `min_p`, `typical_p`,
+`logit_bias`, `repetition_penalty`, `presence_penalty`, `frequency_penalty`,
+`stop`, `n`, and `logprobs`/`top_logprobs` — so a replay re-issues the same
+decode rather than an approximation of it. The
 response's `finish_reason` records whether the run ended at a stop sequence or at
 the step budget, and its `logprobs` (when requested) records the model's own
 per-token confidence; see
@@ -332,6 +333,9 @@ Routes:
   teed to the client and recorded);
 - `POST /v1/messages` — Anthropic Messages, translated to the OpenAI surface
   (non-streaming; streaming Anthropic is refused before inference);
+- `POST /v1/embeddings` — OpenAI embeddings from the model's own token
+  embedding matrix (mean-pooled, L2-normalized, deterministic; string, string
+  array, or token-id input, and `encoding_format: "base64"`);
 - `GET /v1/models`, `GET /v1/deployment`, `GET /health`;
 - `GET /v1/rarext/runs`, `GET /v1/rarext/runs/:digest`,
   `GET /v1/rarext/ledger`.

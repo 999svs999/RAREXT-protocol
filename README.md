@@ -195,7 +195,14 @@ reshapes the distribution. The same engine feeds OpenAI-shaped streaming: `POST
 /v1/chat/completions` with `stream: true` emits **one SSE chunk per generated
 token**, each carrying that token's logprob when asked, and exactly one final
 chunk with the run's real `finish_reason` — the deltas concatenate to the
-non-streaming completion, and the chunk count equals the decode trace.
+non-streaming completion, and the chunk count equals the decode trace. The same
+request surface also honours `n` choices (each with its own seed, trace, and
+usage), `stream_options.include_usage`, OpenAI's `logit_bias`, and `min_p` /
+`typical_p` sampling, so a client that expects a modern engine's controls finds
+them here — with a `rarext_trace` beside each choice. `POST /v1/embeddings`
+returns mean-pooled, L2-normalized vectors from the deployment's **own** token
+embedding matrix: deterministic, so the same committed bytes give the same
+vector anywhere.
 
 `npm run demo:generations` writes the forward-compatibility ladder that "and the
 generations after it" means, as one canonical `rarext.generations.v1` object with

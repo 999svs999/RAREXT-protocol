@@ -179,6 +179,28 @@ check(
   "a greedy token did not head its own top list",
 );
 
+// 8. Embeddings: a deterministic, normalized vector from the same weights.
+const first = engine.embed(model, { text: "hello" });
+const repeat = engine.embed(model, { text: "hello" });
+const other = engine.embed(model, { text: "goodbye" });
+const norm = Math.sqrt(first.embedding.reduce((sum, value) => sum + value * value, 0));
+console.log(
+  `  ${"embeddings".padEnd(18)} dims ${first.dimensions} · tokens ${first.tokens} · L2 norm ${norm.toFixed(6)}\n`,
+);
+check(
+  first.embedding.length === first.dimensions && first.dimensions > 0,
+  "the vector length is not the model's embedding dimension",
+);
+check(Math.abs(norm - 1) < 1e-5, `the embedding is not L2-normalized (${norm})`);
+check(
+  JSON.stringify(first.embedding) === JSON.stringify(repeat.embedding),
+  "embedding the same text twice gave different vectors",
+);
+check(
+  JSON.stringify(first.embedding) !== JSON.stringify(other.embedding),
+  "two different texts embedded to the same vector",
+);
+
 // A digest over the poised run, so two machines can compare the control surface.
 const digest = createHash("sha256")
   .update(
@@ -198,5 +220,5 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log(
-  "All decoding controls behaved as declared: greedy, penalty, top-k/top-p, replay, stop, context, logprobs.",
+  "All decoding controls behaved as declared: greedy, penalty, top-k/top-p, replay, stop, context, logprobs, embeddings.",
 );

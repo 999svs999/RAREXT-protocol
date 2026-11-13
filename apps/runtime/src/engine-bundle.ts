@@ -287,6 +287,12 @@ export interface NativeEngine {
       topK?: number;
       /** Nucleus mass to keep before sampling (1 = no limit). */
       topP?: number;
+      /** Drop tokens below this fraction of the best token's probability (0 = off). */
+      minP?: number;
+      /** Locally-typical mass to keep (1 = off). */
+      typicalP?: number;
+      /** Additive per-token bias, as [tokenId, value] pairs. */
+      logitBias?: Array<[number, number]>;
       /** Divide a repeated token's positive logit (1 = no penalty). */
       repetitionPenalty?: number;
       /** Subtract once per repeated token from its logit. */
@@ -330,6 +336,14 @@ export interface NativeEngine {
   decodeTokens?(model: unknown, ids: number[]): string[];
   /** The decoded prefix after each id, with one parse of the model. */
   decodePrefixes?(model: unknown, ids: number[]): string[];
+  /**
+   * A mean-pooled, L2-normalized embedding from the model's own token embedding
+   * matrix. Deterministic: the same bytes and input give the same vector.
+   */
+  embed?(
+    model: unknown,
+    input: { text?: string; ids?: number[] },
+  ): { embedding: number[]; dimensions: number; tokens: number };
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
   /** Present on the GGUF runtime: parse a RAREXT "RXHF" container header. */
@@ -590,6 +604,7 @@ export function loadEngine(
     decode?: unknown;
     decodeTokens?: unknown;
     decodePrefixes?: unknown;
+    embed?: unknown;
   };
   const run = exports.run;
   if (typeof run !== "function") {
@@ -626,6 +641,9 @@ export function loadEngine(
       : {}),
     ...(typeof exports.decodePrefixes === "function"
       ? { decodePrefixes: exports.decodePrefixes as NonNullable<NativeEngine["decodePrefixes"]> }
+      : {}),
+    ...(typeof exports.embed === "function"
+      ? { embed: exports.embed as NonNullable<NativeEngine["embed"]> }
       : {}),
   };
 }
