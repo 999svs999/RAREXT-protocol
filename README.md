@@ -119,6 +119,7 @@ npm run demo:web4-model # weights + engine are RAREXT blobs, served by provider 
 npm run demo:ai-on-rarext # weights + a portable engine, with no host engine at all
 npm run demo:generations # the network/model/web/protocol generation ladder, as one recomputable commitment
 npm run demo:live      # an agent + its AI living on RAREXT, rebuilt with the node stopped
+npm run demo:decoding  # greedy, top-k/top-p, penalty, sampled replay, stop, context, logprobs — on real weights
 npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
 ```
 
@@ -179,6 +180,22 @@ same trace, replays it, and then commits a **perturbed** copy of the same weight
 to show the same engine answers differently — the output is driven by the
 network's artifacts, not a constant. No third-party software, no container, no
 GPU, no TEE.
+
+`npm run demo:decoding` runs that same engine over a committed container and
+exercises the decoding controls an OpenAI client expects — `temperature`,
+`top_k`, `top_p`, `repetition_penalty`, and `stop` — on one prompt. It shows a
+21-repeat greedy loop reduced to zero repetitions, proves `top_k: 1` reproduces
+the greedy tokens, and proves a *sampled* run replays byte for byte from its
+seed. A sampled run is therefore still a checkable run, not a special case. It
+also proves the context bound: a prompt far longer than the model's declared
+`context_length` is truncated to it, and the run never evaluates more positions
+than the container declares. `logprobs: true` returns the model's own per-token
+confidence (with `top_logprobs` alternatives), computed before the sampler
+reshapes the distribution. The same engine feeds OpenAI-shaped streaming: `POST
+/v1/chat/completions` with `stream: true` emits **one SSE chunk per generated
+token**, each carrying that token's logprob when asked, and exactly one final
+chunk with the run's real `finish_reason` — the deltas concatenate to the
+non-streaming completion, and the chunk count equals the decode trace.
 
 `npm run demo:generations` writes the forward-compatibility ladder that "and the
 generations after it" means, as one canonical `rarext.generations.v1` object with

@@ -251,6 +251,317 @@ function requestedSteps(body: Record<string, unknown>, fallback: number): number
   return Math.max(1, Math.min(steps, 4096));
 }
 
+/** The decoding controls an OpenAI-compatible request may carry. */
+export interface DecodingParams {
+  temperature: number;
+  topK: number;
+  topP: number;
+  repetitionPenalty: number;
+  presencePenalty: number;
+  frequencyPenalty: number;
+  stop: string[];
+  /** Report the model's own per-token log-probabilities. */
+  logprobs: boolean;
+  /** How many alternatives to include per token (0-20). */
+  topLogprobs: number;
+}
+
+/**
+ * Read the decoding controls from a request body, with the OpenAI defaults.
+ *
+ * Every field is optional and clamped to a range the engine can honour, so a
+ * hostile or sloppy client cannot make a run unbounded (top_k is capped) or
+ * non-finite (NaN/Infinity fall back). `stop` is a string or up to eight
+ * strings; more than eight are ignored rather than rejected.
+ */
+export function decodingParams(body: Record<string, unknown>): DecodingParams {
+  const num = (value: unknown, fallback: number): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  const rawTopK = num(body.top_k, 0);
+  const rawStop = body.stop;
+  const stop: string[] = [];
+  if (typeof rawStop === "string" && rawStop.length > 0) {
+    stop.push(rawStop);
+  } else if (Array.isArray(rawStop)) {
+    for (const entry of rawStop) {
+      if (typeof entry === "string" && entry.length > 0 && stop.length < 8) stop.push(entry);
+    }
+  }
+  return {
+    temperature: Math.max(0, num(body.temperature, 0)),
+    topK: rawTopK > 0 ? Math.min(4096, Math.floor(rawTopK)) : 0,
+    topP: Math.min(1, Math.max(0, num(body.top_p, 1))),
+    repetitionPenalty: Math.max(0.01, num(body.repetition_penalty, 1)),
+    presencePenalty: num(body.presence_penalty, 0),
+    frequencyPenalty: num(body.frequency_penalty, 0),
+    stop,
+    // Chat completions take a boolean plus `top_logprobs`; the legacy
+    // completions endpoint takes an integer. Accept both.
+    logprobs: body.logprobs === true || (typeof body.logprobs === "number" && body.logprobs > 0),
+    topLogprobs: Math.max(
+      0,
+      Math.min(
+        20,
+        Math.floor(
+          typeof body.top_logprobs === "number"
+            ? body.top_logprobs
+            : typeof body.logprobs === "number"
+              ? body.logprobs
+              : 0,
+        ),
+      ),
+    ),
+  };
+}
+
+/** Truncate at the earliest stop sequence. The stop text is not returned. */
+export function applyStop(text: string, stop: string[]): { text: string; stopped: boolean } {
+  let at = -1;
+  for (const sequence of stop) {
+    const found = text.indexOf(sequence);
+    if (found >= 0 && (at < 0 || found < at)) at = found;
+  }
+  return at < 0 ? { text, stopped: false } : { text: text.slice(0, at), stopped: true };
+}
+
+/** One generated token's confidence, with the alternatives the engine named. */
+export interface RunLogprob {
+  token: number;
+  text: string;
+  logprob: number;
+  top: Array<{ token: number; text: string; logprob: number }>;
+}
+
+/**
+ * Map an engine's numeric logprobs to text with the engine's own tokenizer.
+ *
+ * The ids are authoritative; `text` is a convenience for the OpenAI-shaped
+ * response. A token whose bytes only make sense inside a longer sequence
+ * decodes to a replacement character on its own — the logprob is still exact.
+ * A malformed entry drops the whole block rather than reporting partial
+ * confidence, so a response is either fully evidenced or silent.
+ */
+function decodeTokenTexts(engine: NativeEngine | null, model: unknown, ids: number[]): string[] {
+  if (engine === null) return ids.map(() => "");
+  if (typeof engine.decodeTokens === "function") {
+    try {
+      const out = engine.decodeTokens(model, ids);
+      if (Array.isArray(out) && out.length === ids.length) {
+        return out.map((text) => (typeof text === "string" ? text : ""));
+      }
+    } catch {
+      // Fall through to the one-at-a-time path below.
+    }
+  }
+  if (typeof engine.decode !== "function") return ids.map(() => "");
+  return ids.map((id) => {
+    try {
+      return engine.decode!(model, [id]);
+    } catch {
+      return "";
+    }
+  });
+}
+
+function engineLogprobs(
+  result: unknown,
+  engine: NativeEngine | null,
+  model: unknown,
+): RunLogprob[] | undefined {
+  const entries = isRecord(result) ? result.logprobs : undefined;
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  // Validate first, collecting every id, so the model is tokenized ONCE for the
+  // whole block instead of once per token and once per alternative.
+  const ids: number[] = [];
+  const numeric: Array<{
+    token: number;
+    logprob: number;
+    top: Array<{ token: number; logprob: number }>;
+  }> = [];
+  for (const entry of entries) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.token !== "number" ||
+      !Number.isSafeInteger(entry.token) ||
+      typeof entry.logprob !== "number" ||
+      !Number.isFinite(entry.logprob)
+    ) {
+      return undefined;
+    }
+    const top: Array<{ token: number; logprob: number }> = [];
+    if (Array.isArray(entry.top)) {
+      for (const alt of entry.top) {
+        if (
+          !isRecord(alt) ||
+          typeof alt.token !== "number" ||
+          !Number.isSafeInteger(alt.token) ||
+          typeof alt.logprob !== "number" ||
+          !Number.isFinite(alt.logprob)
+        ) {
+          continue;
+        }
+        top.push({ token: alt.token, logprob: alt.logprob });
+      }
+    }
+    numeric.push({ token: entry.token, logprob: entry.logprob, top });
+    ids.push(entry.token);
+    for (const alt of top) ids.push(alt.token);
+  }
+  const texts = decodeTokenTexts(engine, model, ids);
+  let at = 0;
+  return numeric.map((entry) => {
+    const text = texts[at++] ?? "";
+    const top = entry.top.map((alt) => ({ ...alt, text: texts[at++] ?? "" }));
+    return { token: entry.token, text, logprob: entry.logprob, top };
+  });
+}
+
+/** The decoded prefix after each id, from the engine if it can do it in one parse. */
+function tokenPrefixes(
+  engine: NativeEngine | null,
+  model: unknown,
+  tokens: number[],
+): string[] | null {
+  const decodePrefixes = engine?.decodePrefixes;
+  if (engine === null || typeof decodePrefixes !== "function") return null;
+  try {
+    const out = decodePrefixes.call(engine, model, tokens);
+    return Array.isArray(out) &&
+      out.length === tokens.length &&
+      out.every((text) => typeof text === "string")
+      ? out
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Split a completion into one delta per generated token.
+ *
+ * Prefixes, not per-token decodes, are the source of truth: a token can carry
+ * part of a UTF-8 character, so its delta is `prefix[i] - prefix[i-1]`. If the
+ * engine cannot decode prefixes, or the prefixes disagree with the final text
+ * (a stop sequence cut mid-token), the answer streams as one delta rather than
+ * sending text the caller never received. Tokens cut away by a stop are dropped,
+ * which keeps the chunk count aligned with what the non-stream response would
+ * have said.
+ */
+function tokenDeltas(
+  tokens: number[],
+  finalText: string,
+  prefixes: string[] | null,
+): string[] {
+  const fallback = finalText === "" ? [] : [finalText];
+  if (tokens.length === 0 || prefixes === null || prefixes.length !== tokens.length) {
+    return fallback;
+  }
+  const deltas: string[] = [];
+  let previous = "";
+  for (const prefix of prefixes) {
+    if (!prefix.startsWith(previous)) return fallback;
+    if (prefix.length === finalText.length) {
+      if (prefix !== finalText) return fallback;
+      deltas.push(prefix.slice(previous.length));
+      return deltas;
+    }
+    if (prefix.length > finalText.length) return fallback;
+    deltas.push(prefix.slice(previous.length));
+    previous = prefix;
+  }
+  if (previous === finalText) return deltas;
+  if (!finalText.startsWith(previous)) return fallback;
+  deltas.push(finalText.slice(previous.length));
+  return deltas;
+}
+
+/** One chat-shaped logprob entry. */
+function chatLogprobEntry(entry: RunLogprob): Record<string, unknown> {
+  return {
+    token: entry.text,
+    logprob: entry.logprob,
+    bytes: null,
+    top_logprobs: entry.top.map((alt) => ({
+      token: alt.text,
+      logprob: alt.logprob,
+      bytes: null,
+    })),
+  };
+}
+
+/** `choices[0].logprobs` for the chat shape, or nothing when none were asked for. */
+function chatLogprobs(result: { logprobs?: RunLogprob[] }): Record<string, unknown> {
+  if (result.logprobs === undefined) return {};
+  return { logprobs: { content: result.logprobs.map(chatLogprobEntry) } };
+}
+
+/**
+ * The logprob block for ONE streamed chunk. It is emitted only when the delta
+ * count matches the logprob count, so a chunk never claims confidence for a
+ * different token than the one it carries.
+ */
+function chatChunkLogprobs(
+  result: { logprobs?: RunLogprob[] },
+  index: number,
+  deltaCount: number,
+): Record<string, unknown> {
+  const entries = result.logprobs;
+  if (entries === undefined || entries.length !== deltaCount) return {};
+  const entry = entries[index];
+  return entry === undefined ? {} : { logprobs: { content: [chatLogprobEntry(entry)] } };
+}
+
+/** The legacy-completions logprob block for one streamed chunk. */
+function completionChunkLogprobs(
+  result: { logprobs?: RunLogprob[] },
+  index: number,
+  deltaCount: number,
+): Record<string, unknown> {
+  const entries = result.logprobs;
+  if (entries === undefined || entries.length !== deltaCount) return {};
+  const entry = entries[index];
+  if (entry === undefined) return {};
+  let offset = 0;
+  for (let i = 0; i < index; i += 1) offset += entries[i]?.text.length ?? 0;
+  const alternatives: Record<string, number> = {};
+  for (const alt of entry.top) alternatives[alt.text] = alt.logprob;
+  return {
+    logprobs: {
+      tokens: [entry.text],
+      text_offset: [offset],
+      token_logprobs: [entry.logprob],
+      top_logprobs: [alternatives],
+    },
+  };
+}
+
+/** `choices[0].logprobs` for the legacy completions shape. */
+function completionLogprobs(result: { logprobs?: RunLogprob[] }): Record<string, unknown> {
+  if (result.logprobs === undefined) return {};
+  const tokens: string[] = [];
+  const offsets: number[] = [];
+  const tokenLogprobs: number[] = [];
+  const topLogprobs: Array<Record<string, number>> = [];
+  let offset = 0;
+  for (const entry of result.logprobs) {
+    tokens.push(entry.text);
+    offsets.push(offset);
+    offset += entry.text.length;
+    tokenLogprobs.push(entry.logprob);
+    const alternatives: Record<string, number> = {};
+    for (const alt of entry.top) alternatives[alt.text] = alt.logprob;
+    topLogprobs.push(alternatives);
+  }
+  return {
+    logprobs: {
+      tokens,
+      text_offset: offsets,
+      token_logprobs: tokenLogprobs,
+      top_logprobs: topLogprobs,
+    },
+  };
+}
+
 function longestToken(model: XorshiftModel): number {
   return model.vocab.reduce((longest, token) => Math.max(longest, token.length), 0);
 }
@@ -1009,8 +1320,19 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   async function complete(
     body: Record<string, unknown>,
     shape: "chat" | "completions" = "chat",
-  ): Promise<{ text: string; seed: number | null; steps: number; trace: TraceData | null }> {
+  ): Promise<{
+    text: string;
+    seed: number | null;
+    steps: number;
+    trace: TraceData | null;
+    finishReason: "stop" | "length";
+    /** Per-token confidence, when the caller asked and the engine reports it. */
+    logprobs?: RunLogprob[];
+    /** One text delta per generated token, when the request streams. */
+    deltas?: string[];
+  }> {
     const prompt = lastUserText(body);
+    const decoding = decodingParams(body);
 
     if (native !== null) {
       const seed =
@@ -1024,7 +1346,20 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       // The engine is the RAREXT artifact when one was committed: the provider
       // runs what it fetched and verified, not a local implementation.
       const result = loadedEngine !== null
-        ? await loadedEngine.run(native, { prompt, steps, seed })
+        ? await loadedEngine.run(native, {
+            prompt,
+            steps,
+            seed,
+            temperature: decoding.temperature,
+            topK: decoding.topK,
+            topP: decoding.topP,
+            repetitionPenalty: decoding.repetitionPenalty,
+            presencePenalty: decoding.presencePenalty,
+            frequencyPenalty: decoding.frequencyPenalty,
+            stop: decoding.stop,
+            logprobs: decoding.logprobs,
+            topLogprobs: decoding.topLogprobs,
+          })
         : runNativeModel(native, { prompt, steps, seed });
       if (
         result === null ||
@@ -1037,11 +1372,37 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       ) {
         throw new Error("the RAREXT engine artifact returned a malformed native result");
       }
+      const stopped = applyStop(result.text, decoding.stop);
+      const logprobs = engineLogprobs(result, loadedEngine, native);
+      const deltas =
+        body.stream === true
+          ? tokenDeltas(
+              result.tokens,
+              stopped.text,
+              loadedEngine !== null
+                ? tokenPrefixes(loadedEngine, native, result.tokens)
+                : (() => {
+                    const cumulative: string[] = [];
+                    let text = "";
+                    for (const token of result.tokens) {
+                      text += native.vocab[token] ?? "";
+                      cumulative.push(text);
+                    }
+                    return cumulative;
+                  })(),
+            )
+          : undefined;
       return {
-        text: result.text,
+        text: stopped.text,
         seed: result.seed,
         steps: result.steps,
         trace: traceFor(result),
+        finishReason:
+          stopped.stopped || (result as { finishReason?: string }).finishReason === "stop"
+            ? "stop"
+            : "length",
+        ...(logprobs === undefined ? {} : { logprobs }),
+        ...(deltas === undefined ? {} : { deltas }),
       };
     }
 
@@ -1052,13 +1413,22 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           ? (body.seed as number)
           : null;
       const steps = requestedSteps(body, 32);
-      const temperature =
-        typeof body.temperature === "number" && Number.isFinite(body.temperature)
-          ? (body.temperature as number)
-          : 0;
       // The provider runs the engine it fetched from RAREXT over the weights it
       // fetched from RAREXT. No Ollama, llama.cpp, native addon, or container.
-      const result = await loadedEngine.run(gguf ?? wasmModel, { prompt, steps, seed, temperature });
+      const result = await loadedEngine.run(gguf ?? wasmModel, {
+        prompt,
+        steps,
+        seed,
+        temperature: decoding.temperature,
+        topK: decoding.topK,
+        topP: decoding.topP,
+        repetitionPenalty: decoding.repetitionPenalty,
+        presencePenalty: decoding.presencePenalty,
+        frequencyPenalty: decoding.frequencyPenalty,
+        stop: decoding.stop,
+        logprobs: decoding.logprobs,
+        topLogprobs: decoding.topLogprobs,
+      });
       if (
         result === null ||
         typeof result !== "object" ||
@@ -1070,11 +1440,27 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       ) {
         throw new Error("the RAREXT engine returned a malformed result");
       }
+      const stopped = applyStop(result.text, decoding.stop);
+      const logprobs = engineLogprobs(result, loadedEngine, gguf ?? wasmModel);
+      const deltas =
+        body.stream === true
+          ? tokenDeltas(
+              result.tokens,
+              stopped.text,
+              tokenPrefixes(loadedEngine, gguf ?? wasmModel, result.tokens),
+            )
+          : undefined;
       return {
-        text: result.text,
+        text: stopped.text,
         seed: result.seed,
         steps: result.steps,
         trace: traceFor(result),
+        finishReason:
+          stopped.stopped || (result as { finishReason?: string }).finishReason === "stop"
+            ? "stop"
+            : "length",
+        ...(logprobs === undefined ? {} : { logprobs }),
+        ...(deltas === undefined ? {} : { deltas }),
       };
     }
 
@@ -1129,7 +1515,17 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       }
       if (tokens.length > 0) trace = { kind: "rarext.judgment.v1", tokens, logprobs };
     }
-    return { text, seed: null, steps: json.usage?.completion_tokens ?? 0, trace };
+    const stopped = applyStop(text, decoding.stop);
+    return {
+      text: stopped.text,
+      seed: null,
+      steps: json.usage?.completion_tokens ?? 0,
+      trace,
+      finishReason: stopped.stopped ? "stop" : "length",
+      // A third-party engine's ids are not ours to decode; stream its text as
+      // one delta rather than guessing token boundaries.
+      ...(body.stream === true ? { deltas: stopped.text === "" ? [] : [stopped.text] } : {}),
+    };
   }
 
   const server = createServer(async (request, response) => {
@@ -1262,7 +1658,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
                 {
                   index: 0,
                   message: { role: "assistant", content: result.text },
-                  finish_reason: "stop",
+                  finish_reason: result.finishReason,
+                  ...chatLogprobs(result),
                 },
               ],
               usage: {
@@ -1282,28 +1679,32 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         const created = Math.floor(Date.now() / 1000);
 
         if (body.stream === true) {
-          sendSse(response, [
-            {
-              id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
-              object: "chat.completion.chunk",
-              created,
-              model: modelId,
-              choices: [
-                {
-                  index: 0,
-                  delta: { role: "assistant", content: result.text },
-                  finish_reason: null,
-                },
-              ],
-            },
-            {
-              id: "chatcmpl-final",
-              object: "chat.completion.chunk",
-              created,
-              model: modelId,
-              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-            },
-          ]);
+          const deltas = result.deltas ?? (result.text === "" ? [] : [result.text]);
+          const id = `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`;
+          const chunks: unknown[] = deltas.map((delta, index) => ({
+            id,
+            object: "chat.completion.chunk",
+            created,
+            model: modelId,
+            choices: [
+              {
+                index: 0,
+                delta: { ...(index === 0 ? { role: "assistant" } : {}), content: delta },
+                finish_reason: null,
+                ...chatChunkLogprobs(result, index, deltas.length),
+              },
+            ],
+          }));
+          // The final chunk carries the truth about how the run ended; the
+          // content chunks always say `null`.
+          chunks.push({
+            id: "chatcmpl-final",
+            object: "chat.completion.chunk",
+            created,
+            model: modelId,
+            choices: [{ index: 0, delta: {}, finish_reason: result.finishReason }],
+          });
+          sendSse(response, chunks);
           return;
         }
 
@@ -1318,7 +1719,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             {
               index: 0,
               message: { role: "assistant", content: result.text },
-              finish_reason: "stop",
+              finish_reason: result.finishReason,
+              ...chatLogprobs(result),
             },
           ],
           usage: {
@@ -1339,15 +1741,29 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         const result = await complete(body, "completions");
         const created = Math.floor(Date.now() / 1000);
         if (body.stream === true) {
-          sendSse(response, [
-            {
-              id: "cmpl-final",
-              object: "text_completion",
-              created,
-              model: options.bundle.model.id,
-              choices: [{ index: 0, text: result.text, finish_reason: "stop" }],
-            },
-          ]);
+          const deltas = result.deltas ?? (result.text === "" ? [] : [result.text]);
+          const chunks: unknown[] = deltas.map((text, index) => ({
+            id: "cmpl-stream",
+            object: "text_completion",
+            created,
+            model: options.bundle.model.id,
+            choices: [
+              {
+                index: 0,
+                text,
+                finish_reason: null,
+                ...completionChunkLogprobs(result, index, deltas.length),
+              },
+            ],
+          }));
+          chunks.push({
+            id: "cmpl-final",
+            object: "text_completion",
+            created,
+            model: options.bundle.model.id,
+            choices: [{ index: 0, text: "", finish_reason: result.finishReason }],
+          });
+          sendSse(response, chunks);
           return;
         }
         const textCompletion = {
@@ -1355,7 +1771,14 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           object: "text_completion",
           created,
           model: options.bundle.model.id,
-          choices: [{ index: 0, text: result.text, finish_reason: "stop" }],
+          choices: [
+            {
+              index: 0,
+              text: result.text,
+              finish_reason: result.finishReason,
+              ...completionLogprobs(result),
+            },
+          ],
           usage: {
             prompt_tokens: lastUserText(body).split(/\s+/).filter(Boolean).length,
             completion_tokens: result.steps,

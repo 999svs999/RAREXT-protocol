@@ -185,7 +185,16 @@ Every completion becomes a `rarext.model-run.v1` body:
 }
 ```
 
-The record digest is `sha256(canonicalize(body))`. The registry verifier
+The record digest is `sha256(canonicalize(body))`. The `sampling` block is a
+summary; the exact decode is in `request.body`, which carries every control the
+client sent — `temperature`, `top_p`, `top_k`, `repetition_penalty`,
+`presence_penalty`, `frequency_penalty`, `stop`, and `logprobs`/`top_logprobs` — so
+a replay re-issues the same decode rather than an approximation of it. The
+response's `finish_reason` records whether the run ended at a stop sequence or at
+the step budget, and its `logprobs` (when requested) records the model's own
+per-token confidence; see
+[the decoding controls](WEB4-MODEL.md#decoding-controls) and
+[confidence](WEB4-MODEL.md#confidence-logprobs). The registry verifier
 recomputes:
 
 - the request digest and byte length from the request body;
@@ -317,8 +326,10 @@ full cloud recipe is in [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md).
 
 Routes:
 
-- `POST /v1/chat/completions` — OpenAI, including streaming (SSE is teed to the
-  client and recorded);
+- `POST /v1/chat/completions` — OpenAI, including per-token streaming (one SSE
+  chunk per generated token from the engine's prefix decode, a single final chunk
+  with the real `finish_reason`, and per-chunk logprobs when requested; SSE is
+  teed to the client and recorded);
 - `POST /v1/messages` — Anthropic Messages, translated to the OpenAI surface
   (non-streaming; streaming Anthropic is refused before inference);
 - `GET /v1/models`, `GET /v1/deployment`, `GET /health`;

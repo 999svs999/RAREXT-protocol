@@ -278,8 +278,58 @@ export async function fetchEngineArtifact(input: {
 export interface NativeEngine {
   run(
     model: unknown,
-    input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
-  ): { text: string; seed: number; steps: number; tokens: number[] };
+    input: {
+      prompt: string;
+      steps: number;
+      seed?: number | null;
+      temperature?: number;
+      /** Keep only the k most likely tokens before sampling (0 = no limit). */
+      topK?: number;
+      /** Nucleus mass to keep before sampling (1 = no limit). */
+      topP?: number;
+      /** Divide a repeated token's positive logit (1 = no penalty). */
+      repetitionPenalty?: number;
+      /** Subtract once per repeated token from its logit. */
+      presencePenalty?: number;
+      /** Subtract once per repetition of a token from its logit. */
+      frequencyPenalty?: number;
+      /** Sequences that end the run; the sequence itself is not returned. */
+      stop?: string[];
+      /** Report the model's own log-probability for every generated token. */
+      logprobs?: boolean;
+      /** How many alternatives to include per token (0-20). */
+      topLogprobs?: number;
+    },
+  ): {
+    text: string;
+    seed: number;
+    steps: number;
+    tokens: number[];
+    /** Why the run ended, when the engine reports it. */
+    finishReason?: "stop" | "length";
+    /** Per-token confidence, aligned with `tokens`, when requested. */
+    logprobs?: Array<{
+      token: number;
+      logprob: number;
+      top: Array<{ token: number; logprob: number }>;
+    }>;
+    /** The context bound the engine held the run to. */
+    contextLength?: number;
+    /** Prompt tokens actually evaluated after any context truncation. */
+    promptTokens?: number;
+    /** True when the prompt had to be shortened to fit the context. */
+    promptTruncated?: boolean;
+    /** The prompt token ids evaluated after truncation. */
+    promptIds?: number[];
+  };
+  /** Tokenize text with the model's own tokenizer, for tests and verifiers. */
+  encode?(model: unknown, text: string): number[];
+  /** Decode token ids with the model's own tokenizer. */
+  decode?(model: unknown, ids: number[]): string;
+  /** Decode many single-token ids with one parse of the model. */
+  decodeTokens?(model: unknown, ids: number[]): string[];
+  /** The decoded prefix after each id, with one parse of the model. */
+  decodePrefixes?(model: unknown, ids: number[]): string[];
   /** Present on the GGUF runtime: dequantize one committed row for inspection. */
   dequantTensor?(model: unknown, name: string, row?: number): Float32Array;
   /** Present on the GGUF runtime: parse a RAREXT "RXHF" container header. */
@@ -536,6 +586,10 @@ export function loadEngine(
     rope?: unknown;
     layerNorm?: unknown;
     ropeFactors?: unknown;
+    encode?: unknown;
+    decode?: unknown;
+    decodeTokens?: unknown;
+    decodePrefixes?: unknown;
   };
   const run = exports.run;
   if (typeof run !== "function") {
@@ -560,6 +614,18 @@ export function loadEngine(
       : {}),
     ...(typeof exports.ropeFactors === "function"
       ? { ropeFactors: exports.ropeFactors as NonNullable<NativeEngine["ropeFactors"]> }
+      : {}),
+    ...(typeof exports.encode === "function"
+      ? { encode: exports.encode as NonNullable<NativeEngine["encode"]> }
+      : {}),
+    ...(typeof exports.decode === "function"
+      ? { decode: exports.decode as NonNullable<NativeEngine["decode"]> }
+      : {}),
+    ...(typeof exports.decodeTokens === "function"
+      ? { decodeTokens: exports.decodeTokens as NonNullable<NativeEngine["decodeTokens"]> }
+      : {}),
+    ...(typeof exports.decodePrefixes === "function"
+      ? { decodePrefixes: exports.decodePrefixes as NonNullable<NativeEngine["decodePrefixes"]> }
       : {}),
   };
 }

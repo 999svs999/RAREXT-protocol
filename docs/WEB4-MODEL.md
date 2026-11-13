@@ -1160,6 +1160,101 @@ the text happened to match: the point is that the same bytes were decoded, not
 that a similar string came out. `replay` reports `traceMatches`, and a divergence
 ends the replay by name.
 
+### Decoding controls
+
+The OpenAI request fields that shape a decode are honoured, not ignored —
+`temperature`, `top_p`, `top_k`, `repetition_penalty`, `presence_penalty`,
+`frequency_penalty`, and `stop`. Each has the OpenAI default, so a request that
+omits them behaves exactly as before, and each is clamped to a range the engine
+can honour (a client cannot make a run unbounded or non-finite).
+
+The point is not feature parity for its own sake. A model that loops gets worse
+the longer it talks, and a caller could not previously stop it:
+
+```
+greedy          "… userloyрал userloyрал userloyрал …"        repeats 21
+repetition x2   "… were optional arge descriptor lb …"        repeats  0
+```
+
+`npm run demo:decoding` runs RAREXT's engine over committed weights and checks
+all five controls on the same prompt: greedy, repetition penalty, top-k/top-p,
+a byte-identical replay of a *sampled* run, and `stop`. `top_k: 1` is a
+single-candidate distribution, so the demo also asserts that `top_k: 1` at
+`temperature: 0.9` reproduces the greedy tokens exactly — the cleanest evidence
+that the restriction is real.
+
+Two consequences matter for the protocol:
+
+- **A sampled run is still replayable.** The sampler is seeded from the run's
+  seed and consumes it deterministically, so `temperature > 0` no longer means
+  "unreplayable". The decode trace records the token ids either way.
+- **`finish_reason` is the truth of the run**, `"stop"` (EOS or a stop sequence)
+  or `"length"` (the step budget), and the stop text is not returned. A response
+  can no longer claim `"stop"` for a run that was truncated by `max_tokens`.
+
+### Confidence: logprobs
+
+The engine can report its own per-token log-probability, and the provider exposes
+it in the OpenAI shape — `choices[0].logprobs.content` for chat,
+`choices[0].logprobs.{tokens,token_logprobs,top_logprobs}` for completions. A
+request asks with `logprobs: true` (chat) or `logprobs: N` (completions), plus
+`top_logprobs: K` for alternatives; off by default, so nothing pays for a
+vocabulary-wide `exp()` it did not ask for.
+
+The number is the softmax over the **penalized logits**, computed before
+temperature/top-k/top-p shape the sampler. That choice matters: the confidence
+is the model's own, so it means the same thing for a greedy and a sampled run and
+can be re-derived by a replay, rather than being an artifact of the sampler.
+Tokens, logprobs, and the returned text are kept aligned: when a stop sequence
+cuts the answer, the token that carried it is dropped instead of being reported
+as confidence for text the caller never saw. On real weights:
+
+```
+logprobs  -9.992 -10.069 -10.068 -10.057 -10.070 -10.045 -10.020 -10.051  (top 2 per token)
+```
+
+Each entry is finite and ≤ 0, alternatives descend, and a greedy choice heads its
+own top list — all asserted by `npm run demo:decoding` and the runtime tests.
+
+### Streaming
+
+`stream: true` is honoured at the decode, not faked at the transport. When
+RAREXT's own engine serves the model, the provider emits **one SSE chunk per
+generated token** — `choices[0].delta.content` for chat,
+`choices[0].text` for completions — followed by a single final chunk whose
+`finish_reason` is the truth of the run (`stop` or `length`); every content chunk
+says `null`.
+
+The deltas come from the engine's **prefix** decode, not from decoding each token
+in isolation: a token can carry part of a UTF-8 character, so a token's delta is
+`prefix[i] - prefix[i-1]` and the concatenation is byte-correct. The chunk count
+equals the number of tokens in the decode trace, and the concatenated deltas equal
+the non-streaming completion exactly. Because the answer is recomputed before the
+first byte is sent, a RAREXT stream is an honest *replay* of the run, not a
+separate code path that could drift.
+
+Two honest bounds: a **third-party** engine's token ids are not ours to decode,
+so its text streams as one delta rather than a guessed token split; a stop
+sequence that cuts the answer **mid-token** makes the prefixes disagree with the
+returned text, so it also streams as one delta instead of sending text the caller
+never received. When logprobs were requested, each content chunk carries the
+logprob of the token it delivered (`choices[0].logprobs.content` for chat, the
+`tokens/token_logprobs/top_logprobs` block for completions), emitted only when the
+chunk and logprob counts agree.
+
+### The context bound
+
+A run is also held to the model's declared `${arch}.context_length`. The KV cache
+grows one position per forward pass and never shrinks, so an oversized prompt
+used to grow it until the host ran out of memory. The engine now truncates the
+prompt deterministically — keeping the most recent tokens and BOS at the front —
+and caps the step budget so `prompt + generated` cannot exceed the declared
+context. A prompt that fits is evaluated verbatim. The result reports
+`contextLength`, `promptTokens`, `promptTruncated`, and the exact `promptIds`
+evaluated, so a long prompt that was shortened is visible rather than silently
+answered from its head. Containers that declare no context length fall back to
+4096 tokens.
+
 ### The engine judgment
 
 An engine run can be checked at the decode level too, when the engine exposes

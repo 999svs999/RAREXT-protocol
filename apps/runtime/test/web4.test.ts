@@ -70,7 +70,7 @@ import {
   hardwareFromNetwork,
   validateDeployment,
 } from "../src/manifest.ts";
-import { startProvider, traceFor } from "../src/provider.ts";
+import { startProvider, traceFor, applyStop, decodingParams } from "../src/provider.ts";
 import { replayEngineRun } from "../src/replay.ts";
 import {
   attestationBindsEnclaveKey,
@@ -204,6 +204,8 @@ function tinyGgufModel(
     ropeShortFactor?: number;
     /** Value written into the LongRoPE long factor tensor (default 1). */
     ropeLongFactor?: number;
+    /** Declared `<arch>.context_length` (default 64). */
+    contextLength?: number;
   } = {},
 ): Buffer {
   const arch = options.arch ?? "qwen2";
@@ -428,7 +430,7 @@ function tinyGgufModel(
     kv("general.architecture", 8, str(options.archOverride ?? arch)),
     kv("general.file_type", 4, u32(0)),
     kv(`${arch}.block_count`, 4, u32(1)),
-    kv(`${arch}.context_length`, 4, u32(64)),
+    kv(`${arch}.context_length`, 4, u32(options.contextLength ?? 64)),
     kv(`${arch}.embedding_length`, 4, u32(nEmbd)),
     kv(`${arch}.feed_forward_length`, 4, u32(nFfn)),
     kv(`${arch}.attention.head_count`, 4, u32(nHead)),
@@ -6412,6 +6414,269 @@ test("a GGUF is served by RAREXT's own fetched engine, with no external engine",
   }
 });
 
+test("an OpenAI request controls decoding end to end: temperature, top_k, stop, finish_reason", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    // The SPM fixture decodes to text, so `stop` is testable end to end.
+    const bytes = tinyGgufModel({ tokenizer: "llama" });
+    const model: ModelRef = {
+      id: "tiny-llama",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "decoding"),
+      port: 0,
+      engineBundle,
+    });
+
+    const ask = async (extra: Record<string, unknown>) => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "ab" }],
+          max_tokens: 8,
+          seed: 5,
+          ...extra,
+        }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as {
+        choices: Array<{
+          message: { content: string };
+          finish_reason: string;
+          logprobs?: {
+            content: Array<{
+              token: string;
+              logprob: number;
+              top_logprobs: Array<{ token: string; logprob: number }>;
+            }>;
+          };
+        }>;
+        rarext_trace?: { tokens?: number[] };
+      };
+    };
+
+    const greedy = await ask({ temperature: 0 });
+    // top_k=1 restricts the sampler to the most likely token, so a sampled
+    // request must reproduce the greedy run token for token.
+    const topOne = await ask({ temperature: 0.9, top_k: 1 });
+    assert.deepEqual(
+      topOne.rarext_trace?.tokens,
+      greedy.rarext_trace?.tokens,
+      "top_k=1 reproduces greedy over HTTP",
+    );
+
+    // A sampled request is reproducible from (seed, top_k, top_p).
+    const sampled = await ask({ temperature: 0.9, top_k: 4, top_p: 0.9 });
+    const sampledAgain = await ask({ temperature: 0.9, top_k: 4, top_p: 0.9 });
+    assert.deepEqual(sampledAgain.rarext_trace?.tokens, sampled.rarext_trace?.tokens);
+
+    // finish_reason is the truth of how the run ended, not a constant.
+    const produced = greedy.rarext_trace?.tokens?.length ?? 0;
+    assert.equal(greedy.choices[0]!.finish_reason, produced >= 8 ? "length" : "stop");
+
+    // stop truncates at the sequence, drops it from the text, and says so.
+    const text = greedy.choices[0]!.message.content;
+    assert.ok(text.length >= 2, `the fixture decodes text to stop on (got ${JSON.stringify(text)})`);
+    const stop = text.slice(0, 2);
+    const stopped = await ask({ temperature: 0, stop: [stop] });
+    assert.equal(stopped.choices[0]!.finish_reason, "stop");
+    assert.equal(stopped.choices[0]!.message.content, text.slice(0, text.indexOf(stop)));
+    assert.equal(stopped.choices[0]!.message.content.includes(stop), false);
+
+    // logprobs: the model's own confidence, one entry per generated token,
+    // aligned with the decode trace, and absent unless requested.
+    assert.equal(greedy.choices[0]!.logprobs, undefined, "no logprobs unless requested");
+    const scored = await ask({ temperature: 0, logprobs: true, top_logprobs: 3 });
+    const content = scored.choices[0]!.logprobs?.content;
+    assert.ok(Array.isArray(content) && content.length > 0, "logprobs were returned");
+    assert.equal(content!.length, scored.rarext_trace?.tokens?.length, "one entry per token");
+    assert.equal(
+      content!.map((entry) => entry.token).join(""),
+      scored.choices[0]!.message.content,
+      "the token texts reconstruct the completion",
+    );
+    for (const entry of content!) {
+      assert.ok(Number.isFinite(entry.logprob) && entry.logprob <= 0, `logprob ${entry.logprob} is a log-probability`);
+      assert.equal(entry.top_logprobs.length, 3);
+      for (let i = 1; i < entry.top_logprobs.length; i += 1) {
+        assert.ok(
+          entry.top_logprobs[i - 1]!.logprob >= entry.top_logprobs[i]!.logprob,
+          "top_logprobs descend",
+        );
+      }
+    }
+
+    // A stop sequence and logprobs describe the same returned sequence. Here the
+    // stop cuts at the first token, so nothing is returned — and no confidence
+    // for tokens that were dropped is reported either.
+    const stoppedScored = await ask({ temperature: 0, stop: [stop], logprobs: true, top_logprobs: 1 });
+    assert.equal(stoppedScored.choices[0]!.finish_reason, "stop");
+    assert.equal(stoppedScored.choices[0]!.message.content, "");
+    assert.equal(
+      stoppedScored.choices[0]!.logprobs,
+      undefined,
+      "no logprobs for tokens the response did not return",
+    );
+
+    // The legacy completions endpoint reports the completions-shaped block.
+    const legacy = await fetch(`${provider!.url}/v1/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: bundle.model.id, prompt: "ab", max_tokens: 4, temperature: 0, logprobs: 2 }),
+    });
+    assert.equal(legacy.status, 200);
+    const legacyJson = (await legacy.json()) as {
+      choices: Array<{
+        text: string;
+        logprobs?: { tokens: string[]; token_logprobs: number[]; top_logprobs: Array<Record<string, number>> };
+      }>;
+    };
+    const legacyLogprobs = legacyJson.choices[0]!.logprobs;
+    assert.ok(legacyLogprobs !== undefined);
+    assert.equal(legacyLogprobs!.tokens.length, 4);
+    assert.equal(legacyLogprobs!.token_logprobs.length, 4);
+    assert.ok(legacyLogprobs!.token_logprobs.every((value) => Number.isFinite(value) && value <= 0));
+    assert.ok(legacyLogprobs!.top_logprobs.every((map) => Object.keys(map).length === 2));
+
+    // Streaming is real: one SSE chunk per generated token, plus a final chunk
+    // that states how the run ended. The chunks must reconstruct exactly the
+    // completion the non-stream endpoint returns for the same request.
+    const plainFive = await ask({ temperature: 0, max_tokens: 5 });
+    const events = async (response: Response): Promise<unknown[]> => {
+      assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+      const raw = await response.text();
+      const frames = raw.split("\n\n").filter((frame) => frame.startsWith("data: "));
+      assert.equal(frames.at(-1), "data: [DONE]");
+      return frames.slice(0, -1).map((frame) => JSON.parse(frame.slice("data: ".length)));
+    };
+    const streamResponse = await fetch(`${provider!.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "ab" }],
+        max_tokens: 5,
+        temperature: 0,
+        seed: 5,
+        stream: true,
+        logprobs: true,
+        top_logprobs: 1,
+      }),
+    });
+    assert.equal(streamResponse.status, 200);
+    type ChatChunk = {
+      choices: Array<{
+        delta?: { role?: string; content?: string };
+        finish_reason: string | null;
+        logprobs?: { content: Array<{ token: string; logprob: number }> };
+      }>;
+    };
+    const chatChunks = (await events(streamResponse)) as ChatChunk[];
+    const contentChunks = chatChunks.filter((chunk) => chunk.choices[0]?.delta?.content !== undefined);
+    assert.equal(contentChunks.length, 5, "one chunk per generated token");
+    assert.equal(
+      contentChunks.length,
+      plainFive.rarext_trace?.tokens?.length,
+      "the chunk count matches the decode trace",
+    );
+    assert.equal(
+      contentChunks.map((chunk) => chunk.choices[0]!.delta!.content).join(""),
+      plainFive.choices[0]!.message.content,
+      "streamed deltas concatenate to the non-stream completion",
+    );
+    assert.equal(contentChunks[0]!.choices[0]!.delta!.role, "assistant");
+    assert.ok(contentChunks.every((chunk) => chunk.choices[0]!.finish_reason === null));
+    assert.ok(
+      contentChunks.every((chunk) => {
+        const entry = chunk.choices[0]!.logprobs?.content;
+        return (
+          entry?.length === 1 &&
+          entry[0]!.token === chunk.choices[0]!.delta!.content &&
+          Number.isFinite(entry[0]!.logprob) &&
+          entry[0]!.logprob <= 0
+        );
+      }),
+      "each streamed chunk carries the logprob of the token it delivered",
+    );
+    const finals = chatChunks.filter((chunk) => chunk.choices[0]?.finish_reason !== null);
+    assert.equal(finals.length, 1, "exactly one final chunk");
+    assert.equal(finals[0]!.choices[0]!.finish_reason, plainFive.choices[0]!.finish_reason);
+    assert.equal(finals[0]!.choices[0]!.finish_reason, "length");
+
+    // A stop that ends the run before any token streams no content chunk, and
+    // the final chunk still says "stop".
+    const stoppedStream = await fetch(`${provider!.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "ab" }],
+        max_tokens: 5,
+        temperature: 0,
+        seed: 5,
+        stream: true,
+        stop: [stop],
+      }),
+    });
+    const stoppedChunks = (await events(stoppedStream)) as ChatChunk[];
+    assert.equal(
+      stoppedChunks.filter((chunk) => chunk.choices[0]?.delta?.content !== undefined).length,
+      0,
+      "no content was streamed for a run that stopped at the first token",
+    );
+    assert.equal(stoppedChunks.at(-1)!.choices[0]!.finish_reason, "stop");
+
+    // The legacy completions endpoint streams per token too.
+    const completionsStream = await fetch(`${provider!.url}/v1/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: bundle.model.id, prompt: "ab", max_tokens: 4, temperature: 0, stream: true }),
+    });
+    type CompletionChunk = {
+      choices: Array<{ text?: string; finish_reason: string | null }>;
+    };
+    const completionChunks = (await events(completionsStream)) as CompletionChunk[];
+    const completionParts = completionChunks.filter(
+      (chunk) => chunk.choices[0]?.finish_reason === null && typeof chunk.choices[0]?.text === "string",
+    );
+    assert.equal(completionParts.length, 4, "one completion chunk per token");
+    assert.equal(
+      completionParts.map((chunk) => chunk.choices[0]!.text).join(""),
+      legacyJson.choices[0]!.text ?? "",
+      "streamed text concatenates to the non-stream completion",
+    );
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 /**
  * Assemble a minimal WebAssembly module that exports `memory` and
  * `run(promptPtr, len, steps, seed) -> i32`, returning a pointer to `text`.
@@ -8090,4 +8355,311 @@ test("the engine itself is a RAREXT artifact a provider fetches, verifies, and r
     if (provider !== null) await provider.close();
     await reg.close();
   }
+});
+
+test("OpenAI decoding fields are parsed with defaults, clamps, and stop truncation", () => {
+  assert.deepEqual(decodingParams({}), {
+    temperature: 0,
+    topK: 0,
+    topP: 1,
+    repetitionPenalty: 1,
+    presencePenalty: 0,
+    frequencyPenalty: 0,
+    stop: [],
+    logprobs: false,
+    topLogprobs: 0,
+  });
+
+  const parsed = decodingParams({
+    temperature: 0.7,
+    top_p: 0.9,
+    top_k: 40,
+    repetition_penalty: 1.2,
+    presence_penalty: 0.1,
+    frequency_penalty: 0.2,
+    stop: ["</s>", "\n\n"],
+  });
+  assert.equal(parsed.temperature, 0.7);
+  assert.equal(parsed.topK, 40);
+  assert.equal(parsed.topP, 0.9);
+  assert.equal(parsed.repetitionPenalty, 1.2);
+  assert.equal(parsed.presencePenalty, 0.1);
+  assert.equal(parsed.frequencyPenalty, 0.2);
+  assert.deepEqual(parsed.stop, ["</s>", "\n\n"]);
+  assert.equal(parsed.logprobs, false);
+
+  // Both OpenAI shapes are accepted: boolean + top_logprobs (chat) and an
+  // integer (legacy completions). Out-of-range counts clamp.
+  assert.deepEqual(
+    [decodingParams({ logprobs: true }).logprobs, decodingParams({ logprobs: true }).topLogprobs],
+    [true, 0],
+  );
+  assert.deepEqual(
+    [decodingParams({ logprobs: true, top_logprobs: 3 }).topLogprobs, decodingParams({ logprobs: 5 }).topLogprobs],
+    [3, 5],
+  );
+  assert.equal(decodingParams({ logprobs: true, top_logprobs: 99 }).topLogprobs, 20);
+
+  // A hostile or sloppy client cannot make a run unbounded or non-finite.
+  assert.equal(decodingParams({ temperature: -5 }).temperature, 0);
+  assert.equal(decodingParams({ temperature: Number.NaN }).temperature, 0);
+  assert.equal(decodingParams({ top_p: 7 }).topP, 1);
+  assert.equal(decodingParams({ top_p: Number.POSITIVE_INFINITY }).topP, 1);
+  assert.equal(decodingParams({ top_k: 1e9 }).topK, 4096);
+  assert.equal(decodingParams({ repetition_penalty: 0 }).repetitionPenalty, 0.01);
+  assert.deepEqual(decodingParams({ stop: "END" }).stop, ["END"]);
+  assert.equal(decodingParams({ stop: Array.from({ length: 20 }, () => "x") }).stop.length, 8);
+
+  assert.deepEqual(applyStop("abcSTOPdef", ["STOP"]), { text: "abc", stopped: true });
+  assert.deepEqual(applyStop("abcSTOPdef", ["zzz", "STOP"]), { text: "abc", stopped: true });
+  assert.deepEqual(applyStop("abc", ["STOP"]), { text: "abc", stopped: false });
+});
+
+test("decoding controls: top-k and top-p restrict the sampler; greedy stays greedy", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel()) };
+
+  const greedy = engine.run(model, { prompt: "ab", steps: 6, temperature: 0, seed: 3 });
+  assert.ok(greedy.tokens.length > 0, "the fixture produces tokens");
+
+  // top_k=1 leaves exactly one candidate, so a sampled run must equal greedy.
+  const topOne = engine.run(model, { prompt: "ab", steps: 6, temperature: 0.9, seed: 3, topK: 1 });
+  assert.deepEqual(topOne.tokens, greedy.tokens, "top_k=1 is greedy");
+
+  // A nucleus below the top token's mass also leaves exactly one candidate.
+  const nucleus = engine.run(model, { prompt: "ab", steps: 6, temperature: 0.9, seed: 3, topP: 1e-9 });
+  assert.deepEqual(nucleus.tokens, greedy.tokens, "top_p below the top mass is greedy");
+
+  // Unrestricted sampling is still reproducible from the seed.
+  const a = engine.run(model, { prompt: "ab", steps: 6, temperature: 0.9, seed: 3 });
+  const b = engine.run(model, { prompt: "ab", steps: 6, temperature: 0.9, seed: 3 });
+  assert.deepEqual(a.tokens, b.tokens, "a sampled run is seed-deterministic");
+  assert.deepEqual(a.text, b.text, "and so is its text");
+});
+
+test("decoding controls: penalties reduce repetition and stop ends the run", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama" })) };
+
+  const repeats = (tokens: number[]): number => new Set(tokens).size === tokens.length
+    ? 0
+    : tokens.length - new Set(tokens).size;
+
+  const base = engine.run(model, { prompt: "ab", steps: 16, temperature: 0, seed: 0 });
+  assert.ok(
+    repeats(base.tokens) > 0,
+    `the greedy fixture repeats a token, so the penalty is testable (got ${base.tokens.join(",")})`,
+  );
+
+  const penalized = engine.run(model, {
+    prompt: "ab",
+    steps: 16,
+    temperature: 0,
+    seed: 0,
+    repetitionPenalty: 8,
+  });
+  assert.ok(
+    repeats(penalized.tokens) < repeats(base.tokens),
+    `repetition_penalty reduces repeats: ${repeats(base.tokens)} -> ${repeats(penalized.tokens)}`,
+  );
+
+  // The run ends AT the stop sequence, and the sequence is not returned.
+  const decodeOne = (ids: number[]): string =>
+    (engine as unknown as { decode(model: unknown, ids: number[]): string }).decode(model, ids);
+  const decoded = base.tokens.map((token) => decodeOne([token]));
+  assert.ok(
+    decoded.some((text) => text.length > 0),
+    `the greedy run decodes some text to test stop (tokens=${base.tokens.join(",")} decoded=${JSON.stringify(decoded)})`,
+  );
+  const stop = decoded.find((text) => text.length > 0)!;
+  assert.ok(base.text.includes(stop), `the decoded text carries the stop (${JSON.stringify({ stop, text: base.text })})`);
+  const at = base.text.indexOf(stop);
+  const stopped = engine.run(model, {
+    prompt: "ab",
+    steps: 16,
+    temperature: 0,
+    seed: 0,
+    stop: [stop],
+  });
+  assert.equal(stopped.finishReason, "stop");
+  assert.equal(stopped.text, base.text.slice(0, at));
+  assert.equal(stopped.text.includes(stop), false, "the stop text is not returned");
+
+  // A run that reaches its step budget without a stop reports "length", and a
+  // 64-step request against a 64-token context is capped so it cannot overrun.
+  const budget = engine.run(model, { prompt: "ab", steps: 64, temperature: 0, seed: 0 });
+  const budgetSteps = budget.contextLength! - budget.promptTokens! + 1;
+  assert.ok(
+    (budget.promptTokens ?? 0) + Math.max(0, budget.tokens.length - 1) <= budget.contextLength!,
+    "the 64-step run stayed inside the 64-token context",
+  );
+  assert.equal(budget.finishReason, budget.tokens.length >= budgetSteps ? "length" : "stop");
+});
+
+test("a prompt longer than the declared context truncates to the tail and bounds the run", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const contextLength = 12;
+  const model = {
+    kind: "gguf" as const,
+    bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama", contextLength })),
+  };
+  const encode = (text: string): number[] => engine.encode!(model, text);
+
+  // Every character here is in the SPM fixture's vocabulary, so the prompt
+  // tokenizes to a known length rather than falling back to BOS alone.
+  const prompt = "abcdefg".repeat(8);
+  const full = encode(prompt);
+  assert.ok(
+    full.length > contextLength,
+    `the fixture prompt is longer than the declared context (${full.length} > ${contextLength})`,
+  );
+
+  // A 256-step request against a 12-token context must not run 256 positions.
+  const run = engine.run(model, { prompt, steps: 256, temperature: 0, seed: 0 });
+  assert.equal(run.contextLength, contextLength);
+  assert.equal(run.promptTruncated, true);
+  assert.equal(run.promptTokens, contextLength);
+  assert.equal(run.promptIds?.length, contextLength);
+  assert.equal(run.promptIds?.[0], 0, "the truncation keeps BOS at the front");
+  assert.deepEqual(
+    run.promptIds,
+    (() => {
+      const tail = full.slice(full.length - contextLength);
+      if (tail[0] !== 0) tail[0] = 0;
+      return tail;
+    })(),
+    "the truncation keeps the most recent tokens, not the oldest",
+  );
+
+  // Positions = prompt + (generated - 1); the first generated token comes out
+  // of the last prompt position. It can never exceed the declared context.
+  const positions = (result: { promptTokens?: number; tokens: number[] }): number =>
+    (result.promptTokens ?? 0) + Math.max(0, result.tokens.length - 1);
+  assert.ok(
+    positions(run) <= contextLength,
+    `the run stayed inside the context (${positions(run)} <= ${contextLength})`,
+  );
+  assert.ok(run.tokens.length <= 1, `the step budget was capped to the left-over context (${run.tokens.length})`);
+  assert.equal(run.finishReason, run.tokens.length === 0 ? "stop" : "length");
+
+  // Deterministic: the same oversized request truncates the same way.
+  const again = engine.run(model, { prompt, steps: 256, temperature: 0, seed: 0 });
+  assert.deepEqual(again.promptIds, run.promptIds);
+  assert.deepEqual(again.tokens, run.tokens);
+  assert.equal(again.finishReason, run.finishReason);
+});
+
+test("a prompt that fits the context is untouched, and the step budget is only cut when needed", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const contextLength = 16;
+  const model = {
+    kind: "gguf" as const,
+    bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama", contextLength })),
+  };
+  const prompt = "abcdefg";
+  const full = engine.encode!(model, prompt);
+  assert.ok(full.length > 0 && full.length < contextLength);
+
+  const run = engine.run(model, { prompt, steps: 256, temperature: 0, seed: 0 });
+  assert.equal(run.promptTruncated, false);
+  assert.deepEqual(run.promptIds, full, "a fitting prompt is evaluated verbatim");
+  assert.equal(run.contextLength, contextLength);
+
+  // The run can use contextLength - prompt + 1 steps at most.
+  const budget = contextLength - full.length + 1;
+  assert.ok(
+    run.tokens.length <= budget,
+    `steps were capped to the context (${run.tokens.length} <= ${budget})`,
+  );
+  assert.equal(run.finishReason, run.tokens.length >= budget ? "length" : "stop");
+
+  // A call that fits both prompt and steps is not shortened.
+  const small = engine.run(model, { prompt, steps: 3, temperature: 0, seed: 0 });
+  assert.equal(small.promptTruncated, false);
+  assert.ok(small.tokens.length <= 3);
+});
+
+test("the engine reports its own logprobs, aligned with the tokens it emitted", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama" })) };
+
+  // Off by default: a caller that does not ask pays no vocabulary-wide exp().
+  const plain = engine.run(model, { prompt: "ab", steps: 6, temperature: 0, seed: 0 });
+  assert.equal("logprobs" in plain, false);
+
+  const run = engine.run(model, {
+    prompt: "ab",
+    steps: 6,
+    temperature: 0,
+    seed: 0,
+    logprobs: true,
+    topLogprobs: 4,
+  });
+  assert.ok(run.logprobs !== undefined, "logprobs were requested and returned");
+  assert.equal(run.logprobs!.length, run.tokens.length, "one entry per generated token");
+  for (const [i, entry] of run.logprobs!.entries()) {
+    assert.equal(entry.token, run.tokens[i], "entries are aligned with tokens");
+    assert.ok(
+      Number.isFinite(entry.logprob) && entry.logprob <= 0,
+      `logprob ${entry.logprob} is a natural log of a probability`,
+    );
+    assert.equal(entry.top.length, 4);
+    // Greedy picks the argmax, so the chosen token heads its own top list.
+    assert.equal(entry.top[0]!.token, entry.token);
+    assert.equal(entry.top[0]!.logprob, entry.logprob);
+    for (let k = 1; k < entry.top.length; k += 1) {
+      assert.ok(entry.top[k - 1]!.logprob >= entry.top[k]!.logprob, "alternatives descend");
+    }
+    assert.ok(entry.top.every((alt) => Number.isFinite(alt.logprob) && alt.logprob <= 0));
+  }
+
+  // Sampling can pick a token that is not the most likely one; the reported
+  // confidence is still the model's, not a re-scored sampler artifact.
+  const sampled = engine.run(model, {
+    prompt: "ab",
+    steps: 8,
+    temperature: 0.9,
+    seed: 3,
+    topK: 2,
+    logprobs: true,
+    topLogprobs: 1,
+  });
+  assert.equal(sampled.logprobs!.length, sampled.tokens.length);
+  for (const entry of sampled.logprobs!) {
+    assert.ok(
+      entry.logprob <= entry.top[0]!.logprob + 1e-9,
+      `the sampled token cannot beat the best token (${entry.logprob} <= ${entry.top[0]!.logprob})`,
+    );
+  }
+
+  // A stop sequence removes the token that carried it, so ids, logprobs, and
+  // text stay aligned rather than reporting confidence for text not returned.
+  const stopped = engine.run(model, {
+    prompt: "ab",
+    steps: 8,
+    temperature: 0,
+    seed: 0,
+    logprobs: true,
+    topLogprobs: 2,
+    stop: [run.text.slice(0, 1)],
+  });
+  assert.equal(stopped.finishReason, "stop");
+  assert.equal(stopped.logprobs!.length, stopped.tokens.length);
+  assert.ok(stopped.text.length < run.text.length, "the stop shortened the answer");
+  assert.equal(
+    stopped.tokens.map((token) => engine.decode!(model, [token])).join(""),
+    stopped.text,
+    "the remaining token texts reconstruct the returned text",
+  );
+
+  // Confidence is deterministic along with the tokens.
+  const again = engine.run(model, {
+    prompt: "ab",
+    steps: 6,
+    temperature: 0,
+    seed: 0,
+    logprobs: true,
+    topLogprobs: 4,
+  });
+  assert.deepEqual(again.logprobs, run.logprobs);
 });

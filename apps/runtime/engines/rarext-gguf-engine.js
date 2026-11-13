@@ -10,7 +10,8 @@
  *
  * Supported container: GGUF v2/v3 (little endian).
  * Supported tensor types: F32, F16, BF16, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0,
- * Q2_K, Q3_K, Q4_K, Q5_K, Q6_K.
+ * Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_K, IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S,
+ * IQ3_XXS, IQ3_S, IQ4_NL, IQ4_XS.
  * Supported architectures: qwen2 (GQA + NeoX RoPE + SwiGLU + tied output),
  * llama/mistral/mixtral (GQA + adjacent-pair RoPE + SwiGLU, optional output
  * matrix; mixtral adds top-k expert routing), gemma (NeoX RoPE + GeGLU +
@@ -20,9 +21,23 @@
  * (llama), both with byte fallback.
  *
  * Exports `run(model, input)` where `model` is `{ kind: "gguf", bytes }` and
- * `input` is `{ prompt, steps, seed, temperature }`. Returns
- * `{ text, seed, steps, tokens }`; `tokens` are the generated token ids, so the
- * run carries a decode trace a replay can re-check token for token.
+ * `input` is `{ prompt, steps, seed, temperature, topK, topP,
+ * repetitionPenalty, presencePenalty, frequencyPenalty, stop, logprobs,
+ * topLogprobs }`. Returns
+ * `{ text, seed, steps, tokens, finishReason, logprobs? }`; `tokens` are the
+ * generated token ids, so the run carries a decode trace a replay can re-check
+ * token for token. Every decoding control has the OpenAI default, so omitting one
+ * leaves an existing caller's run unchanged — and the sampler is seeded, so a
+ * SAMPLED run is replayable too, not only a greedy one. When `logprobs` is set,
+ * each generated token carries the model's own log-probability (before the
+ * sampler reshapes the distribution) and its `topLogprobs` alternatives.
+ *
+ * Context is bounded: the run reads `${arch}.context_length` from the container
+ * and truncates an oversized prompt to its most recent tokens (keeping BOS at
+ * the front) and caps the step budget so prompt + generation never exceeds the
+ * declared context. A prompt that fits is evaluated verbatim. The result
+ * reports `contextLength`, `promptTokens`, `promptTruncated`, and the exact
+ * `promptIds` that were evaluated.
  */
 (function () {
   "use strict";
@@ -2346,26 +2361,6 @@
     return best;
   }
 
-  function sample(values, temperature, rng) {
-    var max = -Infinity;
-    var i;
-    for (i = 0; i < values.length; i += 1) if (values[i] > max) max = values[i];
-    var sum = 0;
-    var probs = new Float64Array(values.length);
-    for (i = 0; i < values.length; i += 1) {
-      var p = Math.exp((values[i] - max) / temperature);
-      probs[i] = p;
-      sum += p;
-    }
-    var target = rng() * sum;
-    var running = 0;
-    for (i = 0; i < values.length; i += 1) {
-      running += probs[i];
-      if (running >= target) return i;
-    }
-    return values.length - 1;
-  }
-
   function xorshift(seed) {
     var state = (seed >>> 0) || 0x9e3779b9;
     return function () {
@@ -2375,6 +2370,127 @@
       state >>>= 0;
       return state / 4294967296;
     };
+  }
+
+  /**
+   * Repetition, presence, and frequency penalties, applied in place.
+   *
+   * `counts[i]` is how many times token `i` was already emitted. Repetition
+   * penalty divides a positive logit (and multiplies a negative one) so a seen
+   * token gets less likely without changing the sign ordering; presence and
+   * frequency are additive, matching the OpenAI-compatible names.
+   */
+  function applyPenalties(logits, counts, repetitionPenalty, presencePenalty, frequencyPenalty) {
+    if (repetitionPenalty === 1 && presencePenalty === 0 && frequencyPenalty === 0) return;
+    for (var i = 0; i < logits.length; i += 1) {
+      var seen = counts[i] || 0;
+      if (seen === 0) continue;
+      if (repetitionPenalty !== 1) {
+        logits[i] = logits[i] > 0 ? logits[i] / repetitionPenalty : logits[i] * repetitionPenalty;
+      }
+      if (presencePenalty !== 0) logits[i] -= presencePenalty;
+      if (frequencyPenalty !== 0) logits[i] -= frequencyPenalty * seen;
+    }
+  }
+
+  /**
+   * The k indices with the largest values, descending. k is small (a decoding
+   * control, not the vocabulary), so a bounded insertion beats a full sort of
+   * a 100k-entry logit vector on every token.
+   */
+  function topKIndices(values, k) {
+    var best = [];
+    for (var i = 0; i < values.length; i += 1) {
+      var v = values[i];
+      if (best.length === k && v <= best[best.length - 1].v) continue;
+      var at = best.length;
+      while (at > 0 && best[at - 1].v < v) at -= 1;
+      best.splice(at, 0, { i: i, v: v });
+      if (best.length > k) best.pop();
+    }
+    return best;
+  }
+
+  /**
+   * Pick the next token under greedy or sampled decoding.
+   *
+   * `temperature <= 0` is greedy on the penalized logits. Above zero the
+   * candidates are restricted to top-k (if set) and then to the nucleus whose
+   * mass reaches top-p, and the draw uses the run's seeded RNG — so the same
+   * request reproduces the same tokens, which is what makes a sampled run
+   * replayable too.
+   */
+  function chooseToken(logits, opts, counts, rng) {
+    applyPenalties(logits, counts, opts.repetitionPenalty, opts.presencePenalty, opts.frequencyPenalty);
+    if (!(opts.temperature > 0)) return argmax(logits);
+
+    var n = logits.length;
+    var max = -Infinity;
+    for (var i = 0; i < n; i += 1) if (logits[i] > max) max = logits[i];
+
+    var candidates;
+    var k = opts.topK > 0 ? Math.min(opts.topK, n) : 0;
+    if (k > 0) {
+      candidates = topKIndices(logits, k);
+    } else {
+      candidates = new Array(n);
+      for (var j = 0; j < n; j += 1) candidates[j] = { i: j, v: logits[j] };
+      candidates.sort(function (a, b) {
+        return b.v - a.v;
+      });
+    }
+
+    var probs = new Array(candidates.length);
+    var total = 0;
+    for (var c = 0; c < candidates.length; c += 1) {
+      var p = Math.exp((candidates[c].v - max) / opts.temperature);
+      probs[c] = p;
+      total += p;
+    }
+
+    var cutoff = opts.topP > 0 && opts.topP < 1 ? opts.topP * total : total;
+    var kept = [];
+    var keptSum = 0;
+    for (var m = 0; m < probs.length; m += 1) {
+      kept.push(m);
+      keptSum += probs[m];
+      if (keptSum >= cutoff) break;
+    }
+
+    var target = rng() * keptSum;
+    var running = 0;
+    for (var q = 0; q < kept.length; q += 1) {
+      running += probs[kept[q]];
+      if (running >= target) return candidates[kept[q]].i;
+    }
+    return candidates[kept[kept.length - 1]].i;
+  }
+
+  /**
+   * The log-probability of `id` under the penalized logits, plus the `topCount`
+   * most likely tokens, both as natural logs of the softmax.
+   *
+   * This is the model's own confidence, computed BEFORE temperature/top-k/top-p
+   * shape the sampler, so it means the same thing for a greedy and a sampled
+   * run and can be checked by a replay. Only computed when a caller asks for
+   * logprobs: it costs one exp() over the vocabulary per token.
+   */
+  function logprobOf(logits, id, topCount) {
+    var n = logits.length;
+    var max = -Infinity;
+    var i;
+    for (i = 0; i < n; i += 1) if (logits[i] > max) max = logits[i];
+    var sum = 0;
+    for (i = 0; i < n; i += 1) sum += Math.exp(logits[i] - max);
+    var logSum = max + Math.log(sum);
+    var top = [];
+    if (topCount > 0) {
+      var best = topKIndices(logits, Math.min(topCount, n));
+      for (var b = 0; b < best.length; b += 1) {
+        top.push({ token: best[b].i, logprob: best[b].v - logSum });
+      }
+    }
+    return { token: id, logprob: logits[id] - logSum, top: top };
   }
 
   function run(model, input) {
@@ -2437,10 +2553,61 @@
     var bos = kv["tokenizer.ggml.bos_token_id"];
     if (promptIds.length === 0 && typeof bos === "number") promptIds.push(bos);
 
+    // Context guard. The KV cache grows by one position per forward pass and
+    // never shrinks, so a prompt longer than the model's declared context used
+    // to grow it without bound until the host ran out of memory. Truncate the
+    // prompt deterministically instead, keeping the most recent tokens (the tail
+    // is what the user just asked) and a BOS at the front so the sequence stays
+    // well formed. Undeclared context lengths fall back to 4096.
+    var declaredCtx = Number(kv[arch + ".context_length"]);
+    var contextLimit = Number.isFinite(declaredCtx) && declaredCtx >= 2 ? Math.floor(declaredCtx) : 4096;
+    var promptTruncated = false;
+    if (promptIds.length > contextLimit) {
+      promptTruncated = true;
+      promptIds = promptIds.slice(promptIds.length - contextLimit);
+      if (typeof bos === "number" && promptIds[0] !== bos) promptIds[0] = bos;
+    }
+
     var steps = Math.max(1, Math.min(Number(input.steps) || 16, 256));
+    // The first generated token comes out of the last prompt position; every
+    // later one costs a position. Bound the run so prompt + generation can
+    // never exceed the declared context.
+    steps = Math.min(steps, Math.max(1, contextLimit - promptIds.length + 1));
     var temperature = typeof input.temperature === "number" ? input.temperature : 0;
     var seed = Number.isSafeInteger(input.seed) ? input.seed : 0;
     var rng = xorshift(seed >>> 0);
+
+    // Decoding controls. Every one has the OpenAI-compatible default, so an
+    // omitted field changes nothing about an existing caller's run.
+    var stopSequences = [];
+    if (typeof input.stop === "string" && input.stop.length > 0) {
+      stopSequences.push(input.stop);
+    } else if (Array.isArray(input.stop)) {
+      for (var stopIndex = 0; stopIndex < input.stop.length && stopSequences.length < 8; stopIndex += 1) {
+        if (typeof input.stop[stopIndex] === "string" && input.stop[stopIndex].length > 0) {
+          stopSequences.push(input.stop[stopIndex]);
+        }
+      }
+    }
+    var decoding = {
+      temperature: temperature,
+      topK: typeof input.topK === "number" && input.topK > 0 ? Math.floor(input.topK) : 0,
+      topP:
+        typeof input.topP === "number" && Number.isFinite(input.topP)
+          ? Math.min(1, Math.max(0, input.topP))
+          : 1,
+      repetitionPenalty:
+        typeof input.repetitionPenalty === "number" && input.repetitionPenalty > 0
+          ? input.repetitionPenalty
+          : 1,
+      presencePenalty: typeof input.presencePenalty === "number" ? input.presencePenalty : 0,
+      frequencyPenalty: typeof input.frequencyPenalty === "number" ? input.frequencyPenalty : 0,
+      logprobs: input.logprobs === true,
+      topLogprobs:
+        typeof input.topLogprobs === "number" && input.topLogprobs > 0
+          ? Math.min(20, Math.floor(input.topLogprobs))
+          : 0,
+    };
 
     var x = new Float32Array(nEmbd);
     var norm = new Float32Array(nEmbd);
@@ -2455,6 +2622,8 @@
     var up = new Float32Array(2 * nFfn);
     var hidden = new Float32Array(nEmbd);
     var logits = new Float32Array(output.rows);
+    // How many times each token has been emitted this run, for the penalties.
+    var emittedCounts = new Uint32Array(output.rows);
 
     // Per-layer KV cache: one Float32Array per position, for every layer.
     var cacheK = [];
@@ -2488,7 +2657,6 @@
 
     var position = 0;
     var generated = [];
-    var allIds = promptIds.slice();
 
     function forward(tokenId) {
       dequantRow(gguf, embd, tokenId, x);
@@ -2701,14 +2869,46 @@
       return out;
     }
 
+    var finishReason = "length";
+
+    var logprobEntries = [];
+
+    function record(tokenId, scored) {
+      generated.push(tokenId);
+      if (tokenId >= 0 && tokenId < emittedCounts.length) emittedCounts[tokenId] += 1;
+      if (decoding.logprobs && scored !== null && scored !== undefined) logprobEntries.push(scored);
+    }
+
+    // Score a chosen token only when the caller asked for logprobs, so the
+    // common path pays nothing for a feature it does not use.
+    function score(logits, tokenId) {
+      return decoding.logprobs ? logprobOf(logits, tokenId, decoding.topLogprobs) : null;
+    }
+
+    /** Index of the earliest stop sequence in the decoded text, or -1. */
+    function stopAt() {
+      if (stopSequences.length === 0) return -1;
+      var text = tokenizer.decode(generated);
+      var cut = -1;
+      for (var s = 0; s < stopSequences.length; s += 1) {
+        var at = text.indexOf(stopSequences[s]);
+        if (at >= 0 && (cut < 0 || at < cut)) cut = at;
+      }
+      return cut;
+    }
+
     for (var i = 0; i < promptIds.length; i += 1) {
       // The last prompt token produces the first generated token; earlier ones
       // only fill the cache.
       var stepLogits = forward(promptIds[i]);
       position += 1;
       if (i === promptIds.length - 1) {
-        var next = temperature > 0 ? sample(stepLogits, temperature, rng) : argmax(stepLogits);
-        if (next !== tokenizer.eos) generated.push(next);
+        var first = chooseToken(stepLogits, decoding, emittedCounts, rng);
+        if (first === tokenizer.eos) {
+          finishReason = "stop";
+        } else {
+          record(first, score(stepLogits, first));
+        }
       }
     }
     if (promptIds.length === 0) throw new Error("the prompt produced no tokens");
@@ -2717,16 +2917,55 @@
       var token = generated[generated.length - 1];
       var nextLogits = forward(token);
       position += 1;
-      var nextToken = temperature > 0 ? sample(nextLogits, temperature, rng) : argmax(nextLogits);
-      if (nextToken === tokenizer.eos) break;
-      generated.push(nextToken);
+      var nextToken = chooseToken(nextLogits, decoding, emittedCounts, rng);
+      if (nextToken === tokenizer.eos) {
+        finishReason = "stop";
+        break;
+      }
+      record(nextToken, score(nextLogits, nextToken));
+      if (stopAt() >= 0) {
+        finishReason = "stop";
+        break;
+      }
+    }
+
+    var text = tokenizer.decode(generated);
+    if (stopSequences.length > 0) {
+      var cutAt = -1;
+      for (var sf = 0; sf < stopSequences.length; sf += 1) {
+        var found = text.indexOf(stopSequences[sf]);
+        if (found >= 0 && (cutAt < 0 || found < cutAt)) cutAt = found;
+      }
+      if (cutAt >= 0) {
+        text = text.slice(0, cutAt);
+        // The token that carried the stop is not part of the answer: drop it
+        // (and anything after it) so the token ids, their logprobs, and the
+        // returned text all describe the same sequence.
+        while (generated.length > 0 && tokenizer.decode(generated).length > text.length) {
+          generated.pop();
+          if (logprobEntries.length > generated.length) logprobEntries.pop();
+        }
+      }
     }
 
     return {
-      text: tokenizer.decode(generated),
+      text: text,
       seed: seed,
       steps: generated.length,
       tokens: generated,
+      finishReason: finishReason,
+      // The context the run was held to, and whether the prompt had to be
+      // shortened to fit it. A caller can see the truncation instead of
+      // wondering why its long prompt was answered from the tail.
+      contextLength: contextLimit,
+      promptTokens: promptIds.length,
+      promptTruncated: promptTruncated,
+      // The exact prompt ids that were evaluated, so an auditor can see what
+      // the model was actually conditioned on after truncation.
+      promptIds: promptIds,
+      // One entry per generated token when logprobs were requested, aligned
+      // with `tokens`.
+      ...(decoding.logprobs ? { logprobs: logprobEntries } : {}),
     };
   }
 
@@ -2774,7 +3013,12 @@
       var g = parseModel(model);
       var arch = g.kv["general.architecture"];
       var prompt = String(input && input.prompt == null ? "" : input.prompt);
-      var total = new Tokenizer(g).encode(prompt).length + Math.max(0, Number(input && input.steps) || 0);
+      // Mirror `run`'s context guard so the factor choice matches the run.
+      var encoded = new Tokenizer(g).encode(prompt).length;
+      var ctx = Number(g.kv[arch + ".context_length"]);
+      var contextLimit = Number.isFinite(ctx) && ctx >= 2 ? Math.floor(ctx) : 4096;
+      var steps = Math.max(0, Number(input && input.steps) || 0);
+      var total = Math.min(Math.min(encoded, contextLimit) + steps, contextLimit);
       var set = selectRopeFactorSet(g, arch, total);
       if (set === null) return null;
       var tensor = tensorOrNull(
@@ -2787,6 +3031,33 @@
     },
     encode: function (model, text) {
       return new Tokenizer(parseModel(model)).encode(text);
+    },
+    /** Decode token ids back to text with the model's own tokenizer. */
+    decode: function (model, ids) {
+      return new Tokenizer(parseModel(model)).decode(ids || []);
+    },
+    /** Decode many token ids with ONE tokenizer parse, for logprob rendering. */
+    decodeTokens: function (model, ids) {
+      var tokenizer = new Tokenizer(parseModel(model));
+      var out = [];
+      for (var i = 0; i < ids.length; i += 1) out.push(tokenizer.decode([ids[i]]));
+      return out;
+    },
+    /**
+     * The decoded text after each id, with ONE tokenizer parse. Streaming uses
+     * this to emit a delta per token that is byte-correct even when a character
+     * spans several tokens (a single token's bytes may be an incomplete UTF-8
+     * sequence; a prefix's are not).
+     */
+    decodePrefixes: function (model, ids) {
+      var tokenizer = new Tokenizer(parseModel(model));
+      var out = [];
+      var seen = [];
+      for (var i = 0; i < ids.length; i += 1) {
+        seen.push(ids[i]);
+        out.push(tokenizer.decode(seen));
+      }
+      return out;
     },
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

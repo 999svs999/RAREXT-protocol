@@ -11,6 +11,55 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Streaming is one chunk per generated token, not one chunk per response.**
+  `stream: true` used to send the whole completion in a single SSE `delta`. The
+  provider now emits **one chunk per token** for chat and completions, each with
+  the delta from the engine's prefix decode — so a character split across tokens
+  is byte-correct — followed by exactly one final chunk that states the real
+  `finish_reason` while the content chunks say `null`. When `logprobs` were
+  requested, each chunk carries the logprob of the token it delivered. The chunk
+  count equals the decode trace and the deltas concatenate to the non-streaming
+  completion, both asserted end to end. A third-party engine's ids are not ours
+  to decode and a mid-token stop makes prefixes disagree with the returned text;
+  both stream as one delta rather than inventing token boundaries. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#streaming).
+- **The engine reports its own confidence.** `logprobs` / `top_logprobs` are now
+  honoured end to end: the engine computes the softmax over the penalized logits
+  before temperature/top-k/top-p shape the sampler, so the number is the model's
+  own and is identical for a greedy and a sampled run. The provider exposes it in
+  the OpenAI shape (`choices[0].logprobs.content` for chat, the
+  `tokens/token_logprobs/top_logprobs` block for completions), off by default so
+  an unrequested run pays no vocabulary-wide `exp()`. Tokens, logprobs, and text
+  stay aligned: a stop sequence drops the token that carried it rather than
+  reporting confidence for text that was not returned. `npm run demo:decoding`
+  shows eight real tokens' logprobs and asserts they are finite, `≤ 0`,
+  descending, and headed by the greedy choice. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#confidence-logprobs).
+- **A run cannot outgrow the model's context.** The engine reads
+  `${arch}.context_length` from the container and holds every run to it: an
+  oversized prompt is truncated deterministically (most recent tokens, BOS kept
+  at the front) and the step budget is capped so `prompt + generated` never
+  exceeds the declared context. Before this, a long prompt grew the KV cache
+  without bound until the host ran out of memory. A prompt that fits is
+  evaluated verbatim; the result reports `contextLength`, `promptTokens`,
+  `promptTruncated`, and the exact `promptIds` evaluated. Undeclared context
+  lengths fall back to 4096. Tests assert the truncation, the BOS, the tail, the
+  step cap, and determinism. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#the-context-bound).
+- **The engine honours real decoding controls, and a sampled run replays.** The
+  OpenAI request fields were parsed by nobody: `temperature` never reached the
+  engine, `top_p`/`top_k`/penalties did not exist, and every response said
+  `finish_reason: "stop"` even when `max_tokens` cut the run off. The engine now
+  implements `temperature`, `top_p`, `top_k`, `repetition_penalty`,
+  `presence_penalty`, `frequency_penalty`, and `stop`, each with its OpenAI
+  default and clamped so a client cannot make a run non-finite or unbounded. The
+  sampler is seeded and deterministic, so a **sampled** run is replayable, not
+  just a greedy one; `finish_reason` reports `"stop"` (EOS or a stop sequence) or
+  `"length"` (the step budget) and the stop text is not returned. `top_k: 1` is
+  asserted to reproduce the greedy tokens exactly, over HTTP as well as in the
+  engine. On real weights a 21-repeat greedy loop drops to zero repetitions with
+  `repetition_penalty: 2`. `npm run demo:decoding` is the proof; see
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#decoding-controls).
 - **The AI lives on RAREXT, engine included.** The engine that turns tokens is now
   a content-addressed RAREXT artifact, sharded and committed beside the weights in
   `rarext.engine-bundle.v1` and named by the model bundle (`execution.artifact`).
