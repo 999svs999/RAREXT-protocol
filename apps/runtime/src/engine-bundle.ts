@@ -305,6 +305,13 @@ export interface NativeEngine {
       logprobs?: boolean;
       /** How many alternatives to include per token (0-20). */
       topLogprobs?: number;
+      /**
+       * Fix the emitted token ids (a RAREXT extension for structured output).
+       * Each pinned token still goes through a forward pass.
+       */
+      pinnedTokens?: number[];
+      /** A compiled byte-level language: tokens that leave it are refused. */
+      grammarDfa?: { accept: number[]; table: number[] };
     },
   ): {
     text: string;
@@ -332,6 +339,18 @@ export interface NativeEngine {
   encode?(model: unknown, text: string): number[];
   /** Decode token ids with the model's own tokenizer. */
   decode?(model: unknown, ids: number[]): string;
+  /** The exact bytes a token contributes to the decoded output. */
+  tokenBytes?(model: unknown, id: number): number[];
+  /**
+   * The container's own chat template and special tokens, or null when it
+   * declares none (the caller then falls back to an explicit prompt).
+   */
+  chatTemplate?(model: unknown): {
+    template: string;
+    bos: string | null;
+    eos: string | null;
+    addBos: boolean;
+  } | null;
   /** Decode many single-token ids with one parse of the model. */
   decodeTokens?(model: unknown, ids: number[]): string[];
   /** The decoded prefix after each id, with one parse of the model. */
@@ -602,6 +621,8 @@ export function loadEngine(
     ropeFactors?: unknown;
     encode?: unknown;
     decode?: unknown;
+    tokenBytes?: unknown;
+    chatTemplate?: unknown;
     decodeTokens?: unknown;
     decodePrefixes?: unknown;
     embed?: unknown;
@@ -635,6 +656,12 @@ export function loadEngine(
       : {}),
     ...(typeof exports.decode === "function"
       ? { decode: exports.decode as NonNullable<NativeEngine["decode"]> }
+      : {}),
+    ...(typeof exports.tokenBytes === "function"
+      ? { tokenBytes: exports.tokenBytes as NonNullable<NativeEngine["tokenBytes"]> }
+      : {}),
+    ...(typeof exports.chatTemplate === "function"
+      ? { chatTemplate: exports.chatTemplate as NonNullable<NativeEngine["chatTemplate"]> }
       : {}),
     ...(typeof exports.decodeTokens === "function"
       ? { decodeTokens: exports.decodeTokens as NonNullable<NativeEngine["decodeTokens"]> }

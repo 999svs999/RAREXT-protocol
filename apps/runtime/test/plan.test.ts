@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assessModelFit, formatBytes } from "../src/manifest.ts";
+import { assessModelFit, formatBytes, hostCapabilityCommitment } from "../src/manifest.ts";
 import type { HardwareRef, ModelRef } from "../src/types.ts";
 
 const GIB = 1024 ** 3;
@@ -73,4 +73,26 @@ test("formatBytes keeps the sign and names the unit", () => {
   assert.equal(formatBytes(1024), "1.0 KiB");
   assert.equal(formatBytes(16 * GIB), "16.0 GiB");
   assert.equal(formatBytes(-GIB), "-1.0 GiB");
+});
+
+test("the host-capability commitment refuses a model the host cannot hold", () => {
+  // 9 GiB of weights on an 8 GiB host: the engine reads the container whole, so
+  // this is a refusal, not a warning.
+  const tooLarge = hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB });
+  assert.equal(tooLarge.allowed, false);
+  assert.equal(tooLarge.verdict, "too-large");
+  assert.match(tooLarge.reason, /exceed this host's memory/);
+  assert.match(tooLarge.reason, /RAREXT_ALLOW_OVERSIZE_MODEL=1/);
+
+  // The override is deliberate, and it is what a streaming engine would use.
+  assert.equal(hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, { allowOversize: true }).allowed, true);
+  assert.equal(hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, { overrideEnv: "1" }).allowed, true);
+  assert.equal(hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, { overrideEnv: undefined }).allowed, false);
+
+  // A model that fits, a tight one, and an unknown size are all allowed.
+  assert.equal(hostCapabilityCommitment(model(1 * GIB), { memoryBytes: 16 * GIB }).allowed, true);
+  const tight = hostCapabilityCommitment(model(7 * GIB), { memoryBytes: 8 * GIB });
+  assert.equal(tight.verdict, "tight");
+  assert.equal(tight.allowed, true, "tight is a warning, not a refusal");
+  assert.equal(hostCapabilityCommitment(model(null), { memoryBytes: 16 * GIB }).verdict, "unknown");
 });

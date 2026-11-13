@@ -189,8 +189,11 @@ The record digest is `sha256(canonicalize(body))`. The `sampling` block is a
 summary; the exact decode is in `request.body`, which carries every control the
 client sent — `temperature`, `top_p`, `top_k`, `min_p`, `typical_p`,
 `logit_bias`, `repetition_penalty`, `presence_penalty`, `frequency_penalty`,
-`stop`, `n`, and `logprobs`/`top_logprobs` — so a replay re-issues the same
-decode rather than an approximation of it. The
+`stop`, `n`, `logprobs`/`top_logprobs`, `tools`/`tool_choice`,
+`response_format`, and the `pinned_tokens` structured-output extension — so a
+replay re-issues the same decode rather than an approximation of it. A chat
+request is rendered through the container's own `tokenizer.chat_template` when it
+declares one (falling back to an explicit transcript otherwise). The
 response's `finish_reason` records whether the run ended at a stop sequence or at
 the step budget, and its `logprobs` (when requested) records the model's own
 per-token confidence; see
@@ -331,11 +334,22 @@ Routes:
   chunk per generated token from the engine's prefix decode, a single final chunk
   with the real `finish_reason`, and per-chunk logprobs when requested; SSE is
   teed to the client and recorded);
-- `POST /v1/messages` — Anthropic Messages, translated to the OpenAI surface
-  (non-streaming; streaming Anthropic is refused before inference);
+- `POST /v1/messages` — Anthropic Messages, translated to the OpenAI surface;
+  `stream: true` is served as the Anthropic event sequence
+  (`message_start`/`content_block_start`/one `content_block_delta` per engine
+  token/`content_block_stop`/`message_delta` with the real `stop_reason` and
+  usage/`message_stop`), assembled and recorded as a run. A tool call streams as
+  a `tool_use` block (`content_block_start` with `id`/`name`/empty `input`,
+  `input_json_delta` for the arguments, `stop_reason: "tool_use"`), and the
+  non-streaming surface translates the same tool call to a `tool_use` block, and
+  `tool_choice` is translated (`auto`/`any`->`required`/`{type:"tool",name}`->
+  a named function) with an undeclared tool refused as `400`;
 - `POST /v1/embeddings` — OpenAI embeddings from the model's own token
   embedding matrix (mean-pooled, L2-normalized, deterministic; string, string
-  array, or token-id input, and `encoding_format: "base64"`);
+  array, or token-id input, and `encoding_format: "base64"`). A gateway forwards
+  it to the engine unchanged (behind the same bearer auth as chat) and passes the
+  provider's own `x-rarext-receipt`/`x-rarext-bundle` headers through, so the
+  vectors remain attributable without the gateway re-deriving them;
 - `GET /v1/models`, `GET /v1/deployment`, `GET /health`;
 - `GET /v1/rarext/runs`, `GET /v1/rarext/runs/:digest`,
   `GET /v1/rarext/ledger`.
@@ -461,8 +475,10 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 
 ## Limits in this version
 
-- Anthropic streaming is refused (`stream:false` required); OpenAI streaming is
-  supported and recorded as an SSE transcript.
+- Anthropic streaming and OpenAI streaming are both supported and recorded. A
+  single-upstream gateway translates the engine's token stream into Anthropic
+  events; a quorum gateway compares the complete answer first, then replays the
+  agreed one.
 - An OpenAI-shaped client needs an OpenAI-compatible upstream. An
   Anthropic-native upstream serves `/v1/messages`; an OpenAI request to it is
   refused with `501` rather than translated silently.
@@ -502,7 +518,7 @@ field validation, endpoint normalisation, transcript verification, every
 tamperable field, cross-deployment refusal, ledger chaining and tamper
 detection, ledger auditing against a challenge, deployment-card verification
 and challenge mismatch, OpenAI and Anthropic surfaces, streaming teeing,
-model-mismatch refusal, the refusal of unattested Anthropic streaming,
+model-mismatch refusal, the Anthropic streamed event sequence,
 memory-fit planning, derived throughput, Ollama's streaming pull (progress,
 error events, non-2xx answers, and the re-probe that supplies the digest),
 remote placement and cloud hardware validation, auth-header forwarding, the

@@ -7,6 +7,7 @@ import {
   anthropicMessagesUrl,
   extractSseText,
   openAiChatUrl,
+  openAiEmbeddingsUrl,
   samplingFromRequest,
   translateAnthropicRequest,
   translateOpenAiResponse,
@@ -1047,6 +1048,474 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     response.end(event("message_stop", { type: "message_stop" }));
   }
 
+  /** OpenAI finish_reason -> Anthropic stop_reason. */
+  function anthropicStopReason(finish: unknown): string {
+    if (finish === "length") return "max_tokens";
+    if (finish === "tool_calls") return "tool_use";
+    if (finish === "content_filter") return "stop_sequence";
+    if (typeof finish === "string" && finish.length > 0 && finish !== "stop") return finish;
+    return "end_turn";
+  }
+
+  /**
+   * Anthropic Messages streaming for a single-upstream gateway.
+   *
+   * The gateway asks the engine for its own token stream, translates each
+   * OpenAI delta into one Anthropic `content_block_delta` (or forwards a native
+   * Anthropic upstream's deltas unchanged), and emits the Anthropic event
+   * sequence: `message_start`, `content_block_start`, one delta per token,
+   * `content_block_stop`, `message_delta` with the real `stop_reason` and usage,
+   * and `message_stop`. The assembled answer — with the engine's `rarext_trace`
+   * when the stream carried one — is recorded as a run, so a stream is as
+   * verifiable as a complete response.
+   */
+  async function streamAnthropicUpstream(
+    response: ServerResponse,
+    upstreamBody: Record<string, unknown>,
+    nativeAnthropic: boolean,
+    startedAt: string,
+  ): Promise<void> {
+    const body: Record<string, unknown> = nativeAnthropic
+      ? { ...upstreamBody, stream: true }
+      : { ...upstreamBody, stream: true, stream_options: { include_usage: true } };
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(
+        nativeAnthropic
+          ? anthropicMessagesUrl(deployment.engine.endpoint)
+          : openAiChatUrl(deployment.engine.endpoint),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            ...upstreamHeaders,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        },
+      );
+    } catch (error) {
+      sendJson(response, 502, {
+        type: "error",
+        error: {
+          type: "api_error",
+          message: `upstream ${deployment.engine.name} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      });
+      return;
+    }
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      sendJson(response, upstream.status, {
+        type: "error",
+        error: { type: "api_error", message: text.slice(0, 1000) },
+      });
+      return;
+    }
+
+    const contentType = upstream.headers.get("content-type") ?? "";
+    const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+    const messageId = `msg_${canonicalDigest({ model: deployment.model.id, startedAt }).slice(0, 24)}`;
+
+    // An upstream that ignored `stream` still answers; replay its complete
+    // message as the Anthropic event sequence rather than failing the request.
+    if (!contentType.includes("text/event-stream")) {
+      const json = (await upstream.json()) as Record<string, unknown>;
+      const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
+      const result = await record(
+        nativeAnthropic ? "anthropic" : "openai",
+        body,
+        json,
+        nativeAnthropic ? usageFromAnthropic(json) : usageFromOpenAi(json),
+        startedAt,
+        undefined,
+        singleProvider(
+          deployment.engine.endpoint,
+          providerResponseDigest(json),
+          receiptFromHeaders(upstream.headers),
+        ),
+      );
+      streamAnthropicAgreed(response, anthropic, runHeaders(result));
+      return;
+    }
+
+    response.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      ...baseHeaders(),
+      "x-rarext-mode": "stream",
+      "x-rarext-stream": "token",
+    });
+    const write = async (frame: string): Promise<void> => {
+      if (!response.write(frame)) await new Promise<void>((resolve) => response.once("drain", resolve));
+    };
+    await write(
+      event("message_start", {
+        type: "message_start",
+        message: {
+          id: messageId,
+          type: "message",
+          role: "assistant",
+          model: deployment.model.id,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+      }),
+    );
+    const chunks: Buffer[] = [];
+    let pending = "";
+    let text = "";
+    let finish: unknown = null;
+    let anthropicStop: string | null = null;
+    let usage: Record<string, unknown> | null = null;
+    let trace: unknown = null;
+    // Content blocks are opened lazily: a text delta opens a text block, a tool
+    // call opens a tool_use block, and the index advances if a turn has both.
+    let blockIndex = -1;
+    let blockKind: "none" | "text" | "tool" = "none";
+    interface ToolCallState {
+      id: string;
+      name: string;
+      args: string;
+    }
+    const toolCalls: ToolCallState[] = [];
+    const toolBlocks = new Map<number, number>();
+
+    const openTextBlock = async (): Promise<void> => {
+      if (blockKind === "text") return;
+      if (blockKind === "tool") {
+        await write(event("content_block_stop", { type: "content_block_stop", index: blockIndex }));
+      }
+      blockIndex += 1;
+      blockKind = "text";
+      await write(
+        event("content_block_start", {
+          type: "content_block_start",
+          index: blockIndex,
+          content_block: { type: "text", text: "" },
+        }),
+      );
+    };
+    const openToolBlock = async (callIndex: number, id: string, name: string): Promise<number> => {
+      const existing = toolBlocks.get(callIndex);
+      if (existing !== undefined) return existing;
+      if (blockKind === "text" || blockKind === "tool") {
+        await write(event("content_block_stop", { type: "content_block_stop", index: blockIndex }));
+      }
+      blockIndex += 1;
+      blockKind = "tool";
+      toolBlocks.set(callIndex, blockIndex);
+      toolCalls.push({ id, name, args: "" });
+      await write(
+        event("content_block_start", {
+          type: "content_block_start",
+          index: blockIndex,
+          content_block: { type: "tool_use", id, name, input: {} },
+        }),
+      );
+      return blockIndex;
+    };
+
+    const consume = async (frame: string): Promise<void> => {
+      for (const line of frame.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "" || data === "[DONE]") continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (!isRecord(parsed)) continue;
+
+        if (nativeAnthropic) {
+          // A native Anthropic stream is forwarded block-for-block, so a
+          // tool_use block passes through with its own start/deltas/stop.
+          if (
+            (parsed.type === "content_block_start" ||
+              parsed.type === "content_block_delta" ||
+              parsed.type === "content_block_stop") &&
+            typeof parsed.index === "number"
+          ) {
+            await write(event(parsed.type, parsed));
+            blockIndex = parsed.index;
+            if (parsed.type === "content_block_start" && isRecord(parsed.content_block)) {
+              blockKind = parsed.content_block.type === "tool_use" ? "tool" : "text";
+              if (parsed.content_block.type === "tool_use") {
+                toolCalls.push({
+                  id: typeof parsed.content_block.id === "string" ? parsed.content_block.id : "",
+                  name: typeof parsed.content_block.name === "string" ? parsed.content_block.name : "",
+                  args: "",
+                });
+              }
+            }
+            if (parsed.type === "content_block_delta" && isRecord(parsed.delta)) {
+              if (typeof parsed.delta.text === "string") text += parsed.delta.text;
+              if (typeof parsed.delta.partial_json === "string" && toolCalls.length > 0) {
+                toolCalls[toolCalls.length - 1]!.args += parsed.delta.partial_json;
+              }
+            }
+          }
+          if (parsed.type === "message_delta" && isRecord(parsed.delta) && typeof parsed.delta.stop_reason === "string") {
+            anthropicStop = parsed.delta.stop_reason;
+          }
+          if (isRecord(parsed.usage)) usage = { ...(usage ?? {}), ...parsed.usage };
+          if (isRecord(parsed.rarext_trace)) trace = parsed.rarext_trace;
+          continue;
+        }
+
+        const choices = Array.isArray(parsed.choices) ? parsed.choices : [];
+        const first = isRecord(choices[0]) ? choices[0] : null;
+        const delta = first !== null && isRecord(first.delta) ? first.delta : null;
+        if (delta !== null && Array.isArray(delta.tool_calls)) {
+          for (const entry of delta.tool_calls) {
+            if (!isRecord(entry)) continue;
+            const callIndex = typeof entry.index === "number" ? entry.index : 0;
+            const fn = isRecord(entry.function) ? entry.function : {};
+            const id = typeof entry.id === "string" ? entry.id : `toolu_${sha256Hex(String(callIndex)).slice(0, 20)}`;
+            const name = typeof fn.name === "string" ? fn.name : "";
+            const at = await openToolBlock(callIndex, id, name);
+            if (typeof fn.arguments === "string" && fn.arguments.length > 0) {
+              toolCalls[toolCalls.length - 1]!.args += fn.arguments;
+              await write(
+                event("content_block_delta", {
+                  type: "content_block_delta",
+                  index: at,
+                  delta: { type: "input_json_delta", partial_json: fn.arguments },
+                }),
+              );
+            }
+          }
+        }
+        if (delta !== null && typeof delta.content === "string" && delta.content !== "") {
+          await openTextBlock();
+          text += delta.content;
+          await write(
+            event("content_block_delta", {
+              type: "content_block_delta",
+              index: blockIndex,
+              delta: { type: "text_delta", text: delta.content },
+            }),
+          );
+        }
+        if (first !== null && typeof first.finish_reason === "string") finish = first.finish_reason;
+        if (isRecord(parsed.usage)) usage = parsed.usage;
+        if (isRecord(parsed.rarext_trace)) trace = parsed.rarext_trace;
+      }
+    };
+
+    if (upstream.body) {
+      for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
+        const buffer = Buffer.from(chunk);
+        chunks.push(buffer);
+        pending += buffer.toString("utf8");
+        let cut = pending.indexOf("\n\n");
+        while (cut >= 0) {
+          const frame = pending.slice(0, cut);
+          pending = pending.slice(cut + 2);
+          await consume(frame);
+          cut = pending.indexOf("\n\n");
+        }
+      }
+    }
+
+    // A turn with no blocks at all is an empty text answer, not a malformed
+    // message; a turn that never opened a block gets one closed so the sequence
+    // is well formed.
+    if (blockKind === "none") {
+      await openTextBlock();
+    }
+    await write(event("content_block_stop", { type: "content_block_stop", index: blockIndex }));
+
+    // A fresh binding: assignments inside `consume` are invisible to the
+    // control-flow analysis of `usage`, which would otherwise narrow to null.
+    const usageFields = ((): Record<string, unknown> | null => usage)();
+    const outputTokens =
+      typeof usageFields?.completion_tokens === "number"
+        ? usageFields.completion_tokens
+        : typeof usageFields?.output_tokens === "number"
+          ? usageFields.output_tokens
+          : Math.max(1, Math.ceil(text.length / 4));
+    const stopReason =
+      nativeAnthropic
+        ? anthropicStop ?? (toolCalls.length > 0 ? "tool_use" : "end_turn")
+        : toolCalls.length > 0 || finish === "tool_calls"
+          ? "tool_use"
+          : anthropicStopReason(finish);
+    await write(
+      event("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: stopReason, stop_sequence: null },
+        usage: { output_tokens: outputTokens },
+      }),
+    );
+    response.end(event("message_stop", { type: "message_stop" }));
+
+    // Record the assembled run after the client has the stream, so a stream is
+    // replayable and verifiable like any other answer.
+    const inputTokens =
+      typeof usageFields?.prompt_tokens === "number"
+        ? usageFields.prompt_tokens
+        : typeof usageFields?.input_tokens === "number"
+          ? usageFields.input_tokens
+          : 0;
+    const toolBlocksRecorded = toolCalls.map((call) => {
+      let input: unknown = {};
+      if (call.args !== "") {
+        try {
+          input = JSON.parse(call.args);
+        } catch {
+          input = {};
+        }
+      }
+      return { type: "tool_use", id: call.id, name: call.name, input };
+    });
+    const anthropicContent =
+      text.length > 0 ? [{ type: "text", text }, ...toolBlocksRecorded] : toolBlocksRecorded;
+    const recorded = nativeAnthropic
+      ? {
+          id: messageId,
+          type: "message",
+          role: "assistant",
+          model: deployment.model.id,
+          content: anthropicContent.length > 0 ? anthropicContent : [{ type: "text", text }],
+          stop_reason: stopReason,
+          stop_sequence: null,
+          usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+          ...(trace === null ? {} : { rarext_trace: trace }),
+        }
+      : {
+          id: "chatcmpl-stream",
+          object: "chat.completion",
+          model: deployment.model.id,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: toolCalls.length > 0 ? (text.length > 0 ? text : null) : text,
+                ...(toolCalls.length === 0
+                  ? {}
+                  : {
+                      tool_calls: toolCalls.map((call) => ({
+                        id: call.id,
+                        type: "function",
+                        function: { name: call.name, arguments: call.args === "" ? "{}" : call.args },
+                      })),
+                    }),
+              },
+              finish_reason:
+                toolCalls.length > 0 ? "tool_calls" : typeof finish === "string" ? finish : "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokens,
+            total_tokens: inputTokens + outputTokens,
+          },
+          ...(trace === null ? {} : { rarext_trace: trace }),
+        };
+    const result = await record(
+      nativeAnthropic ? "anthropic" : "openai",
+      body,
+      recorded,
+      nativeAnthropic ? usageFromAnthropic(recorded) : usageFromOpenAi(recorded),
+      startedAt,
+      undefined,
+      singleProvider(
+        deployment.engine.endpoint,
+        providerResponseDigest({ kind: "sse", data: Buffer.concat(chunks).toString("utf8") }),
+        receiptFromHeaders(upstream.headers),
+      ),
+    );
+    log(
+      `anthropic stream run ${result.record?.digest.slice(0, 12) ?? "unrecorded"} (${text.length} chars, ${stopReason})`,
+    );
+  }
+
+  /**
+   * Embeddings are forwarded to the engine unchanged, like chat, and the
+   * engine's response is returned as-is: the vectors are the engine's, not the
+   * gateway's. There is no decode to attest, so no run is recorded; the
+   * provider's own `x-rarext-receipt` (and bundle/seed headers, when present)
+   * are passed through so a caller can still verify who produced them.
+   */
+  async function handleEmbeddings(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const raw = await readBody(request);
+    let payload: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isRecord(parsed)) throw new Error("request body must be a JSON object");
+      payload = parsed;
+    } catch (error) {
+      sendJson(response, 400, { error: error instanceof Error ? error.message : "invalid JSON" });
+      return;
+    }
+
+    if (upstreamApi === "anthropic") {
+      sendJson(response, 501, {
+        error:
+          "this deployment forwards to an Anthropic-compatible upstream, which has no embeddings endpoint",
+      });
+      return;
+    }
+
+    const model = resolveModel(payload);
+    if (model === null) {
+      sendJson(response, 400, {
+        error: `this gateway attests ${deployment.model.id}; it will not serve ${String(payload.model)}`,
+      });
+      return;
+    }
+    payload.model = model;
+
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(openAiEmbeddingsUrl(deployment.engine.endpoint), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          ...upstreamHeaders,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      sendJson(response, 502, {
+        error: `upstream ${deployment.engine.name} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      return;
+    }
+
+    const text = await upstream.text();
+    if (!upstream.ok) {
+      response.writeHead(upstream.status, {
+        "content-type": upstream.headers.get("content-type") ?? "application/json",
+      });
+      response.end(text);
+      return;
+    }
+
+    const passthrough: Record<string, string> = {};
+    for (const name of ["x-rarext-receipt", "x-rarext-bundle", "x-rarext-seed", "x-rarext-trace"]) {
+      const value = upstream.headers.get(name);
+      if (value !== null) passthrough[name] = value;
+    }
+    response.writeHead(200, {
+      "content-type": "application/json",
+      ...baseHeaders(),
+      ...passthrough,
+    });
+    response.end(text);
+    log(`embeddings forwarded to ${deployment.engine.name}`);
+  }
+
   async function handleOpenAi(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const raw = await readBody(request);
     let payload: Record<string, unknown>;
@@ -1275,21 +1744,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    // A non-quorum gateway has no way to attest a live Anthropic stream, so it
-    // still refuses one. A quorum deployment compares complete responses first
-    // and replays the agreed answer, which is attestable.
-    if (payload.stream === true && !quorumEnabled) {
-      sendJson(response, 400, {
-        type: "error",
-        error: {
-          type: "invalid_request_error",
-          message:
-            "streaming Anthropic requests are not attested yet — send stream:false (OpenAI streaming is attested)",
-        },
-      });
-      return;
-    }
-
+    // Anthropic streaming is served below, after the upstream body is built.
+    // A quorum deployment compares complete responses first and streams the
+    // agreed answer; a single-upstream gateway translates the engine's own
+    // token stream into Anthropic events.
     const nativeAnthropic = upstreamApi === "anthropic";
     const upstreamBody = nativeAnthropic
       ? { ...payload, model: deployment.model.id, stream: false }
@@ -1313,6 +1771,31 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           message: "the deployment requires a replayable run: set temperature 0 and a seed",
         },
       });
+      return;
+    }
+
+    // Anthropic refuses a tool_choice that names an undeclared tool; so does the
+    // gateway, before it spends an inference on it.
+    if (isRecord(payload.tool_choice) && payload.tool_choice.type === "tool") {
+      const wanted = payload.tool_choice.name;
+      const declared = (Array.isArray(payload.tools) ? payload.tools : [])
+        .filter(isRecord)
+        .map((tool) => tool.name)
+        .filter((name): name is string => typeof name === "string");
+      if (typeof wanted !== "string" || !declared.includes(wanted)) {
+        sendJson(response, 400, {
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message: `tool_choice names ${JSON.stringify(String(wanted))}, which is not a declared tool`,
+          },
+        });
+        return;
+      }
+    }
+
+    if (payload.stream === true && !quorumEnabled) {
+      await streamAnthropicUpstream(response, upstreamBody, nativeAnthropic, new Date().toISOString());
       return;
     }
 
@@ -1530,6 +2013,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const protectedPath =
         path === "/v1/chat/completions" ||
         path === "/v1/messages" ||
+        path === "/v1/embeddings" ||
         path.startsWith("/v1/rarext/");
       if (protectedPath && !authorized(request)) {
         sendJson(
@@ -1646,6 +2130,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
       if (request.method === "POST" && path === "/v1/messages") {
         await handleAnthropic(request, response);
+        return;
+      }
+
+      if (request.method === "POST" && path === "/v1/embeddings") {
+        await handleEmbeddings(request, response);
         return;
       }
 

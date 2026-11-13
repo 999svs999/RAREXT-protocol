@@ -3,7 +3,7 @@ import { createPublicKey } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { arch, hostname, platform, tmpdir } from "node:os";
+import { arch, hostname, platform, tmpdir, totalmem } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -37,6 +37,8 @@ import {
   loadEngine,
 } from "./engine-bundle.ts";
 import type { EngineBundle, GgufModel, HfModel, NativeEngine } from "./engine-bundle.ts";
+import { responseFormatDfa, type ByteDfa } from "./grammar.ts";
+import { chatPromptFromTemplate, type ChatTemplateInfo } from "./chat-template.ts";
 import {
   fetchBundleChunks,
   fetchBundleCiphertext,
@@ -53,7 +55,7 @@ import { enclaveKeyDigest, openRequest, sealResponse } from "./confidential.ts";
 import type { RootChain } from "./root-chain.ts";
 import type { SealedRequest } from "./confidential.ts";
 import type { ModelBundle, ProviderCard } from "./model-bundle.ts";
-import { normalizeEndpoint } from "./manifest.ts";
+import { hostCapabilityCommitment, normalizeEndpoint } from "./manifest.ts";
 import type { ApiShape } from "./types.ts";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
@@ -69,6 +71,12 @@ export interface ProviderOptions {
   /** URL clients should use when the bind host is not dialable. */
   publicUrl?: string;
   providerHandle?: string | null;
+  /** Host memory this provider may assume, in bytes (default: the real host). */
+  hostMemoryBytes?: number;
+  /** Override the memory reserve the capability check uses. */
+  reserveBytes?: number;
+  /** Start even if the committed weights exceed host memory (streaming engine). */
+  allowOversizeModel?: boolean;
   /**
    * The machine identity this provider attests. Defaults to a host fingerprint,
    * so two providers on one box attest the same machine and a deployment that
@@ -634,6 +642,239 @@ function choiceBody(body: Record<string, unknown>, index: number, n: number): Re
   return { ...body, seed: (base + index) >>> 0 };
 }
 
+/** A declared function tool, in the OpenAI `tools` shape. */
+export interface ToolSpec {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+}
+
+/** How the request asks the model to use tools. */
+export interface ToolChoice {
+  mode: "none" | "auto" | "required";
+  /** When set, only this function may be called. */
+  name?: string;
+}
+
+/** Read `tools`, accepting only well-formed function declarations. */
+export function parseTools(raw: unknown): ToolSpec[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ToolSpec[] = [];
+  for (const entry of raw) {
+    if (out.length >= 128) break;
+    if (!isRecord(entry) || entry.type !== "function" || !isRecord(entry.function)) continue;
+    const fn = entry.function;
+    if (typeof fn.name !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(fn.name)) continue;
+    out.push({
+      name: fn.name,
+      description: typeof fn.description === "string" ? fn.description : undefined,
+      parameters: fn.parameters,
+    });
+  }
+  return out;
+}
+
+/** Read `tool_choice`: "none", "auto", "required", or a named function. */
+export function parseToolChoice(raw: unknown): ToolChoice {
+  if (raw === "none") return { mode: "none" };
+  if (raw === "required") return { mode: "required" };
+  if (isRecord(raw) && raw.type === "function" && isRecord(raw.function) && typeof raw.function.name === "string") {
+    return { mode: "required", name: raw.function.name };
+  }
+  return { mode: "auto" };
+}
+
+/** Render the message transcript, including assistant tool calls and results. */
+export function renderMessages(messages: unknown): string {
+  if (!Array.isArray(messages)) return "";
+  const lines: string[] = [];
+  for (const message of messages) {
+    if (!isRecord(message)) continue;
+    const role = typeof message.role === "string" ? message.role : "user";
+    let content = typeof message.content === "string" ? message.content : "";
+    if (Array.isArray(message.content)) {
+      content = message.content
+        .map((part) => (isRecord(part) && typeof part.text === "string" ? part.text : ""))
+        .filter((text) => text !== "")
+        .join("\n");
+    }
+    if (role === "assistant" && Array.isArray(message.tool_calls)) {
+      content += message.tool_calls
+        .map((call) =>
+          isRecord(call) && isRecord(call.function) && typeof call.function.name === "string"
+            ? `{"name":"${call.function.name}","arguments":${typeof call.function.arguments === "string" ? call.function.arguments : "{}"}}`
+            : "",
+        )
+        .join("");
+    }
+    lines.push(role === "tool" ? `tool result: ${content}` : `${role}: ${content}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * RAREXT extension: pin the token ids the run emits, for structured output such
+ * as a tool call. The engine still runs a forward pass per token, so the trace
+ * and logprobs stay real; this constrains the output, it does not skip the model.
+ */
+export function pinnedTokens(body: Record<string, unknown>): number[] | undefined {
+  const raw = body.pinned_tokens;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: number[] = [];
+  for (const id of raw) {
+    if (out.length >= 4096) break;
+    if (!Number.isSafeInteger(id) || (id as number) < 0) {
+      throw new Error("pinned_tokens must be non-negative integers");
+    }
+    out.push(id as number);
+  }
+  return out.length === 0 ? undefined : out;
+}
+
+/**
+ * The prompt when tools are declared: the transcript, the tool schemas, and an
+ * instruction to answer with one JSON tool call. This is what a chat template
+ * does; RAREXT renders it explicitly so the exact prompt is committed and a
+ * replay re-issues it.
+ */
+export function toolsPrompt(body: Record<string, unknown>, tools: ToolSpec[], choice: ToolChoice): string | null {
+  if (tools.length === 0 || choice.mode === "none") return null;
+  const transcript = renderMessages(body.messages);
+  const schemas = tools
+    .map((tool) => `${tool.name}: ${tool.description ?? ""} parameters ${JSON.stringify(tool.parameters ?? { type: "object", properties: {} })}`)
+    .join("\n");
+  const must = choice.name === undefined ? "" : ` You must call the function "${choice.name}".`;
+  return (
+    `${transcript}\n\ntools:\n${schemas}\n\n` +
+    `To call a tool, reply with ONLY a JSON object of the form ` +
+    `{"name": "<tool name>", "arguments": { ... }} and nothing else. ` +
+    `If no tool is needed, reply with the answer as text.${must}`
+  ).trim();
+}
+
+/** Every balanced-brace JSON object that parses, in order of appearance. */
+export function jsonObjects(text: string): unknown[] {
+  const out: unknown[] = [];
+  for (let start = 0; start < text.length; start += 1) {
+    if (text[start] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let at = start; at < text.length; at += 1) {
+      const ch = text[at]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            out.push(JSON.parse(text.slice(start, at + 1)));
+          } catch {
+            // Not valid JSON; keep scanning.
+          }
+          // Skip past this object, so a nested brace is not re-reported as a
+          // separate candidate.
+          start = at;
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** One parsed tool call, ready for the OpenAI response shape. */
+export interface ParsedToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+function callsFromValue(value: unknown, names: Set<string>): ParsedToolCall[] {
+  const list: unknown[] = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.tool_calls)
+      ? value.tool_calls
+      : [value];
+  const out: ParsedToolCall[] = [];
+  for (const entry of list) {
+    if (!isRecord(entry)) continue;
+    const fn = isRecord(entry.function) ? entry.function : entry;
+    const name = typeof fn.name === "string" ? fn.name : undefined;
+    if (name === undefined || !names.has(name)) continue;
+    const args = fn.arguments;
+    const argsString = typeof args === "string" ? args : JSON.stringify(args ?? {});
+    out.push({
+      id: `call_${sha256Hex(`${name}:${argsString}:${out.length}`).slice(0, 24)}`,
+      name,
+      arguments: argsString,
+    });
+  }
+  return out;
+}
+
+/**
+ * Extract tool calls from a completion. Only functions the request declared (and
+ * the named one, when `tool_choice` pinned it) are accepted, so a model cannot
+ * call a tool the caller never offered. A text answer yields no calls.
+ */
+export function extractToolCalls(text: string, tools: ToolSpec[], choice: ToolChoice): ParsedToolCall[] {
+  if (tools.length === 0 || choice.mode === "none") return [];
+  const names = new Set(choice.name === undefined ? tools.map((tool) => tool.name) : [choice.name]);
+  for (const value of jsonObjects(text)) {
+    const calls = callsFromValue(value, names);
+    if (calls.length > 0) return calls.slice(0, 8);
+  }
+  return [];
+}
+
+/**
+ * Compile `response_format` to a byte DFA, cached by its canonical form: the
+ * same request shape compiles once. `json_object` accepts any JSON value; a
+ * `json_schema` must be `strict` and is compiled property-by-property. `null`
+ * means the request asked for free text.
+ */
+const dfaCache = new Map<string, ByteDfa>();
+export function responseFormatDfaFor(body: Record<string, unknown>): ByteDfa | null {
+  const format = body.response_format;
+  if (format === undefined || format === null) return null;
+  if (isRecord(format) && (format.type === "text" || format.type === "json_object" || format.type === "json_schema")) {
+    const key = JSON.stringify(format);
+    const cached = dfaCache.get(key);
+    if (cached !== undefined) return cached;
+    const dfa = responseFormatDfa(format);
+    if (dfa !== null) {
+      if (dfaCache.size >= 64) dfaCache.clear();
+      dfaCache.set(key, dfa);
+    }
+    return dfa;
+  }
+  return null;
+}
+
+/**
+ * The container's chat template, if the engine exposes one and the model is a
+ * container. A non-GGUF model (the xorshift native model) has none, and a
+ * malformed template never breaks a request — it falls back to the explicit
+ * prompt.
+ */
+function containerChatTemplate(engine: NativeEngine | null, model: unknown): ChatTemplateInfo | null {
+  if (engine === null || typeof engine.chatTemplate !== "function") return null;
+  try {
+    return engine.chatTemplate(model);
+  } catch {
+    return null;
+  }
+}
+
 function longestToken(model: XorshiftModel): number {
   return model.vocab.reduce((longest, token) => Math.max(longest, token.length), 0);
 }
@@ -1107,6 +1348,25 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     throw new Error(`refusing to serve an invalid model bundle: ${bundleErrors.join("; ")}`);
   }
 
+  // The host-capability commitment: do not read a container the host cannot
+  // hold. This is what keeps "6/7/8 GB classes: shipped: false" honest rather
+  // than a claim the runtime would try and fail to honour.
+  if (options.enclaveEndpoint === undefined) {
+    const commitment = hostCapabilityCommitment(
+      options.bundle.model,
+      { memoryBytes: options.hostMemoryBytes ?? totalmem() },
+      {
+        ...(options.reserveBytes === undefined ? {} : { reserveBytes: options.reserveBytes }),
+        allowOversize: options.allowOversizeModel === true,
+        overrideEnv: process.env.RAREXT_ALLOW_OVERSIZE_MODEL,
+      },
+    );
+    if (!commitment.allowed) throw new Error(commitment.reason);
+    if (commitment.verdict !== "fits") {
+      log(`host capability: ${commitment.verdict} — ${commitment.reason}`);
+    }
+  }
+
   // A forwarding provider holds no key and loads no model; it verifies the
   // committed ciphertext and proxies to an enclave that alone can open it.
   if (options.enclaveEndpoint !== undefined) {
@@ -1403,8 +1663,38 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     /** One text delta per generated token, when the request streams. */
     deltas?: string[];
   }> {
-    const prompt = lastUserText(body);
+    const tools = parseTools(body.tools);
+    const toolChoice = parseToolChoice(body.tool_choice);
+    const toolPrompt = toolsPrompt(body, tools, toolChoice);
+    // The prompt is the model's OWN chat template when the container declares
+    // one, rendered through the interpreter; otherwise the explicit transcript
+    // (with tools) or the last user turn. The exact prompt is what request.body
+    // commits, so a replay re-issues it either way.
+    const templateInfo =
+      shape === "chat"
+        ? containerChatTemplate(loadedEngine, native !== null ? native : gguf ?? wasmModel)
+        : null;
+    let prompt: string;
+    if (templateInfo !== null) {
+      try {
+        prompt = chatPromptFromTemplate(templateInfo, body.messages, tools, { addGenerationPrompt: true });
+      } catch {
+        prompt = toolPrompt ?? lastUserText(body);
+      }
+    } else {
+      prompt = toolPrompt ?? lastUserText(body);
+    }
     const decoding = decodingParams(body);
+    const pinned = pinnedTokens(body);
+    if (pinned !== undefined && loadedEngine === null) {
+      throw new Error("pinned_tokens needs the RAREXT engine");
+    }
+    // response_format compiles to a constrained decode; the model can only emit
+    // a document the schema accepts.
+    const grammarDfa = pinned === undefined ? responseFormatDfaFor(body) : null;
+    if (grammarDfa !== null && loadedEngine === null) {
+      throw new Error("response_format needs the RAREXT engine");
+    }
 
     if (native !== null) {
       const seed =
@@ -1417,10 +1707,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       );
       // The engine is the RAREXT artifact when one was committed: the provider
       // runs what it fetched and verified, not a local implementation.
+      const runSteps = pinned === undefined ? steps : Math.max(steps, pinned.length + 1);
       const result = loadedEngine !== null
         ? await loadedEngine.run(native, {
             prompt,
-            steps,
+            steps: runSteps,
             seed,
             temperature: decoding.temperature,
             topK: decoding.topK,
@@ -1434,6 +1725,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             stop: decoding.stop,
             logprobs: decoding.logprobs,
             topLogprobs: decoding.topLogprobs,
+            ...(pinned === undefined ? {} : { pinnedTokens: pinned }),
+            ...(grammarDfa === null ? {} : { grammarDfa }),
           })
         : runNativeModel(native, { prompt, steps, seed });
       if (
@@ -1488,11 +1781,12 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           ? (body.seed as number)
           : null;
       const steps = requestedSteps(body, 32);
+      const runSteps = pinned === undefined ? steps : Math.max(steps, pinned.length + 1);
       // The provider runs the engine it fetched from RAREXT over the weights it
       // fetched from RAREXT. No Ollama, llama.cpp, native addon, or container.
       const result = await loadedEngine.run(gguf ?? wasmModel, {
         prompt,
-        steps,
+        steps: runSteps,
         seed,
         temperature: decoding.temperature,
         topK: decoding.topK,
@@ -1506,6 +1800,8 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         stop: decoding.stop,
         logprobs: decoding.logprobs,
         topLogprobs: decoding.topLogprobs,
+        ...(pinned === undefined ? {} : { pinnedTokens: pinned }),
+        ...(grammarDfa === null ? {} : { grammarDfa }),
       });
       if (
         result === null ||
@@ -1864,10 +2160,47 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         const result = results[0]!;
         const created = Math.floor(Date.now() / 1000);
         const usage = fixedUsage(promptTokenCount(body), results);
+        const tools = parseTools(body.tools);
+        const toolChoice = parseToolChoice(body.tool_choice);
 
         if (body.stream === true) {
           const chunks: unknown[] = [];
           results.forEach((choice, index) => {
+            const calls = extractToolCalls(choice.text, tools, toolChoice);
+            if (calls.length > 0) {
+              chunks.push({
+                id: `chatcmpl-tool-${index}`,
+                object: "chat.completion.chunk",
+                created,
+                model: modelId,
+                choices: [
+                  {
+                    index,
+                    delta: {
+                      role: "assistant",
+                      tool_calls: calls.map((call, at) => ({
+                        index: at,
+                        id: call.id,
+                        type: "function",
+                        function: { name: call.name, arguments: call.arguments },
+                      })),
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              });
+              chunks.push({
+                id: n === 1 ? "chatcmpl-final" : `chatcmpl-final-${index}`,
+                object: "chat.completion.chunk",
+                created,
+                model: modelId,
+                choices: [{ index, delta: {}, finish_reason: "tool_calls" }],
+                // The stream carries the decode trace too, so a gateway or a
+                // client can record and replay what was actually decoded.
+                ...decodeTrace(choice.trace),
+              });
+              return;
+            }
             const deltas = choice.deltas ?? (choice.text === "" ? [] : [choice.text]);
             const id = `chatcmpl-${sha256Hex(`${created}:${choice.text}`).slice(0, 24)}`;
             deltas.forEach((delta, at) => {
@@ -1894,6 +2227,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
               created,
               model: modelId,
               choices: [{ index, delta: {}, finish_reason: choice.finishReason }],
+              // The stream carries the decode trace too, so a gateway or a
+              // client can record and replay what was actually decoded.
+              ...decodeTrace(choice.trace),
             });
           });
           if (wantsStreamUsage(body)) {
@@ -1912,25 +2248,38 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
 
         response.setHeader("x-rarext-bundle", options.bundle.digest);
         if (result.seed !== null) response.setHeader("x-rarext-seed", String(result.seed));
-        const chatChoices =
-          n === 1
-            ? [
-                {
-                  index: 0,
-                  message: { role: "assistant", content: result.text },
-                  finish_reason: result.finishReason,
-                  ...chatLogprobs(result),
-                },
-              ]
-            : results.map((choice, index) => ({
-                index,
-                message: { role: "assistant", content: choice.text },
-                finish_reason: choice.finishReason,
-                ...chatLogprobs(choice),
-                // Each choice carries its own trace, so a multi-choice answer is
-                // as replayable as a single one.
-                ...decodeTrace(choice.trace),
-              }));
+        const choiceResults = n === 1 ? [result] : results;
+        const chatChoices = choiceResults.map((choice, index) => {
+          const calls = extractToolCalls(choice.text, tools, toolChoice);
+          const trace = n === 1 ? {} : decodeTrace(choice.trace);
+          if (calls.length > 0) {
+            // A tool call is the message: content is null, and the finish reason
+            // says so instead of pretending the run stopped on its own.
+            return {
+              index,
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: calls.map((call) => ({
+                  id: call.id,
+                  type: "function",
+                  function: { name: call.name, arguments: call.arguments },
+                })),
+              },
+              finish_reason: "tool_calls",
+              ...trace,
+            };
+          }
+          return {
+            index,
+            message: { role: "assistant", content: choice.text },
+            finish_reason: choice.finishReason,
+            ...chatLogprobs(choice),
+            // Each choice carries its own trace, so a multi-choice answer is as
+            // replayable as a single one.
+            ...trace,
+          };
+        });
         const completionBody = {
           id: `chatcmpl-${sha256Hex(`${created}:${result.text}`).slice(0, 24)}`,
           object: "chat.completion",
@@ -1989,6 +2338,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
               created,
               model: options.bundle.model.id,
               choices: [{ index, text: "", finish_reason: choice.finishReason }],
+              ...decodeTrace(choice.trace),
             });
           });
           if (wantsStreamUsage(body)) {

@@ -11,6 +11,109 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Anthropic `tool_choice` is translated and enforced.** `translateAnthropicRequest`
+  maps `{type:"auto"}` → `"auto"`, `{type:"any"}` → `"required"`, and
+  `{type:"tool",name}` → `{type:"function",function:{name}}`, passing an
+  OpenAI-shaped string through unchanged; the gateway refuses with `400`, before
+  inference, a `tool_choice` that names a tool the request did not declare, as
+  Anthropic does. Nothing is mirrored back because an Anthropic response carries
+  no `tool_choice` — the tool call is the answer, and it returns as a `tool_use`
+  block. A gateway test asserts each mapping reaches the upstream (via the
+  recorded request body), that the returned `tool_use` names the pinned function,
+  that `"none"` never calls a tool, and that an undeclared tool is refused. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#tool-calling).
+
+- **Chat requests render through the model's own chat template.** When a container
+  declares `tokenizer.chat_template`, the provider prompts with **that template**
+  instead of a hand-written string: roles, assistant `tool_calls`, and tool
+  results are preserved, declared `tools` are passed in the
+  `{type:"function",function:{…}}` shape, and `add_generation_prompt` is set. The
+  template bytes are untrusted, so they are never compiled or eval'd — a new
+  `apps/runtime/src/chat-template.ts` tokenizes, parses, and interprets a safe
+  subset (`for`/`if`/`elif`/`else`/`set`, member/index access, comparisons,
+  `and`/`or`/`not`/`in`/`is defined`, and the usual filters), and anything outside
+  it falls back to the explicit prompt. The engine gains a `chatTemplate(model)`
+  export; a container without a template is unchanged. Tests cover the renderer
+  (special tokens, system/tool turns, whitespace control, filters, and refusals),
+  the engine export, and an end-to-end request whose decode trace is identical to
+  a manual run on the rendered prompt and different from the bare user turn. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#the-models-own-chat-template).
+
+- **Anthropic `tool_use` content blocks, in streams and complete responses.** A
+  tool call is no longer flattened to text on the Anthropic surface. The gateway
+  opens a `tool_use` block (`content_block_start` with `id`, `name`, and an empty
+  `input`), streams the arguments as `input_json_delta`, closes the block, and
+  ends with `stop_reason: "tool_use"`; `translateOpenAiResponse` maps an OpenAI
+  `tool_calls` message to a `tool_use` block, and `translateAnthropicRequest`
+  maps Anthropic `tools`/`input_schema` to the OpenAI shape so a complete tool
+  turn and its stream agree. A turn that emits text before a tool call closes the
+  text block and opens the tool block at the next index, as Anthropic allows. A
+  gateway test asserts the streamed event sequence, the `tool_use` block
+  (`id`/`name`/empty `input`), the `input_json_delta`, `stop_reason: "tool_use"`,
+  that the deltas reconstruct the non-streaming `tool_use.input`, determinism,
+  and that the recorded run carries the tool call. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#the-anthropic-surface).
+
+- **A gateway forwards `/v1/embeddings`.** The cloud gateway serves it behind
+  the same bearer auth as chat, forwards the request to the engine unchanged, and
+  returns the engine's vectors as-is (no gateway-side re-derivation). The
+  provider's own `x-rarext-receipt`/`x-rarext-bundle`/`x-rarext-seed` headers are
+  passed through, so the vectors stay attributable to whoever produced them. An
+  Anthropic-native upstream, which has no embeddings endpoint, is refused with
+  `501` rather than guessed at; a model the deployment did not commit is refused
+  with `400` before any forwarding; and `response_format` on the chat surface is
+  confirmed to ride through the gateway. An end-to-end gateway test asserts the
+  OpenAI embedding shape, finite vectors, determinism across identical requests,
+  the passed-through receipt, and the `400`/`response_format` cases. See
+  [MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md).
+
+- **Anthropic Messages streaming, translated per token.** `/v1/messages` with
+  `stream: true` is no longer refused. The gateway asks the engine for its own
+  token stream and emits the Anthropic event sequence — `message_start`,
+  `content_block_start`, one `content_block_delta` per engine token,
+  `content_block_stop`, `message_delta` with the real `stop_reason` (`end_turn` /
+  `max_tokens` / `tool_use`) and usage, `message_stop` — then records the
+  assembled answer as a run. RAREXT's provider now puts the decode trace on the
+  final streaming chunk, so a stream carries a `rarext_trace` and is replayable
+  like a complete response. `translateOpenAiResponse` maps `stop` to `end_turn`
+  so a complete answer and its stream agree. Tests assert the event sequence is
+  complete and ordered, one delta per engine token, the stop reason, that a
+  repeat run matches, that the events reconstruct the non-streaming message, and
+  that the recorded run carries the trace. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#the-anthropic-surface).
+
+- **`response_format` is enforced by the decoder, not requested of the model.**
+  `json_object` and strict `json_schema` compile to a **byte-level DFA** (a new
+  `apps/runtime/src/grammar.ts`: Thompson NFA + subset construction, so recursive
+  schemas are expressed directly). The engine masks every token that would leave
+  the language and stops at the first accepting state, so the document is valid
+  by construction; zero-byte tokens (EOS/BOS/`<unk>`) are masked out so a run
+  cannot end on an incomplete document. Properties emit in schema order,
+  `required`/`additionalProperties: false` are honoured, and an unsupported
+  `type`, a non-`strict` schema, an object with more than ten optional
+  properties, or a schema missing `additionalProperties: false` is refused with
+  `400` rather than ignored. New engine inputs: `grammarDfa` (the compiled
+  language) and a `tokenBytes` export used to check a token's exact bytes. Tests
+  assert the compiler decides the language exactly, every emitted prefix stays
+  live, the completed document parses and matches the enum/types, and a repeat
+  request returns the same document and trace; the demo shows a real-weights
+  constrained document. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#structured-output).
+- **Tool calling, with the tool use constrained to what the caller offered.** The
+  provider renders `tools` into a real, committed prompt (transcript + schemas +
+  a JSON instruction), runs the model on it, and parses the output into OpenAI's
+  `tool_calls` shape with `finish_reason: "tool_calls"` and `content: null`.
+  Parsing scans balanced-brace JSON anywhere in the text, accepts only functions
+  the request declared (and the named one when `tool_choice` pins it), supports
+  `"none"`/`"auto"`/`"required"`/named choice, derives deterministic call ids,
+  keeps each choice's `rarext_trace`, and streams the call as a `delta.tool_calls`
+  chunk ending in `tool_calls`. Structured output rests on a new
+  `pinned_tokens` extension: the caller fixes the emitted ids and every pinned
+  token still costs a real forward pass, so the trace and logprobs stay real —
+  it constrains the decode, it does not skip the model. Tests assert the parsed
+  call, the undeclared-tool refusal, `tool_choice: "none"`, reproducibility, the
+  streamed delta, and the decode trace. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#tool-calling).
 - **Embeddings come from the model you already verified.** `POST /v1/embeddings`
   returns vectors from the deployment's **own** token embedding matrix
   (`token_embd.weight`) — no second model, no second set of bytes. Each token row

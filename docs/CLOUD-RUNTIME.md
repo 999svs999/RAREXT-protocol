@@ -305,7 +305,9 @@ says `null` where it cannot.
 - The OpenAI-shaped client surface requires an OpenAI-compatible upstream. An
   Anthropic-native upstream serves `/v1/messages`; an OpenAI request to it is
   refused with `501` rather than translated silently.
-- Anthropic streaming is still not attested; OpenAI SSE is.
+- A quorum gateway attests a streamed answer by comparing complete responses first
+  and replaying the agreed one; a single-upstream gateway translates the engine's
+  token stream per token.
 - Replay is available only when the client asks for deterministic decoding
   (`temperature: 0` plus a seed). Anthropic Messages has no seed field, so an
   Anthropic-native run is exact and hash-linked but not replayable.

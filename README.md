@@ -196,13 +196,26 @@ reshapes the distribution. The same engine feeds OpenAI-shaped streaming: `POST
 token**, each carrying that token's logprob when asked, and exactly one final
 chunk with the run's real `finish_reason` — the deltas concatenate to the
 non-streaming completion, and the chunk count equals the decode trace. The same
+stream is served in the Anthropic shape: `/v1/messages` with `stream: true`
+emits `message_start` / one `content_block_delta` per token / `message_delta`
+with the real `stop_reason` / `message_stop`, and records the run. A container
+that declares a `tokenizer.chat_template` is prompted through it — the exact
+rendered prompt is committed and replayed, and an untrusted template is
+interpreted, never eval'd, with a fallback when it uses unsupported syntax. The same
 request surface also honours `n` choices (each with its own seed, trace, and
 usage), `stream_options.include_usage`, OpenAI's `logit_bias`, and `min_p` /
 `typical_p` sampling, so a client that expects a modern engine's controls finds
 them here — with a `rarext_trace` beside each choice. `POST /v1/embeddings`
 returns mean-pooled, L2-normalized vectors from the deployment's **own** token
 embedding matrix: deterministic, so the same committed bytes give the same
-vector anywhere.
+vector anywhere. Declared `tools` are rendered into a committed prompt and the
+model's reply is parsed into OpenAI `tool_calls` (only functions the caller
+declared, `finish_reason: "tool_calls"`, each choice with its trace), and
+`pinned_tokens` constrains a decode to an exact id sequence for structured
+output — with a forward pass per token, so the trace and logprobs stay real. And
+`response_format` (`json_object` or a strict `json_schema`) is compiled to a
+byte-level DFA that the decoder cannot leave, so a JSON answer is valid by
+construction rather than by hope.
 
 `npm run demo:generations` writes the forward-compatibility ladder that "and the
 generations after it" means, as one canonical `rarext.generations.v1` object with

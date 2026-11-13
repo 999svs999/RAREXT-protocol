@@ -247,6 +247,62 @@ export function assessModelFit(
   };
 }
 
+/** The runtime's explicit commitment about what this host can be asked to hold. */
+export interface HostCapabilityCommitment {
+  allowed: boolean;
+  verdict: MemoryFit;
+  requiredBytes: number | null;
+  memoryBytes: number | null;
+  reason: string;
+}
+
+/**
+ * The host-capability commitment: RAREXT will not read a model whose committed
+ * weight bytes exceed the host's memory unless the operator explicitly overrides
+ * it, because the engine reads the container whole. `tight` and `unknown` are
+ * allowed with a note — they are a warning, not a refusal — and a streaming
+ * engine (which does not hold the weights) is the documented way to serve a
+ * class this host cannot hold. `RAREXT_ALLOW_OVERSIZE_MODEL=1` is the override,
+ * and it is a deliberate act, not a default.
+ */
+export function hostCapabilityCommitment(
+  model: ModelRef,
+  hardware: Pick<HardwareRef, "memoryBytes">,
+  options: { reserveBytes?: number; allowOversize?: boolean; overrideEnv?: string | undefined } = {},
+): HostCapabilityCommitment {
+  const fit = assessModelFit(model, {
+    backend: "cpu",
+    device: null,
+    memoryBytes: hardware.memoryBytes,
+    os: "",
+    arch: "",
+  }, options.reserveBytes === undefined ? {} : { reserveBytes: options.reserveBytes });
+  if (fit.verdict !== "too-large") {
+    return {
+      allowed: true,
+      verdict: fit.verdict,
+      requiredBytes: fit.modelBytes,
+      memoryBytes: fit.memoryBytes,
+      reason: fit.note,
+    };
+  }
+  const override = options.allowOversize === true || options.overrideEnv === "1";
+  const required = fit.modelBytes;
+  const reason =
+    required === null || fit.memoryBytes === null
+      ? "the model's committed size exceeds this host's memory"
+      : `the model's committed weights (${formatBytes(required)}) exceed this host's memory ` +
+        `(${formatBytes(fit.memoryBytes)}), and this engine reads the container whole; ` +
+        "serve it on a larger host or with a streaming engine, or set RAREXT_ALLOW_OVERSIZE_MODEL=1 to override";
+  return {
+    allowed: override,
+    verdict: fit.verdict,
+    requiredBytes: required,
+    memoryBytes: fit.memoryBytes,
+    reason,
+  };
+}
+
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes)) return "?";
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];

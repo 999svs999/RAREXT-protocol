@@ -398,6 +398,10 @@ export function anthropicMessagesUrl(endpoint: string): string {
   return `${openAiBase(endpoint)}/messages`;
 }
 
+export function openAiEmbeddingsUrl(endpoint: string): string {
+  return `${openAiBase(endpoint)}/embeddings`;
+}
+
 function textFromContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -441,6 +445,33 @@ export function translateAnthropicRequest(
   if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
     translated.stop = body.stop_sequences;
   }
+  if (Array.isArray(body.tools)) {
+    const tools = body.tools
+      .filter(isRecord)
+      .map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          ...(typeof tool.description === "string" ? { description: tool.description } : {}),
+          parameters: tool.input_schema ?? { type: "object", properties: {} },
+        },
+      }))
+      .filter((tool) => typeof tool.function.name === "string" && tool.function.name.length > 0);
+    if (tools.length > 0) translated.tools = tools;
+  }
+  // Anthropic's tool_choice shape -> OpenAI's. `auto` stays `auto`, `any` means
+  // "must call some tool" (`required`), and `{type:"tool",name}` pins a function.
+  // An OpenAI-shaped string is passed through unchanged.
+  if (typeof body.tool_choice === "string") {
+    translated.tool_choice = body.tool_choice;
+  } else if (isRecord(body.tool_choice)) {
+    const choice = body.tool_choice;
+    if (choice.type === "auto") translated.tool_choice = "auto";
+    else if (choice.type === "any") translated.tool_choice = "required";
+    else if (choice.type === "tool" && typeof choice.name === "string") {
+      translated.tool_choice = { type: "function", function: { name: choice.name } };
+    }
+  }
   if (body.metadata !== undefined) translated.metadata = body.metadata;
 
   return translated;
@@ -456,14 +487,49 @@ export function translateOpenAiResponse(
   const message = isRecord(first.message) ? first.message : {};
   const text = typeof message.content === "string" ? message.content : textFromContent(message.content);
   const usage = isRecord(response.usage) ? response.usage : {};
+  // OpenAI's finish_reason -> Anthropic's stop_reason. `stop` is `end_turn`,
+  // not a literal "stop", so a streamed and a complete answer agree.
+  const finish = typeof first.finish_reason === "string" ? first.finish_reason : null;
+  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls.filter(isRecord) : [];
+  const stopReason =
+    toolCalls.length > 0 || finish === "tool_calls"
+      ? "tool_use"
+      : finish === "length"
+        ? "max_tokens"
+        : finish === null || finish === "stop"
+          ? "end_turn"
+          : finish;
+
+  // An assistant turn is text and/or tool_use blocks; a tool call is not text.
+  const content: unknown[] = [];
+  if (text.length > 0) content.push({ type: "text", text });
+  for (const call of toolCalls) {
+    const fn = isRecord(call.function) ? call.function : {};
+    const name = typeof fn.name === "string" ? fn.name : "";
+    let input: unknown = {};
+    if (typeof fn.arguments === "string") {
+      try {
+        input = JSON.parse(fn.arguments);
+      } catch {
+        input = {};
+      }
+    }
+    content.push({
+      type: "tool_use",
+      id: typeof call.id === "string" ? call.id : `toolu_${Math.random().toString(36).slice(2, 12)}`,
+      name,
+      input,
+    });
+  }
+  if (content.length === 0) content.push({ type: "text", text });
 
   return {
     id: typeof response.id === "string" ? response.id : `msg_${Date.now().toString(36)}`,
     type: "message",
     role: "assistant",
     model: requestedModel,
-    content: [{ type: "text", text }],
-    stop_reason: first.finish_reason === "length" ? "max_tokens" : first.finish_reason ?? null,
+    content,
+    stop_reason: stopReason,
     stop_sequence: null,
     usage: {
       input_tokens: numberOrNull(usage.prompt_tokens) ?? 0,

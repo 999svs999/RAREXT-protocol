@@ -70,7 +70,24 @@ import {
   hardwareFromNetwork,
   validateDeployment,
 } from "../src/manifest.ts";
-import { startProvider, traceFor, applyStop, decodingParams } from "../src/provider.ts";
+import { chatPromptFromTemplate, renderChatTemplate } from "../src/chat-template.ts";
+import {
+  jsonObjectDfa,
+  schemaDfa,
+  dfaAccepts,
+  dfaLivePrefix,
+  responseFormatDfa,
+} from "../src/grammar.ts";
+import {
+  startProvider,
+  traceFor,
+  applyStop,
+  decodingParams,
+  parseTools,
+  parseToolChoice,
+  extractToolCalls,
+  jsonObjects,
+} from "../src/provider.ts";
 import { replayEngineRun } from "../src/replay.ts";
 import {
   attestationBindsEnclaveKey,
@@ -206,6 +223,14 @@ function tinyGgufModel(
     ropeLongFactor?: number;
     /** Declared `<arch>.context_length` (default 64). */
     contextLength?: number;
+    /**
+     * Append the 256 SentencePiece byte-fallback tokens `<0x00>`..`<0xFF>`, so
+     * arbitrary text (JSON punctuation, unicode) round-trips through the
+     * fixture's tokenizer. Off by default to keep the base fixture small.
+     */
+    byteTokens?: boolean;
+    /** Write `tokenizer.chat_template`, as a real GGUF carries. */
+    chatTemplate?: string;
   } = {},
 ): Buffer {
   const arch = options.arch ?? "qwen2";
@@ -215,7 +240,8 @@ function tinyGgufModel(
   const isPhi2 = arch === "phi2";
   const phi3Fused = isPhi3 && (options.phi3Layout ?? "fused") === "fused";
   const expertCount = 4;
-  const vocabSize = 32;
+  const byteTokenCount = options.byteTokens === true ? 256 : 0;
+  const vocabSize = 32 + byteTokenCount;
   const nEmbd = options.nEmbd ?? 8;
   const nHead = options.nHead ?? 2;
   const nHeadKv = options.nHeadKv ?? 1;
@@ -224,7 +250,10 @@ function tinyGgufModel(
     tokenizerModel === "llama"
       ? ["\u2581", "a", "b", "c", "d", "e", "f", "g"]
       : ["a", "b", "c", "d", "e", "f", "g", "h"];
-  for (let i = 0; i < vocabSize - tokens.length; i += 1) tokens.push(`<x${i}>`);
+  while (tokens.length < 32) tokens.push(`<x${tokens.length}>`);
+  for (let byte = 0; byte < byteTokenCount; byte += 1) {
+    tokens.push(`<0x${byte.toString(16).toUpperCase().padStart(2, "0")}>`);
+  }
 
   const u32 = (value: number): Buffer => {
     const out = Buffer.alloc(4);
@@ -461,6 +490,9 @@ function tinyGgufModel(
     kv("tokenizer.ggml.merges", 9, array(8, [])),
     kv("tokenizer.ggml.bos_token_id", 4, u32(0)),
     kv("tokenizer.ggml.eos_token_id", 4, u32(1)),
+    ...(options.chatTemplate === undefined
+      ? []
+      : [kv("tokenizer.chat_template", 8, str(options.chatTemplate))]),
     ...(tokenizerModel === "llama"
       ? [
           kv(
@@ -6628,6 +6660,10 @@ test("an OpenAI request controls decoding end to end: temperature, top_k, stop, 
     assert.equal(finals.length, 1, "exactly one final chunk");
     assert.equal(finals[0]!.choices[0]!.finish_reason, plainFive.choices[0]!.finish_reason);
     assert.equal(finals[0]!.choices[0]!.finish_reason, "length");
+    // The final chunk carries the decode trace, so a stream is replayable too.
+    const finalTrace = (finals[0] as { rarext_trace?: { kind?: string; tokens?: number[] } }).rarext_trace;
+    assert.equal(finalTrace?.kind, "rarext.decode-trace.v1");
+    assert.deepEqual(finalTrace?.tokens, plainFive.rarext_trace?.tokens);
 
     // A stop that ends the run before any token streams no content chunk, and
     // the final chunk still says "stop".
@@ -8933,6 +8969,734 @@ test("the embeddings endpoint returns deterministic, normalized vectors from the
     assert.equal(bad.status, 400);
   } finally {
     if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("tool calls are rendered, parsed into the OpenAI shape, and replayable", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    // Byte-fallback tokens so JSON punctuation round-trips through the fixture.
+    const bytes = tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 512 });
+    const model: ModelRef = {
+      id: "tiny-tools",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "tools"),
+      port: 0,
+      engineBundle,
+    });
+
+    // Parser unit checks: only declared functions are accepted, and prose with
+    // no JSON yields no call.
+    const declared = parseTools([
+      { type: "function", function: { name: "get_weather", parameters: { type: "object" } } },
+      { type: "function", function: { name: "get_time" } },
+      { type: "not-function", function: { name: "nope" } },
+      { type: "function", function: { name: "bad name!" } },
+    ]);
+    assert.deepEqual(declared.map((tool) => tool.name), ["get_weather", "get_time"]);
+    assert.equal(extractToolCalls("no json here", declared, parseToolChoice(undefined)).length, 0);
+    assert.equal(
+      extractToolCalls('{"name":"get_moon","arguments":{}}', declared, parseToolChoice(undefined)).length,
+      0,
+      "an undeclared tool is refused",
+    );
+    assert.equal(
+      extractToolCalls(
+        'sure! {"name":"get_time","arguments":{"zone":"UTC"}} done',
+        declared,
+        parseToolChoice(undefined),
+      ).length,
+      1,
+      "a tool call is found inside surrounding prose",
+    );
+    assert.equal(
+      extractToolCalls('{"name":"get_weather","arguments":{}}', declared, parseToolChoice("none")).length,
+      0,
+    );
+    assert.deepEqual(jsonObjects('a {"x":{"y":1}} b {"z":2}').length, 2);
+
+    // The exact tool-call JSON the constrained decode will emit.
+    const engine = loadEngine(source);
+    const engineModel = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+    const callJson = '{"name":"get_weather","arguments":{"city":"Paris"}}';
+    // Array.from: the engine returns a cross-realm array from the vm sandbox.
+    const pinned = Array.from(engine.encode!(engineModel, callJson));
+    assert.equal(engine.decode!(engineModel, pinned), callJson, "the fixture round-trips the tool JSON");
+
+    type ToolResponse = {
+      choices: Array<{
+        index: number;
+        message: { role: string; content: string | null; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
+        finish_reason: string;
+      }>;
+      rarext_trace?: { kind?: string; tokens?: number[] };
+      usage: { total_tokens: number };
+    };
+    const askTool = async (extra: Record<string, unknown>) => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "What is the weather in Paris?" }],
+          tools: [
+            {
+              type: "function",
+              function: { name: "get_weather", description: "Weather for a city", parameters: { type: "object", properties: { city: { type: "string" } } } },
+            },
+          ],
+          max_completion_tokens: pinned.length + 8,
+          ...extra,
+        }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as ToolResponse;
+    };
+
+    const called = await askTool({ pinned_tokens: pinned });
+    assert.equal(called.choices[0]!.finish_reason, "tool_calls");
+    assert.equal(called.choices[0]!.message.content, null);
+    const call = called.choices[0]!.message.tool_calls![0]!;
+    assert.equal(call.type, "function");
+    assert.equal(call.function.name, "get_weather");
+    assert.deepEqual(JSON.parse(call.function.arguments), { city: "Paris" });
+    assert.match(call.id, /^call_[0-9a-f]{24}$/);
+    assert.equal(called.rarext_trace?.kind, "rarext.decode-trace.v1");
+    assert.deepEqual(called.rarext_trace?.tokens, pinned, "the trace records the emitted tool-call tokens");
+
+    // Reproducible: the same request returns the same call and the same trace.
+    const again = await askTool({ pinned_tokens: pinned });
+    assert.deepEqual(again.choices[0]!.message.tool_calls, called.choices[0]!.message.tool_calls);
+    assert.deepEqual(again.rarext_trace?.tokens, called.rarext_trace?.tokens);
+
+    // tool_choice "none" disables tools: the same pinned text is not parsed.
+    const disabled = await askTool({ pinned_tokens: pinned, tool_choice: "none" });
+    assert.equal(disabled.choices[0]!.message.tool_calls, undefined);
+    assert.notEqual(disabled.choices[0]!.finish_reason, "tool_calls");
+
+    // An undeclared tool in the output is not returned as a call.
+    const foreign = '{"name":"get_moon","arguments":{"moon":"full"}}';
+    const foreignPinned = Array.from(engine.encode!(engineModel, foreign));
+    const refused = await askTool({ pinned_tokens: foreignPinned });
+    assert.equal(refused.choices[0]!.message.tool_calls, undefined);
+    assert.notEqual(refused.choices[0]!.finish_reason, "tool_calls");
+
+    // Streaming carries the tool call as a delta and finishes with tool_calls.
+    const streamed = await fetch(`${provider.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: bundle.model.id,
+        messages: [{ role: "user", content: "What is the weather in Paris?" }],
+        tools: [
+          { type: "function", function: { name: "get_weather", parameters: { type: "object" } } },
+        ],
+        max_completion_tokens: pinned.length + 8,
+        pinned_tokens: pinned,
+        stream: true,
+      }),
+    });
+    const raw = await streamed.text();
+    const frames = raw
+      .split("\n\n")
+      .filter((frame) => frame.startsWith("data: ") && !frame.includes("[DONE]"))
+      .map((frame) => JSON.parse(frame.slice("data: ".length)) as {
+        choices: Array<{ delta?: { tool_calls?: Array<{ function: { name: string; arguments: string } }> }; finish_reason: string | null }>;
+      });
+    const delta = frames.find((frame) => frame.choices[0]?.delta?.tool_calls !== undefined);
+    assert.ok(delta !== undefined, "a tool_calls delta was streamed");
+    assert.equal(delta!.choices[0]!.delta!.tool_calls![0]!.function.name, "get_weather");
+    assert.equal(frames.at(-1)!.choices[0]!.finish_reason, "tool_calls");
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a JSON schema compiles to a byte DFA that decides the language exactly", () => {
+  const anyJson = jsonObjectDfa();
+  for (const text of ["{}", "[]", '{"a":1}', "[1,2,3]", '"hi"', '{"a":{"b":[null]}}', "12.5e-3", "false"]) {
+    assert.ok(dfaAccepts(anyJson, text), `json_object accepts ${text}`);
+  }
+  for (const text of ["", "{", "tru", "1.", '{"a":1,}', "[1,]", "nul"]) {
+    assert.equal(dfaAccepts(anyJson, text), false, `json_object rejects ${JSON.stringify(text)}`);
+  }
+
+  const schema = {
+    type: "object",
+    properties: { kind: { enum: ["hot", "cold"] }, ok: { type: "boolean" } },
+    required: ["kind", "ok"],
+    additionalProperties: false,
+  };
+  const dfa = schemaDfa(schema);
+  for (const text of ['{"kind":"hot","ok":true}', '{"kind":"cold","ok":false}']) {
+    assert.ok(dfaAccepts(dfa, text), `schema accepts ${text}`);
+  }
+  for (const text of [
+    '{"ok":true}',
+    '{"kind":"warm","ok":true}',
+    '{"kind":"hot","ok":true,"x":1}',
+    '{"kind":"hot"}',
+    '{"kind":"hot","ok":true',
+  ]) {
+    assert.equal(dfaAccepts(dfa, text), false, `schema rejects ${JSON.stringify(text)}`);
+  }
+  // Every prefix of a legal document stays live; a dead byte is refused early.
+  assert.ok(dfaLivePrefix(dfa, '{"kind":"ho'));
+  assert.equal(dfaLivePrefix(dfa, '{"kind":"wa'), false);
+
+  // Unsupported schemas are refused, not silently ignored.
+  assert.throws(() => schemaDfa({ type: "object", properties: { a: { type: "string" } }, additionalProperties: true }));
+  assert.throws(() => schemaDfa({ type: "object", properties: { a: { type: "frobnicate" } }, additionalProperties: false }));
+  assert.throws(() => responseFormatDfa({ type: "json_schema", json_schema: { strict: false, schema: {} } }));
+  assert.throws(() => responseFormatDfa({ type: "json_schema", json_schema: { strict: true, schema: { type: "frobnicate" } } }));
+  assert.equal(responseFormatDfa({ type: "json_object" }) !== null, true);
+});
+
+test("constrained decoding only emits tokens the grammar allows", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = {
+    kind: "gguf" as const,
+    bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 512 })),
+  };
+  const dfa = schemaDfa({
+    type: "object",
+    properties: { kind: { enum: ["hot", "cold"] }, ok: { type: "boolean" } },
+    required: ["kind", "ok"],
+    additionalProperties: false,
+  });
+  const run = engine.run(model, {
+    prompt: "ab",
+    steps: 64,
+    temperature: 0,
+    seed: 0,
+    logprobs: true,
+    topLogprobs: 1,
+    grammarDfa: { accept: dfa.accept, table: dfa.table },
+  });
+  assert.equal(run.finishReason, "stop", "the run ends when the document is complete");
+  assert.ok(dfaAccepts(dfa, run.text), `the output is inside the language: ${JSON.stringify(run.text)}`);
+  const parsed = JSON.parse(run.text) as { kind: string; ok: boolean };
+  assert.ok(["hot", "cold"].includes(parsed.kind));
+  assert.equal(typeof parsed.ok, "boolean");
+  // Every prefix the engine emitted stayed live, so no token ever left the
+  // language and was then abandoned.
+  const prefixes = Array.from(engine.decodePrefixes!(model, run.tokens));
+  for (const prefix of prefixes) assert.ok(dfaLivePrefix(dfa, prefix), `live prefix ${JSON.stringify(prefix)}`);
+  assert.equal(run.logprobs?.length, run.tokens.length, "constrained tokens still carry logprobs");
+
+  const again = engine.run(model, {
+    prompt: "ab",
+    steps: 64,
+    temperature: 0,
+    seed: 0,
+    grammarDfa: { accept: dfa.accept, table: dfa.table },
+  });
+  assert.equal(again.text, run.text);
+  assert.deepEqual(Array.from(again.tokens), Array.from(run.tokens));
+});
+
+test("response_format constrains the chat decode to the declared language", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 512 });
+    const model: ModelRef = {
+      id: "tiny-format",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "format"),
+      port: 0,
+      engineBundle,
+    });
+
+    const chat = async (responseFormat: unknown) => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "give me a JSON object" }],
+          max_completion_tokens: 64,
+          response_format: responseFormat,
+        }),
+      });
+      return response;
+    };
+    type FormatResponse = {
+      choices: Array<{ message: { content: string | null }; finish_reason: string }>;
+      rarext_trace?: { kind?: string; tokens?: number[] };
+    };
+
+    const schemaFormat = {
+      type: "json_schema",
+      json_schema: {
+        name: "answer",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: { kind: { enum: ["hot", "cold"] }, ok: { type: "boolean" } },
+          required: ["kind", "ok"],
+          additionalProperties: false,
+        },
+      },
+    };
+    const first = await chat(schemaFormat);
+    assert.equal(first.status, 200);
+    const body = (await first.json()) as FormatResponse;
+    const content = body.choices[0]!.message.content!;
+    assert.equal(body.choices[0]!.finish_reason, "stop");
+    assert.equal(body.rarext_trace?.kind, "rarext.decode-trace.v1");
+    assert.ok((body.rarext_trace?.tokens?.length ?? 0) > 0);
+    const parsed = JSON.parse(content) as { kind: string; ok: boolean };
+    assert.ok(["hot", "cold"].includes(parsed.kind), `kind came from the enum: ${content}`);
+    assert.equal(typeof parsed.ok, "boolean");
+    assert.deepEqual(Object.keys(parsed).sort(), ["kind", "ok"], "no property outside the schema");
+
+    // Reproducible: same request, same constrained document, same trace.
+    const second = (await (await chat(schemaFormat)).json()) as FormatResponse;
+    assert.equal(second.choices[0]!.message.content, content);
+    assert.deepEqual(second.rarext_trace?.tokens, body.rarext_trace?.tokens);
+
+    // json_object: whatever the model says stays a live JSON prefix.
+    const loose = await chat({ type: "json_object" });
+    assert.equal(loose.status, 200);
+    const looseBody = (await loose.json()) as FormatResponse;
+    const looseText = looseBody.choices[0]!.message.content ?? "";
+    assert.ok(looseText.length > 0);
+    assert.ok(
+      dfaLivePrefix(jsonObjectDfa(), looseText),
+      `the output is a live JSON prefix: ${JSON.stringify(looseText)}`,
+    );
+    if (looseBody.choices[0]!.finish_reason === "stop") {
+      JSON.parse(looseText);
+    }
+
+    // A schema that cannot be constrained is refused, not ignored.
+    const looseSchema = await chat({
+      type: "json_schema",
+      json_schema: { name: "x", strict: true, schema: { type: "object", properties: {}, additionalProperties: true } },
+    });
+    assert.equal(looseSchema.status, 400);
+    const nonStrict = await chat({
+      type: "json_schema",
+      json_schema: { name: "x", strict: false, schema: { type: "object", properties: {}, additionalProperties: false } },
+    });
+    assert.equal(nonStrict.status, 400);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a model's own chat template renders messages, tools, and special tokens", () => {
+  const chatml =
+    "{% for message in messages %}<|im_start|>{{ message['role'] }}\n{{ message['content'] }}<|im_end|>\n" +
+    "{% if message['tool_calls'] %}<|calls|>{{ message['tool_calls'] | tojson }}<|end|>\n{% endif %}{% endfor %}" +
+    "{% if tools %}<|tools|>{{ tools | tojson }}<|end|>\n{% endif %}" +
+    "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}";
+  const info = { template: chatml, bos: "<s>", eos: "</s>", addBos: true };
+
+  const rendered = chatPromptFromTemplate(
+    info,
+    [
+      { role: "system", content: "be brief" },
+      { role: "user", content: "hi" },
+      { role: "assistant", content: null, tool_calls: [{ id: "call_1", type: "function", function: { name: "f", arguments: "{}" } }] },
+      { role: "tool", content: "42", tool_call_id: "call_1" },
+    ],
+    [{ type: "function", function: { name: "f", parameters: { type: "object" } } }],
+  );
+  assert.equal(
+    rendered,
+    "<|im_start|>system\nbe brief<|im_end|>\n" +
+      "<|im_start|>user\nhi<|im_end|>\n" +
+      "<|im_start|>assistant\n<|im_end|>\n" +
+      "<|calls|>[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}]<|end|>\n" +
+      "<|im_start|>tool\n42<|im_end|>\n" +
+      "<|tools|>[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"parameters\":{\"type\":\"object\"}}}]<|end|>\n" +
+      "<|im_start|>assistant\n",
+  );
+
+  // Whitespace control, filters, loop metadata, `is defined`, and `else`.
+  const complex =
+    "{%- for m in messages -%}{{ m.content | trim | upper }}{% if not loop.last %},{% endif %}{% else %}none{% endfor -%}" +
+    "{%- if missing is not defined -%}|?{%- endif -%}{%- set x = 2 * 3 -%}{{ x }}";
+  assert.equal(renderChatTemplate(complex, { messages: [] }), "none|?6");
+  assert.equal(renderChatTemplate(complex, { messages: [{ content: " a " }, { content: "b" }] }), "A,B|?6");
+
+  // A template the interpreter cannot handle throws, so the caller can fall back
+  // rather than execute something arbitrary.
+  assert.throws(() => renderChatTemplate("{% import \"x\" as y %}", {}));
+  assert.throws(() => renderChatTemplate("{{ ", {}));
+  assert.throws(() => renderChatTemplate("{% for m in %}", {}));
+});
+
+test("the engine exposes a container's chat template, and null when absent", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const template = "{% for m in messages %}{{ m.role }}:{{ m.content }};{% endfor %}{% if add_generation_prompt %}>{% endif %}";
+  const withTemplate = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const modelWith = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama", chatTemplate: template })) };
+  const info = withTemplate.chatTemplate!(modelWith);
+  assert.ok(info !== null);
+  assert.equal(info!.template, template);
+  assert.equal(typeof info!.bos, "string");
+  assert.equal(typeof info!.eos, "string");
+
+  const without = { kind: "gguf" as const, bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama" })) };
+  assert.equal(engine.chatTemplate!(without), null, "a container without a template says so");
+});
+
+test("a chat request renders through the container's own template, and the decode follows it", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const template =
+      "{% for m in messages %}<|{{ m.role }}|>{{ m.content }}<|end|>{% endfor %}" +
+      "{% if tools %}<|tools|>{{ tools | tojson }}<|end|>{% endif %}" +
+      "{% if add_generation_prompt %}<|assistant|>{% endif %}";
+    const bytes = tinyGgufModel({
+      tokenizer: "llama",
+      byteTokens: true,
+      contextLength: 512,
+      chatTemplate: template,
+    });
+    const model: ModelRef = {
+      id: "tiny-templated",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "template"),
+      port: 0,
+      engineBundle,
+    });
+
+    const engine = loadEngine(source);
+    const engineModel = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+    const info = engine.chatTemplate!(engineModel)!;
+    assert.ok(info !== null, "the fixture declares a template");
+
+    const messages = [
+      { role: "system", content: "be brief" },
+      { role: "user", content: "hi" },
+    ];
+    const tools = [{ type: "function", function: { name: "f", parameters: { type: "object" } } }];
+    const expectedPrompt = chatPromptFromTemplate(info, messages, tools, { addGenerationPrompt: true });
+    assert.ok(expectedPrompt.includes("<|assistant|>"), "the template's generation prompt is present");
+    assert.ok(expectedPrompt.includes("<|tools|>"), "the template sees the declared tools");
+
+    // The engine run on that exact prompt is what the provider must produce.
+    const manual = engine.run(engineModel, { prompt: expectedPrompt, steps: 6, temperature: 0, seed: 0 });
+    const fallbackPrompt = engine.run(engineModel, { prompt: "hi", steps: 6, temperature: 0, seed: 0 });
+    assert.notDeepEqual(
+      Array.from(manual.tokens),
+      Array.from(fallbackPrompt.tokens),
+      "the templated prompt changes the decode versus the bare user turn",
+    );
+
+    const ask = async () => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages,
+          tools,
+          max_completion_tokens: 6,
+          seed: 0,
+        }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as { rarext_trace?: { tokens?: number[] }; choices: Array<{ message: { content: string | null } }> };
+    };
+
+    const templated = await ask();
+    assert.deepEqual(
+      templated.rarext_trace?.tokens,
+      Array.from(manual.tokens),
+      "the provider prompted with the container's own template",
+    );
+    assert.notDeepEqual(
+      templated.rarext_trace?.tokens,
+      Array.from(fallbackPrompt.tokens),
+      "and not with the bare user turn",
+    );
+    const again = await ask();
+    assert.deepEqual(again.rarext_trace?.tokens, templated.rarext_trace?.tokens, "templating is deterministic");
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the template interpreter handles macros, namespace, and the common filters", () => {
+  // A macro with a default argument, called with and without it.
+  const macro =
+    "{% macro line(t, sep=\";\") %}{{ t.function.name }}{{ sep }}{% endmacro %}" +
+    "{% for x in tools %}{{ line(x) }}{% endfor %}|{{ line(tools[0], \"!\") }}";
+  assert.equal(
+    renderChatTemplate(macro, { tools: [{ function: { name: "a" } }, { function: { name: "b" } }] }),
+    "a;b;|a!",
+  );
+
+  // namespace() accumulates across loop iterations, the pattern real templates
+  // use to collect tool names or flags.
+  const namespace =
+    "{% set ns = namespace(users=0, names=[]) %}" +
+    "{% for m in messages %}{% if m.role == \"user\" %}" +
+    "{% set ns.users = ns.users + 1 %}{% set ns.names = ns.names + [m.name] %}{% endif %}{% endfor %}" +
+    "{{ ns.users }}:{{ ns.names | join(\",\") }}";
+  assert.equal(
+    renderChatTemplate(namespace, {
+      messages: [{ role: "user", name: "a" }, { role: "assistant" }, { role: "user", name: "b" }],
+    }),
+    "2:a,b",
+  );
+
+  const scope = {
+    tools: [{ function: { name: "get_weather" } }, { function: { name: "get_time" } }],
+    d: { b: 2, a: 1 },
+    v: 0,
+  };
+  assert.equal(
+    renderChatTemplate("{{ tools | map(attribute=\"function.name\") | join(\"+\") }}", scope),
+    "get_weather+get_time",
+  );
+  assert.equal(
+    renderChatTemplate("{{ tools | selectattr(\"function.name\",\"equalto\",\"get_time\") | map(attribute=\"function.name\") | join(\",\") }}", scope),
+    "get_time",
+  );
+  assert.equal(
+    renderChatTemplate("{{ tools | rejectattr(\"function.name\",\"equalto\",\"get_time\") | length }}", scope),
+    "1",
+  );
+  assert.equal(renderChatTemplate("{{ d | items | first | tojson }}", scope), '["b",2]');
+  assert.equal(renderChatTemplate("{{ d | keys | sort | join(\",\") }}", scope), "a,b");
+  assert.equal(renderChatTemplate("{{ 'a-b-c' | replace('-', '_') }}", scope), "a_b_c");
+  assert.equal(renderChatTemplate("{{ [3,1,2] | sort | join('') }}|{{ [3,1,2] | sort(reverse=true) | join('') }}", scope), "123|321");
+  assert.equal(renderChatTemplate("{{ v | default('fallback', boolean=true) }}", scope), "fallback");
+  assert.equal(renderChatTemplate("{{ [1,1,2] | unique | length }}|{{ 'x' ~ '!' }}", scope), "2|x!");
+  assert.equal(renderChatTemplate("{{ tools | list | count }}|{{ (tools | last).function.name }}", scope), "2|get_time");
+
+  // Still no arbitrary execution: unknown statements and filters are refused.
+  assert.throws(() => renderChatTemplate("{% include \"x\" %}", {}));
+  assert.throws(() => renderChatTemplate("{{ 1 | frobnicate }}", {}));
+  assert.throws(() => renderChatTemplate("{{ [1] | select('nosuchtest', 1) | join(',') }}", {}));
+});
+
+test("a macro-and-namespace chat template drives the decode end to end", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const template =
+      "{% macro tool_line(t) %}{{ t.function.name }}{% endmacro %}" +
+      "{% set ns = namespace(names=[]) %}" +
+      "{% for t in tools %}{% set ns.names = ns.names + [tool_line(t)] %}{% endfor %}" +
+      "{% if ns.names | length > 0 %}<|tools|>{{ ns.names | join(',') }}<|end|>{% endif %}" +
+      "{% for m in messages %}<|{{ m.role }}|>{{ m.content }}<|end|>{% endfor %}" +
+      "{% if add_generation_prompt %}<|assistant|>{% endif %}";
+    const bytes = tinyGgufModel({
+      tokenizer: "llama",
+      byteTokens: true,
+      contextLength: 512,
+      chatTemplate: template,
+    });
+    const model: ModelRef = {
+      id: "tiny-macro-template",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "macro-template"),
+      port: 0,
+      engineBundle,
+    });
+
+    const engine = loadEngine(source);
+    const engineModel = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+    const info = engine.chatTemplate!(engineModel)!;
+    const messages = [{ role: "user", content: "hi" }];
+    const tools = [
+      { type: "function", function: { name: "get_weather" } },
+      { type: "function", function: { name: "get_time" } },
+    ];
+    const expectedPrompt = chatPromptFromTemplate(info, messages, tools, { addGenerationPrompt: true });
+    // The macro and the namespace both contributed.
+    assert.ok(expectedPrompt.includes("<|tools|>get_weather,get_time<|end|>"), expectedPrompt);
+    assert.ok(expectedPrompt.endsWith("<|assistant|>"), expectedPrompt);
+
+    const manual = engine.run(engineModel, { prompt: expectedPrompt, steps: 6, temperature: 0, seed: 0 });
+    const fallback = engine.run(engineModel, { prompt: "hi", steps: 6, temperature: 0, seed: 0 });
+    assert.notDeepEqual(Array.from(manual.tokens), Array.from(fallback.tokens));
+
+    const ask = async () => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: bundle.model.id, messages, tools, max_completion_tokens: 6, seed: 0 }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as { rarext_trace?: { tokens?: number[] } };
+    };
+    const first = await ask();
+    assert.deepEqual(first.rarext_trace?.tokens, Array.from(manual.tokens));
+    assert.deepEqual((await ask()).rarext_trace?.tokens, first.rarext_trace?.tokens);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the provider refuses a model the host cannot hold, unless overridden", async () => {
+  const reg = await registry();
+  const GIB = 1024 ** 3;
+  try {
+    const bytes = tinyGgufModel();
+    const model: ModelRef = {
+      id: "tiny-oversize",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const { bundle: real, chunks } = buildModelBundle({
+      bytes,
+      model,
+      execution: NATIVE_EXECUTION,
+      chunkBytes: 1024,
+    });
+    await uploadBundle({ registry: reg.base, bundle: real, chunks });
+    // The committed size this deployment declares is the 6/7/8 GB class it
+    // names; the container bytes here are small so the test stays fast.
+    const bundle = { ...real, model: { ...real.model, sizeBytes: 9 * GIB } };
+
+    // The host-capability commitment: refused before the container is read.
+    await assert.rejects(
+      () =>
+        startProvider({
+          bundle,
+          registry: reg.base,
+          stateDir: join(reg.root, "oversize"),
+          port: 0,
+          hostMemoryBytes: 8 * GIB,
+        }),
+      /exceed this host's memory/,
+    );
+
+    // The explicit override (what a streaming engine would set) starts.
+    const overridden = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "oversize-ok"),
+      port: 0,
+      hostMemoryBytes: 8 * GIB,
+      allowOversizeModel: true,
+    });
+    await overridden.close();
+
+    // A host that can hold it needs no override.
+    const large = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "large-host"),
+      port: 0,
+      hostMemoryBytes: 64 * GIB,
+    });
+    await large.close();
+  } finally {
     await reg.close();
   }
 });

@@ -1228,6 +1228,88 @@ and its own final `finish_reason` chunk; `stream_options: { "include_usage":
 true }` appends one usage chunk with no choices. A test asserts three choices,
 `[0, 1, 2]`, matching traces, summed usage, and the usage-only chunk.
 
+### Tool calling
+
+Declare `tools` and the provider renders a real prompt — the message transcript,
+then each function's name, description, and JSON-schema parameters, then an
+instruction to answer with one JSON tool call — and runs the model on it. The
+exact prompt is what `request.body` commits, so a replay re-issues the same
+decode. The output is parsed into the OpenAI shape:
+
+```json
+{
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [
+    { "id": "call_2b5d7dc779f76b39cbc09994", "type": "function",
+      "function": { "name": "get_weather", "arguments": "{\"city\":\"Paris\"}" } }
+  ]
+}
+```
+
+with `finish_reason: "tool_calls"` instead of pretending the run stopped on its
+own. The parser scans for balanced-brace JSON anywhere in the output, so a call
+surrounded by prose is still found, and it accepts **only functions the request
+declared** (and only the named one when `tool_choice` pins it) — a model cannot
+call a tool the caller never offered. `tool_choice: "none"` disables the whole
+path; `"required"` and `{type:"function", function:{name}}` are honoured. Call
+ids are derived from the name and arguments, so the same run yields the same id,
+and each choice carries its `rarext_trace`. On a stream, the call arrives as a
+`delta.tool_calls` chunk and the final chunk says `tool_calls`.
+
+On the Anthropic surface the same request's `tool_choice` is translated to the
+OpenAI shape and enforced: `{ "type": "auto" }` → `auto`, `{ "type": "any" }` →
+`required`, and `{ "type": "tool", "name": "x" }` →
+`{ "type": "function", "function": { "name": "x" } }`; an OpenAI-shaped string
+passes through. Naming a tool the request did not declare is refused with `400`
+before any inference, as Anthropic does. Nothing is mirrored back: an Anthropic
+response carries no `tool_choice` — the tool call itself is the answer, and it
+comes back as a `tool_use` block.
+
+Structured output is built on a RAREXT extension, **`pinned_tokens`**: the
+caller fixes the exact token ids to emit. Each pinned token still costs a real
+forward pass — the trace, logprobs, stop handling, and context guard all apply —
+so this constrains the decode, it does not skip the model. On real weights:
+
+```
+structured  52 pinned tokens → "{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Paris\"}}"
+```
+
+Two honest bounds: this is not a per-model chat template (GGUF files carry no
+template here), so the rendering is explicit and committed rather than learned
+per model; and the transcript is rendered for tool requests, while a plain chat
+request without tools still uses the last user turn as its prompt.
+
+### Structured output
+
+`response_format` is enforced by the decoder, not requested of the model.
+`{ "type": "json_object" }` compiles the JSON grammar, and
+`{ "type": "json_schema", "json_schema": { strict: true, schema: … } }` compiles
+the schema itself, to a **byte-level DFA** (`apps/runtime/src/grammar.ts`: a
+Thompson NFA and subset construction, so recursion — arrays of arrays, objects
+in arrays — is expressed directly). The engine refuses any token that would leave
+the language and stops at the first state that accepts a complete document, so
+the output is valid **by construction**:
+
+```
+response_format   "{\"sentiment\":\"negative\",\"confident\":true}"
+```
+
+Properties are emitted in schema order; `required` decides which may be omitted;
+`additionalProperties: false` is enforced by construction; an object with more
+than ten optional properties, an unsupported `type`, a non-`strict` schema, or a
+schema missing `additionalProperties: false` is refused with `400` rather than
+silently ignored. A token that contributes no byte (EOS, BOS, `<unk>`) is masked
+out, so the model cannot end on an incomplete document.
+
+Two honest bounds. First, the constraint guarantees a **live prefix** at every
+step; an *unbounded* schema (a free string, an open array) is guaranteed valid
+only if the model closes it within `max_tokens`, exactly as with any grammar
+decoder. Second, the DFA is compiled per request shape and cached; it consumes
+no token budget of its own. A test walks the emitted prefixes and asserts every
+one stayed live, that the completed document parses, that it matches the enum and
+types, and that a second identical request returns the same document and trace.
+
 ### Embeddings
 
 `POST /v1/embeddings` returns vectors from the model's **own** token embedding
@@ -1251,7 +1333,11 @@ embeddings  dims 16 · tokens 6 · L2 norm 1.000000
 
 Malformed input is refused (`400`) rather than silently embedded, and a
 deployment whose engine exposes no embedding matrix says so instead of inventing
-a vector.
+a vector. A cloud gateway forwards `/v1/embeddings` to the engine unchanged,
+behind the same bearer auth as chat, and passes the provider's own
+`x-rarext-receipt`/`x-rarext-bundle` headers through — so the vectors stay
+attributable to the provider that produced them, and the gateway never
+re-derives a vector of its own.
 
 ### Confidence: logprobs
 
@@ -1302,6 +1388,80 @@ never received. When logprobs were requested, each content chunk carries the
 logprob of the token it delivered (`choices[0].logprobs.content` for chat, the
 `tokens/token_logprobs/top_logprobs` block for completions), emitted only when the
 chunk and logprob counts agree.
+
+### The model's own chat template
+
+When the container declares `tokenizer.chat_template`, the provider renders the
+request through **that template** — not a hand-written prompt. Messages keep
+their roles, assistant `tool_calls`, and tool results; declared `tools` are
+passed in the `{ type: "function", function: { … } }` shape templates read; and
+`add_generation_prompt` is set so the template appends its assistant prefix. The
+`tokenizer.chat_template` bytes are **untrusted**, so they are never compiled or
+eval'd: `apps/runtime/src/chat-template.ts` tokenizes, parses, and walks the
+template with a fixed evaluator that supports `{% for %}`, `{% if %}/{% elif
+%}/{% else %}`, `{% set %}`, `{{ }}` expressions with member/index access,
+comparisons, `and`/`or`/`not`, `in`, `is defined`, and the filters real templates
+use (`tojson`, `trim`, `length`, `join`, `string`, `default`). Anything outside
+that subset throws, and the request falls back to the explicit prompt rather than
+executing something arbitrary. A container without a template keeps the previous
+behaviour.
+
+The exact rendered prompt is what `request.body` commits, so a replay re-issues
+it. On real structure:
+
+```
+<|system|>be brief<|end|><|user|>hi<|end|><|tools|>[{"type":"function",…}]<|end|><|assistant|>
+```
+
+A test renders the same messages and tools through the same template and runs the
+engine on the result, then asserts a live request's decode trace is **identical**
+to that manual run and **different** from the bare user turn — proving the prompt
+really came from the container's template.
+
+### The Anthropic surface
+
+The same stream is served in the Anthropic shape. `/v1/messages` with
+`stream: true` asks the engine for its own token stream, translates each token
+delta into one `content_block_delta`, and emits the full Anthropic event
+sequence — `message_start`, `content_block_start`, one delta per token,
+`content_block_stop`, `message_delta` with the real `stop_reason` (`end_turn`,
+`max_tokens`, `tool_use`) and usage, and `message_stop`:
+
+```
+event: message_start
+event: content_block_start
+event: content_block_delta   {"delta":{"type":"text_delta","text":"echo: "}}
+event: content_block_delta   {"delta":{"type":"text_delta","text":"hi"}}
+event: content_block_stop
+event: message_delta         {"delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":2}}
+event: message_stop
+```
+
+A tool call is not text, and the stream does not pretend otherwise: when the
+engine produces one, the gateway opens a `tool_use` block
+(`content_block_start` with `id`, `name`, and an empty `input`), streams the
+arguments as `input_json_delta`, closes the block, and ends with
+`stop_reason: "tool_use"`:
+
+```
+event: content_block_start  {"content_block":{"type":"tool_use","id":"call_mock","name":"get_weather","input":{}}}
+event: content_block_delta  {"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Paris\"}"}}
+event: content_block_stop
+event: message_delta        {"delta":{"stop_reason":"tool_use","stop_sequence":null}}
+```
+
+The concatenated `input_json_delta`s parse to exactly the non-streaming
+`tool_use.input`, and a text turn and a tool turn are translated by the same code
+path (a turn that opens a text block first closes it and opens the tool block
+with the next index, as Anthropic allows).
+
+The assembled answer is recorded as a run, with the engine's `rarext_trace`
+carried through when the stream includes it (RAREXT's own provider puts the
+decode trace on the final chunk), so a streamed answer is replayable rather than
+merely readable. A complete answer and its stream agree on `stop_reason` — a
+test asserts the streamed events reconstruct the non-streaming message exactly,
+that there is one `content_block_delta` per engine token, that the stop reason is
+`end_turn`, and that a repeat run matches.
 
 ### The context bound
 

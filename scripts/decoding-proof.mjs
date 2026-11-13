@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 
 const root = new URL("..", import.meta.url).pathname;
 const { loadEngine } = await import(root + "apps/runtime/src/engine-bundle.ts");
+const { schemaDfa, dfaAccepts } = await import(root + "apps/runtime/src/grammar.ts");
 
 const path = process.env.RAREXT_WEB4_GGUF ?? "/tmp/tinyllama-q8.rarext";
 if (!existsSync(path)) {
@@ -201,6 +202,78 @@ check(
   "two different texts embedded to the same vector",
 );
 
+// 9. Structured output: the constrained decode tool calls are built on. Pinning
+//    ids still runs a forward pass per token, so the trace and logprobs are real.
+const target = '{"name":"get_weather","arguments":{"city":"Paris"}}';
+const targetIds = Array.from(engine.encode(model, target));
+const pinnedRun = engine.run(model, {
+  prompt,
+  steps: targetIds.length + 4,
+  temperature: 0,
+  seed: 0,
+  pinnedTokens: targetIds,
+  logprobs: true,
+  topLogprobs: 1,
+});
+const pinnedAgain = engine.run(model, {
+  prompt,
+  steps: targetIds.length + 4,
+  temperature: 0,
+  seed: 0,
+  pinnedTokens: targetIds,
+});
+console.log(
+  `  ${"structured".padEnd(18)} ${targetIds.length} pinned tokens → ${JSON.stringify(pinnedRun.text)}\n`,
+);
+check(pinnedRun.text === target, `pinned decode emitted ${JSON.stringify(pinnedRun.text)}`);
+check(
+  pinnedRun.tokens.join(",") === targetIds.join(","),
+  "the trace is exactly the pinned ids",
+);
+check(pinnedRun.finishReason === "stop", "a finished structured output reports stop");
+check(
+  (pinnedRun.logprobs ?? []).length === targetIds.length,
+  "every pinned token still carries a real logprob",
+);
+check(pinnedAgain.text === pinnedRun.text, "pinned decoding is deterministic");
+
+// 10. response_format: compile a schema to a byte DFA and let the engine only
+//     emit tokens inside it. The document is valid by construction.
+const boundedSchema = {
+  type: "object",
+  properties: {
+    sentiment: { enum: ["positive", "negative"] },
+    confident: { type: "boolean" },
+  },
+  required: ["sentiment", "confident"],
+  additionalProperties: false,
+};
+const schemaDfaRun = schemaDfa(boundedSchema);
+const constrained = engine.run(model, {
+  prompt,
+  steps: 128,
+  temperature: 0,
+  seed: 0,
+  grammarDfa: { accept: schemaDfaRun.accept, table: schemaDfaRun.table },
+});
+const constrainedAgain = engine.run(model, {
+  prompt,
+  steps: 128,
+  temperature: 0,
+  seed: 0,
+  grammarDfa: { accept: schemaDfaRun.accept, table: schemaDfaRun.table },
+});
+console.log(`  ${"response_format".padEnd(18)} ${JSON.stringify(constrained.text)}\n`);
+check(
+  dfaAccepts(schemaDfaRun, constrained.text),
+  `the constrained output is not in the schema's language: ${JSON.stringify(constrained.text)}`,
+);
+check(constrained.finishReason === "stop", "a completed document reports stop");
+check(
+  constrainedAgain.text === constrained.text,
+  "constrained decoding is deterministic",
+);
+
 // A digest over the poised run, so two machines can compare the control surface.
 const digest = createHash("sha256")
   .update(
@@ -220,5 +293,5 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log(
-  "All decoding controls behaved as declared: greedy, penalty, top-k/top-p, replay, stop, context, logprobs, embeddings.",
+  "All decoding controls behaved as declared: greedy, penalty, top-k/top-p, replay, stop, context, logprobs, embeddings, structured output, response_format.",
 );

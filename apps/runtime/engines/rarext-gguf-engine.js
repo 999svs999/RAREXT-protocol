@@ -23,7 +23,12 @@
  * Exports `run(model, input)` where `model` is `{ kind: "gguf", bytes }` and
  * `input` is `{ prompt, steps, seed, temperature, topK, topP, minP, typicalP,
  * logitBias, repetitionPenalty, presencePenalty, frequencyPenalty, stop,
- * logprobs, topLogprobs }`. Returns
+ * logprobs, topLogprobs, pinnedTokens, grammarDfa }`. `pinnedTokens` (a RAREXT
+ * extension) fixes the emitted token ids for structured output; each still costs
+ * a forward pass, so the trace and logprobs remain real. `grammarDfa` is a
+ * compiled byte-level language ({ accept, table }): the run refuses any token
+ * that would leave it and stops at the first accepting state, so
+ * `response_format` output is valid by construction. Returns
  * `{ text, seed, steps, tokens, finishReason, logprobs? }`; `tokens` are the
  * generated token ids, so the run carries a decode trace a replay can re-check
  * token for token. Every decoding control has the OpenAI default, so omitting one
@@ -2277,6 +2282,30 @@
     return this.decoder.decode(new Uint8Array(bytes));
   };
 
+  /**
+   * The exact byte sequence a token contributes to the decoded output — the
+   * same bytes `decode` concatenates. Deriving bytes by decoding a token alone
+   * and re-encoding the string is WRONG for multi-byte tokens (a lone
+   * continuation byte decodes to U+FFFD), so grammar-constrained decoding uses
+   * this instead.
+   */
+  function tokenByteArray(tokenizer, id) {
+    var token = tokenizer.tokens[id] || "";
+    if (tokenizer.spm) {
+      var match = /^<0x([0-9A-Fa-f]{2})>$/.exec(token);
+      if (match !== null) return new Uint8Array([parseInt(match[1], 16)]);
+      if (token === "<s>" || token === "</s>" || token === "<unk>") return new Uint8Array(0);
+      return tokenizer.encoder.encode(token.replace(/\u2581/g, " "));
+    }
+    var bytes = [];
+    for (var i = 0; i < token.length; i += 1) {
+      var byte = tokenizer.charToByte[token[i]];
+      if (byte === undefined) return tokenizer.encoder.encode(token);
+      bytes.push(byte);
+    }
+    return new Uint8Array(bytes);
+  }
+
   Tokenizer.prototype.decode = function (ids) {
     if (this.spm) return this.decodeSpm(ids);
     var text = "";
@@ -2710,6 +2739,84 @@
       logitBias: Array.isArray(input.logitBias) ? input.logitBias : [],
     };
 
+    // Constrained decode: the caller may pin the exact token ids to emit (a
+    // RAREXT extension used for structured output such as tool calls). Each
+    // pinned token still goes through a real forward pass, so the trace,
+    // logprobs, stop handling and context guard all apply — this is decoding
+    // with a fixed output, not a bypass of the model.
+    var pinned = null;
+    if (Array.isArray(input.pinnedTokens)) {
+      pinned = [];
+      for (var pz = 0; pz < input.pinnedTokens.length && pinned.length < 4096; pz += 1) {
+        var pid = input.pinnedTokens[pz];
+        if (typeof pid !== "number" || Math.floor(pid) !== pid || pid < 0 || pid >= output.rows) {
+          throw new Error("pinnedTokens must be token ids inside the vocabulary");
+        }
+        pinned.push(pid);
+      }
+      if (pinned.length === 0) pinned = null;
+    }
+    if (pinned !== null) {
+      var pinnedBudget = Math.min(steps, Math.max(1, contextLimit - promptIds.length + 1));
+      if (pinned.length > pinnedBudget) pinned = pinned.slice(0, pinnedBudget);
+      steps = Math.min(steps, pinned.length);
+    }
+
+    // Grammar-constrained decode: the caller compiles a language to a byte DFA
+    // (a flat table), and the engine refuses any token that would leave it. The
+    // run stops at the first state that accepts a complete document, so the
+    // output is a member of the language by construction. `pinnedTokens` wins
+    // when both are present (an exact sequence is a stronger constraint).
+    var grammar = null;
+    var grammarDone = false;
+    if (pinned === null && input.grammarDfa !== null && input.grammarDfa !== undefined) {
+      var gTable = input.grammarDfa.table;
+      var gAccept = input.grammarDfa.accept;
+      if (!Array.isArray(gTable) || !Array.isArray(gAccept) || gTable.length % 256 !== 0) {
+        throw new Error("grammarDfa must be { accept, table } with a 256-wide table");
+      }
+      var gStates = gAccept.length;
+      if (gTable.length !== gStates * 256) throw new Error("grammarDfa table/accept size mismatch");
+      var table = new Int32Array(gTable.length);
+      for (var gi = 0; gi < gTable.length; gi += 1) table[gi] = gTable[gi] | 0;
+      var accepting = new Uint8Array(gStates);
+      for (var aj = 0; aj < gStates; aj += 1) accepting[aj] = gAccept[aj] ? 1 : 0;
+      var vocabRows = output.rows;
+      var tokenBytes = new Array(vocabRows);
+      for (var tb = 0; tb < vocabRows; tb += 1) tokenBytes[tb] = tokenByteArray(tokenizer, tb);
+      grammar = { table: table, accept: accepting, bytes: tokenBytes, state: 0 };
+    }
+
+    function grammarFeed(state, bytes) {
+      var at = state;
+      for (var bi = 0; bi < bytes.length; bi += 1) {
+        at = grammar.table[at * 256 + bytes[bi]];
+        if (at < 0) return -1;
+      }
+      return at;
+    }
+
+    /** Mask the logits to tokens that keep the output a prefix of the language. */
+    function grammarMask(logits) {
+      var allowed = 0;
+      for (var id = 0; id < logits.length; id += 1) {
+        // A token that contributes no byte (EOS, BOS, <unk>) cannot advance a
+        // grammar; allowing it would let the model end on an incomplete
+        // document, so it is masked out.
+        if (grammar.bytes[id].length === 0 || grammarFeed(grammar.state, grammar.bytes[id]) < 0) {
+          logits[id] = -Infinity;
+        } else {
+          allowed += 1;
+        }
+      }
+      return allowed;
+    }
+
+    function grammarAdvance(tokenId) {
+      grammar.state = grammarFeed(grammar.state, grammar.bytes[tokenId]);
+      if (grammar.accept[grammar.state] === 1) grammarDone = true;
+    }
+
     var x = new Float32Array(nEmbd);
     var norm = new Float32Array(nEmbd);
     var q = new Float32Array(nEmbd);
@@ -2973,6 +3080,7 @@
     var finishReason = "length";
 
     var logprobEntries = [];
+    var pinnedIndex = 0;
 
     function record(tokenId, scored) {
       generated.push(tokenId);
@@ -3004,31 +3112,55 @@
       var stepLogits = forward(promptIds[i]);
       position += 1;
       if (i === promptIds.length - 1) {
-        var first = chooseToken(stepLogits, decoding, emittedCounts, rng);
+        if (grammar !== null && pinned === null && grammarMask(stepLogits) === 0) {
+          throw new Error("the grammar admits none of this model's tokens");
+        }
+        var first =
+          pinned !== null ? pinned[pinnedIndex] : chooseToken(stepLogits, decoding, emittedCounts, rng);
+        pinnedIndex += 1;
         if (first === tokenizer.eos) {
           finishReason = "stop";
         } else {
           record(first, score(stepLogits, first));
+          if (grammar !== null && pinned === null) grammarAdvance(first);
         }
       }
     }
     if (promptIds.length === 0) throw new Error("the prompt produced no tokens");
 
     for (var step = 1; step < steps && generated.length < steps; step += 1) {
+      if (grammarDone || (pinned !== null && pinnedIndex >= pinned.length)) {
+        finishReason = "stop";
+        break;
+      }
       var token = generated[generated.length - 1];
       var nextLogits = forward(token);
       position += 1;
-      var nextToken = chooseToken(nextLogits, decoding, emittedCounts, rng);
+      if (grammar !== null && pinned === null) {
+        if (grammarMask(nextLogits) === 0) {
+          finishReason = "stop";
+          break;
+        }
+      }
+      var nextToken =
+        pinned !== null ? pinned[pinnedIndex] : chooseToken(nextLogits, decoding, emittedCounts, rng);
+      pinnedIndex += 1;
       if (nextToken === tokenizer.eos) {
         finishReason = "stop";
         break;
       }
       record(nextToken, score(nextLogits, nextToken));
+      if (grammar !== null && pinned === null) grammarAdvance(nextToken);
       if (stopAt() >= 0) {
         finishReason = "stop";
         break;
       }
     }
+
+    // A constrained run that emitted every pinned token finished its structured
+    // output, so it reports `stop` rather than the step budget.
+    if (pinned !== null && pinnedIndex >= pinned.length) finishReason = "stop";
+    if (grammarDone) finishReason = "stop";
 
     var text = tokenizer.decode(generated);
     if (stopSequences.length > 0) {
@@ -3199,6 +3331,30 @@
     },
     encode: function (model, text) {
       return new Tokenizer(parseModel(model)).encode(text);
+    },
+    /**
+     * The container's own chat template (`tokenizer.chat_template`), with the
+     * BOS/EOS token strings and whether BOS is added. Returns null when the
+     * container declares none, so a caller can fall back to an explicit prompt.
+     */
+    chatTemplate: function (model) {
+      var g = parseModel(model);
+      var template = g.kv["tokenizer.chat_template"];
+      if (typeof template !== "string" || template.length === 0) return null;
+      var tokenizer = new Tokenizer(g);
+      var bos =
+        typeof tokenizer.bos === "number" && tokenizer.tokens[tokenizer.bos] !== undefined
+          ? tokenizer.tokens[tokenizer.bos]
+          : null;
+      var eos =
+        typeof tokenizer.eos === "number" && tokenizer.tokens[tokenizer.eos] !== undefined
+          ? tokenizer.tokens[tokenizer.eos]
+          : null;
+      return { template: template, bos: bos, eos: eos, addBos: tokenizer.addBos === true };
+    },
+    /** The exact bytes a token contributes (grammar debugging / verification). */
+    tokenBytes: function (model, id) {
+      return Array.from(tokenByteArray(new Tokenizer(parseModel(model)), id));
     },
     /** Decode token ids back to text with the model's own tokenizer. */
     decode: function (model, ids) {
