@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>ccd31ca3e76d8796eed1814cdc220f44acd30eb1b95a5018bd3455291af63b36</div>
+        <div class="address"><b>rarext:futuristic@</b>3a2f6a51ed6b58487ea080854171cd409b1d95a37ba815e340dae7292fab38fc</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -267,7 +267,7 @@
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=ccd31ca3e76d8796eed1814cdc220f44acd30eb1b95a5018bd3455291af63b36">run the pinned verifier</a> ·
+        <a href="./verify.html?root=3a2f6a51ed6b58487ea080854171cd409b1d95a37ba815e340dae7292fab38fc">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -281,7 +281,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · ccd31ca3e76d…";
+            status.textContent = "ROOT VERIFIED · 3a2f6a51ed6b…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
