@@ -712,6 +712,7 @@ const ENGINE_NAMES = new Set<EngineName>([
   "freetoken",
   "openai-compatible",
   "anthropic",
+  "rarext-cloud",
 ]);
 
 export function executionProblems(execution: unknown): string[] {

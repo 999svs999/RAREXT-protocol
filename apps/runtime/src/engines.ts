@@ -704,8 +704,12 @@ export function samplingFromRequest(body: Record<string, unknown>): {
 }
 
 export function supportedApis(engine: EngineName): ApiShape[] {
+  // A RAREXT-native cloud model speaks its own architecture-free wire
+  // (`rarext.cloud-infer.v1`) and is surfaced to clients as OpenAI chat: there is
+  // no Anthropic translation for it yet, and claiming one would be a lie.
+  if (engine === "rarext-cloud") return ["openai"];
   // The runtime translates Anthropic Messages to the OpenAI surface, so every
-  // engine advertises both to clients regardless of what the engine speaks.
+  // other engine advertises both to clients regardless of what the engine speaks.
   return engine === "ollama" || engine === "openai-compatible" || engine === "strata" || engine === "freetoken" || engine === "rarext"
     ? ["openai", "anthropic"]
     : ["openai"];

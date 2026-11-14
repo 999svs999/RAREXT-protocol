@@ -28,6 +28,17 @@ import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError, validDecodeTrace } from "./transcript.ts";
+import { cloudModelFromDeployment, cloudProtocolFor, type CloudProtocol } from "./cloud-model.ts";
+import {
+  assembleNativeStream,
+  nativeCloudUrl,
+  openAiChunkFromNativeFrame,
+  openAiCompletionFromNative,
+  parseNativeStream,
+  toNativeCloudRequest,
+  type NativeCloudResponse,
+  type NativeCloudStreamFrame,
+} from "./cloud-protocol.ts";
 import {
   providerBootStages,
   providerChainDepth,
@@ -67,6 +78,12 @@ export interface GatewayOptions {
   gatewayToken?: string | null;
   /** Which shape the remote engine speaks. Defaults from the deployment. */
   upstreamApi?: ApiShape;
+  /**
+   * Which cloud protocol the upstream speaks. Defaults from the engine name and
+   * the `upstreamProtocol` label. `rarext-cloud` is RAREXT's own architecture-free
+   * wire; `openai`/`anthropic` are compatibility protocols.
+   */
+  upstreamProtocol?: CloudProtocol;
   /** Auth/protocol headers forwarded to the remote engine. */
   upstreamHeaders?: Record<string, string>;
   /**
@@ -189,8 +206,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const log = options.log ?? (() => {});
   const timeoutMs = options.upstreamTimeoutMs ?? 120_000;
+  const cloudProtocol: CloudProtocol =
+    options.upstreamProtocol ?? cloudProtocolFor(deployment.engine.name, deployment.labels);
   const upstreamApi: ApiShape =
-    options.upstreamApi ?? (deployment.engine.name === "anthropic" ? "anthropic" : "openai");
+    options.upstreamApi ??
+    (cloudProtocol === "anthropic" ? "anthropic" : "openai");
+  const nativeCloud = cloudProtocol === "rarext-cloud";
   const upstreamHeaders = options.upstreamHeaders ?? {};
   const gatewayToken = options.gatewayToken ?? null;
   const upstreams =
@@ -1488,10 +1509,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (upstreamApi === "anthropic") {
+    if (upstreamApi === "anthropic" || nativeCloud) {
       sendJson(response, 501, {
-        error:
-          "this deployment forwards to an Anthropic-compatible upstream, which has no embeddings endpoint",
+        error: nativeCloud
+          ? "this deployment is a RAREXT-native cloud model (rarext-cloud): the native wire has no " +
+            "embeddings operation yet, so it is not offered rather than guessed at"
+          : "this deployment forwards to an Anthropic-compatible upstream, which has no embeddings endpoint",
       });
       return;
     }
@@ -1547,6 +1570,150 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     log(`embeddings forwarded to ${deployment.engine.name}`);
   }
 
+  /**
+   * Forward to a RAREXT-native cloud model (`rarext.cloud-infer.v1`) and surface
+   * the answer as OpenAI. The native wire is architecture-free: the gateway sends
+   * messages, decode controls, tools and structured-output requests, and reads
+   * back text, tool calls, logprobs and usage. Nothing about tensors, tokenizers,
+   * or weight files crosses this boundary, and the control plane holds no model
+   * bytes — the run is recorded for replay exactly like any other.
+   */
+  async function forwardNativeCloud(
+    payload: Record<string, unknown>,
+    response: ServerResponse,
+  ): Promise<void> {
+    const startedAt = new Date().toISOString();
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(nativeCloudUrl(deployment.engine.endpoint), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          ...upstreamHeaders,
+        },
+        body: JSON.stringify(toNativeCloudRequest(payload)),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      sendJson(response, 502, {
+        error: `RAREXT-native model at ${deployment.engine.endpoint} unreachable: ` +
+          (error instanceof Error ? error.message : String(error)),
+      });
+      return;
+    }
+
+    const contentType = upstream.headers.get("content-type") ?? "application/json";
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      response.writeHead(upstream.status, { "content-type": contentType });
+      response.end(text);
+      return;
+    }
+
+    const wantsStream = payload.stream === true && contentType.includes("text/event-stream");
+    if (requiresTrace && wantsStream) {
+      sendJson(response, 503, {
+        error:
+          "the deployment requires a decode trace; a RAREXT-native cloud model runs elsewhere and " +
+          "carries no local decode trace, so a streamed run cannot satisfy it",
+      });
+      return;
+    }
+
+    if (!wantsStream) {
+      let native: NativeCloudResponse;
+      try {
+        native = (await upstream.json()) as NativeCloudResponse;
+      } catch {
+        sendJson(response, 502, { error: "the RAREXT-native model returned a body that is not a cloud response" });
+        return;
+      }
+      const completion = openAiCompletionFromNative(native, deployment.model.id);
+      const result = await record(
+        "openai",
+        payload,
+        completion,
+        usageFromOpenAi(completion),
+        startedAt,
+        undefined,
+        singleProvider(
+          deployment.engine.endpoint,
+          providerResponseDigest(native),
+          receiptFromHeaders(upstream.headers),
+        ),
+      );
+      sendJson(response, 200, completion, {
+        ...baseHeaders(),
+        ...runHeaders(result),
+        "x-rarext-cloud": cloudProtocol,
+      });
+      log(`native cloud run ${result.record?.digest.slice(0, 12) ?? "unrecorded"} (${native.output.finish_reason})`);
+      return;
+    }
+
+    // Streaming: translate each native frame into an OpenAI chunk as it arrives,
+    // and record the translated SSE so the run stays a normal OpenAI transcript.
+    response.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      ...baseHeaders(),
+      "x-rarext-mode": "stream",
+      "x-rarext-cloud": cloudProtocol,
+    });
+    const translated: string[] = [];
+    let pending = "";
+    const consumeFrame = async (frame: string): Promise<void> => {
+      for (const line of frame.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "" || data === "[DONE]") continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        const chunk = openAiChunkFromNativeFrame(parsed as NativeCloudStreamFrame, 0);
+        const encoded = `data: ${JSON.stringify(chunk)}\n\n`;
+        translated.push(encoded);
+        if (!response.write(encoded)) await new Promise<void>((resolve) => response.once("drain", resolve));
+      }
+    };
+    if (upstream.body) {
+      for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
+        pending += Buffer.from(chunk).toString("utf8");
+        let cut = pending.indexOf("\n\n");
+        while (cut >= 0) {
+          const frame = pending.slice(0, cut);
+          pending = pending.slice(cut + 2);
+          await consumeFrame(frame);
+          cut = pending.indexOf("\n\n");
+        }
+      }
+    }
+    response.write("data: [DONE]\n\n");
+    response.end();
+
+    const data = translated.join("");
+    const streamResponse = { kind: "sse", data };
+    const result = await record(
+      "openai",
+      payload,
+      streamResponse,
+      null,
+      startedAt,
+      undefined,
+      singleProvider(
+        deployment.engine.endpoint,
+        providerResponseDigest(streamResponse),
+        receiptFromHeaders(upstream.headers),
+      ),
+    );
+    log(`native cloud stream run ${result.record?.digest.slice(0, 12) ?? "unrecorded"} (${extractSseText(data).length} chars)`);
+  }
+
   async function handleOpenAi(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const raw = await readBody(request);
     let payload: Record<string, unknown>;
@@ -1575,6 +1742,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           "the deployment requires a replayable run: set temperature 0 and a seed, " +
           "so a reader can re-derive the bytes",
       });
+      return;
+    }
+
+    if (nativeCloud) {
+      await forwardNativeCloud(payload, response);
       return;
     }
 
@@ -1789,6 +1961,20 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         error: {
           type: "invalid_request_error",
           message: unsupportedContentMessage(unsupportedBlock),
+        },
+      });
+      return;
+    }
+
+    if (nativeCloud) {
+      sendJson(response, 501, {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message:
+            "this deployment is a RAREXT-native cloud model (rarext-cloud): it is served on the " +
+            "OpenAI surface at /v1/chat/completions, and there is no Anthropic translation for the " +
+            "native wire yet",
         },
       });
       return;
@@ -2095,16 +2281,20 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             // a limit by failing. Multimodal input is refused by name.
             capabilities: {
               chat: true,
-              anthropic_messages: true,
-              anthropic_streaming: true,
-              tool_use_blocks: true,
+              anthropic_messages: !nativeCloud,
+              anthropic_streaming: !nativeCloud,
+              tool_use_blocks: !nativeCloud,
               parallel_tool_use: true,
-              embeddings: upstreamApi !== "anthropic",
+              embeddings: upstreamApi !== "anthropic" && !nativeCloud,
               multimodal: false,
               multimodal_note:
                 "image and audio parts are refused with an invalid_request_error: no vision or audio tower " +
                 "is implemented in this runtime, and the committed weights carry none",
+              // The model as a capability contract, not a file. Discoverable
+              // here so a client never has to assume an architecture.
+              protocol: cloudProtocol,
             },
+            cloud_model: cloudModelFromDeployment(deployment, { protocol: cloudProtocol }),
           },
           baseHeaders(),
         );

@@ -403,6 +403,7 @@ const ENGINE_NAMES = new Set<EngineName>([
   "freetoken",
   "openai-compatible",
   "anthropic",
+  "rarext-cloud",
 ]);
 const API_SHAPES = new Set<ApiShape>(["openai", "anthropic"]);
 const BACKENDS = new Set<HardwareBackend>([

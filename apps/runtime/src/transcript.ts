@@ -921,7 +921,15 @@ export function providerCardArtifact(body: unknown) {
   } as const;
 }
 
-const ENGINES = new Set<EngineName>(["rarext", "ollama", "strata", "freetoken", "openai-compatible", "anthropic"]);
+const ENGINES = new Set<EngineName>([
+  "rarext",
+  "ollama",
+  "strata",
+  "freetoken",
+  "openai-compatible",
+  "anthropic",
+  "rarext-cloud",
+]);
 const BACKENDS = new Set<HardwareBackend>([
   "cpu",
   "metal",

@@ -41,7 +41,15 @@ export const MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 /** Largest request body the gateway will read. */
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
-export type EngineName = "rarext" | "ollama" | "strata" | "freetoken" | "openai-compatible" | "anthropic";
+export type EngineName =
+  | "rarext"
+  | "ollama"
+  | "strata"
+  | "freetoken"
+  | "openai-compatible"
+  | "anthropic"
+  /** RAREXT's own architecture-free cloud inference protocol (`rarext.cloud-infer.v1`). */
+  | "rarext-cloud";
 export type ApiShape = "openai" | "anthropic";
 export type HardwareBackend =
   | "cpu"
