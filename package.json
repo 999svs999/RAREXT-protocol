@@ -12,7 +12,7 @@
   "scripts": {
     "build": "npm run build:web",
     "become-a-node": "node --experimental-strip-types scripts/become-a-node.mjs",
-    "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap && esbuild apps/web/src/verify.ts --bundle --format=esm --outfile=apps/web/public/verify.js --sourcemap && esbuild apps/web/src/ai-page.ts --bundle --format=esm --outfile=apps/web/public/ai.js --sourcemap && esbuild apps/web/src/renditions.ts --bundle --format=esm --outfile=apps/web/public/renditions.js --sourcemap",
+    "build:web": "esbuild apps/web/src/main.ts --bundle --format=esm --outfile=apps/web/public/app.js --sourcemap && esbuild apps/web/src/verify.ts --bundle --format=esm --outfile=apps/web/public/verify.js --sourcemap && esbuild apps/web/src/ai-page.ts --bundle --format=esm --outfile=apps/web/public/ai.js --sourcemap && esbuild apps/web/src/renditions.ts --bundle --format=esm --outfile=apps/web/public/renditions.js --sourcemap && esbuild apps/web/src/verify-page.ts --bundle --format=esm --outfile=apps/web/public/verify-page.js --sourcemap",
     "build:packages": "node scripts/build-packages.mjs",
     "verify:packages": "node scripts/verify-packages.mjs",
     "pack:all": "npm run build:packages && node scripts/pack-all.mjs",

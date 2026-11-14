@@ -11,6 +11,26 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A verifier a person can actually use, and an obvious way to reach it.** RAREXT's
+  promise is "you can check it yourself", but the web app served no verifier at
+  all — `index.html` and `ai.html` linked `./verify.html` and got a 404. There is
+  now a real `/verify.html`: paste a RAREXT link, a web address, or a 64-character
+  code, press one button, and read **one sentence** — "This copy is honest." /
+  "This copy has been altered." / "This is a different object than you asked for." /
+  "We could not check this copy." — with the arithmetic it did kept behind
+  "the numbers behind this answer". The logic
+  (`apps/web/src/verify-page.ts`) is the same `verifyBundle` the mirror page and the
+  registry run, split into pure parts (`resolveInput`, `describeVerdict`) that node
+  tests exercise directly, and a DOM layer that builds every node with
+  `textContent` (no `innerHTML`). It runs a shared link automatically, so a URL with
+  `?root=` is one click or zero. The top bar gains a first-class **Verify** entry
+  (accented, and translated in all eight locales), the welcome modal offers "check a
+  copy instead", and the mirror-refusal banner now says what happened in plain
+  words instead of protocol jargon. Tests cover the link parsing (good and
+  refused), the verdict for honest/altered/different-object/unreachable copies, and
+  that the page is served, reachable from home and `ai.html`, and free of
+  `innerHTML`. See [README.md](README.md) and `apps/web/public/verify.html`.
+
 - **RAREXT AI is a cloud model declared by capability, not by weights.** A new
   `rarext.cloud-model.v1` card describes a cloud AI by what it can do (chat,
   streaming, tools, structured output, logprobs, modalities, context) and

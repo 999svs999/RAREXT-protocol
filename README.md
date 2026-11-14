@@ -124,6 +124,7 @@ npm run bench:engine   # measured throughput + a reference forward pass on the s
 npm run demo:oversize  # a real 6.5 GiB container, verified to disk and served within a bound
 npm run demo:cloud-native # a capability-declared cloud model over RAREXT's own wire, no local weights
 npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
+npm run build:web     # build the web app, including the human-facing verifier at /verify.html
 ```
 
 `npm run demo:ai` is the one-command proof a third party can run on their own
