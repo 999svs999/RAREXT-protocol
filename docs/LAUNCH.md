@@ -1,4 +1,39 @@
-# Launch the site on a custom domain (rarext.com)
+# Launch the RAREXT web4 AI showcase on rarext.com
+
+The showcase is the committed `site/` tree. It is already live on the reference
+host (`https://999svs999.github.io/RAREXT-protocol/`), and `rarext.com` is a
+Cloudflare-hosted property today, so there are two ways to put it at the sketch:
+**Path A** keeps Cloudflare and replaces what `.com` serves; **Path B** moves the
+domain to GitHub Pages. Both need a credential this repository does not hold.
+
+> **`rarext.co` is not touched by either path.** It stays exactly as it is.
+
+## Path A — deploy the showcase to the Cloudflare Pages project `rarext.com` already uses
+
+`rarext.com` resolves to Cloudflare Pages project `rarext-com`
+(`rarext-com.pages.dev`), which is why `rarext.com/api/v1`, `/llms.txt`, and the
+MCP surface exist. Deploying `site/` to that project replaces those pages with the
+showcase — which is the intent, but note it **replaces** the current contents
+(keep a copy of anything you want to serve alongside it).
+
+```bash
+npx wrangler login                       # the credential step; only you can do this
+npm run deploy:brand:com                 # npx wrangler pages deploy site --project-name=rarext-com
+```
+
+Then point `rarext.com` at the production deployment if it is not already (Pages
+project → Custom domains → `rarext.com`), and confirm:
+
+```bash
+curl -s https://rarext.com/ | grep -o '<title>[^<]*</title>'
+curl -s https://rarext.com/mirror/verify.html -o /dev/null -w '%{http_code}\n'
+```
+
+After the first deploy the ecosystem's `rarext` brand record (anchored at
+`rarext-com.pages.dev`) describes older bytes; the ship watchdog re-anchors it, or
+run `node scripts/ecosystem-records.mjs rarext`.
+
+## Path B — move rarext.com to GitHub Pages
 
 The site is a projection of the committed `site/` tree onto the `gh-pages`
 branch. Publishing it is one command; the only thing a script cannot do is own

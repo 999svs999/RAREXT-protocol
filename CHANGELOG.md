@@ -11,6 +11,20 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **rarext.com is the web4 AI showcase.** The front door (`site/index.html`) now
+  leads with verifiable web4 AI — "AI you can verify" — with the model running in
+  your browser, verify-by-recomputation, the four-step mechanics, the capability
+  list (every feature carrying a `rarext_trace`), measured evidence, and an honest
+  limits section. The pinned proof links the deploy requires (`data-pin-root`,
+  `mirror/verify.html`, `mirror/gallery.html`, `mirror/ai.html`) are all kept, and
+  the deploy rewrites the verify link to carry the anchored root. It is **live** at
+  the reference host and verified byte-for-byte. Two launch paths are wired for the
+  domain: `npm run deploy:brand:com` deploys `site/` to the existing Cloudflare
+  Pages project (`rarext-com`) — the credential step is `npx wrangler login` — or
+  `RAREXT_LAUNCH_CONFIRM=1 npm run deploy:site -- --domain rarext.com` moves the
+  domain to GitHub Pages. `rarext.co` is untouched. See
+  [docs/LAUNCH.md](docs/LAUNCH.md).
+
 - **A re-runnable audit, and a guarded one-command launch on a custom domain.**
   `docs/AUDIT.md` records the repository's quality gates (types clean, the full
   suite green at `--test-concurrency=2`, links clean), the deployment path (the

@@ -79,7 +79,8 @@
     "demo:decoding": "node scripts/decoding-proof.mjs",
     "bench:engine": "node scripts/bench-engine.mjs",
     "demo:oversize": "node scripts/oversize-serve.mjs",
-    "demo:cloud-native": "node scripts/cloud-native.mjs"
+    "demo:cloud-native": "node scripts/cloud-native.mjs",
+    "deploy:brand:com": "npx --yes wrangler@4 pages deploy site --project-name=rarext-com --branch=main"
   },
   "engines": {
     "node": ">=22.18"
