@@ -120,6 +120,8 @@ npm run demo:ai-on-rarext # weights + a portable engine, with no host engine at 
 npm run demo:generations # the network/model/web/protocol generation ladder, as one recomputable commitment
 npm run demo:live      # an agent + its AI living on RAREXT, rebuilt with the node stopped
 npm run demo:decoding  # greedy, top-k/top-p, penalty, sampled replay, stop, context, logprobs — on real weights
+npm run bench:engine   # measured throughput + a reference forward pass on the same weights
+npm run demo:oversize  # a real 6.5 GiB container, verified to disk and served within a bound
 npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
 ```
 

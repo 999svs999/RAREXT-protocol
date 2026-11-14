@@ -71,6 +71,8 @@ import {
   validateDeployment,
 } from "../src/manifest.ts";
 import { chatPromptFromTemplate, renderChatTemplate } from "../src/chat-template.ts";
+import { benchFingerprint, benchmarkEngine } from "../src/bench.ts";
+import { referenceForward } from "../src/reference-forward.ts";
 import {
   jsonObjectDfa,
   schemaDfa,
@@ -231,6 +233,11 @@ function tinyGgufModel(
     byteTokens?: boolean;
     /** Write `tokenizer.chat_template`, as a real GGUF carries. */
     chatTemplate?: string;
+    /**
+     * Append an unreferenced `blk.9.pad.weight` of this many rows, so the file
+     * is large without making the declared model any bigger.
+     */
+    padRows?: number;
   } = {},
 ): Buffer {
   const arch = options.arch ?? "qwen2";
@@ -288,7 +295,7 @@ function tinyGgufModel(
   interface TensorSpec {
     name: string;
     dims: number[];
-    kind: "weight" | "norm" | "bias" | "factor";
+    kind: "weight" | "norm" | "bias" | "factor" | "pad";
   }
   const kvDim = nHeadKv * (nEmbd / nHead);
   const specs: TensorSpec[] = [
@@ -405,11 +412,31 @@ function tinyGgufModel(
     return out;
   };
 
+  if (options.padRows !== undefined && options.padRows > 0) {
+    specs.push({ name: "blk.9.pad.weight", dims: [nEmbd, options.padRows], kind: "pad" });
+  }
+
   const datas: Buffer[] = [];
   let offset = 0;
   const infos: Buffer[] = [];
   for (const spec of specs) {
     const count = spec.dims.reduce((total, dim) => total * dim, 1);
+    if (spec.kind === "pad") {
+      // Bulk filler: allocated, never generated value by value.
+      const data = Buffer.alloc(count * 4);
+      datas.push(data);
+      infos.push(
+        Buffer.concat([
+          str(spec.name),
+          u32(spec.dims.length),
+          ...spec.dims.map(u64),
+          u32(0),
+          u64(offset),
+        ]),
+      );
+      offset += data.length;
+      continue;
+    }
     const values: number[] = [];
     for (let i = 0; i < count; i += 1) {
       let value: number;
@@ -9938,6 +9965,20 @@ test("a multimodal request is refused by name, not answered as text only", async
 
     assert.match((await refusal([{ type: "input_audio", input_audio: { data: "AAAA", format: "wav" } }])).error.message, /input_audio/);
 
+    // The provider advertises what it will do, so a client does not have to
+    // discover a limit by failing.
+    const models = (await (await fetch(`${provider.url}/v1/models`)).json()) as {
+      data: Array<{ capabilities?: Record<string, unknown> }>;
+    };
+    const capabilities = models.data[0]!.capabilities!;
+    assert.equal(capabilities.multimodal, false);
+    assert.match(String(capabilities.multimodal_note), /no vision or audio tower/);
+    assert.equal(capabilities.embeddings, true);
+    assert.equal(capabilities.tools, true);
+    assert.equal(capabilities.response_format, true);
+    assert.equal(capabilities.streaming, true);
+    assert.equal(capabilities.logprobs, true);
+
     // A text-only content array is still a normal request.
     const text = await ask([{ type: "text", text: "hi" }]);
     assert.equal(text.status, 200);
@@ -9946,5 +9987,240 @@ test("a multimodal request is refused by name, not answered as text only", async
   } finally {
     if (provider !== null) await provider.close();
     await reg.close();
+  }
+});
+
+test("the benchmark measures the engine and a reference pass on the same weights", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const bytes = tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 256 });
+  const options = { id: "tiny-bench", steps: 4, repeats: 1, prompt: "ab" };
+
+  const resident = benchmarkEngine(engine, { kind: "gguf", bytes: new Uint8Array(bytes) }, options);
+  assert.equal(resident.kind, "rarext.engine-bench.v1");
+  assert.equal(resident.model.tensorCount > 0, true);
+  assert.equal(resident.engine.tokens, 4);
+  assert.ok(resident.engine.tokensPerSecond > 0, "a positive throughput was measured");
+  assert.ok(resident.engine.msPerToken > 0);
+  assert.match(resident.engine.tokenDigest, /^[0-9a-f]{64}$/);
+  assert.ok(resident.macsPerToken > 0, "the container's weight arithmetic is counted");
+  assert.equal(resident.reference.rows, 32 + 256, "the projection's row count is the vocabulary");
+  assert.ok(resident.reference.materializeMs >= 0 && resident.reference.dotMs >= 0);
+  assert.ok(resident.reference.rowsPerSecond > 0);
+  assert.ok(Number.isFinite(resident.comparison.engineStepOverReferenceProjection));
+  assert.ok(Number.isFinite(resident.comparison.engineStepOverReferenceFullPass));
+  assert.equal(resident.streamed, null, "no reader was supplied");
+  // The independent full forward pass agrees with the engine's first token.
+  assert.equal(resident.reference.fullPass.agrees, true);
+  assert.equal(resident.reference.fullPass.argmax, resident.engine.tokenIds[0]);
+  assert.equal(resident.reference.fullPass.engineFirstToken, resident.engine.tokenIds[0]);
+  assert.equal(resident.reference.fullPass.layers > 0, true);
+
+  // The deterministic part is reproducible; the timings are not part of it.
+  const again = benchmarkEngine(engine, { kind: "gguf", bytes: new Uint8Array(bytes) }, options);
+  assert.equal(benchFingerprint(again), benchFingerprint(resident));
+  assert.deepEqual(again.engine.tokenIds, resident.engine.tokenIds);
+
+  // With a file-backed reader, the streamed decode must be identical, and it
+  // reports what it actually read.
+  const dir = mkdtempSync(join(tmpdir(), "rarext-bench-"));
+  const file = join(dir, "bench.gguf");
+  writeFileSync(file, bytes);
+  const fd = openSync(file, "r");
+  const size = statSync(file).size;
+  const readAt = (offset: number, length: number): Uint8Array => {
+    const want = Math.max(0, Math.min(length, size - offset));
+    const buffer = Buffer.allocUnsafe(want);
+    const read = readSync(fd, buffer, 0, want, offset);
+    return new Uint8Array(buffer.buffer, buffer.byteOffset, read);
+  };
+  try {
+    const withReader = benchmarkEngine(engine, { kind: "gguf", bytes: new Uint8Array(bytes) }, {
+      ...options,
+      streamer: () => ({ readAt, sizeBytes: size }),
+    });
+    assert.equal(withReader.streamed?.identical, true, "the streamed decode matched the resident one");
+    assert.deepEqual(withReader.streamed?.tokenIds, withReader.engine.tokenIds);
+    assert.ok((withReader.streamed?.bytesRead ?? 0) > 0, "the streamed run read from disk");
+    assert.ok((withReader.streamed?.peakResidentBytes ?? 0) > 0);
+    assert.equal(withReader.notes.length, 0);
+  } finally {
+    closeSync(fd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an oversized container is verified to disk and served streamed, matching its control", async () => {
+  const reg = await registry();
+  const MIB = 1024 * 1024;
+  let bigProvider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let controlProvider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    // ~24 MiB with the pad tensor, ~4 MiB without it: the declared model is the
+    // same, so the two must decode identically.
+    const bigBytes = tinyGgufModel({
+      tokenizer: "llama",
+      byteTokens: true,
+      nEmbd: 512,
+      nFfn: 1024,
+      contextLength: 256,
+      padRows: 11_700,
+    });
+    const controlBytes = tinyGgufModel({
+      tokenizer: "llama",
+      byteTokens: true,
+      nEmbd: 512,
+      nFfn: 1024,
+      contextLength: 256,
+    });
+    assert.ok(bigBytes.length > 20 * MIB, `the padded container is large (${bigBytes.length})`);
+    assert.ok(controlBytes.length < 16 * MIB, `the control is small (${controlBytes.length})`);
+
+    const model: ModelRef = {
+      id: "tiny-oversize",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 256,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const chunkBytes = 4 * MIB;
+    const big = buildModelBundle({ bytes: bigBytes, model, execution, chunkBytes });
+    await uploadBundle({ registry: reg.base, bundle: big.bundle, chunks: big.chunks });
+    const control = buildModelBundle({
+      bytes: controlBytes,
+      model: { ...model, id: "tiny-control" },
+      execution,
+      chunkBytes,
+    });
+    await uploadBundle({ registry: reg.base, bundle: control.bundle, chunks: control.chunks });
+
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    const hostMemoryBytes = 8 * MIB;
+    const streamResidentBytes = 6 * MIB; // one 4 MiB fetch shard + the engine's cache
+    const streamingOptions = {
+      registry: reg.base,
+      port: 0,
+      engineBundle,
+      hostMemoryBytes,
+      streamResidentBytes,
+    } as const;
+
+    // Resident: refused, because 24 MiB cannot be held by a simulated 8 MiB host.
+    await assert.rejects(
+      () =>
+        startProvider({
+          bundle: big.bundle,
+          stateDir: join(reg.root, "oversize-resident"),
+          ...streamingOptions,
+        }),
+      /exceed this host's memory/,
+    );
+
+    // Streamed: verified to disk one shard at a time, then served.
+    bigProvider = await startProvider({
+      bundle: big.bundle,
+      stateDir: join(reg.root, "oversize-streamed"),
+      streamWeights: true,
+      ...streamingOptions,
+      log: () => {},
+    });
+    assert.equal(bigProvider.streaming, true);
+    assert.equal(big.bundle.shards.length > 1, true, "the container was sharded");
+
+    controlProvider = await startProvider({
+      bundle: control.bundle,
+      stateDir: join(reg.root, "oversize-control"),
+      registry: reg.base,
+      port: 0,
+      engineBundle,
+      hostMemoryBytes: 64 * MIB,
+    });
+
+    const ask = async (provider: Awaited<ReturnType<typeof startProvider>>) => {
+      const response = await fetch(`${provider.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: provider.bundle.model.id,
+          messages: [{ role: "user", content: "ab" }],
+          max_completion_tokens: 3,
+          seed: 0,
+        }),
+      });
+      assert.equal(response.status, 200);
+      return ((await response.json()) as { rarext_trace?: { tokens?: number[] } }).rarext_trace?.tokens ?? [];
+    };
+    const streamedTokens = await ask(bigProvider);
+    const controlTokens = await ask(controlProvider);
+    assert.equal(streamedTokens.length, 3);
+    assert.deepEqual(streamedTokens, controlTokens, "the padded container decodes like its control");
+
+    // The engine's own bound: read the real file and report the peak it held.
+    const bigPath = join(reg.root, "oversize-file.gguf");
+    writeFileSync(bigPath, bigBytes);
+    const engine = loadEngine(source);
+    const fd = openSync(bigPath, "r");
+    const size = statSync(bigPath).size;
+    const readAt = (offset: number, length: number): Uint8Array => {
+      const want = Math.max(0, Math.min(length, size - offset));
+      const buffer = Buffer.allocUnsafe(want);
+      const read = readSync(fd, buffer, 0, want, offset);
+      return new Uint8Array(buffer.buffer, buffer.byteOffset, read);
+    };
+    try {
+      const run = engine.run(
+        { kind: "gguf" as const, readAt, sizeBytes: size, chunkBytes: 65536, cacheChunks: 8 },
+        { prompt: "ab", steps: 3, temperature: 0, seed: 0 },
+      );
+      const bound = 512 * 1024 + 64 * 1024; // 8 chunks of 64 KiB + the largest row
+      assert.ok(
+        (run.residentBytes ?? 0) <= bound,
+        `the loader held ${run.residentBytes} bytes, over ${bound}`,
+      );
+      assert.equal(run.streaming, true);
+      assert.deepEqual(Array.from(run.tokens), streamedTokens);
+    } finally {
+      closeSync(fd);
+      rmSync(bigPath, { force: true });
+    }
+  } finally {
+    if (bigProvider !== null) await bigProvider.close();
+    if (controlProvider !== null) await controlProvider.close();
+    await reg.close();
+  }
+});
+
+test("an independent forward pass agrees with the engine on the same weights", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const model = {
+    kind: "gguf" as const,
+    bytes: new Uint8Array(tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 256 })),
+  };
+  // More than one prompt, so agreement is not one lucky argmax.
+  for (const prompt of ["ab", "abcdef", "hello there"]) {
+    const reference = referenceForward(engine, model, { prompt });
+    const run = engine.run(model, { prompt, steps: 1, temperature: 0, seed: 0 });
+    assert.equal(
+      reference.argmax,
+      run.tokens[0],
+      `the reference's argmax agrees with the engine on ${JSON.stringify(prompt)}`,
+    );
+    assert.equal(reference.top[0]!.token, reference.argmax, "the argmax heads the top list");
+    assert.equal(reference.layers > 0, true);
+    assert.equal(reference.vocab > 0, true);
+    assert.equal(reference.positions, reference.promptTokens);
+    assert.ok(reference.ms >= 0);
   }
 });

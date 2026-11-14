@@ -783,6 +783,16 @@ test("the Anthropic surface refuses a multimodal block by name", async () => {
     // None of the refusals reached the engine, so nothing was recorded.
     assert.equal(new RunLedger(context.dir).records().length, 0, "a refused request records no run");
 
+    // The deployment advertises its capabilities, including what it will not do.
+    const deployment = (await (await fetch(`${context.gateway.url}/v1/deployment`)).json()) as {
+      capabilities?: Record<string, unknown>;
+    };
+    assert.equal(deployment.capabilities?.multimodal, false);
+    assert.match(String(deployment.capabilities?.multimodal_note), /no vision or audio tower/);
+    assert.equal(deployment.capabilities?.anthropic_streaming, true);
+    assert.equal(deployment.capabilities?.tool_use_blocks, true);
+    assert.equal(deployment.capabilities?.parallel_tool_use, true);
+
     // A text-only block list still works and records.
     const text = await call([{ type: "text", text: "hi" }]);
     assert.equal(text.status, 200);

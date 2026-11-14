@@ -1429,6 +1429,27 @@ engine on the result, then asserts a live request's decode trace is **identical*
 to that manual run and **different** from the bare user turn — proving the prompt
 really came from the container's template.
 
+### Multimodal is out of scope in this repository
+
+To be explicit rather than merely quiet: **this repo implements no vision or audio
+tower, and that is a scope decision, not an unimplemented detail.** The serving
+layer, the engine artifact, and the container format carry text tokens only; an
+image or audio part is therefore *refused by name* with a capability error, and
+the refusal is advertised in the API itself (`capabilities.multimodal: false` with
+a note, on the provider's `/v1/models` and the gateway's `/v1/deployment`) so a
+client can see the limit before sending anything.
+
+Implementing it would take four things, all requiring assets this repo does not
+ship and cannot fabricate: (1) a vision/audio **tower** in the committed weights
+(a projection plus encoder tensors and their architecture declarations in the
+container), (2) **preprocessing** (image decode/resize/patch extraction, audio
+resampling/mel), which is where most of the "other AIs" surface actually lives,
+(3) **engine ops** for the tower and the cross-attention/embedding splice, and
+(4) a **multimodal chat template** plus prompt-assembly rules per model family.
+Everything else in this document — decode, sampling, grammar, tools, templating,
+embeddings, streaming, the bound and the benchmarks — is implemented and tested;
+multimodal is stated as out of scope, on purpose, and stated in the API.
+
 ### Multimodal parts are refused by name
 
 RAREXT's committed weights carry no vision or audio tower, so a request that
@@ -1495,6 +1516,124 @@ merely readable. A complete answer and its stream agree on `stop_reason` — a
 test asserts the streamed events reconstruct the non-streaming message exactly,
 that there is one `content_block_delta` per engine token, that the stop reason is
 `end_turn`, and that a repeat run matches.
+
+### Measured throughput
+
+`npm run bench:engine` measures a committed container with no third-party engine
+and writes the numbers to `bench/engine-bench.json`. It reports four things on
+the **same weights**:
+
+- the engine end to end — tokens, ms/token, tokens/second;
+- the same container **streamed from disk** through a bounded reader, with a
+  token-for-token check that the two decodes are identical;
+- a **reference output-projection pass**, written the obvious (slow) way:
+  materialize every row through the engine's own dequantizer in one parse, then
+  dot it. The projection dominates a transformer's per-token cost, so it is a
+  fair yardstick for the engine's whole step;
+- the committed work per token (multiply-accumulates over the container).
+
+The reference is now a **full independent forward pass** as well as the
+projection pass: `apps/runtime/src/reference-forward.ts` re-implements the
+transformer — embedding lookup, RMSNorm, RoPE (both pair layouts), causal
+attention with a KV cache, the gated FFN, and the output projection — in plain
+TypeScript, over the same committed weights, reading them through the engine's
+own `dequantRows` so no second implementation re-derives a weight. Its argmax for
+the last prompt position must be the engine's first generated token, or the
+benchmark fails and says so.
+
+On the 4.7 MB committed container (llama, 21 tensors, 1,032,272 MACs/token):
+
+```
+engine        334.30 tok/s   2.991 ms/token   (16 tokens)
+reference     1250491.79 rows/s   0.0008 ms/row   (32000 rows, output.weight)
+ref forward   129.8 ms for 9 positions  (14.421 ms/position, 2 layers, independent implementation)
+              argmax 16534 vs engine first token 16534  → agrees true
+              · top2 [{16534, logit 0.2976506}, {26796, logit 0.2975566}]
+engine step / reference projection per token: 0.117
+engine step / reference full pass per position: 0.207
+```
+
+Both ratios are **below 1**: the engine's whole-model step is cheaper than the
+naive projection pass **alone** (~8.5×), and cheaper per position than the
+independent full forward pass (~4.8×) — while the engine also runs the KV cache
+and its own block decoding. The agreement is meaningful precisely because the
+top-2 gap is ~0.0001: the two implementations land on the same token out of a
+32000-way near-tie, on every prompt the test tries.
+
+This is a head-to-head against an **independent implementation on the same
+weights**, not against another production engine — deliberately, because pulling
+in a third-party engine would reintroduce the dependency the protocol exists to
+avoid. The measured numbers are host timings, and
+the committed artifact says so; the **deterministic** part (model bytes, steps,
+MACs per token, token ids, the reference's shape) carries a canonical
+`fingerprint`, so a re-run can be checked for agreement even when the timings
+move. The harness refuses to call a streamed run identical if the tokens differ.
+
+### Serving weights you supply
+
+The streaming path is ready for a real container the moment one is available. The
+generator is a fallback, not the point:
+
+```
+# a real GGUF (any size, any supported architecture/quant)
+RAREXT_OVERSIZE_PATH=/path/to/model.gguf \
+RAREXT_OVERSIZE_CONTROL=/path/to/same-model-without-extra-tensors.gguf \
+RAREXT_OVERSIZE_GIB=0 npm run demo:oversize
+
+# or compare against the same file served resident, when the host can hold it
+RAREXT_OVERSIZE_PATH=/path/to/model.gguf RAREXT_OVERSIZE_RESIDENT=1 npm run demo:oversize
+
+# an HF directory (converted first by RAREXT's own converter)
+node scripts/convert-hf-safetensors.mjs <hf-dir> /tmp/model.rarext
+RAREXT_OVERSIZE_PATH=/tmp/model.rarext npm run demo:oversize   # HF must be served resident
+```
+
+A supplied container is never deleted, the control is optional (with the identity
+check skipped and *said to be skipped* when neither a control nor the opt-in
+resident comparison is given), and an HF/RXHF container is refused up front with
+the reason (it cannot stream), rather than after sharding gigabytes.
+
+### A 6.5 GiB container, served
+
+`npm run demo:oversize` generates a **genuinely 6.5 GiB GGUF container** (real
+bytes: valid header, KV block, tensor table, and 6.5 GiB of tensor data written
+in bounded chunks by `scripts/make-oversize-gguf.mjs`), shards it into RAREXT,
+and serves it from a provider whose simulated host memory is far smaller than
+the container — with **no override**:
+
+```
+container     6979322528 bytes (6.50 GiB) · 209 shards of 32 MiB
+host memory   384 MiB (simulated) · committed bound 192 MiB
+host capability: too-large — weights (6.5 GiB) exceed host memory (384.0 MiB),
+  but the container is verified to disk and read on demand: the loader holds at
+  most 192.0 MiB, never the whole file
+provider      streamed 607 ms (8 tokens), streaming=true
+engine        peak resident 69632 bytes · 76 reads · 66,544 bytes read
+identical     true (streamed vs control, same used weights)
+throughput    16.8 tok/s (59.505 ms/token)
+```
+
+Five things are checked, and the demo fails loudly if any is false: the provider
+reports streaming; the shards were verified **one at a time** to disk (209 of
+them); the answer is **identical** to a control container that carries the same
+used weights without the bulk; the engine's peak resident set stays inside the
+committed bound (69 632 bytes here, against a 192 MiB bound); and the same
+request through the engine directly produces the same tokens within its own
+bound.
+
+The declared architecture is deliberately small — the container is large, not
+the model — because a real 6.5 GB *model* does not exist on this host. Serving a
+real 6G/7G/8G **model** needs real weights, which only the operator can supply:
+point `RAREXT_BENCH_MODEL` (benchmark) or the bundle/convert path at a container
+built from them (`node scripts/convert-hf-safetensors.mjs <hf-dir> <out.rarext>`
+for an HF directory, or any GGUF), and the same streaming path serves it within
+the bound. The ladder keeps those classes `shipped: false` until such weights are
+served here. That is
+the honest limit: this proves the **loader and provider** path at 6.5 GiB (real
+file, real shards, real disk reads, bounded memory, identical decode), not that
+6.5 GB of trained weights run here. `apps/runtime/test/web4.test.ts` exercises the
+same path in CI with a 24 MiB padded container and its control, so the mechanism
+is covered on every run.
 
 ### Weights larger than memory
 

@@ -571,6 +571,139 @@ export function buildModelBundle(input: BuildBundleInput): {
   return { bundle: { ...partial, digest: bundleDigest(partial) }, chunks };
 }
 
+/**
+ * Build a bundle for a container ON DISK without holding it.
+ *
+ * `buildModelBundle` hashes the whole buffer and copies every shard, so a 6.5 GiB
+ * container would need 13 GiB of memory to bundle. This streams the file: the
+ * weights digest is folded in as it is read, one shard is hashed at a time, and
+ * the shard bytes are read on demand by `readShard` (which `uploadBundleFromFile`
+ * uses). The resulting bundle is identical to `buildModelBundle`'s for the same
+ * bytes and chunk size.
+ */
+export function buildModelBundleFromFile(input: {
+  path: string;
+  model: ModelRef;
+  execution: ExecutionRef;
+  chunkBytes?: number;
+  createdAt?: string;
+  id?: string;
+}): { bundle: ModelBundle; readShard: (index: number) => Buffer; close: () => void } {
+  const fd = openSync(input.path, "r");
+  let closed = false;
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    closeSync(fd);
+  };
+  try {
+    const size = statSync(input.path).size;
+    if (size === 0) throw new Error("a model cannot be empty");
+    const chunkBytes = input.chunkBytes ?? DEFAULT_CHUNK_BYTES;
+    const whole = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(Math.min(chunkBytes, size));
+    const shards: BundleShard[] = [];
+    let index = 0;
+    let offset = 0;
+    while (offset < size) {
+      const want = Math.min(chunkBytes, size - offset);
+      const read = readSync(fd, buffer, 0, want, offset);
+      if (read !== want) throw new Error(`short read at ${offset}: ${read} of ${want} bytes`);
+      const slice = buffer.subarray(0, read);
+      whole.update(slice);
+      shards.push({ index, hash: sha256Hex(slice), size: read });
+      offset += read;
+      index += 1;
+    }
+    const digest = `sha256:${whole.digest("hex")}`;
+    if (input.model.weightsDigest !== null && input.model.weightsDigest !== digest) {
+      throw new Error(
+        `model.weightsDigest ${input.model.weightsDigest} does not match the file digest ${digest}`,
+      );
+    }
+    const partial = {
+      kind: MODEL_BUNDLE_KIND,
+      version: 1,
+      id: input.id ?? input.model.id,
+      model: { ...input.model, sizeBytes: size, weightsDigest: digest },
+      execution: input.execution,
+      shards,
+      totalBytes: size,
+      shardsRoot: bundleShardsRoot(shards),
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    } satisfies Omit<ModelBundle, "digest">;
+    // The descriptor stays open for `readShard`, so the caller owns the close.
+    return {
+      bundle: { ...partial, digest: bundleDigest(partial) },
+      readShard: (which: number): Buffer => {
+        const shard = shards[which];
+        if (shard === undefined) throw new Error(`no shard ${which}`);
+        const out = Buffer.allocUnsafe(shard.size);
+        const at = shards.slice(0, which).reduce((total, item) => total + item.size, 0);
+        const got = readSync(fd, out, 0, shard.size, at);
+        if (got !== shard.size) throw new Error(`short read of shard ${which}`);
+        return out;
+      },
+      close,
+    };
+  } catch (error) {
+    close();
+    throw error;
+  }
+}
+
+/**
+ * Upload a bundle whose shards live in a file, one at a time. The same
+ * verification as `uploadBundle`: the registry must store each shard under the
+ * committed hash.
+ */
+export async function uploadBundleFromFile(input: {
+  registry: string;
+  bundle: ModelBundle;
+  readShard: (index: number) => Buffer;
+  fetchImpl?: typeof fetch;
+}): Promise<UploadedBundle> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const registry = normalizeBase(input.registry);
+  const shardHashes: string[] = [];
+  for (let index = 0; index < input.bundle.shards.length; index += 1) {
+    const shard = input.bundle.shards[index]!;
+    const chunk = input.readShard(index);
+    const response = await fetchImpl(`${registry}/v1/blobs/raw`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-rarext-hash": shard.hash,
+        "x-rarext-media-type": "application/octet-stream",
+      },
+      body: Buffer.from(chunk) as unknown as BodyInit,
+    });
+    if (!response.ok) {
+      throw new Error(`registry refused shard ${index}: HTTP ${response.status} ${await response.text()}`);
+    }
+    const record = (await response.json()) as { hash?: unknown };
+    if (record.hash !== shard.hash) {
+      throw new Error(`registry stored shard ${index} as ${String(record.hash)}, expected ${shard.hash}`);
+    }
+    shardHashes.push(shard.hash);
+  }
+  const manifest = bundleManifestBytes(input.bundle);
+  const manifestHash = sha256Hex(manifest);
+  const response = await fetchImpl(`${registry}/v1/blobs/raw`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-rarext-hash": manifestHash,
+      "x-rarext-media-type": "application/vnd.rarext.model-bundle+json",
+    },
+    body: manifest as unknown as BodyInit,
+  });
+  if (!response.ok) {
+    throw new Error(`registry refused the manifest: HTTP ${response.status} ${await response.text()}`);
+  }
+  return { manifestHash, shardHashes };
+}
+
 const EXECUTION_KINDS = new Set(["native", "engine"]);
 const ENGINE_NAMES = new Set<EngineName>([
   "rarext",

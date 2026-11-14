@@ -89,8 +89,20 @@ console.log(
     `${fmt(result.reference.msPerRow, 4)} ms/row  · ${result.reference.rows} rows ` +
     `(${result.reference.tensor})`,
 );
+const full = result.reference.fullPass;
+console.log(
+  `  ref forward   ${fmt(full.ms, 1)} ms for ${full.promptTokens} positions  ` +
+    `(${fmt(full.msPerPosition, 3)} ms/position, ${full.layers} layer(s), independent implementation)`,
+);
+console.log(
+  `                argmax ${full.argmax} vs engine first token ${full.engineFirstToken}  ` +
+    `→ agrees ${full.agrees}${full.agrees ? "" : " (MISMATCH)"}  · top2 ${JSON.stringify(full.top)}`,
+);
 console.log(
   `\n  engine step / reference projection per token: ${fmt(result.comparison.engineStepOverReferenceProjection, 3)}`,
+);
+console.log(
+  `  engine step / reference full pass per position: ${fmt(result.comparison.engineStepOverReferenceFullPass, 3)}`,
 );
 console.log(`  ${result.comparison.note}\n`);
 
@@ -105,6 +117,10 @@ check(result.engine.tokensPerSecond > 0, "the engine throughput was not positive
 check(result.macsPerToken > 0, "the container reported no weight arithmetic");
 check(result.reference.rowsPerSecond > 0, "the reference pass ran no rows");
 check(result.streamed === null || result.streamed.identical, "the streamed decode differed from the resident one");
+check(
+  result.reference.fullPass.agrees,
+  `the independent forward pass disagreed: argmax ${result.reference.fullPass.argmax} vs engine ${result.reference.fullPass.engineFirstToken}`,
+);
 
 const fingerprint = benchFingerprint(result);
 const outDir = join(root, "bench");

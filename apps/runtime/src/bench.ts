@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 
 import { canonicalDigest } from "./digest.ts";
+import { referenceForward } from "./reference-forward.ts";
 import type { NativeEngine } from "./engine-bundle.ts";
 
 export interface BenchTiming {
@@ -46,6 +47,17 @@ export interface BenchResult {
     | null;
   reference: {
     pass: string;
+    /** A full, independent forward pass over the same committed weights. */
+    fullPass: {
+      layers: number;
+      promptTokens: number;
+      ms: number;
+      msPerPosition: number;
+      argmax: number;
+      engineFirstToken: number | null;
+      agrees: boolean;
+      top: Array<{ token: number; logit: number }>;
+    };
     tensor: string;
     rows: number;
     cols: number;
@@ -62,6 +74,8 @@ export interface BenchResult {
   comparison: {
     /** Engine whole-step ms per token over the reference's projection-only pass. */
     engineStepOverReferenceProjection: number;
+    /** Engine ms/token over the reference's full pass ms/position. */
+    engineStepOverReferenceFullPass: number;
     note: string;
   };
   /** Facts about what could not be measured, said out loud. */
@@ -173,8 +187,28 @@ export function benchmarkEngine(
     const scale = 10 ** digits;
     return Math.round(value * scale) / scale;
   };
+  // The full independent forward pass: two runs, fastest reported, so the
+  // comparison is not decided by one cold JIT pass.
+  const fullPass = (() => {
+    const first = referenceForward(engine, model, { prompt });
+    const second = referenceForward(engine, model, { prompt });
+    return first.ms <= second.ms ? first : second;
+  })();
+  const engineFirstToken = tokens.length > 0 ? tokens[0]! : null;
+  const agrees = engineFirstToken !== null && fullPass.argmax === engineFirstToken;
+
   const reference = {
     pass: "reference output projection (materialize-then-dot, engine dequantizer)",
+    fullPass: {
+      layers: fullPass.layers,
+      promptTokens: fullPass.promptTokens,
+      ms: round(fullPass.ms, 3),
+      msPerPosition: round(fullPass.ms / Math.max(1, fullPass.positions), 3),
+      argmax: fullPass.argmax,
+      engineFirstToken,
+      agrees,
+      top: fullPass.top,
+    },
     tensor: projection.name,
     rows: projection.rows,
     cols: projection.cols,
@@ -231,6 +265,10 @@ export function benchmarkEngine(
     reference,
     comparison: {
       engineStepOverReferenceProjection,
+      engineStepOverReferenceFullPass:
+        fullPass.ms === 0
+          ? 0
+          : Math.round((best.msPerToken / (fullPass.ms / Math.max(1, fullPass.positions))) * 1000) / 1000,
       note:
         "the engine number is a whole-model step; the reference number is the output " +
         "projection alone, materialized row by row. A ratio below 1 means the engine's " +
@@ -254,7 +292,18 @@ export function benchFingerprint(result: BenchResult): string {
     macsPerToken: result.macsPerToken,
     tokens: result.engine.tokenIds,
     tokenDigest: result.engine.tokenDigest,
-    reference: { tensor: result.reference.tensor, rows: result.reference.rows, cols: result.reference.cols },
+    reference: {
+      tensor: result.reference.tensor,
+      rows: result.reference.rows,
+      cols: result.reference.cols,
+      fullPass: {
+        layers: result.reference.fullPass.layers,
+        promptTokens: result.reference.fullPass.promptTokens,
+        argmax: result.reference.fullPass.argmax,
+        engineFirstToken: result.reference.fullPass.engineFirstToken,
+        agrees: result.reference.fullPass.agrees,
+      },
+    },
     streamedIdentical: result.streamed === null ? null : result.streamed.identical,
     notes: result.notes,
   });

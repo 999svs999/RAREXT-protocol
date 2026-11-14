@@ -2061,6 +2061,24 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
               created: Math.floor(Date.parse(options.bundle.createdAt) / 1000),
               owned_by: "rarext-provider",
               digest: options.bundle.model.weightsDigest?.replace(/^sha256:/, "") ?? null,
+              // What this provider will do, stated rather than discovered by
+              // failing. Multimodal input is refused by name: no vision or audio
+              // tower is implemented, and the weights carry none.
+              capabilities: {
+                chat: true,
+                completions: true,
+                streaming: true,
+                embeddings: loadedEngine !== null && typeof loadedEngine.embed === "function",
+                tools: true,
+                response_format: true,
+                logprobs: true,
+                grammar: true,
+                multimodal: false,
+                multimodal_note:
+                  "image and audio parts are refused with code unsupported_content_part: no vision or audio " +
+                  "tower is implemented in this runtime, and the committed weights carry none",
+                weights_streaming: streamedReader !== null,
+              },
             },
           ],
         });

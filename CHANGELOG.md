@@ -11,6 +11,68 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Multimodal is stated as out of scope in the API, and the streaming path is
+  ready for operator-supplied weights.** `GET /v1/models` (provider) and
+  `GET /v1/deployment` (gateway) now carry a `capabilities` block —
+  `multimodal: false` with the reason, plus the features that ARE implemented —
+  so a client learns the limit without failing, and tests assert it. The docs say
+  plainly that no vision/audio tower is implemented (and list the four things a
+  real one would need), rather than leaving it implied. `demo:oversize` now takes
+  a real container (`RAREXT_OVERSIZE_PATH`), an optional control
+  (`RAREXT_OVERSIZE_CONTROL`) or the opt-in resident comparison
+  (`RAREXT_OVERSIZE_RESIDENT=1`), never deletes a supplied file, refuses an
+  HF/RXHF container up front with the reason, and says when the identity check was
+  skipped instead of implying it passed. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#multimodal-is-out-of-scope-in-this-repository)
+  and [Serving weights you supply](docs/WEB4-MODEL.md#serving-weights-you-supply).
+
+- **A full independent forward pass in the benchmark.** `apps/runtime/src/
+  reference-forward.ts` re-implements the transformer in plain TypeScript —
+  embedding, RMSNorm, RoPE (both pair layouts), causal attention with a KV cache,
+  the gated FFN, the output projection — over the same committed weights, read
+  through the engine's own `dequantRows`, and the benchmark asserts its argmax for
+  the last prompt position is the engine's first token (it fails loudly if not).
+  On the 4.7 MB container: engine **334.30 tok/s / 2.991 ms/token**, reference
+  full pass **14.421 ms/position**, ratios **0.117** (projection) and **0.207**
+  (full pass) — the engine's whole step is ~8.5× and ~4.8× cheaper respectively,
+  with agreement on a 32000-way near-tie (top-2 gap ≈ 0.0001) and across every
+  prompt the test tries. This is a head-to-head against an independent
+  implementation on the same weights, deliberately not against another production
+  engine (that would reintroduce the third-party dependency the protocol avoids).
+  The docs also state plainly that serving a real 6G/7G/8G *model* needs
+  operator-supplied weights. See [WEB4-MODEL.md](docs/WEB4-MODEL.md#measured-throughput).
+
+- **A real 6.5 GiB container, verified to disk and served within a bound.** New
+  `scripts/make-oversize-gguf.mjs` writes a genuinely large GGUF container — valid
+  header, KV block, tensor table, and 6.5 GiB of real tensor data written in
+  bounded chunks — and `npm run demo:oversize` shards it into RAREXT
+  (`buildModelBundleFromFile` streams the file; `uploadBundleFromFile` uploads one
+  shard at a time) and serves it from a provider with `RAREXT_STREAM_WEIGHTS=1` on
+  a simulated **384 MiB** host, with no override: 209 shards of 32 MiB verified to
+  disk one at a time, streaming=true, **peak resident 69 632 bytes** against a
+  192 MiB committed bound, decode **identical** to a control container carrying
+  the same used weights, 16.8 tok/s (59.5 ms/token). The declared architecture is
+  small on purpose — the container is large, not the model — and the demo says so;
+  the CI test covers the same path with a 24 MiB padded container and its control.
+  See [WEB4-MODEL.md](docs/WEB4-MODEL.md#a-65-gib-container-served).
+
+- **A measured benchmark, with a reference pass on the same weights.** New
+  `apps/runtime/src/bench.ts` and `npm run bench:engine` measure a committed
+  container with no third-party engine: engine tokens/second and ms/token, the
+  same container streamed from disk through a bounded reader (token-for-token
+  identical check), a reference output-projection pass written the slow way
+  (materialize every row through the engine's own dequantizer, then dot — with a
+  new `dequantRows` primitive so one parse does not dominate), and the container's
+  MACs per token. On the 4.7 MB committed container: **291.72 tok/s / 3.428
+  ms/token**, reference projection **0.0008 ms/row** over 32000 rows, ratio
+  **0.142** — the engine's whole-model step is ~7× cheaper than the naive
+  projection alone. The measured numbers are written to `bench/engine-bench.json`
+  as evidence; the deterministic part carries a canonical `fingerprint`, so
+  agreement is checkable even though timings move. Tests assert the measured
+  invariants, fingerprint reproducibility, and that the streamed decode matches
+  the resident one while reading from disk. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#measured-throughput).
+
 - **A multimodal part is refused by name, not dropped.** OpenAI parts
   (`image_url`, `input_audio`, `file`) and Anthropic blocks (`image`,
   `document`) now produce a precise capability error naming the part and the

@@ -2086,7 +2086,28 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       }
 
       if (request.method === "GET" && path === "/v1/deployment") {
-        sendJson(response, 200, deployment, baseHeaders());
+        sendJson(
+          response,
+          200,
+          {
+            ...deployment,
+            // The surface's capabilities, so a client does not have to discover
+            // a limit by failing. Multimodal input is refused by name.
+            capabilities: {
+              chat: true,
+              anthropic_messages: true,
+              anthropic_streaming: true,
+              tool_use_blocks: true,
+              parallel_tool_use: true,
+              embeddings: upstreamApi !== "anthropic",
+              multimodal: false,
+              multimodal_note:
+                "image and audio parts are refused with an invalid_request_error: no vision or audio tower " +
+                "is implemented in this runtime, and the committed weights carry none",
+            },
+          },
+          baseHeaders(),
+        );
         return;
       }
 
