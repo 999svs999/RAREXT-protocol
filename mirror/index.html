@@ -33,6 +33,7 @@
       </a>
 
       <nav class="tabs" aria-label="Views">
+        <a class="tab tab-accent" href="/verify.html" data-i18n="nav.verify">Verify</a>
         <button class="tab active" data-view="workbench" data-i18n="nav.play">Play</button>
         <button class="tab" data-view="feed" data-i18n="nav.community">Community</button>
         <button class="tab" data-view="rewards" data-i18n="nav.rewards">Rewards</button>
@@ -76,12 +77,13 @@
     </header>
 
     <div id="mirror-refusal" class="mirror-refusal hidden" role="alert">
-      <strong>This workbench refused its bundle: the bytes do not rebuild the pinned root.</strong>
+      <strong>This copy did not pass its own check, so we stopped using it.</strong>
       <p>
-        Reads from this mirror's bundle are disabled — the feed, the challenges,
-        and the semantics cannot be answered from bytes that fail verification.
-        Open <a href="./verify.html">the bundle verifier</a> for the same check
-        this workbench runs at startup.
+        The files served here do not rebuild the fingerprint this copy claims, so
+        the feed and the puzzles are switched off rather than shown from bytes we
+        cannot trust. This is not your mistake and nothing is broken on your side —
+        it means this particular copy is stale or tampered with. Try another source,
+        or <a href="./verify.html">check a copy yourself</a>.
       </p>
       <div class="mirror-refusal-roots">
         <div>
@@ -567,6 +569,9 @@
           <button id="welcome-explore" class="ghost" data-i18n="welcome.explore">
             See community builds
           </button>
+          <a class="ghost" href="/verify.html" data-i18n="welcome.verify">
+            Check a copy instead
+          </a>
         </div>
         <details class="welcome-glossary">
           <summary data-i18n="welcome.glossary">What are these blocks?</summary>

@@ -349,6 +349,15 @@ a.tab {
   background: var(--surface-2);
   color: var(--text-dim);
 }
+/* The one thing a visitor most needs to be able to do: check a copy. */
+.tab.tab-accent {
+  color: var(--brand-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-accent) 40%, transparent);
+}
+.tab.tab-accent:hover {
+  background: color-mix(in srgb, var(--brand-accent) 12%, transparent);
+  color: var(--brand-accent);
+}
 
 .tab.active {
   background: var(--surface-3);
