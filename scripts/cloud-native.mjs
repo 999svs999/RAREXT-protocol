@@ -39,6 +39,7 @@ const MODEL_ID = "future-model";
 
 // ── A RAREXT-native cloud model. It speaks only rarext.cloud-infer.v1. ──────
 const seen = [];
+const replies = [];
 const nativeServer = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -79,24 +80,24 @@ const nativeServer = createServer(async (request, response) => {
       response.end("data: [DONE]\n\n");
       return;
     }
+    const reply = {
+      kind: CLOUD_INFER_KIND,
+      id: "cloud-demo",
+      model: native.model,
+      output: {
+        text,
+        tool_calls: null,
+        finish_reason: "stop",
+        logprobs: native.decode?.logprobs
+          ? [{ token: "cloud-native", logprob: -0.05, top: [{ token: "cloud-native", logprob: -0.05 }] }]
+          : null,
+      },
+      usage: { input_tokens: 3, output_tokens: text.split(" ").length },
+      attestation: { scheme: "rarext.opaque.v1", digest: "demo-operator-card" },
+    };
+    replies.push(reply);
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(
-      JSON.stringify({
-        kind: CLOUD_INFER_KIND,
-        id: "cloud-demo",
-        model: native.model,
-        output: {
-          text,
-          tool_calls: null,
-          finish_reason: "stop",
-          logprobs: native.decode?.logprobs
-            ? [{ token: "cloud-native", logprob: -0.05, top: [{ token: "cloud-native", logprob: -0.05 }] }]
-            : null,
-        },
-        usage: { input_tokens: 3, output_tokens: text.split(" ").length },
-        attestation: { scheme: "rarext.opaque.v1", digest: "demo-operator-card" },
-      }),
-    );
+    response.end(JSON.stringify(reply));
     return;
   }
   response.writeHead(404, { "content-type": "application/json" });
@@ -210,6 +211,8 @@ try {
   console.log(`  chat          "${body.choices[0].message.content}"`);
   console.log(`  stream        "${streamedText}"`);
   console.log(`  native frames ${seen.length} request(s), all ${CLOUD_INFER_KIND}`);
+  console.log(`  native req    ${JSON.stringify(seen[0])}`);
+  console.log(`  native reply  ${JSON.stringify(replies[0])}`);
   console.log(`  run           ${record?.digest.slice(0, 16)}… verifies ${verdict.correct}`);
   console.log(`  local weights none (control plane holds no model bytes)`);
 } finally {
