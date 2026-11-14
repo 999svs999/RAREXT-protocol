@@ -268,7 +268,15 @@ export interface HostCapabilityCommitment {
 export function hostCapabilityCommitment(
   model: ModelRef,
   hardware: Pick<HardwareRef, "memoryBytes">,
-  options: { reserveBytes?: number; allowOversize?: boolean; overrideEnv?: string | undefined } = {},
+  options: {
+    reserveBytes?: number;
+    allowOversize?: boolean;
+    overrideEnv?: string | undefined;
+    /** True when the weights are read from disk on demand, not held whole. */
+    streaming?: boolean;
+    /** The loader's own bound: cache + one row + tokenizer strings, in bytes. */
+    residentBytes?: number;
+  } = {},
 ): HostCapabilityCommitment {
   const fit = assessModelFit(model, {
     backend: "cpu",
@@ -286,8 +294,45 @@ export function hostCapabilityCommitment(
       reason: fit.note,
     };
   }
-  const override = options.allowOversize === true || options.overrideEnv === "1";
   const required = fit.modelBytes;
+  // Streaming changes the question: the loader never holds the container whole,
+  // so what must fit is its own bound, not the file. That is what lets a
+  // 6/7/8 GB class be served on a smaller host without an override — provided
+  // the bound itself fits.
+  if (options.streaming === true) {
+    const bound = options.residentBytes ?? null;
+    if (bound === null || fit.memoryBytes === null) {
+      return {
+        allowed: false,
+        verdict: fit.verdict,
+        requiredBytes: required,
+        memoryBytes: fit.memoryBytes,
+        reason: "a streaming loader must state the resident bound it commits to before it is trusted",
+      };
+    }
+    if (bound > fit.memoryBytes) {
+      return {
+        allowed: false,
+        verdict: fit.verdict,
+        requiredBytes: required,
+        memoryBytes: fit.memoryBytes,
+        reason:
+          `even the streaming bound (${formatBytes(bound)}) exceeds this host's memory ` +
+          `(${formatBytes(fit.memoryBytes)})`,
+      };
+    }
+    return {
+      allowed: true,
+      verdict: fit.verdict,
+      requiredBytes: required,
+      memoryBytes: fit.memoryBytes,
+      reason:
+        `weights (${formatBytes(required ?? 0)}) exceed host memory (${formatBytes(fit.memoryBytes)}), ` +
+        `but the container is verified to disk and read on demand: the loader holds at most ` +
+        `${formatBytes(bound)}, never the whole file`,
+    };
+  }
+  const override = options.allowOversize === true || options.overrideEnv === "1";
   const reason =
     required === null || fit.memoryBytes === null
       ? "the model's committed size exceeds this host's memory"

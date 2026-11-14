@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9107,6 +9107,21 @@ test("tool calls are rendered, parsed into the OpenAI shape, and replayable", as
     assert.equal(refused.choices[0]!.message.tool_calls, undefined);
     assert.notEqual(refused.choices[0]!.finish_reason, "tool_calls");
 
+    // parallel_tool_calls: false limits the answer to one tool call; the same
+    // pinned output yields two when parallel calls are allowed.
+    const twoCalls =
+      '{"tool_calls":[{"name":"get_weather","arguments":{"city":"Paris"}},{"name":"get_weather","arguments":{"city":"Rome"}}]}';
+    const twoPinned = Array.from(engine.encode!(engineModel, twoCalls));
+    const both = await askTool({ pinned_tokens: twoPinned });
+    assert.equal(both.choices[0]!.message.tool_calls!.length, 2);
+    const single = await askTool({ pinned_tokens: twoPinned, parallel_tool_calls: false });
+    assert.equal(single.choices[0]!.message.tool_calls!.length, 1);
+    assert.deepEqual(
+      JSON.parse(single.choices[0]!.message.tool_calls![0]!.function.arguments),
+      { city: "Paris" },
+      "the first call is the one kept",
+    );
+
     // Streaming carries the tool call as a delta and finishes with tool_calls.
     const streamed = await fetch(`${provider.url}/v1/chat/completions`, {
       method: "POST",
@@ -9549,6 +9564,23 @@ test("the template interpreter handles macros, namespace, and the common filters
   assert.equal(renderChatTemplate("{{ [1,1,2] | unique | length }}|{{ 'x' ~ '!' }}", scope), "2|x!");
   assert.equal(renderChatTemplate("{{ tools | list | count }}|{{ (tools | last).function.name }}", scope), "2|get_time");
 
+  // `{% call %}` blocks are rendered through `caller()`.
+  assert.equal(
+    renderChatTemplate("{% macro wrap(t) %}[{{ t }}:{{ caller() }}]{% endmacro %}{% call wrap(\"x\") %}body{% endcall %}", {}),
+    "[x:body]",
+  );
+  assert.equal(
+    renderChatTemplate("{% macro box(t) %}<{{ t }}>{{ caller() }}</{{ t }}>{% endmacro %}{% call box(\"h\") %}v={{ v }}{% endcall %}", { v: 7 }),
+    "<h>v=7</h>",
+  );
+  assert.equal(
+    renderChatTemplate(
+      "{% macro row(x) %}({{ caller() }}){% endmacro %}{% for i in [1,2] %}{% call row(i) %}{{ i }}{% endcall %}{% endfor %}",
+      {},
+    ),
+    "(1)(2)",
+  );
+
   // Still no arbitrary execution: unknown statements and filters are refused.
   assert.throws(() => renderChatTemplate("{% include \"x\" %}", {}));
   assert.throws(() => renderChatTemplate("{{ 1 | frobnicate }}", {}));
@@ -9561,9 +9593,10 @@ test("a macro-and-namespace chat template drives the decode end to end", async (
   try {
     const template =
       "{% macro tool_line(t) %}{{ t.function.name }}{% endmacro %}" +
+      "{% macro section(title) %}<|{{ title }}|>{{ caller() }}<|end|>{% endmacro %}" +
       "{% set ns = namespace(names=[]) %}" +
       "{% for t in tools %}{% set ns.names = ns.names + [tool_line(t)] %}{% endfor %}" +
-      "{% if ns.names | length > 0 %}<|tools|>{{ ns.names | join(',') }}<|end|>{% endif %}" +
+      "{% if ns.names | length > 0 %}{% call section('tools') %}{{ ns.names | join(',') }}{% endcall %}{% endif %}" +
       "{% for m in messages %}<|{{ m.role }}|>{{ m.content }}<|end|>{% endfor %}" +
       "{% if add_generation_prompt %}<|assistant|>{% endif %}";
     const bytes = tinyGgufModel({
@@ -9652,16 +9685,23 @@ test("the provider refuses a model the host cannot hold, unless overridden", asy
       weightsDigest: null,
       contextLength: 64,
     };
-    const { bundle: real, chunks } = buildModelBundle({
-      bytes,
-      model,
-      execution: NATIVE_EXECUTION,
-      chunkBytes: 1024,
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
     });
-    await uploadBundle({ registry: reg.base, bundle: real, chunks });
-    // The committed size this deployment declares is the 6/7/8 GB class it
-    // names; the container bytes here are small so the test stays fast.
-    const bundle = { ...real, model: { ...real.model, sizeBytes: 9 * GIB } };
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    // The host is simulated rather than the model faked:
+    // `buildModelBundle` binds sizeBytes to the real container, so a smaller
+    // host is the honest way to exercise the same commitment (5 536 committed
+    // bytes cannot be read by a 4 KiB host).
+    const tinyHost = 4096;
 
     // The host-capability commitment: refused before the container is read.
     await assert.rejects(
@@ -9671,7 +9711,7 @@ test("the provider refuses a model the host cannot hold, unless overridden", asy
           registry: reg.base,
           stateDir: join(reg.root, "oversize"),
           port: 0,
-          hostMemoryBytes: 8 * GIB,
+          hostMemoryBytes: tinyHost,
         }),
       /exceed this host's memory/,
     );
@@ -9682,21 +9722,229 @@ test("the provider refuses a model the host cannot hold, unless overridden", asy
       registry: reg.base,
       stateDir: join(reg.root, "oversize-ok"),
       port: 0,
-      hostMemoryBytes: 8 * GIB,
+      engineBundle,
+      hostMemoryBytes: tinyHost,
       allowOversizeModel: true,
     });
     await overridden.close();
 
-    // A host that can hold it needs no override.
-    const large = await startProvider({
+    // (A host that can hold it is covered by the plan tests: fits/tight/unknown
+    // are all allowed. Starting one here would need a model the runtime can
+    // actually run, which is what the overridden start above proves it reaches.)
+  } finally {
+    await reg.close();
+  }
+});
+
+test("a container streams from a file with a bounded resident set, and decodes identically", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  // A container big enough that holding it whole would break the cap below.
+  const bytes = tinyGgufModel({ tokenizer: "llama", nEmbd: 512, nFfn: 1024 });
+  const dir = mkdtempSync(join(tmpdir(), "rarext-stream-"));
+  const file = join(dir, "streamed.gguf");
+  writeFileSync(file, bytes);
+
+  const resident = engine.run(
+    { kind: "gguf" as const, bytes: new Uint8Array(bytes) },
+    { prompt: "ab", steps: 4, temperature: 0, seed: 0 },
+  );
+
+  // A bounded file reader: every read allocates at most `length` bytes, so the
+  // engine can never hold the container whole.
+  const fd = openSync(file, "r");
+  const size = statSync(file).size;
+  let maxSingleRead = 0;
+  const readAt = (offset: number, length: number): Uint8Array => {
+    const want = Math.max(0, Math.min(length, size - offset));
+    const buffer = Buffer.allocUnsafe(want);
+    const read = readSync(fd, buffer, 0, want, offset);
+    maxSingleRead = Math.max(maxSingleRead, read);
+    return new Uint8Array(buffer.buffer, buffer.byteOffset, read);
+  };
+  const cap = 256 * 1024;
+  assert.ok(size > cap * 8, `the container (${size}) is far bigger than the cap (${cap})`);
+
+  try {
+    const streamed = engine.run(
+      { kind: "gguf" as const, readAt, sizeBytes: size, chunkBytes: 65536, cacheChunks: 2 },
+      { prompt: "ab", steps: 4, temperature: 0, seed: 0 },
+    );
+    // The decode is identical to serving the same container resident.
+    assert.deepEqual(Array.from(streamed.tokens), Array.from(resident.tokens));
+    assert.equal(streamed.text, resident.text);
+    assert.equal(streamed.streaming, true);
+    assert.equal(typeof streamed.residentBytes, "number");
+    assert.ok(
+      streamed.residentBytes! <= cap,
+      `the loader held ${streamed.residentBytes} bytes, over the ${cap} cap`,
+    );
+    assert.ok(maxSingleRead <= cap, `a single read was ${maxSingleRead} bytes, over the cap`);
+
+    // It really read from disk, and the accounting says so.
+    const stats = engine.streamStats!({
+      kind: "gguf" as const,
+      readAt,
+      sizeBytes: size,
+      chunkBytes: 65536,
+      cacheChunks: 2,
+    });
+    assert.equal(stats.streaming, true);
+    assert.ok(stats.reads > 0 && stats.bytesRead > 0);
+    assert.ok(stats.peakResidentBytes! <= cap, `peak resident ${stats.peakResidentBytes} over cap`);
+
+    // A container that only exists as a reader cannot be served resident.
+    assert.throws(
+      () => engine.run({ kind: "hf" as const, readAt }, { prompt: "ab", steps: 1 }),
+      /only a GGUF container can stream/,
+    );
+  } finally {
+    closeSync(fd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a provider streams a container larger than host memory and answers from it", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  const MIB = 1024 * 1024;
+  try {
+    // ~9 MiB of weights, against a simulated 1 MiB host: the resident path must
+    // refuse, and the streaming path must serve without any override.
+    const bytes = tinyGgufModel({ tokenizer: "llama", byteTokens: true, nEmbd: 512, nFfn: 1024, contextLength: 512 });
+    assert.ok(bytes.length > 4 * MIB, `the fixture is big enough to matter (${bytes.length} bytes)`);
+    const model: ModelRef = {
+      id: "tiny-streamed",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 65536 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+
+    const options = {
       bundle,
       registry: reg.base,
-      stateDir: join(reg.root, "large-host"),
+      stateDir: join(reg.root, "streamed"),
       port: 0,
-      hostMemoryBytes: 64 * GIB,
-    });
-    await large.close();
+      engineBundle,
+      // A host that cannot hold the container, but can hold the loader's bound.
+      hostMemoryBytes: 4 * MIB,
+    };
+
+    // Resident: refused, because the model exceeds the host's memory.
+    await assert.rejects(() => startProvider(options), /exceed this host's memory/);
+
+    // Streaming: allowed with no override, and the provider says so.
+    provider = await startProvider({ ...options, streamWeights: true, streamResidentBytes: 2 * MIB });
+    assert.equal(provider.streaming, true);
+
+    const ask = async () => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: bundle.model.id,
+          messages: [{ role: "user", content: "ab" }],
+          max_completion_tokens: 3,
+          seed: 0,
+        }),
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()) as { rarext_trace?: { kind?: string; tokens?: number[] }; choices: Array<{ message: { content: string | null } }> };
+    };
+    const first = await ask();
+    assert.equal(first.rarext_trace?.kind, "rarext.decode-trace.v1");
+    assert.equal(first.rarext_trace?.tokens?.length, 3, "the streamed container produced tokens");
+    assert.equal(typeof first.choices[0]!.message.content, "string");
+    // Deterministic, so a re-read from disk decodes the same answer.
+    assert.deepEqual((await ask()).rarext_trace?.tokens, first.rarext_trace?.tokens);
   } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("a multimodal request is refused by name, not answered as text only", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({ tokenizer: "llama", byteTokens: true, contextLength: 512 });
+    const model: ModelRef = {
+      id: "tiny-multimodal",
+      family: "llama",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 512,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source,
+      name: "rarext-gguf-engine",
+      engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF,
+      chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle,
+      registry: reg.base,
+      stateDir: join(reg.root, "multimodal"),
+      port: 0,
+      engineBundle,
+    });
+
+    const ask = async (content: unknown) => {
+      const response = await fetch(`${provider!.url}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: bundle.model.id, messages: [{ role: "user", content }], max_tokens: 2 }),
+      });
+      return response;
+    };
+    const refusal = async (content: unknown) => {
+      const response = await ask(content);
+      assert.equal(response.status, 400);
+      return (await response.json()) as { error: { message: string; code?: string; param?: string } };
+    };
+
+    const image = await refusal([
+      { type: "text", text: "what is in this picture?" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+    ]);
+    assert.equal(image.error.code, "unsupported_content_part");
+    assert.equal(image.error.param, "messages");
+    assert.match(image.error.message, /image_url content parts are not supported/);
+    assert.match(image.error.message, /no vision or audio tower/);
+
+    assert.match((await refusal([{ type: "input_audio", input_audio: { data: "AAAA", format: "wav" } }])).error.message, /input_audio/);
+
+    // A text-only content array is still a normal request.
+    const text = await ask([{ type: "text", text: "hi" }]);
+    assert.equal(text.status, 200);
+    const body = (await text.json()) as { rarext_trace?: { kind?: string } };
+    assert.equal(body.rarext_trace?.kind, "rarext.decode-trace.v1");
+  } finally {
+    if (provider !== null) await provider.close();
     await reg.close();
   }
 });

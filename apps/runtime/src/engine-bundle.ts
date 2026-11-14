@@ -334,6 +334,10 @@ export interface NativeEngine {
     promptTruncated?: boolean;
     /** The prompt token ids evaluated after truncation. */
     promptIds?: number[];
+    /** True when the container was read on demand rather than held resident. */
+    streaming?: boolean;
+    /** Peak bytes the streaming loader held, when it streamed. */
+    residentBytes?: number;
   };
   /** Tokenize text with the model's own tokenizer, for tests and verifiers. */
   encode?(model: unknown, text: string): number[];
@@ -341,6 +345,20 @@ export interface NativeEngine {
   decode?(model: unknown, ids: number[]): string;
   /** The exact bytes a token contributes to the decoded output. */
   tokenBytes?(model: unknown, id: number): number[];
+  /** Dequantize a run of rows in one parse, for verification and benchmarks. */
+  dequantRows?(
+    model: unknown,
+    name: string,
+    start?: number,
+    count?: number,
+  ): { values: Float32Array; rows: number; cols: number };
+  /** Reads/bytes/peak-resident accounting for a streaming (or resident) model. */
+  streamStats?(model: unknown): {
+    streaming: boolean;
+    reads: number;
+    bytesRead: number;
+    peakResidentBytes: number | null;
+  };
   /**
    * The container's own chat template and special tokens, or null when it
    * declares none (the caller then falls back to an explicit prompt).
@@ -416,7 +434,17 @@ export interface NativeEngine {
 /** A model handle for the GGUF runtime: the verified bytes, nothing else. */
 export interface GgufModel {
   kind: "gguf";
-  bytes: Uint8Array;
+  /** The whole container. Absent when the model streams through `readAt`. */
+  bytes?: Uint8Array;
+  /**
+   * A bounded reader: `readAt(offset, length)` returns at most `length` bytes,
+   * so the engine can serve a container larger than memory. `chunkBytes` and
+   * `cacheChunks` bound the metadata cache.
+   */
+  readAt?: (offset: number, length: number) => Uint8Array;
+  sizeBytes?: number;
+  chunkBytes?: number;
+  cacheChunks?: number;
 }
 
 /** A model handle for a RAREXT-native container ("RXHF") built from safetensors. */
@@ -622,6 +650,8 @@ export function loadEngine(
     encode?: unknown;
     decode?: unknown;
     tokenBytes?: unknown;
+    dequantRows?: unknown;
+    streamStats?: unknown;
     chatTemplate?: unknown;
     decodeTokens?: unknown;
     decodePrefixes?: unknown;
@@ -659,6 +689,12 @@ export function loadEngine(
       : {}),
     ...(typeof exports.tokenBytes === "function"
       ? { tokenBytes: exports.tokenBytes as NonNullable<NativeEngine["tokenBytes"]> }
+      : {}),
+    ...(typeof exports.streamStats === "function"
+      ? { streamStats: exports.streamStats as NonNullable<NativeEngine["streamStats"]> }
+      : {}),
+    ...(typeof exports.dequantRows === "function"
+      ? { dequantRows: exports.dequantRows as NonNullable<NativeEngine["dequantRows"]> }
       : {}),
     ...(typeof exports.chatTemplate === "function"
       ? { chatTemplate: exports.chatTemplate as NonNullable<NativeEngine["chatTemplate"]> }

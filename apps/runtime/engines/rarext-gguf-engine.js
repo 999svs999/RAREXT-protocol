@@ -1033,56 +1033,164 @@
   BLOCK[TYPE_IQ4_XS] = { bytes: 136, weights: 256 };
   BLOCK[TYPE_BF16] = { bytes: 2, weights: 1 };
 
-  function Reader(bytes) {
-    this.bytes = bytes;
-    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  /**
+   * A byte source. Either the container is resident (`bytes`) or it is read on
+   * demand through a host `readAt(offset, length)` (a memory-mapped or sparse
+   * file reader), in which case only a bounded chunk cache and the current row
+   * are held.
+   */
+  function makeBufferSource(bytes) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return {
+      streaming: false,
+      sizeBytes: bytes.byteLength,
+      u8: function (o) { return view.getUint8(o); },
+      i8: function (o) { return view.getInt8(o); },
+      u16: function (o) { return view.getUint16(o, true); },
+      u32: function (o) { return view.getUint32(o, true); },
+      i32: function (o) { return view.getInt32(o, true); },
+      f32: function (o) { return view.getFloat32(o, true); },
+      f64: function (o) { return view.getFloat64(o, true); },
+      u64: function (o) { return Number(view.getBigUint64(o, true)); },
+      i64: function (o) { return Number(view.getBigInt64(o, true)); },
+      slice: function (o, l) { return new Uint8Array(bytes.buffer, bytes.byteOffset + o, l); },
+      peakResidentBytes: function () { return null; },
+      stats: function () { return { streaming: false, reads: 0, bytesRead: 0, peakResidentBytes: null }; },
+    };
+  }
+
+  function makeStreamSource(model) {
+    var readAt = model.readAt;
+    var chunkBytes = model.chunkBytes > 0 ? model.chunkBytes : 65536;
+    var maxChunks = model.cacheChunks > 0 ? model.cacheChunks : 64; // 4 MiB of metadata
+    var chunks = new Map();
+    var order = [];
+    var reads = 0;
+    var bytesRead = 0;
+    var peakChunks = 0;
+    var peakSlice = 0;
+
+    function chunkAt(index) {
+      var hit = chunks.get(index);
+      if (hit !== undefined) return hit;
+      var data = readAt(index * chunkBytes, chunkBytes);
+      if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
+      reads += 1;
+      bytesRead += data.length;
+      chunks.set(index, data);
+      order.push(index);
+      if (order.length > maxChunks) chunks.delete(order.shift());
+      if (chunks.size > peakChunks) peakChunks = chunks.size;
+      return data;
+    }
+    function byteAt(offset) {
+      var index = Math.floor(offset / chunkBytes);
+      var chunk = chunkAt(index);
+      var local = offset - index * chunkBytes;
+      if (local >= chunk.length) throw new Error("readAt returned a short chunk");
+      return chunk[local];
+    }
+    function scalar(method, offset, bytes) {
+      var index = Math.floor(offset / chunkBytes);
+      var local = offset - index * chunkBytes;
+      var chunk = chunkAt(index);
+      if (local + bytes <= chunk.length) {
+        var view = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+        return view[method](local, ...(bytes === 8 ? [true] : bytes === 1 ? [] : [true]));
+      }
+      // A scalar straddling two chunks: assemble it from both.
+      var parts = new Uint8Array(bytes);
+      for (var i = 0; i < bytes; i += 1) parts[i] = byteAt(offset + i);
+      var assembled = new DataView(parts.buffer);
+      return assembled[method](0, ...(bytes === 8 ? [true] : bytes === 1 ? [] : [true]));
+    }
+    return {
+      streaming: true,
+      sizeBytes: typeof model.sizeBytes === "number" ? model.sizeBytes : null,
+      u8: function (o) { return byteAt(o); },
+      i8: function (o) { var v = byteAt(o); return v >= 0x80 ? v - 0x100 : v; },
+      u16: function (o) { return scalar("getUint16", o, 2); },
+      u32: function (o) { return scalar("getUint32", o, 4); },
+      i32: function (o) { return scalar("getInt32", o, 4); },
+      f32: function (o) { return scalar("getFloat32", o, 4); },
+      f64: function (o) { return scalar("getFloat64", o, 8); },
+      u64: function (o) { return Number(scalar("getBigUint64", o, 8)); },
+      i64: function (o) { return Number(scalar("getBigInt64", o, 8)); },
+      slice: function (o, l) {
+        var data = readAt(o, l);
+        if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
+        reads += 1;
+        bytesRead += data.length;
+        if (data.length > peakSlice) peakSlice = data.length;
+        return data;
+      },
+      peakResidentBytes: function () { return peakChunks * chunkBytes + peakSlice; },
+      stats: function () {
+        return {
+          streaming: true,
+          reads: reads,
+          bytesRead: bytesRead,
+          peakResidentBytes: peakChunks * chunkBytes + peakSlice,
+        };
+      },
+    };
+  }
+
+  function sourceFor(input) {
+    if (ArrayBuffer.isView(input)) return makeBufferSource(input);
+    if (input && typeof input.readAt === "function") return makeStreamSource(input);
+    throw new Error("a model needs either bytes or a readAt(offset, length) reader");
+  }
+
+  function Reader(source) {
+    this.src = source;
     this.offset = 0;
   }
   Reader.prototype.u8 = function () {
-    var v = this.view.getUint8(this.offset);
+    var v = this.src.u8(this.offset);
     this.offset += 1;
     return v;
   };
   Reader.prototype.i8 = function () {
-    var v = this.view.getInt8(this.offset);
+    var v = this.src.i8(this.offset);
     this.offset += 1;
     return v;
   };
   Reader.prototype.u16 = function () {
-    var v = this.view.getUint16(this.offset, true);
+    var v = this.src.u16(this.offset);
     this.offset += 2;
     return v;
   };
   Reader.prototype.u32 = function () {
-    var v = this.view.getUint32(this.offset, true);
+    var v = this.src.u32(this.offset);
     this.offset += 4;
     return v;
   };
   Reader.prototype.i32 = function () {
-    var v = this.view.getInt32(this.offset, true);
+    var v = this.src.i32(this.offset);
     this.offset += 4;
     return v;
   };
   Reader.prototype.f32 = function () {
-    var v = this.view.getFloat32(this.offset, true);
+    var v = this.src.f32(this.offset);
     this.offset += 4;
     return v;
   };
   Reader.prototype.f64 = function () {
-    var v = this.view.getFloat64(this.offset, true);
+    var v = this.src.f64(this.offset);
     this.offset += 8;
     return v;
   };
   Reader.prototype.u64 = function () {
-    var v = this.view.getBigUint64(this.offset, true);
+    var v = this.src.u64(this.offset);
     this.offset += 8;
     // GGUF sizes and offsets fit comfortably in a double for real models.
-    return Number(v);
+    return v;
   };
   Reader.prototype.i64 = function () {
-    var v = this.view.getBigInt64(this.offset, true);
+    var v = this.src.i64(this.offset);
     this.offset += 8;
-    return Number(v);
+    return v;
   };
   var UTF8 = null;
   function decodeUtf8(bytes) {
@@ -1092,8 +1200,11 @@
   Reader.prototype.str = function () {
     var length = this.u64();
     var start = this.offset;
-    if (start + length > this.bytes.length) throw new Error("GGUF string runs past the end of the file");
-    var text = decodeUtf8(this.bytes.subarray(start, start + length));
+    if (this.src.sizeBytes !== null && start + length > this.src.sizeBytes) {
+      throw new Error("GGUF string runs past the end of the file");
+    }
+    var bytes = this.src.slice(start, length);
+    var text = decodeUtf8(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     this.offset += length;
     return text;
   };
@@ -1121,8 +1232,9 @@
     }
   }
 
-  function parseGguf(bytes) {
-    var reader = new Reader(bytes);
+  function parseGguf(input) {
+    var src = sourceFor(input);
+    var reader = new Reader(src);
     var magic = String.fromCharCode(reader.u8(), reader.u8(), reader.u8(), reader.u8());
     if (magic !== "GGUF") throw new Error("not a GGUF file (magic " + JSON.stringify(magic) + ")");
     var version = reader.u32();
@@ -1179,7 +1291,15 @@
       alignment = kv["general.alignment"];
     }
     var dataStart = Math.ceil(reader.offset / alignment) * alignment;
-    return { kv: kv, tensors: tensors, dataStart: dataStart, bytes: bytes, view: reader.view };
+    return {
+      kv: kv,
+      tensors: tensors,
+      dataStart: dataStart,
+      bytes: src.streaming ? null : input,
+      view: src.streaming ? null : new DataView(input.buffer, input.byteOffset, input.byteLength),
+      source: src,
+      streaming: src.streaming,
+    };
   }
 
   /**
@@ -1234,8 +1354,13 @@
 
   /** Dispatch on the container magic: GGUF bytes or a RAREXT "RXHF" container. */
   function parseModel(model) {
-    if (model.kind === "hf") return parseContainer(model.bytes);
-    return parseGguf(model.bytes);
+    if (model.kind === "hf") {
+      if (!ArrayBuffer.isView(model.bytes)) {
+        throw new Error("only a GGUF container can stream with readAt(); an HF container must be resident");
+      }
+      return parseContainer(model.bytes);
+    }
+    return parseGguf(ArrayBuffer.isView(model.bytes) ? model.bytes : model);
   }
 
   // ── quantized rows ────────────────────────────────────────────────────────
@@ -1441,6 +1566,12 @@
   function dequantRow(model, tensor, row, out) {
     var view = model.view;
     var base = model.dataStart + tensor.offset + row * tensor.rowBytes;
+    if (view === null) {
+      // Streaming: read just this row, so the resident set stays bounded.
+      var rowBytes = model.source.slice(base, tensor.rowBytes);
+      view = new DataView(rowBytes.buffer, rowBytes.byteOffset, rowBytes.byteLength);
+      base = 0;
+    }
     var cols = tensor.cols;
     var i;
     var block;
@@ -1746,6 +1877,13 @@
   function dotRow(model, tensor, row, vec) {
     var view = model.view;
     var base = model.dataStart + tensor.offset + row * tensor.rowBytes;
+    if (view === null) {
+      // Streaming: one bounded read per row (the row cache in the source keeps
+      // this from re-reading the same bytes).
+      var streamedRow = model.source.slice(base, tensor.rowBytes);
+      view = new DataView(streamedRow.buffer, streamedRow.byteOffset, streamedRow.byteLength);
+      base = 0;
+    }
     var cols = tensor.cols;
     var total = 0;
     var block;
@@ -2614,7 +2752,11 @@
   }
 
   function run(model, input) {
-    if (!model || (model.kind !== "gguf" && model.kind !== "hf") || !ArrayBuffer.isView(model.bytes)) {
+    if (
+      !model ||
+      (model.kind !== "gguf" && model.kind !== "hf") ||
+      (!ArrayBuffer.isView(model.bytes) && typeof model.readAt !== "function")
+    ) {
       throw new Error('the rarext gguf engine needs a model { kind: "gguf" | "hf", bytes: Uint8Array }');
     }
     var gguf = parseModel(model);
@@ -3196,6 +3338,11 @@
       // The exact prompt ids that were evaluated, so an auditor can see what
       // the model was actually conditioned on after truncation.
       promptIds: promptIds,
+      // When the container streamed, how much the loader held at its peak: the
+      // bound the host-capability commitment is allowed to trust.
+      ...(gguf.source !== undefined && gguf.source.streaming
+        ? { residentBytes: gguf.source.peakResidentBytes(), streaming: true }
+        : {}),
       // One entry per generated token when logprobs were requested, aligned
       // with `tokens`.
       ...(decoding.logprobs ? { logprobs: logprobEntries } : {}),
@@ -3351,6 +3498,33 @@
           ? tokenizer.tokens[tokenizer.eos]
           : null;
       return { template: template, bos: bos, eos: eos, addBos: tokenizer.addBos === true };
+    },
+    /**
+     * Dequantize a run of rows in ONE parse, as a flat Float32Array. This is a
+     * verification/benchmark primitive: `dequantTensor` parses the container per
+     * call, which is fine for checking a row and wrong for measuring a whole
+     * tensor.
+     */
+    dequantRows: function (model, name, start, count) {
+      var parsed = parseModel(model);
+      var tensor = parsed.tensors[name];
+      if (tensor === undefined) throw new Error("no tensor " + name);
+      var from = Math.max(0, Number(start) || 0);
+      var rows =
+        count === undefined
+          ? tensor.rows - from
+          : Math.max(0, Math.min(Number(count) || 0, tensor.rows - from));
+      var out = new Float32Array(rows * tensor.cols);
+      var row = new Float32Array(tensor.cols);
+      for (var i = 0; i < rows; i += 1) {
+        dequantRow(parsed, tensor, from + i, row);
+        out.set(row, i * tensor.cols);
+      }
+      return { values: out, rows: rows, cols: tensor.cols };
+    },
+    /** How much a streaming loader held at its peak (bytes), for a commitment. */
+    streamStats: function (model) {
+      return parseModel(model).source.stats();
     },
     /** The exact bytes a token contributes (grammar debugging / verification). */
     tokenBytes: function (model, id) {

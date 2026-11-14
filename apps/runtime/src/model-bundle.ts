@@ -8,6 +8,7 @@ import {
   randomBytes,
 } from "node:crypto";
 import type { KeyObject, JsonWebKey } from "node:crypto";
+import { closeSync, openSync, readSync, statSync, writeSync } from "node:fs";
 
 import { canonicalize } from "../../../packages/core/src/canonical.ts";
 import { publicKeyId, verifyPayload } from "../../../packages/agent-sdk/src/index.ts";
@@ -1026,6 +1027,80 @@ export async function fetchBundleChunks(input: FetchBundleInput): Promise<{
   }
 
   return { bytes: plaintext };
+}
+
+/**
+ * Fetch every shard, verify the whole file, and write it to `path` — one shard
+ * resident at a time. This is the streaming counterpart of
+ * `fetchBundleChunks`: a provider can serve a container larger than its memory
+ * by verifying it to disk and then reading the rows it needs on demand. A
+ * sealed bundle is refused, because opening it happens in memory.
+ */
+export async function fetchBundleChunksToFile(
+  input: FetchBundleInput & { path: string },
+): Promise<{ bytes: number; digest: string; path: string }> {
+  if (input.bundle.sealing !== undefined) {
+    throw new Error("a sealed bundle cannot be streamed: it must be opened in memory");
+  }
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const registries = registryBases(input);
+  const whole = createHash("sha256");
+  const fd = openSync(input.path, "w");
+  let offset = 0;
+  try {
+    for (const shard of input.bundle.shards) {
+      const chunk = await fetchShard(registries, shard, fetchImpl);
+      if (offset + chunk.length > input.bundle.totalBytes) {
+        throw new Error(
+          `shard ${shard.index} overruns the committed total of ${input.bundle.totalBytes} bytes`,
+        );
+      }
+      let written = 0;
+      while (written < chunk.length) {
+        written += writeSync(fd, chunk, written, chunk.length - written, offset + written);
+      }
+      offset += chunk.length;
+      whole.update(chunk);
+      input.onShard?.(shard.index, chunk.length);
+    }
+  } finally {
+    closeSync(fd);
+  }
+  if (offset !== input.bundle.totalBytes) {
+    throw new Error(`reassembled ${offset} bytes, expected ${input.bundle.totalBytes}`);
+  }
+  const digest = `sha256:${whole.digest("hex")}`;
+  if (digest !== input.bundle.model.weightsDigest) {
+    throw new Error(
+      `reassembled model hashes to ${digest}, expected ${input.bundle.model.weightsDigest}`,
+    );
+  }
+  return { bytes: offset, digest, path: input.path };
+}
+
+/**
+ * A bounded, memory-mapped-style reader over a file: `readAt(offset, length)`
+ * allocates only what it returns, so an engine reading it never holds the whole
+ * container. This is what a streaming provider hands to the engine artifact.
+ */
+export function fileReader(path: string): {
+  readAt: (offset: number, length: number) => Uint8Array;
+  sizeBytes: number;
+  close: () => void;
+} {
+  const fd = openSync(path, "r");
+  const sizeBytes = statSync(path).size;
+  return {
+    readAt: (offset: number, length: number): Uint8Array => {
+      const want = Math.max(0, Math.min(length, sizeBytes - offset));
+      if (want === 0) return new Uint8Array(0);
+      const buffer = Buffer.allocUnsafe(want);
+      const read = readSync(fd, buffer, 0, want, offset);
+      return new Uint8Array(buffer.buffer, buffer.byteOffset, read);
+    },
+    sizeBytes,
+    close: () => closeSync(fd),
+  };
 }
 
 /**

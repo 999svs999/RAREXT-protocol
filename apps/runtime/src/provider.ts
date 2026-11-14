@@ -39,8 +39,11 @@ import {
 import type { EngineBundle, GgufModel, HfModel, NativeEngine } from "./engine-bundle.ts";
 import { responseFormatDfa, type ByteDfa } from "./grammar.ts";
 import { chatPromptFromTemplate, type ChatTemplateInfo } from "./chat-template.ts";
+import { unsupportedContentMessage, unsupportedContentPart } from "./engines.ts";
 import {
   fetchBundleChunks,
+  fetchBundleChunksToFile,
+  fileReader,
   fetchBundleCiphertext,
   fetchBundleManifest,
   buildProviderCard,
@@ -60,6 +63,14 @@ import type { ApiShape } from "./types.ts";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
+/**
+ * The resident bound a streaming provider commits to: the metadata chunk cache
+ * (2 MiB) plus the largest tensor row, the tokenizer strings, and slack. It is
+ * what the host-capability commitment checks against memory, instead of the
+ * whole container.
+ */
+const STREAM_RESIDENT_BYTES = 8 * 1024 * 1024;
+
 export interface ProviderOptions {
   bundle: ModelBundle;
   registry: string;
@@ -77,6 +88,13 @@ export interface ProviderOptions {
   reserveBytes?: number;
   /** Start even if the committed weights exceed host memory (streaming engine). */
   allowOversizeModel?: boolean;
+  /**
+   * Verify the container to disk and read the rows on demand, so a model larger
+   * than host memory can be served within the resident bound below.
+   */
+  streamWeights?: boolean;
+  /** The resident bound a streaming provider commits to (default 8 MiB). */
+  streamResidentBytes?: number;
   /**
    * The machine identity this provider attests. Defaults to a host fingerprint,
    * so two providers on one box attest the same machine and a deployment that
@@ -186,6 +204,8 @@ export interface Provider {
   bundle: ModelBundle;
   /** The reassembled model bytes after every shard was verified. */
   modelBytes: Buffer;
+  /** True when the weights were verified to disk and are read on demand. */
+  streaming: boolean;
   close: () => Promise<void>;
 }
 
@@ -1332,6 +1352,7 @@ async function startEnclaveProxy(options: ProviderOptions, enclaveEndpoint: stri
     bundle: options.bundle,
     // The forwarder's "model bytes" are the verified CIPHERTEXT, never plaintext.
     modelBytes: ciphertext,
+    streaming: false,
     close: async () => {
       server.closeAllConnections?.();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1346,25 +1367,6 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   const bundleErrors = verifyModelBundle(options.bundle);
   if (bundleErrors.length > 0) {
     throw new Error(`refusing to serve an invalid model bundle: ${bundleErrors.join("; ")}`);
-  }
-
-  // The host-capability commitment: do not read a container the host cannot
-  // hold. This is what keeps "6/7/8 GB classes: shipped: false" honest rather
-  // than a claim the runtime would try and fail to honour.
-  if (options.enclaveEndpoint === undefined) {
-    const commitment = hostCapabilityCommitment(
-      options.bundle.model,
-      { memoryBytes: options.hostMemoryBytes ?? totalmem() },
-      {
-        ...(options.reserveBytes === undefined ? {} : { reserveBytes: options.reserveBytes }),
-        allowOversize: options.allowOversizeModel === true,
-        overrideEnv: process.env.RAREXT_ALLOW_OVERSIZE_MODEL,
-      },
-    );
-    if (!commitment.allowed) throw new Error(commitment.reason);
-    if (commitment.verdict !== "fits") {
-      log(`host capability: ${commitment.verdict} — ${commitment.reason}`);
-    }
   }
 
   // A forwarding provider holds no key and loads no model; it verifies the
@@ -1401,18 +1403,77 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       `for ${options.bundle.model.id} from ${options.registry}` +
       (options.bundle.sealing === undefined ? "" : ` (sealed, ${options.bundle.sealing.scheme})`),
   );
-  const { bytes } = await fetchBundleChunks({
-    registry: options.registry,
-    registries,
-    bundle: options.bundle,
-    fetchImpl,
-    ...(sealKey === undefined ? {} : { sealKey }),
-    onShard: (index, size) => log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`),
-  });
-  log(
-    `verified ${bytes.length} bytes against ${options.bundle.model.weightsDigest}` +
-      (options.bundle.sealing === undefined ? "" : " (opened in memory; the RAREXT store never holds plaintext)"),
-  );
+  const streamWeights = options.streamWeights === true || process.env.RAREXT_STREAM_WEIGHTS === "1";
+  const streamingEligible =
+    options.bundle.execution.kind === "engine" && options.bundle.execution.engine === "rarext";
+  if (streamWeights && !streamingEligible) {
+    throw new Error(
+      'streaming weights needs the RAREXT GGUF engine (execution.engine "rarext"); ' +
+        "another engine would hold the container itself",
+    );
+  }
+  if (streamWeights && options.bundle.sealing !== undefined) {
+    throw new Error("a sealed bundle cannot be streamed: it must be opened in memory");
+  }
+  const onShard = (index: number, size: number): void =>
+    log(`  shard ${index + 1}/${options.bundle.shards.length} ${size} bytes`);
+  let bytes: Buffer;
+  let streamedReader: ReturnType<typeof fileReader> | null = null;
+  let streamedPath: string | null = null;
+  if (streamWeights) {
+    mkdirSync(options.stateDir, { recursive: true });
+    streamedPath = join(options.stateDir, `weights-${options.bundle.digest.slice(0, 16)}.gguf`);
+    const written = await fetchBundleChunksToFile({
+      registry: options.registry,
+      registries,
+      bundle: options.bundle,
+      fetchImpl,
+      path: streamedPath,
+      onShard,
+    });
+    streamedReader = fileReader(streamedPath);
+    bytes = Buffer.alloc(0);
+    log(
+      `verified ${written.bytes} bytes against ${options.bundle.model.weightsDigest} and wrote them to disk; ` +
+        "the provider will read rows on demand",
+    );
+  } else {
+    ({ bytes } = await fetchBundleChunks({
+      registry: options.registry,
+      registries,
+      bundle: options.bundle,
+      fetchImpl,
+      ...(sealKey === undefined ? {} : { sealKey }),
+      onShard,
+    }));
+    log(
+      `verified ${bytes.length} bytes against ${options.bundle.model.weightsDigest}` +
+        (options.bundle.sealing === undefined ? "" : " (opened in memory; the RAREXT store never holds plaintext)"),
+    );
+  }
+
+  // The host-capability commitment: do not read a container the host cannot
+  // hold. This is what keeps "6/7/8 GB classes: shipped: false" honest rather
+  // than a claim the runtime would try and fail to honour.
+  if (options.enclaveEndpoint === undefined) {
+    const commitment = hostCapabilityCommitment(
+      options.bundle.model,
+      { memoryBytes: options.hostMemoryBytes ?? totalmem() },
+      {
+        ...(options.reserveBytes === undefined ? {} : { reserveBytes: options.reserveBytes }),
+        streaming: streamedReader !== null,
+        ...(streamedReader === null
+          ? {}
+          : { residentBytes: options.streamResidentBytes ?? STREAM_RESIDENT_BYTES }),
+        allowOversize: options.allowOversizeModel === true,
+        overrideEnv: process.env.RAREXT_ALLOW_OVERSIZE_MODEL,
+      },
+    );
+    if (!commitment.allowed) throw new Error(commitment.reason);
+    if (commitment.verdict !== "fits") {
+      log(`host capability: ${commitment.verdict} — ${commitment.reason}`);
+    }
+  }
 
   // The engine the provider will RUN. When it is a RAREXT artifact, fetch and
   // verify it first: a shard that does not hash to the committed engine, or a
@@ -1504,12 +1565,24 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     if (loadedEngine === null) {
       throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");
     }
-    // The verified bytes stay in memory. The fetched engine parses them: GGUF,
-    // or the RAREXT-native "RXHF" container built from safetensors.
-    const isContainer =
-      bytes.length >= 4 &&
-      bytes[0] === 0x52 && bytes[1] === 0x58 && bytes[2] === 0x48 && bytes[3] === 0x46;
-    gguf = isContainer ? { kind: "hf", bytes } : { kind: "gguf", bytes };
+    if (streamedReader !== null) {
+      // Bounded memory: the engine reads the header and every tensor row through
+      // the reader instead of indexing a resident buffer.
+      gguf = {
+        kind: "gguf",
+        readAt: streamedReader.readAt,
+        sizeBytes: streamedReader.sizeBytes,
+        chunkBytes: 65536,
+        cacheChunks: 32,
+      };
+    } else {
+      // The verified bytes stay in memory. The fetched engine parses them: GGUF,
+      // or the RAREXT-native "RXHF" container built from safetensors.
+      const isContainer =
+        bytes.length >= 4 &&
+        bytes[0] === 0x52 && bytes[1] === 0x58 && bytes[2] === 0x48 && bytes[3] === 0x46;
+      gguf = isContainer ? { kind: "hf", bytes } : { kind: "gguf", bytes };
+    }
   } else {
     if (options.engineEndpoint === undefined) {
       throw new Error("an engine bundle needs --engine-endpoint so the provider can load the model");
@@ -2101,6 +2174,22 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
         const modelId = options.bundle.model.id;
 
+        // A multimodal part is a capability question, answered precisely: this
+        // deployment's weights have no vision or audio tower, so the request is
+        // refused by name rather than answered from the text around the image.
+        const unsupported = unsupportedContentPart(body.messages);
+        if (unsupported !== null) {
+          sendJson(response, 400, {
+            error: {
+              message: unsupportedContentMessage(unsupported),
+              type: "invalid_request_error",
+              code: "unsupported_content_part",
+              param: "messages",
+            },
+          });
+          return;
+        }
+
         // A sealed prompt: only the enclave opens it, runs it, and seals the
         // answer under the caller's key. Anything relaying this request — a
         // forwarding provider, a gateway, a log — sees ciphertext.
@@ -2121,6 +2210,18 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             return;
           }
           const inner = isRecord(opened.body) ? opened.body : {};
+          const sealedUnsupported = unsupportedContentPart(inner.messages);
+          if (sealedUnsupported !== null) {
+            sendJson(response, 400, {
+              error: {
+                message: unsupportedContentMessage(sealedUnsupported),
+                type: "invalid_request_error",
+                code: "unsupported_content_part",
+                param: "messages",
+              },
+            });
+            return;
+          }
           const result = await complete(inner);
           const created = Math.floor(Date.now() / 1000);
           const promptWords = lastUserText(inner).split(/\s+/).filter(Boolean).length;
@@ -2166,7 +2267,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         if (body.stream === true) {
           const chunks: unknown[] = [];
           results.forEach((choice, index) => {
-            const calls = extractToolCalls(choice.text, tools, toolChoice);
+            const found = extractToolCalls(choice.text, tools, toolChoice);
+            const calls =
+              body.parallel_tool_calls === false ? found.slice(0, 1) : found;
             if (calls.length > 0) {
               chunks.push({
                 id: `chatcmpl-tool-${index}`,
@@ -2249,8 +2352,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         response.setHeader("x-rarext-bundle", options.bundle.digest);
         if (result.seed !== null) response.setHeader("x-rarext-seed", String(result.seed));
         const choiceResults = n === 1 ? [result] : results;
+        // OpenAI's `parallel_tool_calls: false` means at most one tool call.
+        const maxToolCalls = body.parallel_tool_calls === false ? 1 : undefined;
         const chatChoices = choiceResults.map((choice, index) => {
-          const calls = extractToolCalls(choice.text, tools, toolChoice);
+          const found = extractToolCalls(choice.text, tools, toolChoice);
+          const calls = maxToolCalls === undefined ? found : found.slice(0, maxToolCalls);
           const trace = n === 1 ? {} : decodeTrace(choice.trace);
           if (calls.length > 0) {
             // A tool call is the message: content is null, and the finish reason
@@ -2405,9 +2511,20 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     card: card ?? cardFor(),
     bundle: options.bundle,
     modelBytes: bytes,
+    streaming: streamedReader !== null,
     close: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (streamedReader !== null) {
+        streamedReader.close();
+        if (streamedPath !== null) {
+          try {
+            rmSync(streamedPath, { force: true });
+          } catch {
+            // A leftover temp file is not worth failing a shutdown over.
+          }
+        }
+      }
     },
   };
 }

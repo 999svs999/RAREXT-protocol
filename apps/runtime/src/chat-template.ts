@@ -28,6 +28,7 @@ type Node =
   | { kind: "output"; expr: Expr }
   | { kind: "set"; name: string; attribute?: string; expr: Expr }
   | { kind: "macro"; name: string; params: Array<{ name: string; fallback: Expr | null }>; body: Node[] }
+  | { kind: "callBlock"; callee: Expr; args: Expr[]; named: Record<string, Expr>; body: Node[] }
   | { kind: "if"; branches: Array<{ condition: Expr | null; body: Node[] }> }
   | { kind: "for"; name: string; iterable: Expr; condition: Expr | null; body: Node[]; elseBody: Node[] };
 
@@ -406,6 +407,23 @@ function parseNodes(chunks: Chunk[], start: number, stopWords: string[]): { node
       at += 1;
       continue;
     }
+    if (word === "call") {
+      // `{% call macro(args) %}body{% endcall %}` — the body is passed to the
+      // macro as `caller()`, Jinja's way to wrap a block in a macro.
+      const callExpr = parseExpression(chunk.value.slice(4).trim());
+      if (callExpr.kind !== "call") throw new Error(`unsupported {% ${chunk.value} %}`);
+      const body = parseNodes(chunks, at + 1, ["endcall"]);
+      if (chunks[body.next] === undefined) throw new Error("unterminated {% call %} in template");
+      nodes.push({
+        kind: "callBlock",
+        callee: callExpr.callee,
+        args: callExpr.args,
+        named: callExpr.named,
+        body: body.nodes,
+      });
+      at = body.next + 1;
+      continue;
+    }
     if (word === "macro") {
       const match = /^macro\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$/.exec(chunk.value);
       if (match === null) throw new Error(`unsupported {% ${chunk.value} %}`);
@@ -499,13 +517,7 @@ function evaluate(expr: Expr, scope: TemplateScope, filters: Record<string, (...
       const positional = expr.args.map((arg) => evaluate(arg, scope, filters));
       const named: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(expr.named)) named[key] = evaluate(value, scope, filters);
-      if (isRecord(callee) && callee.__rarextMacro === true) {
-        return (callee.invoke as (args: unknown[], kwargs: Record<string, unknown>) => unknown)(positional, named);
-      }
-      if (typeof callee !== "function") return undefined;
-      // Keywords reach a function as a trailing object, which is how the
-      // filters that take them (`map(attribute=…)`, `default(…)`) read them.
-      return (callee as (...args: unknown[]) => unknown)(...positional, named);
+      return invokeValue(callee, positional, named);
     }
     case "unary":
       return expr.op === "not" ? !truthy(evaluate(expr.value, scope, filters)) : undefined;
@@ -564,6 +576,17 @@ function evaluate(expr: Expr, scope: TemplateScope, filters: Record<string, (...
   }
 }
 
+/** Call a macro object or a function with positional and keyword arguments. */
+function invokeValue(callee: unknown, positional: unknown[], named: Record<string, unknown>): unknown {
+  if (isRecord(callee) && callee.__rarextMacro === true) {
+    return (callee.invoke as (args: unknown[], kwargs: Record<string, unknown>) => unknown)(positional, named);
+  }
+  if (typeof callee !== "function") return undefined;
+  // Keywords reach a function as a trailing object, which is how the filters
+  // that take them (`map(attribute=…)`, `default(…)`) read them.
+  return (callee as (...args: unknown[]) => unknown)(...positional, named);
+}
+
 function renderNodes(nodes: Node[], scope: TemplateScope, filters: Record<string, (...args: unknown[]) => unknown>): string {
   let out = "";
   for (const node of nodes) {
@@ -582,6 +605,18 @@ function renderNodes(nodes: Node[], scope: TemplateScope, filters: Record<string
         if (isRecord(target)) target[node.attribute] = value;
         else scope[node.name] = { [node.attribute]: value };
       }
+    } else if (node.kind === "callBlock") {
+      const callee = evaluate(node.callee, scope, filters);
+      const positional = node.args.map((arg) => evaluate(arg, scope, filters));
+      const named: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(node.named)) named[key] = evaluate(value, scope, filters);
+      // `caller()` renders the block; kwargs become variables inside it.
+      named.caller = {
+        __rarextMacro: true,
+        invoke: (_args: unknown[], kwargs: Record<string, unknown>) =>
+          renderNodes(node.body, { ...scope, ...kwargs }, filters),
+      };
+      out += stringify(invokeValue(callee, positional, named));
     } else if (node.kind === "macro") {
       const definitionScope = scope;
       const invoke = (positional: unknown[], named: Record<string, unknown>): string => {
@@ -591,6 +626,8 @@ function renderNodes(nodes: Node[], scope: TemplateScope, filters: Record<string
           else if (index < positional.length) local[param.name] = positional[index];
           else local[param.name] = param.fallback === null ? undefined : evaluate(param.fallback, definitionScope, filters);
         });
+        // A `{% call %}` block arrives as `caller`, which the macro renders.
+        if (Object.hasOwn(named, "caller")) local.caller = named.caller;
         return renderNodes(node.body, local, filters);
       };
       scope[node.name] = { __rarextMacro: true, invoke, name: node.name };

@@ -342,8 +342,10 @@ Routes:
   a `tool_use` block (`content_block_start` with `id`/`name`/empty `input`,
   `input_json_delta` for the arguments, `stop_reason: "tool_use"`), and the
   non-streaming surface translates the same tool call to a `tool_use` block, and
-  `tool_choice` is translated (`auto`/`any`->`required`/`{type:"tool",name}`->
-  a named function) with an undeclared tool refused as `400`;
+  `tool_choice` is translated (`auto`/`any`->`required`/`none`/
+  `{type:"tool",name}`->a named function) with an undeclared tool refused as
+  `400`, and `disable_parallel_tool_use` (or a named tool) limits the answer to
+  one `tool_use` block;
 - `POST /v1/embeddings` — OpenAI embeddings from the model's own token
   embedding matrix (mean-pooled, L2-normalized, deterministic; string, string
   array, or token-id input, and `encoding_format: "base64"`). A gateway forwards
@@ -475,6 +477,24 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 
 ## Limits in this version
 
+- **Multimodal input is a capability question, answered precisely.** An image or
+  audio part (`image_url`/`input_audio`/`file` on the OpenAI surface, `image`/
+  `document` on Anthropic's) is refused with `400` naming the part and the reason
+  — the committed weights carry no vision or audio tower — rather than answered
+  from the surrounding text. A part inside a `tool_result` or a block `system`
+  prompt is caught too; a refused request never reaches the engine, so no run is
+  recorded for it.
+- **The host-capability commitment.** A provider refuses to start when the
+  deployment's committed `model.sizeBytes` exceeds the host's memory and the
+  weights would be held whole. Two ways out, both real: `RAREXT_STREAM_WEIGHTS=1`
+  verifies the shards to disk one at a time and serves the container through a
+  bounded reader (the commitment then checks the loader's *bound* — metadata
+  cache + largest row + tokenizer strings, 8 MiB by default, `streamResidentBytes`
+  to change it — instead of the file), or `RAREXT_ALLOW_OVERSIZE_MODEL=1` for an
+  operator who knows better. `tight` and `unknown` are warnings, not refusals.
+  This is why the 6G/7G/8G classes are `shipped: false` on this host: the runtime
+  can serve such a container within a bound, but this box has no such weights to
+  serve and the ladder is declared, not measured.
 - Anthropic streaming and OpenAI streaming are both supported and recorded. A
   single-upstream gateway translates the engine's token stream into Anthropic
   events; a quorum gateway compares the complete answer first, then replays the

@@ -8,6 +8,8 @@ import {
   extractSseText,
   openAiChatUrl,
   openAiEmbeddingsUrl,
+  unsupportedContentMessage,
+  unsupportedContentPart,
   samplingFromRequest,
   translateAnthropicRequest,
   translateOpenAiResponse,
@@ -1048,6 +1050,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     response.end(event("message_stop", { type: "message_stop" }));
   }
 
+  /**
+   * Anthropic disables parallel tool use for a named tool, or when the request
+   * asks for it; either way at most one `tool_use` block may be returned.
+   */
+  function singleToolUse(payload: Record<string, unknown>): boolean {
+    const choice = payload.tool_choice;
+    if (!isRecord(choice)) return false;
+    if (choice.type === "tool") return true;
+    return choice.disable_parallel_tool_use === true;
+  }
+
   /** OpenAI finish_reason -> Anthropic stop_reason. */
   function anthropicStopReason(finish: unknown): string {
     if (finish === "length") return "max_tokens";
@@ -1074,6 +1087,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     upstreamBody: Record<string, unknown>,
     nativeAnthropic: boolean,
     startedAt: string,
+    singleTool: boolean,
   ): Promise<void> {
     const body: Record<string, unknown> = nativeAnthropic
       ? { ...upstreamBody, stream: true }
@@ -1122,7 +1136,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     // message as the Anthropic event sequence rather than failing the request.
     if (!contentType.includes("text/event-stream")) {
       const json = (await upstream.json()) as Record<string, unknown>;
-      const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
+      const anthropic = nativeAnthropic
+        ? json
+        : translateOpenAiResponse(json, deployment.model.id, {
+            ...(singleTool ? { maxToolCalls: 1 } : {}),
+          });
       const result = await record(
         nativeAnthropic ? "anthropic" : "openai",
         body,
@@ -1244,6 +1262,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           ) {
             await write(event(parsed.type, parsed));
             blockIndex = parsed.index;
+            if (
+              parsed.type === "content_block_start" &&
+              isRecord(parsed.content_block) &&
+              singleTool &&
+              parsed.content_block.type === "tool_use" &&
+              toolCalls.length >= 1
+            ) {
+              // A second tool_use block is dropped when parallel use is off.
+              blockKind = "tool";
+              continue;
+            }
             if (parsed.type === "content_block_start" && isRecord(parsed.content_block)) {
               blockKind = parsed.content_block.type === "tool_use" ? "tool" : "text";
               if (parsed.content_block.type === "tool_use") {
@@ -1275,6 +1304,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         if (delta !== null && Array.isArray(delta.tool_calls)) {
           for (const entry of delta.tool_calls) {
             if (!isRecord(entry)) continue;
+            // Parallel tool use off: the first tool_use block is the only one.
+            if (singleTool && toolCalls.length >= 1) break;
             const callIndex = typeof entry.index === "number" ? entry.index : 0;
             const fn = isRecord(entry.function) ? entry.function : {};
             const id = typeof entry.id === "string" ? entry.id : `toolu_${sha256Hex(String(callIndex)).slice(0, 20)}`;
@@ -1744,6 +1775,25 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
+    // A multimodal block is a capability question on this surface too, answered
+    // with an Anthropic-shaped error naming the block.
+    const fromSystem = Array.isArray(payload.system)
+      ? unsupportedContentPart([{ role: "system", content: payload.system }])
+      : null;
+    const unsupportedBlock =
+      unsupportedContentPart(payload.messages) ??
+      (fromSystem === null ? null : { part: fromSystem.part, where: "system" });
+    if (unsupportedBlock !== null) {
+      sendJson(response, 400, {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: unsupportedContentMessage(unsupportedBlock),
+        },
+      });
+      return;
+    }
+
     // Anthropic streaming is served below, after the upstream body is built.
     // A quorum deployment compares complete responses first and streams the
     // agreed answer; a single-upstream gateway translates the engine's own
@@ -1795,7 +1845,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (payload.stream === true && !quorumEnabled) {
-      await streamAnthropicUpstream(response, upstreamBody, nativeAnthropic, new Date().toISOString());
+      await streamAnthropicUpstream(
+        response,
+        upstreamBody,
+        nativeAnthropic,
+        new Date().toISOString(),
+        singleToolUse(payload),
+      );
       return;
     }
 
@@ -1956,7 +2012,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           ),
           determinism,
         );
-    const anthropic = nativeAnthropic ? json : translateOpenAiResponse(json, deployment.model.id);
+    const anthropic = nativeAnthropic
+      ? json
+      : translateOpenAiResponse(json, deployment.model.id, {
+          ...(singleToolUse(payload) ? { maxToolCalls: 1 } : {}),
+        });
     sendJson(response, 200, anthropic, { ...baseHeaders(), ...runHeaders(result) });
   }
 

@@ -96,3 +96,28 @@ test("the host-capability commitment refuses a model the host cannot hold", () =
   assert.equal(tight.allowed, true, "tight is a warning, not a refusal");
   assert.equal(hostCapabilityCommitment(model(null), { memoryBytes: 16 * GIB }).verdict, "unknown");
 });
+
+test("a streaming loader is allowed to exceed host memory within its bound", () => {
+  // 9 GiB of weights on an 8 GiB host, served by a loader that holds 8 MiB.
+  const streamed = hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, {
+    streaming: true,
+    residentBytes: 8 * 1024 * 1024,
+  });
+  assert.equal(streamed.allowed, true);
+  assert.equal(streamed.verdict, "too-large");
+  assert.match(streamed.reason, /read on demand/);
+  assert.match(streamed.reason, /never the whole file/);
+
+  // The bound is not magic: a loader that would hold more than memory is refused.
+  const tooBigABound = hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, {
+    streaming: true,
+    residentBytes: 9 * GIB,
+  });
+  assert.equal(tooBigABound.allowed, false);
+  assert.match(tooBigABound.reason, /streaming bound/);
+
+  // A streaming loader must state its bound before it is trusted.
+  const unstated = hostCapabilityCommitment(model(9 * GIB), { memoryBytes: 8 * GIB }, { streaming: true });
+  assert.equal(unstated.allowed, false);
+  assert.match(unstated.reason, /must state the resident bound/);
+});

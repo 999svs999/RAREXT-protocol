@@ -11,6 +11,72 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A multimodal part is refused by name, not dropped.** OpenAI parts
+  (`image_url`, `input_audio`, `file`) and Anthropic blocks (`image`,
+  `document`) now produce a precise capability error naming the part and the
+  reason (`code: "unsupported_content_part"` on the OpenAI surface, an
+  `invalid_request_error` on Anthropic's) instead of a silently text-only
+  answer: the committed weights carry no vision or audio tower. A part nested in
+  a `tool_result`, a `system` prompt given as blocks, and an untyped part are all
+  caught; `translateAnthropicRequest` refuses the same parts so no caller can
+  translate a multimodal request into text. A refused request never reaches the
+  engine, so nothing is recorded for it, and a text-only content array keeps
+  working. Tests cover the helper (both surfaces, nested and untyped parts) and
+  end-to-end refusals on both HTTP surfaces. See
+  [WEB4-MODEL.md](docs/WEB4-MODEL.md#multimodal-parts-are-refused-by-name).
+
+- **Anthropic parallel tool use, and `{% call %}` in the template interpreter.**
+  `tool_choice` now also translates `{type:"none"}` -> `"none"`, and a named tool
+  or `disable_parallel_tool_use: true` returns **at most one** `tool_use` block:
+  the gateway keeps the first call and drops the rest, on the complete answer and
+  on the stream (tested against a mock that emits two calls — `auto` returns both,
+  the disabled forms return one, and `{type:"none"}` calls nothing). OpenAI's
+  `parallel_tool_calls: false` is the mirror image on the OpenAI surface (tested
+  with a pinned two-call output). The interpreter gained `{% call %}` blocks with
+  `caller()`, including inside loops and with the caller's scope, and the
+  macro-and-namespace end-to-end template now renders its tools section through
+  `{% call %}`. See [WEB4-MODEL.md](docs/WEB4-MODEL.md#tool-calling).
+
+- **A container larger than memory can be served, within a stated bound.** The
+  engine accepts a `readAt(offset, length)` reader instead of the whole byte
+  array: it parses metadata through a bounded chunk cache, reads one tensor row at
+  a time, and reports the peak it held (`residentBytes`). A 9.5 MB container with
+  a 256 KiB cap held 68 KiB at its peak with 64 KiB reads, and decoded
+  **identically** to the same bytes served resident. `fetchBundleChunksToFile`
+  verifies shards to disk one at a time (bounded fetch) and `fileReader` hands the
+  engine a bounded reader; the provider uses them with `RAREXT_STREAM_WEIGHTS=1`
+  (or `streamWeights: true`). The host-capability commitment now allows a
+  deployment whose weights exceed memory **without any override** when the loader
+  states a bound that fits (`streamResidentBytes`, 8 MiB default), and still
+  refuses a bound that does not. HF/RXHF containers and sealed bundles do not
+  stream (documented); this is a correctness path, not a fast one. Tests cover
+  the engine loader (bounded resident, identical decode, real disk reads), the
+  commitment (allowed with a fitting bound, refused otherwise, refused when no
+  bound is stated), and an end-to-end provider that refuses a 9 MiB container on
+  a simulated 4 MiB host resident and then serves it streamed and deterministically.
+  See [WEB4-MODEL.md](docs/WEB4-MODEL.md#weights-larger-than-memory).
+
+- **The chat-template interpreter reaches macros, namespace, and the rest of the
+  common filters.** `{% macro %}` with default arguments and call sites,
+  `namespace(**kwargs)` with `{% set ns.x = … %}` accumulation, keyword
+  arguments in calls and filters (`map(attribute=…)`, `default(…, boolean=true)`),
+  `~`/list `+`, and the filters `list`/`keys`/`values`/`items`/`first`/`last`/
+  `count`/`reverse`/`sort`/`unique`/`replace`/`safe`/`map`/`select`/`reject`/
+  `selectattr`/`rejectattr` are interpreted. Unknown filters, `{% include %}`,
+  and `{% import %}` are refused by name, so the request falls back instead of
+  executing anything. Tests cover each construct and an end-to-end request whose
+  decode trace equals a manual run on the macro-and-namespace-rendered prompt.
+- **An explicit host-capability commitment, so the 6/7/8 GB classes stay honest.**
+  A provider now refuses to start when the deployment's committed
+  `model.sizeBytes` exceeds the host's memory (the engine reads the container
+  whole), naming both sizes and the deliberate override
+  (`RAREXT_ALLOW_OVERSIZE_MODEL=1`, or a streaming engine); `tight` and `unknown`
+  are warnings, not refusals. New `hostCapabilityCommitment` in the manifest, a
+  startup guard in the provider, unit tests for every verdict, and an end-to-end
+  test that a 5 536-byte container on a simulated 4 KiB host is refused and then
+  starts under the override. See
+  [MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md).
+
 - **Anthropic `tool_choice` is translated and enforced.** `translateAnthropicRequest`
   maps `{type:"auto"}` → `"auto"`, `{type:"any"}` → `"required"`, and
   `{type:"tool",name}` → `{type:"function",function:{name}}`, passing an

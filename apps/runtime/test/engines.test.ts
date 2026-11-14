@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { probeEngineCatalog, pullOllamaModel } from "../src/engines.ts";
+import {
+  probeEngineCatalog,
+  pullOllamaModel,
+  translateAnthropicRequest,
+  unsupportedContentMessage,
+  unsupportedContentPart,
+} from "../src/engines.ts";
 import type { PullProgress } from "../src/engines.ts";
 
 const DIGEST = "a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67";
@@ -182,5 +188,63 @@ test("probeEngineCatalog lists every model without refusing a multi-model engine
   assert.deepEqual(
     catalog.models.map((model) => model.weightsDigest),
     [`sha256:${"a".repeat(64)}`, `sha256:${"b".repeat(64)}`],
+  );
+});
+
+test("a multimodal content part is identified by name, on either surface", () => {
+  // Text-only content, both shapes, is fine.
+  assert.equal(unsupportedContentPart([{ role: "user", content: "hi" }]), null);
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{ type: "text", text: "hi" }] }]), null);
+  assert.equal(
+    unsupportedContentPart([{ role: "assistant", content: [{ type: "tool_use", id: "x", name: "f", input: {} }] }]),
+    null,
+  );
+
+  // OpenAI parts.
+  assert.deepEqual(
+    unsupportedContentPart([{ role: "user", content: [{ type: "text", text: "look" }, { type: "image_url", image_url: { url: "data:image/png;base64,AA" } }] }]),
+    { part: "image_url", where: "message" },
+  );
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{ type: "input_audio", input_audio: {} }] }])?.part, "input_audio");
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{ type: "file", file: {} }] }])?.part, "file");
+
+  // Anthropic blocks, including one nested in a tool_result.
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{ type: "image", source: {} }] }])?.part, "image");
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{ type: "document", source: {} }] }])?.part, "document");
+  assert.deepEqual(
+    unsupportedContentPart([
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "x", content: [{ type: "image", source: {} }] }],
+      },
+    ]),
+    { part: "image", where: "tool_result" },
+  );
+
+  // An untyped part is refused, not skipped.
+  assert.equal(unsupportedContentPart([{ role: "user", content: [{}] }])?.part, "(untyped part)");
+
+  // The message names the part and the reason.
+  const message = unsupportedContentMessage({ part: "image_url", where: "message" });
+  assert.match(message, /image_url content parts are not supported/);
+  assert.match(
+    unsupportedContentMessage({ part: "image", where: "tool_result" }),
+    /image content in tool_result is not supported/,
+  );
+  assert.match(message, /no vision or audio tower/);
+
+  // Translation refuses rather than silently dropping the part.
+  assert.throws(
+    () =>
+      translateAnthropicRequest(
+        { messages: [{ role: "user", content: [{ type: "image", source: {} }] }] },
+        "m",
+      ),
+    /image content parts are not supported/,
+  );
+  // ... and a system prompt array is checked too.
+  assert.throws(
+    () => translateAnthropicRequest({ system: [{ type: "document", source: {} }], messages: [] }, "m"),
+    /document content in system is not supported/,
   );
 });

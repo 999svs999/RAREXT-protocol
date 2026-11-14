@@ -402,6 +402,69 @@ export function openAiEmbeddingsUrl(endpoint: string): string {
   return `${openAiBase(endpoint)}/embeddings`;
 }
 
+/** Content-part types that carry text we can actually use. */
+const TEXTUAL_PART_TYPES = new Set([
+  "text",
+  "input_text",
+  "output_text",
+  "tool_use",
+  "tool_result",
+  "thinking",
+]);
+
+/** A content part the committed weights cannot process. */
+export interface UnsupportedContentPart {
+  /** The part's `type`, or "(untyped part)" when it did not name one. */
+  part: string;
+  /** Where it appeared: "message", "tool_result", or "system". */
+  where: string;
+}
+
+/**
+ * Find the first content part that is not text.
+ *
+ * Both surfaces carry parts as `{ type, … }`: OpenAI uses `image_url`,
+ * `input_audio`, `file`; Anthropic uses `image`, `document`, `audio`. RAREXT's
+ * committed weights carry no vision or audio tower, so a request that includes
+ * one is REFUSED with a capability error naming the part — it is never answered
+ * as if the image had been read, and never silently answered from the text
+ * around it. `tool_result` content is inspected, because it can itself hold
+ * blocks.
+ */
+export function unsupportedContentPart(messages: unknown): UnsupportedContentPart | null {
+  if (!Array.isArray(messages)) return null;
+  for (const message of messages) {
+    if (!isRecord(message)) continue;
+    const content = message.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (typeof part === "string") continue;
+      if (!isRecord(part)) continue;
+      const type = typeof part.type === "string" ? part.type : "";
+      if (TEXTUAL_PART_TYPES.has(type)) {
+        if (type === "tool_result" && Array.isArray(part.content)) {
+          const nested = unsupportedContentPart([{ role: "tool", content: part.content }]);
+          if (nested !== null) return { part: nested.part, where: "tool_result" };
+        }
+        continue;
+      }
+      return { part: type === "" ? "(untyped part)" : type, where: "message" };
+    }
+  }
+  return null;
+}
+
+/** The refusal message for a surface, naming the part and the reason. */
+export function unsupportedContentMessage(part: UnsupportedContentPart): string {
+  const location = part.where === "message" ? "content parts" : `content in ${part.where}`;
+  const verb = part.where === "message" ? "are" : "is";
+  return (
+    `${part.part} ${location} ${verb} not supported: ` +
+    "the committed weights carry no vision or audio tower, so the model cannot read them. " +
+    "Remove the part, send text only, or deploy a model that is trained for it."
+  );
+}
+
 function textFromContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -419,6 +482,16 @@ export function translateAnthropicRequest(
   body: Record<string, unknown>,
   fallbackModel: string,
 ): Record<string, unknown> {
+  // Refuse a multimodal request here too, so no caller can translate one into a
+  // text-only prompt and answer it as if the image had been read.
+  const fromSystem = Array.isArray(body.system)
+    ? unsupportedContentPart([{ role: "system", content: body.system }])
+    : null;
+  const part =
+    unsupportedContentPart(body.messages) ??
+    (fromSystem === null ? null : { part: fromSystem.part, where: "system" });
+  if (part !== null) throw new Error(unsupportedContentMessage(part));
+
   const messages: Array<{ role: string; content: string }> = [];
 
   if (typeof body.system === "string" && body.system.length > 0) {
@@ -468,6 +541,7 @@ export function translateAnthropicRequest(
     const choice = body.tool_choice;
     if (choice.type === "auto") translated.tool_choice = "auto";
     else if (choice.type === "any") translated.tool_choice = "required";
+    else if (choice.type === "none") translated.tool_choice = "none";
     else if (choice.type === "tool" && typeof choice.name === "string") {
       translated.tool_choice = { type: "function", function: { name: choice.name } };
     }
@@ -481,6 +555,7 @@ export function translateAnthropicRequest(
 export function translateOpenAiResponse(
   response: Record<string, unknown>,
   requestedModel: string,
+  options: { maxToolCalls?: number } = {},
 ): Record<string, unknown> {
   const choices = Array.isArray(response.choices) ? response.choices : [];
   const first = isRecord(choices[0]) ? choices[0] : {};
@@ -490,7 +565,10 @@ export function translateOpenAiResponse(
   // OpenAI's finish_reason -> Anthropic's stop_reason. `stop` is `end_turn`,
   // not a literal "stop", so a streamed and a complete answer agree.
   const finish = typeof first.finish_reason === "string" ? first.finish_reason : null;
-  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls.filter(isRecord) : [];
+  const allToolCalls = Array.isArray(message.tool_calls) ? message.tool_calls.filter(isRecord) : [];
+  // Anthropic returns at most one tool_use block when parallel tool use is off
+  // (a named tool, or `disable_parallel_tool_use`).
+  const toolCalls = options.maxToolCalls === undefined ? allToolCalls : allToolCalls.slice(0, options.maxToolCalls);
   const stopReason =
     toolCalls.length > 0 || finish === "tool_calls"
       ? "tool_use"

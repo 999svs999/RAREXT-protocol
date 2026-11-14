@@ -76,20 +76,25 @@ function startMockEngine() {
       if (tools.length > 0 && typeof choiceName === "string") {
         const name = choiceName;
         const args = '{"city":"Paris"}';
+        // A prompt that says "two" makes the mock emit two tool calls, so the
+        // parallel-tool-use limit has something to limit.
+        const wantTwo = String(last?.content ?? "").includes("two");
+        const toolCalls = wantTwo
+          ? [
+              { index: 0, id: "call_mock", type: "function", function: { name, arguments: args } },
+              {
+                index: 1,
+                id: "call_mock_2",
+                type: "function",
+                function: { name: tools[1]?.function?.name ?? name, arguments: '{"zone":"UTC"}' },
+              },
+            ]
+          : [{ index: 0, id: "call_mock", type: "function", function: { name, arguments: args } }];
         if (body.stream === true) {
           response.writeHead(200, { "content-type": "text/event-stream" });
           response.write(
             `data: ${JSON.stringify({
-              choices: [
-                {
-                  index: 0,
-                  delta: {
-                    tool_calls: [
-                      { index: 0, id: "call_mock", type: "function", function: { name, arguments: args } },
-                    ],
-                  },
-                },
-              ],
+              choices: [{ index: 0, delta: { tool_calls: toolCalls } }],
             })}\n\n`,
           );
           response.write(
@@ -113,7 +118,11 @@ function startMockEngine() {
                 message: {
                   role: "assistant",
                   content: null,
-                  tool_calls: [{ id: "call_mock", type: "function", function: { name, arguments: args } }],
+                  tool_calls: toolCalls.map((call) => ({
+                    id: call.id,
+                    type: call.type,
+                    function: call.function,
+                  })),
                 },
                 finish_reason: "tool_calls",
               },
@@ -653,6 +662,133 @@ test("an Anthropic stream is translated per token and reconstructs the message",
         }),
       "the recorded stream carries the decode trace",
     );
+  } finally {
+    await teardown(context);
+  }
+});
+
+test("Anthropic parallel tool use is off for a named tool or when asked", async () => {
+  const context = await setup();
+  try {
+    const tools = [
+      { name: "get_weather", description: "weather", input_schema: { type: "object" } },
+      { name: "get_time", description: "time", input_schema: { type: "object" } },
+    ];
+    type Block = { type: string; name?: string };
+    // "two" makes the mock emit two tool calls, so the limit has an effect.
+    const messages = [{ role: "user", content: "two tools please" }];
+    const call = (toolChoice: unknown, stream = false) =>
+      fetch(`${context.gateway.url}/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "test-model",
+          max_tokens: 64,
+          tools,
+          messages,
+          ...(toolChoice === undefined ? {} : { tool_choice: toolChoice }),
+          ...(stream ? { stream: true } : {}),
+        }),
+      });
+    const blocks = async (toolChoice: unknown): Promise<Block[]> => {
+      const response = await call(toolChoice);
+      assert.equal(response.status, 200);
+      return ((await response.json()) as { content: Block[] }).content.filter((block) => block.type === "tool_use");
+    };
+
+    // Parallel tool use allowed: both calls come back.
+    assert.equal((await blocks({ type: "auto" })).length, 2);
+
+    // `disable_parallel_tool_use` limits the answer to one tool_use block.
+    const limited = await blocks({ type: "any", disable_parallel_tool_use: true });
+    assert.equal(limited.length, 1);
+    assert.equal(limited[0]!.name, "get_weather");
+
+    // A named tool is a single call, and it is the named one.
+    const named = await blocks({ type: "tool", name: "get_time" });
+    assert.equal(named.length, 1);
+    assert.equal(named[0]!.name, "get_time");
+
+    // `{type:"none"}` never calls a tool at all.
+    const none = await call({ type: "none" });
+    const noneBody = (await none.json()) as { content: Block[] };
+    assert.equal(noneBody.content.some((block) => block.type === "tool_use"), false);
+    const withNone = await waitForRecords(context.dir, 4);
+    assert.ok(
+      withNone.records().some((record) => (record.body.request.body as { tool_choice?: unknown }).tool_choice === "none"),
+      "none reached the upstream as none",
+    );
+
+    // The stream is limited too: exactly one tool_use block, stop_reason tool_use.
+    const streamed = await call({ type: "any", disable_parallel_tool_use: true }, true);
+    const raw = await streamed.text();
+    const events = raw
+      .split("\n\n")
+      .filter((frame) => frame.trim() !== "")
+      .map((frame) => ({
+        name: /^event: (.*)$/m.exec(frame)![1]!,
+        data: JSON.parse(/^data: (.*)$/m.exec(frame)![1]!) as Record<string, unknown>,
+      }));
+    const starts = events.filter((event) => event.name === "content_block_start");
+    assert.equal(starts.length, 1, "one content block in the stream");
+    const block = starts[0]!.data.content_block as Block;
+    assert.equal(block.type, "tool_use");
+    assert.equal(block.name, "get_weather");
+    assert.equal((events.at(-2)!.data as { delta: { stop_reason: string } }).delta.stop_reason, "tool_use");
+    assert.equal(
+      events.filter((event) => event.name === "content_block_stop").length,
+      1,
+      "exactly one block closed",
+    );
+  } finally {
+    await teardown(context);
+  }
+});
+
+test("the Anthropic surface refuses a multimodal block by name", async () => {
+  const context = await setup();
+  try {
+    const call = (content: unknown, system?: unknown) =>
+      fetch(`${context.gateway.url}/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "test-model",
+          max_tokens: 32,
+          messages: [{ role: "user", content }],
+          ...(system === undefined ? {} : { system }),
+        }),
+      });
+
+    const image = await call([
+      { type: "text", text: "what is this?" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+    ]);
+    assert.equal(image.status, 400);
+    const imageBody = (await image.json()) as { type: string; error: { type: string; message: string } };
+    assert.equal(imageBody.type, "error");
+    assert.equal(imageBody.error.type, "invalid_request_error");
+    assert.match(imageBody.error.message, /image content parts are not supported/);
+    assert.match(imageBody.error.message, /no vision or audio tower/);
+
+    const document = await call([{ type: "document", source: { type: "base64", media_type: "application/pdf", data: "AAAA" } }]);
+    assert.equal(document.status, 400);
+    assert.match(((await document.json()) as { error: { message: string } }).error.message, /document/);
+
+    // A system prompt carrying a block is checked too.
+    const system = await call([{ type: "text", text: "hi" }], [{ type: "image", source: {} }]);
+    assert.equal(system.status, 400);
+    assert.match(((await system.json()) as { error: { message: string } }).error.message, /content in system/);
+
+    // None of the refusals reached the engine, so nothing was recorded.
+    assert.equal(new RunLedger(context.dir).records().length, 0, "a refused request records no run");
+
+    // A text-only block list still works and records.
+    const text = await call([{ type: "text", text: "hi" }]);
+    assert.equal(text.status, 200);
+    const body = (await text.json()) as { content: Array<{ type: string; text: string }> };
+    assert.equal(body.content[0]!.text, "echo: hi");
+    await waitForRecords(context.dir, 1);
   } finally {
     await teardown(context);
   }

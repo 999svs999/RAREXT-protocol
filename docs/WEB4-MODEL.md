@@ -1259,9 +1259,14 @@ and each choice carries its `rarext_trace`. On a stream, the call arrives as a
 
 On the Anthropic surface the same request's `tool_choice` is translated to the
 OpenAI shape and enforced: `{ "type": "auto" }` → `auto`, `{ "type": "any" }` →
-`required`, and `{ "type": "tool", "name": "x" }` →
-`{ "type": "function", "function": { "name": "x" } }`; an OpenAI-shaped string
-passes through. Naming a tool the request did not declare is refused with `400`
+`required`, `{ "type": "none" }` → `none`, and `{ "type": "tool", "name": "x" }`
+→ `{ "type": "function", "function": { "name": "x" } }`; an OpenAI-shaped string
+passes through. **Parallel tool use** is honoured too: a named tool, or
+`disable_parallel_tool_use: true`, returns **at most one** `tool_use` block —
+the gateway keeps the first call and drops the rest, on the complete answer and
+on the stream (a test drives a mock that emits two calls: `auto` returns both,
+the disabled forms return one). OpenAI's `parallel_tool_calls: false` is the
+mirror image on the OpenAI surface. Naming a tool the request did not declare is refused with `400`
 before any inference, as Anthropic does. Nothing is mirrored back: an Anthropic
 response carries no `tool_choice` — the tool call itself is the answer, and it
 comes back as a `tool_use` block.
@@ -1398,12 +1403,18 @@ passed in the `{ type: "function", function: { … } }` shape templates read; an
 `add_generation_prompt` is set so the template appends its assistant prefix. The
 `tokenizer.chat_template` bytes are **untrusted**, so they are never compiled or
 eval'd: `apps/runtime/src/chat-template.ts` tokenizes, parses, and walks the
-template with a fixed evaluator that supports `{% for %}`, `{% if %}/{% elif
-%}/{% else %}`, `{% set %}`, `{{ }}` expressions with member/index access,
-comparisons, `and`/`or`/`not`, `in`, `is defined`, and the filters real templates
-use (`tojson`, `trim`, `length`, `join`, `string`, `default`). Anything outside
-that subset throws, and the request falls back to the explicit prompt rather than
-executing something arbitrary. A container without a template keeps the previous
+template with a fixed evaluator that supports `{% for %}` (with `if` and `loop`
+metadata), `{% if %}/{% elif %}/{% else %}`, `{% set %}` (including
+`{% set ns.x = … %}`), `{% macro %}` with default arguments and call sites,
+`{% call %}` blocks with `caller()`,
+`{{ }}` expressions with member/index access, comparisons,
+`and`/`or`/`not`/`in`/`is defined`, `~` and list `+`, `namespace(**kwargs)`, and
+the filters real templates use (`tojson`, `trim`, `length`, `join`, `string`,
+`default`, `list`, `keys`, `values`, `items`, `first`, `last`, `count`, `reverse`,
+`sort`, `unique`, `replace`, `safe`, `map`, `select`, `reject`, `selectattr`,
+`rejectattr`). Anything outside that subset throws, and the request falls back to
+the explicit prompt rather than executing something arbitrary. `{% include %}`,
+`{% import %}`, and unknown filters are refused by name. A container without a template keeps the previous
 behaviour.
 
 The exact rendered prompt is what `request.body` commits, so a replay re-issues
@@ -1417,6 +1428,28 @@ A test renders the same messages and tools through the same template and runs th
 engine on the result, then asserts a live request's decode trace is **identical**
 to that manual run and **different** from the bare user turn — proving the prompt
 really came from the container's template.
+
+### Multimodal parts are refused by name
+
+RAREXT's committed weights carry no vision or audio tower, so a request that
+carries an image or audio part is **refused**, never answered as if the part had
+been read and never silently answered from the text around it. Both surfaces
+detect the part and say exactly which one and why:
+
+```json
+{"error":{"message":"image_url content parts are not supported: the committed
+ weights carry no vision or audio tower, so the model cannot read them. Remove
+ the part, send text only, or deploy a model that is trained for it.",
+ "type":"invalid_request_error","code":"unsupported_content_part","param":"messages"}}
+```
+
+Anthropic blocks get an Anthropic-shaped error (`image`, `document`); OpenAI
+parts get `code: "unsupported_content_part"` (`image_url`, `input_audio`,
+`file`). A part nested inside a `tool_result` is inspected too, as is a `system`
+prompt supplied as blocks, and an untyped part is refused rather than skipped.
+`translateAnthropicRequest` refuses the same parts, so no caller can translate a
+multimodal request into a text-only prompt. A text-only content array keeps
+working, and a refused request is never run — so nothing is recorded for it.
 
 ### The Anthropic surface
 
@@ -1462,6 +1495,34 @@ merely readable. A complete answer and its stream agree on `stop_reason` — a
 test asserts the streamed events reconstruct the non-streaming message exactly,
 that there is one `content_block_delta` per engine token, that the stop reason is
 `end_turn`, and that a repeat run matches.
+
+### Weights larger than memory
+
+The engine can serve a container it never holds whole. Given a
+`readAt(offset, length)` reader instead of `bytes`, it parses the metadata through
+a bounded chunk cache (64 KiB chunks, 32 of them by default), reads **one tensor
+row at a time** for the forward pass, and reports the peak it held as
+`residentBytes`. On a 9.5 MB container with a 256 KiB cap:
+
+```
+fileBytes 9515232 · maxSingleRead 65536 · residentBytes 69632 · tokens [17,12,3,19]
+```
+
+The tokens are **identical** to serving the same bytes resident, so streaming is
+a loader change, not a different model. The provider reaches this path with
+`RAREXT_STREAM_WEIGHTS=1` (or `streamWeights: true`): it verifies the shards to a
+file **one shard at a time** (a bounded fetch, not a whole-file buffer) and hands
+the engine the reader. The host-capability commitment then allows a deployment
+whose weights exceed memory, because what has to fit is the loader's *bound*
+(metadata cache + largest row + tokenizer strings), not the file — and a loader
+that would hold more than memory is still refused.
+
+Three honest limits. An **HF/RXHF** container cannot stream (it is parsed from a
+resident buffer); a **sealed** bundle cannot stream (opening happens in memory);
+and streaming is a correctness/robustness path, not a performance one — it trades
+throughput for a bounded resident set. The 6/7/8 GB classes therefore remain
+targets here: the runtime can now serve such a container within a bound, but this
+host has no such weights to serve and cannot fabricate them.
 
 ### The context bound
 

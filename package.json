@@ -76,7 +76,8 @@
     "claim:self-test": "node scripts/claim-check.mjs --self-test",
     "build:routes": "node scripts/build-route-index.mjs",
     "publish:futuristic": "node scripts/publish-futuristic-proof.mjs",
-    "demo:decoding": "node scripts/decoding-proof.mjs"
+    "demo:decoding": "node scripts/decoding-proof.mjs",
+    "bench:engine": "node scripts/bench-engine.mjs"
   },
   "engines": {
     "node": ">=22.18"
