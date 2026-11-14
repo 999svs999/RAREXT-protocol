@@ -3,31 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RAREXT — the database for anything digital</title>
+    <title>RAREXT — AI you can verify, not AI you have to trust</title>
     <meta
       name="description"
-      content="RAREXT is the protocol for web4: every digital object becomes a claim anyone can verify — content-addressed, signed, anchored, erasure-coded. Free to read and verify; durability is bought, not assumed."
+      content="RAREXT is verifiable web4 AI: the model and the engine are content-addressed artifacts, every answer carries a replayable decode trace, and a stranger with a browser recomputes the proof. No model server, no key, no GPU required to check."
     />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
-    <meta property="og:title" content="RAREXT — the database for anything digital" />
+    <meta property="og:title" content="RAREXT — AI you can verify" />
     <meta
       property="og:description"
-      content="Store anything. Verify it anywhere. Pay only for the copies you choose to keep."
+      content="The weights and the engine are content-addressed. Every answer replays from a seed. Anyone recomputes the proof — no server, no key, no GPU."
     />
     <meta property="og:type" content="website" />
-    <meta
-      property="og:image"
-      content="https://999svs999.github.io/RAREXT-protocol/og.png"
-    />
+    <meta property="og:image" content="https://rarext.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="RAREXT — The database for anything digital. Store anything. Verify it anywhere. Pay only for the copies you keep."
+      content="RAREXT — AI you can verify. The model and the engine are content-addressed; every answer replays; anyone can check it."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="canonical" href="https://999svs999.github.io/RAREXT-protocol/" />
+    <link rel="canonical" href="https://rarext.com/" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -38,11 +35,11 @@
         <span>RAREXT</span>
       </a>
       <nav aria-label="Primary">
-        <a href="#web4">web4</a>
+        <a href="#try">Try it</a>
         <a href="#how">How it works</a>
-        <a href="#storage">Storage</a>
-        <a href="#free">What free means</a>
-        <a href="#truth">Truth</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#evidence">Evidence</a>
+        <a href="#truth">Limits</a>
         <a href="#build">Contribute</a>
       </nav>
       <a class="gh" href="https://github.com/999svs999/RAREXT-protocol">GitHub ↗</a>
@@ -50,271 +47,251 @@
 
     <main id="main">
       <section class="hero">
-        <p class="pill"><span class="dot"></span> web4 · open protocol · Apache-2.0 · pre-alpha</p>
-        <h1>The database for<br /><em>anything digital.</em></h1>
+        <p class="pill"><span class="dot"></span> web4 AI · verify, don’t trust · Apache-2.0 · pre-alpha</p>
+        <h1>AI you can<br /><em>verify.</em></h1>
         <p class="lede">
-          Store anything. Verify it anywhere. Pay only for the copies you choose to keep.
+          The model and the engine are content-addressed artifacts. Every answer carries a
+          decode trace you can replay from a seed. A stranger with a browser re-derives the
+          proof — no model server, no key, no GPU required to check.
         </p>
         <div class="cta">
-          <a class="btn primary" href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/LITEPAPER.md">
-            Read the litepaper
-          </a>
-          <a class="btn ghost" href="#build">Start contributing</a>
+          <a class="btn primary" href="./mirror/ai.html">Run the model in your browser</a>
+          <a class="btn ghost" href="./mirror/verify.html" data-pin-root>Verify this registry</a>
         </div>
 
         <!-- The front door's proof surface. data-pin-root links are rewritten at
              deploy time to carry the anchored root, so a visitor verifies THIS
              registry against the root the chain holds, not a screenshot of it. -->
         <p class="small proof-row">
-          <a href="./mirror/verify.html" data-pin-root>Verify this registry in your browser →</a>
+          <a href="./mirror/ai.html">Make an AI proof in your browser →</a>
           ·
           <a href="./mirror/gallery.html">Watch AI artifacts verify themselves →</a>
-          <a href="./mirror/ai.html">Make an AI proof in your browser →</a>
+          ·
+          <a href="./mirror/verify.html" data-pin-root>Verify this registry →</a>
           ·
           <a href="./registry/">Public registry bundle and seed list →</a>
         </p>
 
         <div class="facts">
           <div>
-            <strong>Any object → one claim</strong>
-            <span>A payload, its meaning, and its proof, in one signed envelope.</span>
+            <strong>One trace per answer</strong>
+            <span>Every run records the token ids it decoded, so the answer replays byte for byte.</span>
           </div>
           <div>
-            <strong>One verifier, two runtimes</strong>
-            <span>The same bytes are recomputed in a browser and on a server.</span>
+            <strong>Verify by recomputation</strong>
+            <span>Exact bytes, a generative replay from a committed model, or a bounded metric.</span>
           </div>
           <div>
-            <strong>k-of-n, not promises</strong>
-            <span>Erasure-coded shards that rebuild the file when holders disappear.</span>
+            <strong>The asker runs nothing</strong>
+            <span>The provider commits the weights and the engine; you check the receipts.</span>
           </div>
         </div>
       </section>
 
-      <section id="web4" class="band">
-        <p class="eyebrow">The network</p>
-        <h2>web4 is the free-for-all layer.</h2>
+      <section id="try" class="band">
+        <p class="eyebrow">Live, right now</p>
+        <h2>Check it in a browser tab.</h2>
         <p class="section-lede">
-          Not a token, not a chain, not a browser. A network where any object, claim, or
-          agent carries its own proof, and anyone with a device can hold bytes, verify
-          work, and be paid for it. RAREXT is the protocol; ApesDaily is where the public
-          meets it.
-        </p>
-        <div class="facts">
-          <div>
-            <strong>No gatekeeper for reading</strong>
-            <span>A payload is reachable from a hash and a mirror, not from permission.</span>
-          </div>
-          <div>
-            <strong>No gatekeeper for verifying</strong>
-            <span>The verifier is a file you can read and run in a browser tab.</span>
-          </div>
-          <div>
-            <strong>No protocol token</strong>
-            <span>Apps may launch tokens. The protocol's job is to make the launch checkable.</span>
-          </div>
-        </div>
-        <p class="small">
-          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4.md">
-            Read the definition, including the primitive that is still missing →
-          </a>
-        </p>
-      </section>
-
-      <section id="free" class="band">
-        <p class="eyebrow">The honest definition</p>
-        <h2>What “free” means here</h2>
-        <p class="section-lede">
-          The protocol does not bill you. That is a real property, and it is a narrow one.
-          Here is exactly where it stops.
+          Nothing below fetches a model from us to run it. The committed model itself runs on
+          your device, and the same verifier the registry runs is the one your tab runs — so if
+          they disagreed, this page would be the first place it showed.
         </p>
 
         <div class="grid four">
-          <article class="card">
-            <h3>Writing, reading, verifying</h3>
-            <p>No fee, no gate, no account. The reference registry is open source; run your own if you prefer ours.</p>
-          </article>
-          <article class="card">
-            <h3>One device, one copy</h3>
-            <p>If your machine holds the bytes, it costs the protocol nothing — and it is a single copy. That is a backup that has not failed yet, not durability.</p>
-          </article>
-          <article class="card">
-            <h3>Durability is bought</h3>
-            <p>More copies cost more disk somewhere. RAREXT makes the price explicit: k-of-n shards, published replica counts, retention challenges.</p>
-          </article>
-          <article class="card">
-            <h3>Physics still applies</h3>
-            <p>Electricity, bandwidth, and the device are real costs. They are yours, and we do not pretend they vanished. Nothing here beats Shannon.</p>
-          </article>
+          <a class="card link" href="./mirror/ai.html">
+            <h3>Run the committed model</h3>
+            <p>
+              A real model class, in WebAssembly/JS, seeded and deterministic. Change the seed
+              and the output changes; the evidence the run carries changes with it.
+            </p>
+          </a>
+          <a class="card link" href="./mirror/gallery.html">
+            <h3>Watch artifacts verify</h3>
+            <p>
+              AI publications that verify themselves: exact bytes, a bounded reconstruction
+              measured against a committed reference, and a generative replay.
+            </p>
+          </a>
+          <a class="card link" href="./mirror/verify.html" data-pin-root>
+            <h3>Verify the registry</h3>
+            <p>
+              Rebuild the Merkle root of the live bundle from its own bytes and compare it with
+              the root the chain holds. In one sentence.
+            </p>
+          </a>
+          <a class="card link" href="./registry/">
+            <h3>Read the registry</h3>
+            <p>
+              The bundle, the seed list, and the mirror locations — the public record the whole
+              ecosystem publishes into.
+            </p>
+          </a>
         </div>
-
-        <aside class="callout">
-          <p>
-            <strong>The commitment is forever. The bytes are rented.</strong>
-            A publication's claim is permanent and recomputable; the storage that serves it is
-            paid for by whoever chooses to hold it. When nobody does, the claim still verifies —
-            you just have to supply the file.
-          </p>
-        </aside>
       </section>
 
       <section id="how">
         <p class="eyebrow">The mechanics</p>
-        <h2>Four steps, each one checkable</h2>
+        <h2>How a verifiable answer is made</h2>
+        <p class="section-lede">
+          Four steps, none of which asks you to believe a server. Each one produces bytes that a
+          different machine can check on its own.
+        </p>
 
         <ol class="steps">
           <li>
             <span class="num">01</span>
             <div>
-              <h3>Publish and sign</h3>
+              <h3>Commit the model and the engine</h3>
               <p>
-                Any file becomes a publication: a content hash, a kind, a meaning, and a signature
-                from ECDSA-P256 or ML-DSA. The signing suite is recorded, so a reader knows what
-                the proof is worth.
+                The weights and the inference engine are separate content-addressed RAREXT
+                artifacts. A provider fetches both from a registry, verifies every shard, and
+                runs exactly what it fetched — not a local build that could differ.
               </p>
             </div>
           </li>
           <li>
             <span class="num">02</span>
             <div>
-              <h3>Recompute, don't trust</h3>
+              <h3>Run it deterministically</h3>
               <p>
-                A deterministic verifier re-executes the claim. The shipped verifier runs
-                unchanged in the browser and on the server and returns the same attestation from
-                both.
+                Decoding is seeded: greedy or sampled, temperature, top-k, top-p, min-p,
+                typical-p, penalties, logit bias, a stop set. The same model bytes and the same
+                seed produce the same tokens, on any machine, every time.
               </p>
             </div>
           </li>
           <li>
             <span class="num">03</span>
             <div>
-              <h3>Anchor to a chain</h3>
+              <h3>Record a decode trace</h3>
               <p>
-                The Merkle root is anchored to a hash-linked log. The registry reads it back from
-                an independent path before it says “confirmed” — a write is not a receipt.
+                Every answer ships with the exact ids it decoded, the confidence per token, and
+                the bound it ran inside. The trace is the claim; the text is a rendering of it.
               </p>
             </div>
           </li>
           <li>
             <span class="num">04</span>
             <div>
-              <h3>Replicate as shards</h3>
+              <h3>Verify by recomputation</h3>
               <p>
-                Files are split into k-of-n Reed–Solomon shards and placed on distinct
-                holders over HTTP. Each holder answers a nonce-bound Merkle challenge; lose holders up to
-                n−k and any k rebuild the file, and a failed shard is repaired onto a spare.
+                A reader re-derives the result from the trace, the model, and the seed. Lossy
+                work — a quantized net, a codec — is a distance against a committed reference,
+                measured, not asserted.
               </p>
             </div>
           </li>
         </ol>
+
+        <aside class="callout">
+          <p>
+            <strong>Verification is not the same as trust in an answer.</strong>
+            Recomputation proves the bytes and the run are what was claimed. It does not prove
+            the model is correct, safe, or unbiased, and it does not make a bad answer good.
+            The protocol is built to say exactly that, and no more.
+          </p>
+        </aside>
       </section>
 
-      <section id="storage" class="band">
-        <p class="eyebrow">Measured, not promised</p>
-        <h2>Storage is real, inside stated limits.</h2>
+      <section id="capabilities" class="band">
+        <p class="eyebrow">What the web4 AI does today</p>
+        <h2>Capability parity, with a receipt.</h2>
         <p class="section-lede">
-          Erasure-coded shards, signed placements, nonce-bound holder challenges, repair,
-          and availability sampling run today. These are the measurements, including where
-          they stop.
+          Everything a modern local or cloud model offers, on top of artifacts you can check.
+          Each answer carries a <span class="mono">rarext_trace</span> beside it, so the
+          capability and the proof arrive together.
+        </p>
+
+        <div class="chips">
+          <span>chat completions</span>
+          <span>per-token streaming (OpenAI&nbsp;+ Anthropic)</span>
+          <span>temperature / top-k / top-p</span>
+          <span>min-p / typical-p</span>
+          <span>repetition, presence, frequency penalties</span>
+          <span>logit bias</span>
+          <span>stop sequences</span>
+          <span>seeded sampling, replayed</span>
+          <span>logprobs + top alternatives</span>
+          <span>n choices, each with its own trace</span>
+          <span>structured output (JSON schema)</span>
+          <span>grammar-constrained decoding</span>
+          <span>tool calling</span>
+          <span>parallel tool use</span>
+          <span>the model’s own chat template</span>
+          <span>embeddings from the same weights</span>
+          <span>Anthropic tool_use blocks</span>
+          <span>a context bound it will not exceed</span>
+          <span>a cloud-native model wire</span>
+          <span>one trace per choice</span>
+        </div>
+
+        <p class="small">
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4-MODEL.md">
+            Read the model thesis, decoding controls, and the confidence model →
+          </a>
+        </p>
+      </section>
+
+      <section id="evidence">
+        <p class="eyebrow">Measured, not promised</p>
+        <h2>What the numbers actually say</h2>
+        <p class="section-lede">
+          The claim is checkable, so it is stated with its limits attached. These are measurements
+          from the repository at this revision, not marketing figures.
         </p>
 
         <div class="facts">
           <div>
-            <strong>1 GiB · 394 MiB peak</strong>
-            <span>File-backed encode/decode. The latest rerun was 393 MiB; the in-memory path was 3,243 MiB.</span>
+            <strong>3 representation kinds</strong>
+            <span>
+              Exact bytes, a bounded metric against a committed reference, or a generative replay
+              from a committed model and seed. Each is verified its own way.
+            </span>
           </div>
           <div>
-            <strong>1 GiB · 249 MiB peak</strong>
-            <span>Streamed over raw holder HTTP. The latest rerun was 242 MiB; holder peak was 94 MiB.</span>
+            <strong>1 verifier, 2 runtimes</strong>
+            <span>
+              The same verifier runs in a browser tab and on a server and must return the same
+              attestation from both bytes.
+            </span>
           </div>
           <div>
-            <strong>5,910 · 100%</strong>
-            <span>Puts and retrievals in a 604 s churn soak, with 145 repairs, zero failed re-audits, and 23 holder kills.</span>
-          </div>
-          <div>
-            <strong>44 · 4 KiB</strong>
-            <span>Random samples detect 10% withholding at 99% confidence, for 176 KiB read.</span>
+            <strong>~8× cheaper than the naive pass</strong>
+            <span>
+              The engine’s whole step against an independent output-projection pass on the same
+              weights — and it agrees with a separately written full forward pass.
+            </span>
           </div>
         </div>
 
         <aside class="callout">
           <p>
-            <strong>What this does not prove.</strong>
-            The sealed tier is not confidential until its envelope is reviewed. The soak is
-            one machine on loopback with small payloads: it is not evidence about disks,
-            power loss, TLS, or multi-writer coordination. Possession challenges are not
-            retrievability proofs, and 100 GiB repair is unmeasured.
+            <strong>How to check the numbers yourself.</strong>
+            The registry is anchored, and the mirror re-derives every AI rendition from the
+            published bytes on your machine. Open the gallery, or verify the bundle, and watch
+            the arithmetic happen rather than reading a summary of it.
           </p>
           <p class="small">
-            <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/STORAGE.md">
-              Read the one-page storage status and limits →
-            </a>
+            <a href="./mirror/gallery.html">Watch the AI artifacts verify themselves →</a>
           </p>
         </aside>
-
-        <p class="small">
-          The earlier 611 s soak did 143 repairs and 100% retrievals, but only 99.9% of
-          puts; retry is what moved the next run to 100%. Do not combine the two runs into
-          a single claim.
-        </p>
-        <p class="small">
-          <a href="./registry/">Public registry bundle and seed list →</a>
-        </p>
-      </section>
-
-      <section class="band">
-        <p class="eyebrow">Shipped, not promised</p>
-        <h2>What runs today</h2>
-        <div class="chips">
-          <span>publication &amp; claim envelopes</span>
-          <span>deterministic verifiers</span>
-          <span>registry with mirror &amp; takedown</span>
-          <span>signed agent identities</span>
-          <span>Merkle anchoring + read-back</span>
-          <span>content-addressed storage</span>
-          <span>proof of possession</span>
-          <span>erasure shards + holder audits</span>
-          <span>holder HTTP transport</span>
-          <span>signed placement records</span>
-          <span>scheduled durability challenges</span>
-          <span>repair &amp; re-challenge</span>
-          <span>verified registry backups</span>
-          <span>storage benchmark harness</span>
-          <span>independent verifier operators</span>
-          <span>key rotation &amp; delegated publishing</span>
-          <span>leaderboard &amp; capability discovery</span>
-          <span>data availability sampling</span>
-          <span>self-hosted pinning</span>
-          <span>fair-launch trajectories</span>
-          <span>published negative results</span>
-          <span>work economy &amp; credit ledger</span>
-          <span>agent market</span>
-          <span>MCP server</span>
-          <span>multi-chain anchoring</span>
-          <span>web workbench</span>
-          <span>4 workspace packages</span>
-        </div>
-        <p class="small">
-          Every change ships with tests. The takedown test publishes, takes the operator
-          offline, and verifies the mirror with the shipped verifier.
-        </p>
       </section>
 
       <section id="truth" class="band truth">
         <p class="eyebrow">Truth over hype</p>
         <blockquote>
-          Compression trades bytes for structure, fidelity, or compute. Erasure coding trades
-          bytes for durability. Verification keeps both honest — and it only works if the claim
-          says which trade it made.
+          A verifiable answer is not a true answer. It is an answer whose bytes, run, and claim
+          you can reproduce — and it only means something if the claim says what it does not cover.
         </blockquote>
         <div class="truth-links">
-          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/PRIOR-ART.md">
-            Prior art: what already exists
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/AI-VERIFICATION.md">
+            What verification does and does not prove
           </a>
-          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/STORAGE-FRONTIER.md">
-            The storage frontier: limits and next steps
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4-MODEL.md">
+            Where the AI stops today
           </a>
-          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/bench/storage/NEGATIVE-RESULTS.md">
-            Where two research directions failed
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/MODEL-RUNTIME.md">
+            The runtime, and its stated limits
           </a>
         </div>
       </section>
@@ -323,8 +300,8 @@
         <p class="eyebrow">Open by default</p>
         <h2>Build with us</h2>
         <p class="section-lede">
-          RAREXT is meant to be built by more than its maintainers. Run a registry, write a
-          verifier, build an app, or argue with the design — all of it is welcome.
+          RAREXT is meant to be built by more than its maintainers. Run a provider, write a
+          verifier, port a model, build an app, or argue with the design — all of it is welcome.
         </p>
 
         <div class="grid three">
@@ -332,21 +309,21 @@
             <h3>Contribute</h3>
             <p>Setup, tests, commit rules, and the DCO sign-off. Start with a small, focused PR.</p>
           </a>
-          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">
-            <h3>Good first issues</h3>
-            <p>Tasks sized for a first contribution, labelled and kept current.</p>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4-MODEL.md">
+            <h3>Port a model</h3>
+            <p>Commit a container and an engine, and the same verifier checks the runs it produces.</p>
           </a>
-          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/blob/main/ROADMAP.md">
-            <h3>Roadmap</h3>
-            <p>What is next, what is blocked, and what we have deliberately refused to build.</p>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/CLOUD-RUNTIME.md">
+            <h3>Serve it in the cloud</h3>
+            <p>Keep every weight off your own machine, or declare a model by capability alone.</p>
           </a>
           <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/tree/main/rfcs">
             <h3>RFCs</h3>
             <p>Design changes start as an argument in writing. This is where the argument happens.</p>
           </a>
-          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/discussions">
-            <h3>Discussions</h3>
-            <p>Questions, ideas, and “is this possible?” before it becomes an issue.</p>
+          <a class="card link" href="https://github.com/999svs999/RAREXT-protocol/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">
+            <h3>Good first issues</h3>
+            <p>Tasks sized for a first contribution, labelled and kept current.</p>
           </a>
           <a class="card link" href="https://github.com/999svs999/RAREXT-protocol">
             <h3>Fork it</h3>
@@ -359,11 +336,15 @@
     <footer>
       <div>
         <img src="favicon.svg" alt="" width="24" height="24" />
-        <span><strong>RAREXT</strong> — the protocol for web4, under ApesDaily</span>
+        <span><strong>RAREXT</strong> — verifiable web4 AI, on the protocol we publish</span>
       </div>
       <p>Apache-2.0 code · CC BY 4.0 docs · no token sale · no bridge</p>
-      <p class="mono">web4 · pre-alpha · build in public</p>
-      <p>Also built by us: <a href="https://saikougoods.com">Saikou Goods</a> — verified streetwear, one price, no surprises.</p>
+      <p class="mono">web4 AI · pre-alpha · build in public</p>
+      <p>
+        The protocol itself is at
+        <a href="./registry/">the registry</a>; the model thesis is in
+        <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/WEB4-MODEL.md">WEB4-MODEL.md</a>.
+      </p>
     </footer>
   </body>
 </html>
