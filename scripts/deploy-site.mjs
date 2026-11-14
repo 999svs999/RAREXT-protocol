@@ -27,6 +27,29 @@ const SITE = join(ROOT, "site");
 const WORKTREE = join(ROOT, ".data", "deploy-gh-pages");
 const BRANCH = "gh-pages";
 const DRY_RUN = process.argv.includes("--dry-run");
+
+// A custom domain is opt-in and guarded. GitHub Pages serves a CNAME file's
+// domain and then redirects the *.github.io URL to it, so shipping a CNAME
+// before the DNS exists TAKES THE SITE DOWN. It is therefore never inferred:
+// it is named with --domain (or RAREXT_LAUNCH_DOMAIN), and a non-dry run
+// additionally requires RAREXT_LAUNCH_CONFIRM=1 so a stray flag cannot move a
+// live site by accident.
+function argValue(flag, envName) {
+  const at = process.argv.indexOf(flag);
+  const fromArg = at >= 0 ? (process.argv[at + 1] ?? "").trim() : "";
+  const fromEnv = (process.env[envName] ?? "").trim();
+  return fromArg || fromEnv || null;
+}
+const DOMAIN = argValue("--domain", "RAREXT_LAUNCH_DOMAIN");
+if (DOMAIN !== null && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(DOMAIN)) {
+  throw new Error(`--domain is not a hostname: ${JSON.stringify(DOMAIN)}`);
+}
+if (DOMAIN !== null && !DRY_RUN && process.env.RAREXT_LAUNCH_CONFIRM !== "1") {
+  throw new Error(
+    "refusing to publish a custom domain without RAREXT_LAUNCH_CONFIRM=1: " +
+      "a CNAME makes GitHub redirect the *.github.io URL to the domain, so the DNS must already resolve",
+  );
+}
 const GIT_ID = ["-c", "user.name=R", "-c", "user.email=r@R.local"];
 
 function git(args, options = {}) {
@@ -132,6 +155,10 @@ function collectFiles() {
     files.push({ source, target });
   }
 
+  if (DOMAIN !== null) {
+    files.push({ source: null, target: "CNAME", bytes: Buffer.from(`${DOMAIN}\n`, "utf8") });
+  }
+
   const mirrorDir = join(SITE, "registry", "mirror");
   for (const entry of readdirSync(mirrorDir, { withFileTypes: true }).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -159,6 +186,11 @@ function checkCommittedSources(files) {
   }
 
   for (const file of files) {
+    // A synthesized file (the opt-in CNAME) has no repo source; keep its bytes.
+    if (file.source === null) {
+      file.sha256 = sha256(file.bytes);
+      continue;
+    }
     const abs = join(SITE, file.source);
     if (!existsSync(abs)) fail(`missing repo source: site/${file.source}`);
 
@@ -545,10 +577,12 @@ async function main() {
   console.log(`source ${sourceCommit}`);
   console.log(`root   ${roots.root}`);
   console.log(`files  ${files.length}`);
+  if (DOMAIN !== null) console.log(`domain ${DOMAIN} (CNAME)`);
 
   if (DRY_RUN) {
     for (const file of files) {
-      console.log(`  site/${file.source} -> /${file.target} ${file.sha256.slice(0, 12)}`);
+      const origin = file.source === null ? "(generated)" : `site/${file.source}`;
+      console.log(`  ${origin} -> /${file.target} ${file.sha256.slice(0, 12)}`);
     }
     return;
   }

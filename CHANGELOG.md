@@ -11,6 +11,22 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **A re-runnable audit, and a guarded one-command launch on a custom domain.**
+  `docs/AUDIT.md` records the repository's quality gates (types clean, the full
+  suite green at `--test-concurrency=2`, links clean), the deployment path (the
+  `site/` tree projected onto `gh-pages`; dry run 26 files, roots consistent,
+  front door pinned), and the state of the live hosts — including the finding that
+  **`rarext.com` and `rarext.co` already serve a different, live site**, so the
+  domain can only be pointed here by whoever controls its DNS. `docs/LAUNCH.md` is
+  the runbook (GitHub Pages A/AAAA + `www` records, the Pages setting, the publish,
+  the verification, the rollback). `scripts/deploy-site.mjs` now carries a custom
+  domain when named — `--domain rarext.com` / `RAREXT_LAUNCH_DOMAIN` — and
+  **refuses a non-dry run without `RAREXT_LAUNCH_CONFIRM=1`**, because a `CNAME`
+  makes GitHub redirect the `*.github.io` URL and would take the current site down
+  before the DNS exists. The domain is never inferred from a stray file, and the
+  publish verifies the live bytes, roots, the seed's content address, the
+  two-location mirror rule, and the live AI renditions.
+
 - **A verifier a person can actually use, and an obvious way to reach it.** RAREXT's
   promise is "you can check it yourself", but the web app served no verifier at
   all — `index.html` and `ai.html` linked `./verify.html` and got a 404. There is

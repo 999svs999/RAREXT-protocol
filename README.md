@@ -43,6 +43,14 @@ welcome.
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, the [storage benchmark](bench/storage/README.md) that gates it, and the [1 GB repair measurement](bench/repair/README.md) that records where the current code sits.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
+- **Audit and launch** — [docs/AUDIT.md](docs/AUDIT.md) is a re-runnable audit of the whole
+  repository and its deployment: 1248/1248 tests, types and links clean, the deploy artifact
+  consistent and pinned, the live reference deployment byte-equal to the committed root — and the
+  one thing a script cannot do: `rarext.com` and `rarext.co` currently serve a different, live
+  site, so pointing the domain here needs its DNS. [docs/LAUNCH.md](docs/LAUNCH.md) is the runbook,
+  and the deploy carries a custom domain in one guarded command
+  (`RAREXT_LAUNCH_CONFIRM=1 npm run deploy:site -- --domain rarext.com`) that refuses to fire
+  without the DNS in place.
 - **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely. It also defines **RAREXT's own architecture-free cloud model** — `rarext.cloud-model.v1`, declared by capability and unable to carry a weight file's vocabulary, speaking RAREXT's own `rarext.cloud-infer.v1` wire — so RAREXT's future AI is not bound to the architectures and weights of today.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
