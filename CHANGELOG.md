@@ -11,6 +11,19 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The showcase is deployed to Cloudflare Pages, one DNS step from `rarext.com`.**
+  `rarext.com` and `rarext.co` are both custom domains of the Worker `rarext`
+  today; the web4 AI showcase is deployed to the Pages project `rarext-com` and
+  serving at `rarext-com.pages.dev`, and `rarext.com` is registered on that project
+  (`pending`, awaiting a CNAME). New `scripts/cutover-rarext-com.sh` performs the
+  cutover as one gated command — preview preflight, permission probe, proxied
+  CNAMEs, release from the Worker, live verification, rollback — and **refuses**
+  with the ops token found on this machine, which can deploy Pages but not edit
+  DNS or Workers. The two dashboard actions that finish it, and the exact records
+  (`CNAME @|www -> rarext-com.pages.dev`, proxied), are in
+  [docs/LAUNCH.md](docs/LAUNCH.md#status-2026-11-15-deployed-one-dns-step-from-live).
+  `rarext.co` is untouched.
+
 - **rarext.com is the web4 AI showcase.** The front door (`site/index.html`) now
   leads with verifiable web4 AI — "AI you can verify" — with the model running in
   your browser, verify-by-recomputation, the four-step mechanics, the capability

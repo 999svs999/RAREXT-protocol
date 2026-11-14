@@ -8,7 +8,52 @@ domain to GitHub Pages. Both need a credential this repository does not hold.
 
 > **`rarext.co` is not touched by either path.** It stays exactly as it is.
 
-## Path A — deploy the showcase to the Cloudflare Pages project `rarext.com` already uses
+## Status (2026-11-15): deployed, one DNS step from live
+
+- The showcase is **deployed** to the Pages project `rarext-com` and serving at
+  `https://rarext-com.pages.dev/`.
+- `rarext.com` is **registered on that project** (domain enabled; status
+  `pending`, waiting on a CNAME).
+- **Both `rarext.com` and `rarext.co` are custom domains of the Worker `rarext`**
+  today, so the hostname has to be released from the Worker as well as recorded.
+- The ops token at `~/.hermes/.env` (`CLOUDFLARE_API_TOKEN=cfat_adIVcI…`, account
+  `b37d1d7b…`) can **deploy Pages** but cannot edit **DNS** or **Workers**
+  (`zone/DNS/workers` writes return `Authentication error` / `Method not allowed
+  for this authentication scheme`). `bash scripts/cutover-rarext-com.sh` proves
+  this before it does anything and refuses.
+
+So one of these two finishes it:
+
+**Two dashboard actions (no token needed)**
+
+1. Workers & Pages → **`rarext`** (Worker) → Settings → Domains & Routes →
+   remove `rarext.com` and `www.rarext.com`. **Leave `rarext.co` and
+   `www.rarext.co` alone.**
+2. Workers & Pages → **`rarext-com`** (Pages) → Custom domains → add
+   `rarext.com` and `www.rarext.com`. The dashboard creates the proxied CNAMEs
+   for you (the same shape `saikougoods.com` uses:
+   `CNAME @  -> saikougoods.pages.dev`, proxied).
+
+**Or a token with `Zone.DNS:Edit` for `rarext.com` + `Workers:Edit`**
+
+```bash
+bash scripts/cutover-rarext-com.sh          # dry run: preflight + permission probe
+CLOUDFLARE_API_TOKEN=… bash scripts/cutover-rarext-com.sh --apply
+```
+
+The script verifies every route on the preview first, creates the proxied CNAMEs
+`rarext.com` / `www.rarext.com` → `rarext-com.pages.dev`, releases the hostnames
+from the Worker, then curls the live host and prints the rollback if it is not
+healthy. `rarext.co` is never touched.
+
+Confirm when done:
+
+```bash
+dig +short CNAME rarext.com          # -> rarext-com.pages.dev.
+curl -s https://rarext.com/ | grep -o '<title>[^<]*</title>'
+```
+
+## Path A (reference) — the deploy itself
 
 `rarext.com` resolves to Cloudflare Pages project `rarext-com`
 (`rarext-com.pages.dev`), which is why `rarext.com/api/v1`, `/llms.txt`, and the
