@@ -11,6 +11,29 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RAREXT AI is a cloud model declared by capability, not by weights.** A new
+  `rarext.cloud-model.v1` card describes a cloud AI by what it can do (chat,
+  streaming, tools, structured output, logprobs, modalities, context) and
+  **refuses the vocabulary of a local weight file** — `format`, `quantization`,
+  `architecture`, `sizeBytes`, `weightsDigest`, `family`, `parameters`, `tensors`,
+  `tokenizer` are rejected at build and validation time, because RAREXT's model is
+  a service with behaviour, not a file with a layout. The card is content-addressed
+  (`identity = sha256(canonicalize(card))`), an operator can attach an opaque
+  `attestation` RAREXT never interprets, and `GET /v1/deployment` advertises the
+  whole contract under `cloud_model`. The model speaks RAREXT's own
+  architecture-free wire, `rarext.cloud-infer.v1` (new
+  `apps/runtime/src/cloud-protocol.ts`): messages, decode controls, tools and
+  structured output in; text, tool calls, logprobs, usage and the attestation out;
+  streaming is a delta per frame. The gateway translates it to and from the OpenAI
+  surface, records the run as an ordinary OpenAI transcript, and holds **no model
+  bytes at all**. A new engine name `rarext-cloud` is committed in the signed
+  manifest, OpenAI-surfaced only (the Anthropic surface and embeddings are refused
+  with `501` naming the reason). Tests cover the card (capability-declared,
+  weight-vocabulary-refusing, identity-tamper-detecting), the wire (round trips,
+  tool calls, stream assemble/parse), and the whole path end to end (serve, stream,
+  record-and-verify, no weight file written). `npm run demo:cloud-native` shows it.
+  See [CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md#rarext-native-cloud-models).
+
 - **Multimodal is stated as out of scope in the API, and the streaming path is
   ready for operator-supplied weights.** `GET /v1/models` (provider) and
   `GET /v1/deployment` (gateway) now carry a `capabilities` block —

@@ -78,7 +78,8 @@
     "publish:futuristic": "node scripts/publish-futuristic-proof.mjs",
     "demo:decoding": "node scripts/decoding-proof.mjs",
     "bench:engine": "node scripts/bench-engine.mjs",
-    "demo:oversize": "node scripts/oversize-serve.mjs"
+    "demo:oversize": "node scripts/oversize-serve.mjs",
+    "demo:cloud-native": "node scripts/cloud-native.mjs"
   },
   "engines": {
     "node": ">=22.18"

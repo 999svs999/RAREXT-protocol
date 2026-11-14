@@ -177,7 +177,10 @@ async function probeOpenAi(
       endpoint: base,
     },
     model: models[0],
-    apis: engineName === "anthropic" ? ["anthropic"] : ["openai", "anthropic"],
+    // What this engine can be *served* as: a RAREXT-native cloud model is
+    // OpenAI-surfaced only, so it must not advertise an Anthropic translation it
+    // does not have.
+    apis: supportedApis(engineName),
     models,
   };
 }

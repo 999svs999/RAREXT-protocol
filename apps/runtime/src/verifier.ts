@@ -57,7 +57,8 @@ export function runSpecFromChallenge(challenge: unknown): ModelRunSpec {
     value.engine !== "strata" &&
     value.engine !== "freetoken" &&
     value.engine !== "openai-compatible" &&
-    value.engine !== "anthropic"
+    value.engine !== "anthropic" &&
+    value.engine !== "rarext-cloud"
   ) {
     throw new Error("challenge.spec.engine must name a supported engine");
   }

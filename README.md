@@ -43,7 +43,7 @@ welcome.
 - **Questions and ideas** — [GitHub Discussions](https://github.com/999svs999/RAREXT-protocol/discussions).
 - **The research frontier** — [docs/STORAGE-FRONTIER.md](docs/STORAGE-FRONTIER.md), including what we will not claim, the [storage benchmark](bench/storage/README.md) that gates it, and the [1 GB repair measurement](bench/repair/README.md) that records where the current code sits.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
-- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote OpenAI/Anthropic-compatible endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely.
+- **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely. It also defines **RAREXT's own architecture-free cloud model** — `rarext.cloud-model.v1`, declared by capability and unable to carry a weight file's vocabulary, speaking RAREXT's own `rarext.cloud-infer.v1` wire — so RAREXT's future AI is not bound to the architectures and weights of today.
 
 You do not need permission to fork, run a node, or publish a verifier. If you
 disagree with a decision, the RFC folder is where the argument happens.
@@ -122,6 +122,7 @@ npm run demo:live      # an agent + its AI living on RAREXT, rebuilt with the no
 npm run demo:decoding  # greedy, top-k/top-p, penalty, sampled replay, stop, context, logprobs — on real weights
 npm run bench:engine   # measured throughput + a reference forward pass on the same weights
 npm run demo:oversize  # a real 6.5 GiB container, verified to disk and served within a bound
+npm run demo:cloud-native # a capability-declared cloud model over RAREXT's own wire, no local weights
 npm run demo:resident # from a seed URL: verify a copy and replay its AI claims; no keys, no server
 ```
 
@@ -157,6 +158,15 @@ run, anchors them, and recomputes both from the bundle while proving that no
 model file exists on the host. Set `RAREXT_CLOUD_ENDPOINT` to run it against a
 real provider; without it a deterministic remote fixture stands in and says so.
 See [the cloud runtime guide](docs/CLOUD-RUNTIME.md).
+
+`npm run demo:cloud-native` is the future-facing shape of that: the AI is a cloud
+model **declared by capability, not by weights** (`rarext.cloud-model.v1`), it
+speaks RAREXT's own architecture-free wire (`rarext.cloud-infer.v1`), and both
+the card builder and the validator refuse to carry `format`, `quantization`,
+`architecture`, `weightsDigest`, or any other weight-file vocabulary. The
+gateway translates the wire to the OpenAI surface, records and verifies the run,
+and holds no model bytes at all — no shards, no files, no local engine. See
+[RAREXT-native cloud models](docs/CLOUD-RUNTIME.md#rarext-native-cloud-models).
 
 `npm run demo:web4-model` removes the last third party. The model file is sharded
 into content-addressed RAREXT blobs; provider nodes fetch every shard, verify the

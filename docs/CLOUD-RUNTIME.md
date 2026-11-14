@@ -1,13 +1,19 @@
 # AI lives in the cloud on RAREXT
 
 The model runtime has three placements. `local` probes an engine on the machine
-that runs the gateway. `remote` commits an OpenAI- or Anthropic-compatible
-endpoint somewhere else and forwards every request to it. `web4` stores the
-weights as sharded RAREXT blobs and forwards to a provider that fetched and
-verified them ([WEB4-MODEL.md](WEB4-MODEL.md)). In a remote deployment the
-runtime holds **no weights**, downloads **no model files**, and runs **no
-inference**; it is the control plane that records and publishes what the cloud
-engine said.
+that runs the gateway. `remote` commits an endpoint somewhere else and forwards
+every request to it. `web4` stores the weights as sharded RAREXT blobs and
+forwards to a provider that fetched and verified them ([WEB4-MODEL.md](WEB4-MODEL.md)).
+In a remote deployment the runtime holds **no weights**, downloads **no model
+files**, and runs **no inference**; it is the control plane that records and
+publishes what the cloud engine said.
+
+A remote deployment can speak one of three protocols: RAREXT's own
+architecture-free wire (`rarext-cloud`, see
+[RAREXT-native cloud models](#rarext-native-cloud-models)), an
+OpenAI-compatible endpoint, or an Anthropic-compatible one. The first is the
+future-facing one: the model is declared by what it can do, never by a weight
+file, and RAREXT never needs to know how it is built.
 
 The deployment identity does not change between placements. It is still
 `sha256(canonicalize(manifest))`, and the challenge still commits the deployment
@@ -42,6 +48,79 @@ provider.
 claim. The verifier checks it: a remote card must name `hardware.backend:
 "cloud"` and `hardware.memoryBytes: null`, so a manifest cannot say "remote"
 while recording a local fit it did not perform.
+
+## RAREXT-native cloud models
+
+A cloud model here is declared by **capability**, not by weights. The card is
+`rarext.cloud-model.v1`:
+
+```json
+{
+  "kind": "rarext.cloud-model.v1",
+  "version": 1,
+  "id": "future-model",
+  "provider": "demo-cloud",
+  "protocol": "rarext-cloud",
+  "endpoint": "https://ai.example.com",
+  "capabilities": {
+    "chat": true, "streaming": true, "tools": true, "parallel_tool_calls": true,
+    "response_format": true, "logprobs": true, "embeddings": false,
+    "context_length": 131072, "max_output_tokens": null,
+    "input_modalities": ["text"], "output_modalities": ["text"]
+  },
+  "operator": { "handle": "demo-cloud", "measurement": null },
+  "attestation": { "scheme": "rarext.opaque.v1", "digest": "…" },
+  "createdAt": "2026-11-14T00:00:00.000Z",
+  "identity": "sha256:…"
+}
+```
+
+The card **cannot** carry the vocabulary of a local weight file. `format`,
+`quantization`, `architecture`, `sizeBytes`, `weightsDigest`, `family`,
+`parameters`, `tensors`, `tokenizer` are refused by name, at build time and at
+validation time. RAREXT's future model is a service with behaviour, not a file
+with a layout; an operator who *does* want to pin something uses the opaque
+`attestation`, which RAREXT stores but never interprets. `identity` is
+`sha256(canonicalize(card))`, so a model's contract is content-addressed the same
+way a deployment or a run is.
+
+`protocol: "rarext-cloud"` names RAREXT's own architecture-free wire,
+`rarext.cloud-infer.v1`:
+
+```json
+{ "kind": "rarext.cloud-infer.v1", "model": "future-model",
+  "messages": [ { "role": "user", "content": "hi" } ],
+  "decode": { "temperature": 0, "top_p": null, "top_k": null, "max_tokens": null,
+              "seed": 1, "n": null, "stop": [], "logprobs": false, "top_logprobs": null },
+  "tools": [], "tool_choice": null, "response_format": null, "stream": false }
+```
+
+The reply carries text, tool calls, logprobs, usage and the provider's opaque
+attestation — and nothing about how the model is built:
+
+```json
+{ "kind": "rarext.cloud-infer.v1", "id": "cloud-demo", "model": "future-model",
+  "output": { "text": "…", "tool_calls": null, "finish_reason": "stop", "logprobs": null },
+  "usage": { "input_tokens": 3, "output_tokens": 4 },
+  "attestation": { "scheme": "rarext.opaque.v1", "digest": "…" } }
+```
+
+Streaming is the same wire: each `data:` frame is a delta, the last carries the
+finish reason and usage. The control plane translates between this wire and the
+OpenAI surface clients use, records the run as an ordinary OpenAI transcript, and
+holds **no model bytes** — no shards, no files, no local engine. That is what
+makes it "totally cloud": the model is somewhere else and RAREXT never needs to
+describe it.
+
+```bash
+npm run demo:cloud-native
+```
+
+A RAREXT-native model is OpenAI-surfaced (`/v1/chat/completions`). The Anthropic
+surface and embeddings are refused with `501` naming the reason, rather than
+translated into a shape the native wire does not have. The deployment advertises
+the whole contract at `GET /v1/deployment` under `cloud_model`, so a client
+discovers what the model can do without assuming anything about it.
 
 ## Deploy against a provider
 
