@@ -1,0 +1,4 @@
+# The front door links ./mirror/* — the same layout the gh-pages projection
+# publishes. Pages serves site/ verbatim, where the mirror lives under
+# registry/mirror, so rewrite (200, not 302) to keep the URL the page links to.
+/mirror/*  /registry/mirror/:splat  200

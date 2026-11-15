@@ -21,11 +21,34 @@ break a client or invalidate stored data.
   analytics. The page adds an honest capability matrix (including `0.50 tok/s`,
   1G-only model classes, and no vision/audio), an evidence block with the commands
   behind each number, and a limits section that says what the claim does not cover.
-  Measured with the new harness below: **89 → 99 overall** (performance 100 → 98,
-  accessibility 90 → 100, UX 79 → 100) on the same instrument, with contrast
-  failures at 0, horizontal overflow at 0, and both themes working. The redesign
-  also fixed a real defect the harness found: the nav class `.primary` matched the
-  primary CTA button, so "Run the proof" was hidden below 1040px.
+  Measured with the new harness below: **89 → 100 overall** (performance 100,
+  accessibility 100, UX 100) on the same instrument, with contrast failures at 0,
+  horizontal overflow at 0, and both themes working. The last performance point
+  came from a real layout bug: the empty token stream grew when the widget ran and
+  moved the hero (CLS 0.064); reserving its final height brought CLS to 0.001. The
+  redesign also fixed a defect the harness found: the nav class `.primary` matched
+  the primary CTA button, so "Run the proof" was hidden below 1040px.
+
+- **The share card now says what the page says.** `site/og.png` still read
+  "The database for anything digital", so every shared link advertised the old
+  positioning. It is now rendered from `scripts/og-card.html` by
+  `npm run render:og` at 1200×630: the same headline, the same live-proof panel,
+  the same zero-account/zero-upload/zero-third-party facts. The card is
+  reproducible without an image editor, and the renderer fails if the layout is
+  not exactly 1200×630.
+
+- **Fixed a silent deployment defect the front door's own links exposed.** Pages
+  serves `site/` verbatim, while the front door links the published layout
+  `/mirror/*` (the mirror is stored at `/registry/mirror/*`). Every mirror link
+  therefore returned **200 with the landing page** — the status check passed and
+  the page was wrong. `site/_redirects` now rewrites `/mirror/*` to
+  `/registry/mirror/:splat` (200, not a redirect that loses the path), and
+  `site/404.html` answers unknown paths with a real 404 instead of the showcase.
+  `test:showcase` fetches each linked destination and asserts its title, which is
+  the check a status-only link tester would miss. Verified on
+  `rarext-com.pages.dev`: `/mirror/ai.html`, `/mirror/gallery.html`, and
+  `/mirror/verify.html` all land on their own pages, and the deployed front door
+  re-measures **99** (98/100/100).
 
 - **`npm run bench:ui`: a measured UI/UX benchmark of the AI apps people use.**
   New `scripts/benchmark-ui-ux.mjs` drives a real Chrome over CDP and records

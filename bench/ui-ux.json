@@ -1,6 +1,6 @@
 {
   "kind": "rarext.ui-ux-benchmark.v1",
-  "createdAt": "2026-11-15T05:40:31.803Z",
+  "createdAt": "2026-11-15T05:55:15.763Z",
   "chrome": "headless 157",
   "viewports": {
     "desktop": "1440x900",
@@ -15,31 +15,31 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/",
-        "elapsedMs": 58,
-        "bytes": 15372,
+        "elapsedMs": 42,
+        "bytes": 22297,
         "encoding": null,
-        "cache": null,
-        "csp": null,
+        "cache": "no-store",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         "hsts": null,
-        "nosniff": null,
+        "nosniff": "nosniff",
         "frame": null,
-        "referrer": null,
+        "referrer": "strict-origin-when-cross-origin",
         "permissions": null,
-        "server": "SimpleHTTP/0.6 Python/3.14.5"
+        "server": null
       },
       "refused": false,
-      "title": "RAREXT — AI you can verify, not AI you have to trust",
+      "title": "RAREXT \u2014 don\u2019t trust the model. Check it.",
       "desktop": {
         "url": "http://127.0.0.1:8080/",
-        "title": "RAREXT — AI you can verify, not AI you have to trust",
+        "title": "RAREXT \u2014 don\u2019t trust the model. Check it.",
         "lang": "en",
         "hasViewport": true,
-        "description": "RAREXT is verifiable web4 AI: the model and the engine are content-addressed artifacts, every answer carries a replayable decode trace, and a stranger with a browser recomputes the proof. No model server, no key, no GPU required to check.",
+        "description": "RAREXT is verifiable AI: the weights and the engine are content-addressed, every answer carries a replayable token trace, and anyone can recompute the proof. Run a committed model in this page \u2014 no account, no server, no upload.",
         "canonical": "https://rarext.com/",
         "og": true,
         "landmarks": {
           "header": 1,
-          "nav": 1,
+          "nav": 3,
           "main": 1,
           "footer": 1,
           "h1": 1
@@ -48,43 +48,27 @@
         "headings": [
           {
             "level": 1,
-            "text": "AI you can verify."
+            "text": "Don\u2019t trust the model. Check it."
           },
           {
             "level": 2,
-            "text": "Check it in a browser tab."
-          },
-          {
-            "level": 3,
-            "text": "Run the committed model"
-          },
-          {
-            "level": 3,
-            "text": "Watch artifacts verify"
-          },
-          {
-            "level": 3,
-            "text": "Verify the registry"
-          },
-          {
-            "level": 3,
-            "text": "Read the registry"
+            "text": "LIVE PROOF"
           },
           {
             "level": 2,
-            "text": "How a verifiable answer is made"
+            "text": "Four steps. None of them asks you to believe a server."
           },
           {
             "level": 3,
-            "text": "Commit the model and the engine"
+            "text": "Commit the weights and the engine"
           },
           {
             "level": 3,
-            "text": "Run it deterministically"
+            "text": "Decode deterministically"
           },
           {
             "level": 3,
-            "text": "Record a decode trace"
+            "text": "Record the trace, not just the text"
           },
           {
             "level": 3,
@@ -92,11 +76,35 @@
           },
           {
             "level": 2,
-            "text": "Capability parity, with a receipt."
+            "text": "What it does. What it does not."
           },
           {
             "level": 2,
-            "text": "What the numbers actually say"
+            "text": "The numbers have commands behind them."
+          },
+          {
+            "level": 3,
+            "text": "14 / 15 live probes"
+          },
+          {
+            "level": 3,
+            "text": "34 / 34 phases"
+          },
+          {
+            "level": 3,
+            "text": "A bundle you can rebuild"
+          },
+          {
+            "level": 3,
+            "text": "Artifacts that check themselves"
+          },
+          {
+            "level": 3,
+            "text": "Reproduce it in one shell"
+          },
+          {
+            "level": 2,
+            "text": "The claim says what it does not cover."
           },
           {
             "level": 2,
@@ -112,456 +120,30 @@
           },
           {
             "level": 3,
-            "text": "Serve it in the cloud"
+            "text": "Write an RFC"
           },
           {
             "level": 3,
-            "text": "RFCs"
-          },
-          {
-            "level": 3,
-            "text": "Good first issues"
-          },
-          {
-            "level": 3,
-            "text": "Fork it"
+            "text": "Verify this registry"
           }
         ],
         "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
+        "ariaLive": 2,
+        "roleStatus": 2,
         "images": 2,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 0,
-        "controls": 0,
+        "controls": 1,
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 32,
-        "smallTargets": 17,
-        "smallTargetsSample": [
-          {
-            "name": "Try it",
-            "w": 31,
-            "h": 22
-          },
-          {
-            "name": "How it works",
-            "w": 80,
-            "h": 22
-          },
-          {
-            "name": "Capabilities",
-            "w": 73,
-            "h": 22
-          },
-          {
-            "name": "Evidence",
-            "w": 57,
-            "h": 22
-          },
-          {
-            "name": "Limits",
-            "w": 37,
-            "h": 22
-          },
-          {
-            "name": "Contribute",
-            "w": 66,
-            "h": 22
-          }
-        ],
-        "contrastFailures": [
-          {
-            "text": "Every run records the token ids it decoded, so the",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Exact bytes, a generative replay from a committed ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The provider commits the weights and the engine; y",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "A real model class, in WebAssembly/JS, seeded and ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "AI publications that verify themselves: exact byte",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Rebuild the Merkle root of the live bundle from it",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The bundle, the seed list, and the mirror location",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Exact bytes, a bounded metric against a committed ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The same verifier runs in a browser tab and on a s",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The engine’s whole step against an independent out",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          }
-        ],
-        "contrastFailureCount": 16,
+        "tapTargets": 31,
+        "smallTargets": 0,
+        "smallTargetsSample": [],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
         "scrollWidth": 1440,
         "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": false,
-        "fixedOverlayArea": 0.071,
-        "firstScreen": {
-          "h1": [
-            "AI you can verify."
-          ],
-          "h2": [
-            "Check it in a browser tab.",
-            "How a verifiable answer is made"
-          ],
-          "ctas": [
-            {
-              "text": "Skip to content",
-              "tag": "a",
-              "href": "#main"
-            },
-            {
-              "text": "RAREXT home",
-              "tag": "a",
-              "href": "./"
-            },
-            {
-              "text": "Try it",
-              "tag": "a",
-              "href": "#try"
-            },
-            {
-              "text": "How it works",
-              "tag": "a",
-              "href": "#how"
-            },
-            {
-              "text": "Capabilities",
-              "tag": "a",
-              "href": "#capabilities"
-            },
-            {
-              "text": "Evidence",
-              "tag": "a",
-              "href": "#evidence"
-            },
-            {
-              "text": "Limits",
-              "tag": "a",
-              "href": "#truth"
-            },
-            {
-              "text": "Contribute",
-              "tag": "a",
-              "href": "#build"
-            }
-          ],
-          "navItems": 8,
-          "wordCount": 1074,
-          "links": 32,
-          "text": "Skip to content RAREXT Try it How it works Capabilities Evidence Limits Contribute GitHub ↗ web4 AI · verify, don’t trust · Apache-2.0 · pre-alpha AI you can verify. The model and the engine are content-addressed artifacts. Every answer carries a decode trace you can replay from a seed. A stranger with a browser re-derives the proof — no model server, no key, no GPU required to check. Run the model in your browser Verify this registry Make an AI proof in your browser → · Watch AI artifacts verify themselves → · Verify this registry → · Public registry bundle and seed list → One trace per answe"
-        },
-        "metrics": {
-          "fcp": 144,
-          "lcp": 144,
-          "cls": 0,
-          "longTasks": 1,
-          "tbt": 5,
-          "dcl": 24,
-          "load": 115.79999995231628,
-          "ttfb": 9.299999952316284,
-          "resources": 3,
-          "transferBytes": 10604,
-          "decodedBytes": 10613,
-          "jsBytes": 0,
-          "cssBytes": 9695,
-          "imgBytes": 909,
-          "thirdPartyHosts": 0,
-          "host": "127.0.0.1:8080"
-        }
-      },
-      "mobile": {
-        "url": "http://127.0.0.1:8080/",
-        "title": "RAREXT — AI you can verify, not AI you have to trust",
-        "lang": "en",
-        "hasViewport": true,
-        "description": "RAREXT is verifiable web4 AI: the model and the engine are content-addressed artifacts, every answer carries a replayable decode trace, and a stranger with a browser recomputes the proof. No model server, no key, no GPU required to check.",
-        "canonical": "https://rarext.com/",
-        "og": true,
-        "landmarks": {
-          "header": 1,
-          "nav": 1,
-          "main": 1,
-          "footer": 1,
-          "h1": 1
-        },
-        "skipLink": true,
-        "headings": [
-          {
-            "level": 1,
-            "text": "AI you can verify."
-          },
-          {
-            "level": 2,
-            "text": "Check it in a browser tab."
-          },
-          {
-            "level": 3,
-            "text": "Run the committed model"
-          },
-          {
-            "level": 3,
-            "text": "Watch artifacts verify"
-          },
-          {
-            "level": 3,
-            "text": "Verify the registry"
-          },
-          {
-            "level": 3,
-            "text": "Read the registry"
-          },
-          {
-            "level": 2,
-            "text": "How a verifiable answer is made"
-          },
-          {
-            "level": 3,
-            "text": "Commit the model and the engine"
-          },
-          {
-            "level": 3,
-            "text": "Run it deterministically"
-          },
-          {
-            "level": 3,
-            "text": "Record a decode trace"
-          },
-          {
-            "level": 3,
-            "text": "Verify by recomputation"
-          },
-          {
-            "level": 2,
-            "text": "Capability parity, with a receipt."
-          },
-          {
-            "level": 2,
-            "text": "What the numbers actually say"
-          },
-          {
-            "level": 2,
-            "text": "Build with us"
-          },
-          {
-            "level": 3,
-            "text": "Contribute"
-          },
-          {
-            "level": 3,
-            "text": "Port a model"
-          },
-          {
-            "level": 3,
-            "text": "Serve it in the cloud"
-          },
-          {
-            "level": 3,
-            "text": "RFCs"
-          },
-          {
-            "level": 3,
-            "text": "Good first issues"
-          },
-          {
-            "level": 3,
-            "text": "Fork it"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 2,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 26,
-        "smallTargets": 8,
-        "smallTargetsSample": [
-          {
-            "name": "Make an AI proof in your browser →",
-            "w": 214,
-            "h": 16
-          },
-          {
-            "name": "Verify this registry →",
-            "w": 126,
-            "h": 16
-          },
-          {
-            "name": "Watch the AI artifacts verify themselves",
-            "w": 281,
-            "h": 17
-          },
-          {
-            "name": "What verification does and does not prov",
-            "w": 273,
-            "h": 22
-          },
-          {
-            "name": "Where the AI stops today",
-            "w": 163,
-            "h": 22
-          },
-          {
-            "name": "The runtime, and its stated limits",
-            "w": 211,
-            "h": 22
-          }
-        ],
-        "contrastFailures": [
-          {
-            "text": "Every run records the token ids it decoded, so the",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Exact bytes, a generative replay from a committed ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The provider commits the weights and the engine; y",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "A real model class, in WebAssembly/JS, seeded and ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "AI publications that verify themselves: exact byte",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Rebuild the Merkle root of the live bundle from it",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The bundle, the seed list, and the mirror location",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "Exact bytes, a bounded metric against a committed ",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The same verifier runs in a browser tab and on a s",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          },
-          {
-            "text": "The engine’s whole step against an independent out",
-            "ratio": 4.41,
-            "need": 4.5,
-            "size": 13.5,
-            "color": "rgb(108, 122, 139)",
-            "bg": "rgb(11, 14, 19)"
-          }
-        ],
-        "contrastFailureCount": 16,
-        "scrollWidth": 390,
-        "innerWidth": 390,
         "horizontalOverflow": false,
         "bodyFontSize": "16px",
         "reducedMotionRule": true,
@@ -569,83 +151,227 @@
         "fixedOverlayArea": 0.076,
         "firstScreen": {
           "h1": [
-            "AI you can verify."
+            "Don\u2019t trust the model. Check it."
           ],
           "h2": [
-            "Check it in a browser tab.",
-            "How a verifiable answer is made"
+            "LIVE PROOF",
+            "Four steps. None of them asks you to believe a server."
           ],
           "ctas": [
             {
-              "text": "Skip to content",
+              "text": "Run the proof \u2193",
               "tag": "a",
-              "href": "#main"
+              "href": "#proof"
             },
             {
-              "text": "RAREXT home",
-              "tag": "a",
-              "href": "./"
-            },
-            {
-              "text": "GitHub ↗",
-              "tag": "a",
-              "href": "https://github.com/999svs999/RAREXT-protocol"
-            },
-            {
-              "text": "Run the model in your browser",
+              "text": "Open the full workbench",
               "tag": "a",
               "href": "./mirror/ai.html"
             },
             {
-              "text": "Verify this registry",
-              "tag": "a",
-              "href": "./mirror/verify.html"
+              "text": "Run",
+              "tag": "button",
+              "href": null
             },
             {
-              "text": "Make an AI proof in your browser →",
-              "tag": "a",
-              "href": "./mirror/ai.html"
-            },
-            {
-              "text": "Watch AI artifacts verify themselves →",
-              "tag": "a",
-              "href": "./mirror/gallery.html"
-            },
-            {
-              "text": "Verify this registry →",
-              "tag": "a",
-              "href": "./mirror/verify.html"
+              "text": "Tamper",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 2,
-          "wordCount": 1065,
-          "links": 32,
-          "text": "Skip to content RAREXT GitHub ↗ web4 AI · verify, don’t trust · Apache-2.0 · pre-alpha AI you can verify. The model and the engine are content-addressed artifacts. Every answer carries a decode trace you can replay from a seed. A stranger with a browser re-derives the proof — no model server, no key, no GPU required to check. Run the model in your browser Verify this registry Make an AI proof in your browser → · Watch AI artifacts verify themselves → · Verify this registry → · Public registry bundle and seed list → One trace per answer Every run records the token ids it decoded, so the answer "
+          "navItems": 8,
+          "wordCount": 1092,
+          "links": 35,
+          "text": "Skip to content RAREXT verifiable AI Proof How it works Capabilities Evidence Limits Build GitHub \u2197 Live in this page \u00b7 no account \u00b7 no upload Don\u2019t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it \u2014 the same check anyone can repeat. Run the proof \u2193 Open the full workbench LIVE PROOF VERIFIED A committed model class runs here. Change the seed, or tamper with one token, and watch the verdict follow the bytes. Token bound"
         },
         "metrics": {
-          "fcp": 36,
-          "lcp": 36,
+          "fcp": 164,
+          "lcp": 164,
+          "cls": 0.0005548033746999314,
+          "longTasks": 1,
+          "tbt": 28,
+          "dcl": 121.10000014305115,
+          "load": 125.20000004768372,
+          "ttfb": 4.700000047683716,
+          "resources": 4,
+          "transferBytes": 33175,
+          "decodedBytes": 31975,
+          "jsBytes": 5901,
+          "cssBytes": 25456,
+          "imgBytes": 909,
+          "thirdPartyHosts": 0,
+          "host": "127.0.0.1:8080"
+        }
+      },
+      "mobile": {
+        "url": "http://127.0.0.1:8080/",
+        "title": "RAREXT \u2014 don\u2019t trust the model. Check it.",
+        "lang": "en",
+        "hasViewport": true,
+        "description": "RAREXT is verifiable AI: the weights and the engine are content-addressed, every answer carries a replayable token trace, and anyone can recompute the proof. Run a committed model in this page \u2014 no account, no server, no upload.",
+        "canonical": "https://rarext.com/",
+        "og": true,
+        "landmarks": {
+          "header": 1,
+          "nav": 3,
+          "main": 1,
+          "footer": 1,
+          "h1": 1
+        },
+        "skipLink": true,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Don\u2019t trust the model. Check it."
+          },
+          {
+            "level": 2,
+            "text": "LIVE PROOF"
+          },
+          {
+            "level": 2,
+            "text": "Four steps. None of them asks you to believe a server."
+          },
+          {
+            "level": 3,
+            "text": "Commit the weights and the engine"
+          },
+          {
+            "level": 3,
+            "text": "Decode deterministically"
+          },
+          {
+            "level": 3,
+            "text": "Record the trace, not just the text"
+          },
+          {
+            "level": 3,
+            "text": "Verify by recomputation"
+          },
+          {
+            "level": 2,
+            "text": "What it does. What it does not."
+          },
+          {
+            "level": 2,
+            "text": "The numbers have commands behind them."
+          },
+          {
+            "level": 3,
+            "text": "14 / 15 live probes"
+          },
+          {
+            "level": 3,
+            "text": "34 / 34 phases"
+          },
+          {
+            "level": 3,
+            "text": "A bundle you can rebuild"
+          },
+          {
+            "level": 3,
+            "text": "Artifacts that check themselves"
+          },
+          {
+            "level": 3,
+            "text": "Reproduce it in one shell"
+          },
+          {
+            "level": 2,
+            "text": "The claim says what it does not cover."
+          },
+          {
+            "level": 2,
+            "text": "Build with us"
+          },
+          {
+            "level": 3,
+            "text": "Contribute"
+          },
+          {
+            "level": 3,
+            "text": "Port a model"
+          },
+          {
+            "level": 3,
+            "text": "Write an RFC"
+          },
+          {
+            "level": 3,
+            "text": "Verify this registry"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 2,
+        "roleStatus": 2,
+        "images": 2,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 0,
+        "controls": 1,
+        "unlabeledControls": 0,
+        "unnamedButtons": 0,
+        "nestedInteractive": 0,
+        "tapTargets": 25,
+        "smallTargets": 0,
+        "smallTargetsSample": [],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": false,
+        "fixedOverlayArea": 0.081,
+        "firstScreen": {
+          "h1": [
+            "Don\u2019t trust the model. Check it."
+          ],
+          "h2": [
+            "LIVE PROOF",
+            "Four steps. None of them asks you to believe a server."
+          ],
+          "ctas": [
+            {
+              "text": "Run the proof \u2193",
+              "tag": "a",
+              "href": "#proof"
+            },
+            {
+              "text": "Open the full workbench",
+              "tag": "a",
+              "href": "./mirror/ai.html"
+            }
+          ],
+          "navItems": 1,
+          "wordCount": 1077,
+          "links": 35,
+          "text": "Skip to content RAREXT Live in this page \u00b7 no account \u00b7 no upload Don\u2019t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it \u2014 the same check anyone can repeat. Run the proof \u2193 Open the full workbench LIVE PROOF VERIFIED A committed model class runs here. Change the seed, or tamper with one token, and watch the verdict follow the bytes. Token boundaries are colored; the output is their exact concatenation. SEED Run Tamper a"
+        },
+        "metrics": {
+          "fcp": 64,
+          "lcp": 64,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 12.100000143051147,
-          "load": 15.299999952316284,
-          "ttfb": 2.6000001430511475,
-          "resources": 2,
-          "transferBytes": 0,
-          "decodedBytes": 10004,
-          "jsBytes": 0,
-          "cssBytes": 0,
-          "imgBytes": 0,
+          "dcl": 45.5,
+          "load": 47.59999990463257,
+          "ttfb": 3,
+          "resources": 3,
+          "transferBytes": 32266,
+          "decodedBytes": 31366,
+          "jsBytes": 5901,
+          "cssBytes": 25456,
+          "imgBytes": 909,
           "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
         }
       },
       "score": {
         "perf": 100,
-        "a11y": 90,
-        "ux": 79,
-        "overall": 89,
+        "a11y": 100,
+        "ux": 100,
+        "overall": 100,
         "detail": {
           "perf": {
             "ttfb": 1,
@@ -659,8 +385,8 @@
           "a11y": {
             "alt": 1,
             "names": 1,
-            "contrast": 0.8212290502793296,
-            "targets": 0.46875,
+            "contrast": 1,
+            "targets": 1,
             "structure": 1,
             "skip": 1,
             "motion": 1
@@ -670,8 +396,8 @@
             "nav": 1,
             "mobileNav": 1,
             "overflow": 1,
-            "live": 0,
-            "cta": 0.5,
+            "live": 1,
+            "cta": 1,
             "meta": 1
           }
         }
@@ -688,20 +414,20 @@
         "elapsedMs": 5,
         "bytes": 3498,
         "encoding": null,
-        "cache": null,
-        "csp": null,
+        "cache": "no-store",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         "hsts": null,
-        "nosniff": null,
+        "nosniff": "nosniff",
         "frame": null,
-        "referrer": null,
+        "referrer": "strict-origin-when-cross-origin",
         "permissions": null,
-        "server": "SimpleHTTP/0.6 Python/3.14.5"
+        "server": null
       },
       "refused": false,
-      "title": "Make an AI proof — RAREXT",
+      "title": "Make an AI proof \u2014 RAREXT",
       "desktop": {
         "url": "http://127.0.0.1:8080/registry/mirror/ai.html",
-        "title": "Make an AI proof — RAREXT",
+        "title": "Make an AI proof \u2014 RAREXT",
         "lang": "en",
         "hasViewport": true,
         "description": null,
@@ -802,20 +528,20 @@
           "navItems": 0,
           "wordCount": 300,
           "links": 2,
-          "text": "AI lives here, not on a server This page runs the committed model in your browser — the same numbers the published bundle was generated with — and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 3 ms. The replay agrees — this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
+          "text": "AI lives here, not on a server This page runs the committed model in your browser \u2014 the same numbers the published bundle was generated with \u2014 and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 2 ms. The replay agrees \u2014 this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
         },
         "metrics": {
-          "fcp": 168,
-          "lcp": 168,
+          "fcp": 96,
+          "lcp": 96,
           "cls": 0.03621918824749228,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 145.29999995231628,
-          "load": 149,
-          "ttfb": 37.09999990463257,
+          "dcl": 69.09999990463257,
+          "load": 72.79999995231628,
+          "ttfb": 4.700000047683716,
           "resources": 4,
-          "transferBytes": 191905,
-          "decodedBytes": 190705,
+          "transferBytes": 195385,
+          "decodedBytes": 194185,
           "jsBytes": 21681,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -825,7 +551,7 @@
       },
       "mobile": {
         "url": "http://127.0.0.1:8080/registry/mirror/ai.html",
-        "title": "Make an AI proof — RAREXT",
+        "title": "Make an AI proof \u2014 RAREXT",
         "lang": "en",
         "hasViewport": true,
         "description": null,
@@ -936,22 +662,22 @@
           "navItems": 0,
           "wordCount": 300,
           "links": 2,
-          "text": "AI lives here, not on a server This page runs the committed model in your browser — the same numbers the published bundle was generated with — and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 1 ms. The replay agrees — this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
+          "text": "AI lives here, not on a server This page runs the committed model in your browser \u2014 the same numbers the published bundle was generated with \u2014 and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 1 ms. The replay agrees \u2014 this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
         },
         "metrics": {
-          "fcp": 36,
-          "lcp": 36,
+          "fcp": 44,
+          "lcp": 44,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 14.899999856948853,
-          "load": 17.399999856948853,
-          "ttfb": 2.799999952316284,
+          "dcl": 18,
+          "load": 21,
+          "ttfb": 2.6000001430511475,
           "resources": 3,
-          "transferBytes": 300,
-          "decodedBytes": 190096,
-          "jsBytes": 0,
-          "cssBytes": 0,
+          "transferBytes": 194476,
+          "decodedBytes": 193576,
+          "jsBytes": 21681,
+          "cssBytes": 41986,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
@@ -1001,17 +727,17 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/registry/mirror/gallery.html",
-        "elapsedMs": 3,
+        "elapsedMs": 4,
         "bytes": 13800,
         "encoding": null,
-        "cache": null,
-        "csp": null,
+        "cache": "no-store",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         "hsts": null,
-        "nosniff": null,
+        "nosniff": "nosniff",
         "frame": null,
-        "referrer": null,
+        "referrer": "strict-origin-when-cross-origin",
         "permissions": null,
-        "server": "SimpleHTTP/0.6 Python/3.14.5"
+        "server": null
       },
       "refused": false,
       "title": "RAREXT media gallery",
@@ -1052,7 +778,7 @@
         "smallTargetsSample": [],
         "contrastFailures": [
           {
-            "text": "image/png · 12420 bytes · public\n28afc922d062acc06",
+            "text": "image/png \u00b7 12420 bytes \u00b7 public\n28afc922d062acc06",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1068,7 +794,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "image/png · 401 bytes · public\n778a5bcc5a9db15eeb6",
+            "text": "image/png \u00b7 401 bytes \u00b7 public\n778a5bcc5a9db15eeb6",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1076,7 +802,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "text/plain · 31 bytes · public\n0faefba2dc363808a72",
+            "text": "text/plain \u00b7 31 bytes \u00b7 public\n0faefba2dc363808a72",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1084,7 +810,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "audio/wav · 8044 bytes · public\n4706628da56425ee45",
+            "text": "audio/wav \u00b7 8044 bytes \u00b7 public\n4706628da56425ee45",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1092,7 +818,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "image/png · 10381 bytes · public\n5b6760d585086eaac",
+            "text": "image/png \u00b7 10381 bytes \u00b7 public\n5b6760d585086eaac",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1115,22 +841,22 @@
           "h2": [],
           "ctas": [],
           "navItems": 0,
-          "wordCount": 173,
+          "wordCount": 167,
           "links": 0,
-          "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route — the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png · 12420 bytes · public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition · generative · ai-gener"
+          "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route \u2014 the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png \u00b7 12420 bytes \u00b7 public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition \u00b7 generative \u00b7 ai-gener"
         },
         "metrics": {
-          "fcp": 100,
-          "lcp": 100,
+          "fcp": 76,
+          "lcp": 76,
           "cls": 0.008537372102462705,
           "longTasks": 1,
-          "tbt": 377,
-          "dcl": 67.79999995231628,
-          "load": 81.40000009536743,
-          "ttfb": 15.299999952316284,
+          "tbt": 446,
+          "dcl": 31.299999952316284,
+          "load": 48.40000009536743,
+          "ttfb": 3.0999999046325684,
           "resources": 6,
-          "transferBytes": 5826641,
-          "decodedBytes": 5951870,
+          "transferBytes": 5958301,
+          "decodedBytes": 5956501,
           "jsBytes": 21670,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -1175,7 +901,7 @@
         "smallTargetsSample": [],
         "contrastFailures": [
           {
-            "text": "image/png · 12420 bytes · public\n28afc922d062acc06",
+            "text": "image/png \u00b7 12420 bytes \u00b7 public\n28afc922d062acc06",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1191,7 +917,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "image/png · 401 bytes · public\n778a5bcc5a9db15eeb6",
+            "text": "image/png \u00b7 401 bytes \u00b7 public\n778a5bcc5a9db15eeb6",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1199,7 +925,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "text/plain · 31 bytes · public\n0faefba2dc363808a72",
+            "text": "text/plain \u00b7 31 bytes \u00b7 public\n0faefba2dc363808a72",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1207,7 +933,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "audio/wav · 8044 bytes · public\n4706628da56425ee45",
+            "text": "audio/wav \u00b7 8044 bytes \u00b7 public\n4706628da56425ee45",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1215,7 +941,7 @@
             "bg": "rgb(13, 17, 23)"
           },
           {
-            "text": "image/png · 10381 bytes · public\n5b6760d585086eaac",
+            "text": "image/png \u00b7 10381 bytes \u00b7 public\n5b6760d585086eaac",
             "ratio": 4.32,
             "need": 4.5,
             "size": 12,
@@ -1238,48 +964,48 @@
           "h2": [],
           "ctas": [],
           "navItems": 0,
-          "wordCount": 173,
+          "wordCount": 167,
           "links": 0,
-          "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route — the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png · 12420 bytes · public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition · generative · ai-gener"
+          "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route \u2014 the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png \u00b7 12420 bytes \u00b7 public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition \u00b7 generative \u00b7 ai-gener"
         },
         "metrics": {
-          "fcp": 28,
-          "lcp": 28,
-          "cls": 0,
+          "fcp": 40,
+          "lcp": 40,
+          "cls": 0.01791520596157734,
           "longTasks": 1,
-          "tbt": 356,
-          "dcl": 12,
-          "load": 12.400000095367432,
-          "ttfb": 2.299999952316284,
+          "tbt": 366,
+          "dcl": 22.90000009536743,
+          "load": 23.100000143051147,
+          "ttfb": 2.700000047683716,
           "resources": 5,
-          "transferBytes": 600,
-          "decodedBytes": 5951261,
-          "jsBytes": 0,
-          "cssBytes": 0,
+          "transferBytes": 5957392,
+          "decodedBytes": 5955892,
+          "jsBytes": 21670,
+          "cssBytes": 41986,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
         }
       },
       "score": {
-        "perf": 83,
-        "a11y": 73,
+        "perf": 82,
+        "a11y": 72,
         "ux": 36,
-        "overall": 63,
+        "overall": 62,
         "detail": {
           "perf": {
             "ttfb": 1,
             "fcp": 1,
             "lcp": 1,
             "cls": 1,
-            "weight": 0.0304138596491228,
+            "weight": 0.007315614035087736,
             "scripts": 1,
-            "tbt": 0.7744827586206897
+            "tbt": 0.7268965517241379
           },
           "a11y": {
             "alt": 1,
             "names": 1,
-            "contrast": 0.5838150289017341,
+            "contrast": 0.5688622754491017,
             "targets": 1,
             "structure": 0.5,
             "skip": 0,
@@ -1305,23 +1031,23 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/registry/mirror/verify.html",
-        "elapsedMs": 3,
+        "elapsedMs": 8,
         "bytes": 31709,
         "encoding": null,
-        "cache": null,
-        "csp": null,
+        "cache": "no-store",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         "hsts": null,
-        "nosniff": null,
+        "nosniff": "nosniff",
         "frame": null,
-        "referrer": null,
+        "referrer": "strict-origin-when-cross-origin",
         "permissions": null,
-        "server": "SimpleHTTP/0.6 Python/3.14.5"
+        "server": null
       },
       "refused": false,
-      "title": "Mirror verification — FUTURISTIC included",
+      "title": "Mirror verification \u2014 FUTURISTIC included",
       "desktop": {
         "url": "http://127.0.0.1:8080/registry/mirror/verify.html",
-        "title": "Mirror verification — FUTURISTIC included",
+        "title": "Mirror verification \u2014 FUTURISTIC included",
         "lang": "en",
         "hasViewport": true,
         "description": null,
@@ -1338,27 +1064,27 @@
         "headings": [
           {
             "level": 1,
-            "text": "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURI"
+            "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURI"
           },
           {
             "level": 2,
-            "text": "Meanings — anchored"
+            "text": "Meanings \u2014 anchored"
           },
           {
             "level": 2,
-            "text": "Federation — the registries this bundle commits to"
+            "text": "Federation \u2014 the registries this bundle commits to"
           },
           {
             "level": 2,
-            "text": "AI claims — verified in your browser"
+            "text": "AI claims \u2014 verified in your browser"
           },
           {
             "level": 2,
-            "text": "Reference — name and verify an object"
+            "text": "Reference \u2014 name and verify an object"
           },
           {
             "level": 2,
-            "text": "Statement — what a key was owed, as of a frozen state"
+            "text": "Statement \u2014 what a key was owed, as of a frozen state"
           }
         ],
         "headingSkips": 0,
@@ -1385,40 +1111,40 @@
         "fixedOverlayArea": 0,
         "firstScreen": {
           "h1": [
-            "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURISTIC's published record holds."
+            "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds."
           ],
           "h2": [
-            "Meanings — anchored",
-            "Federation — the registries this bundle commits to"
+            "Meanings \u2014 anchored",
+            "Federation \u2014 the registries this bundle commits to"
           ],
           "ctas": [],
           "navItems": 0,
-          "wordCount": 905,
+          "wordCount": 937,
           "links": 0,
-          "text": "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 32 Anchored root 1de3aa161ca461b9e134daff4b1d2225aa4a0756d7c07957ac3c81274dda9ddc Recomputed root 1de3aa161ca461b9e134daff4b1d2225aa4a0756d7c07957ac3c81274dda9ddc Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings — anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation — the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54… Seed list at https://99"
+          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Recomputed root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
         },
         "metrics": {
-          "fcp": 164,
-          "lcp": 164,
+          "fcp": 76,
+          "lcp": 76,
           "cls": 0.13346373456790123,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 147.70000004768372,
-          "load": 149,
-          "ttfb": 62.200000047683716,
-          "resources": 14,
-          "transferBytes": 5807022,
-          "decodedBytes": 5804922,
+          "dcl": 53.89999985694885,
+          "load": 55.59999990463257,
+          "ttfb": 4.5,
+          "resources": 8,
+          "transferBytes": 5808445,
+          "decodedBytes": 5806045,
           "jsBytes": 42966,
           "cssBytes": 0,
           "imgBytes": 0,
-          "thirdPartyHosts": 1,
+          "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
         }
       },
       "mobile": {
         "url": "http://127.0.0.1:8080/registry/mirror/verify.html",
-        "title": "Mirror verification — FUTURISTIC included",
+        "title": "Mirror verification \u2014 FUTURISTIC included",
         "lang": "en",
         "hasViewport": true,
         "description": null,
@@ -1435,27 +1161,27 @@
         "headings": [
           {
             "level": 1,
-            "text": "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURI"
+            "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURI"
           },
           {
             "level": 2,
-            "text": "Meanings — anchored"
+            "text": "Meanings \u2014 anchored"
           },
           {
             "level": 2,
-            "text": "Federation — the registries this bundle commits to"
+            "text": "Federation \u2014 the registries this bundle commits to"
           },
           {
             "level": 2,
-            "text": "AI claims — verified in your browser"
+            "text": "AI claims \u2014 verified in your browser"
           },
           {
             "level": 2,
-            "text": "Reference — name and verify an object"
+            "text": "Reference \u2014 name and verify an object"
           },
           {
             "level": 2,
-            "text": "Statement — what a key was owed, as of a frozen state"
+            "text": "Statement \u2014 what a key was owed, as of a frozen state"
           }
         ],
         "headingSkips": 0,
@@ -1482,34 +1208,34 @@
         "fixedOverlayArea": 0,
         "firstScreen": {
           "h1": [
-            "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURISTIC's published record holds."
+            "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds."
           ],
           "h2": [
-            "Meanings — anchored",
-            "Federation — the registries this bundle commits to"
+            "Meanings \u2014 anchored",
+            "Federation \u2014 the registries this bundle commits to"
           ],
           "ctas": [],
           "navItems": 0,
-          "wordCount": 908,
+          "wordCount": 937,
           "links": 0,
-          "text": "This mirror is a copy. Here is whether it is a faithful one — and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 32 Anchored root 1de3aa161ca461b9e134daff4b1d2225aa4a0756d7c07957ac3c81274dda9ddc Recomputed root 1de3aa161ca461b9e134daff4b1d2225aa4a0756d7c07957ac3c81274dda9ddc Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings — anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation — the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54… Seed list at https://99"
+          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Recomputed root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
         },
         "metrics": {
-          "fcp": 40,
-          "lcp": 40,
-          "cls": 0.21653603110949082,
+          "fcp": 44,
+          "lcp": 44,
+          "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 12.399999856948853,
-          "load": 13.399999856948853,
-          "ttfb": 2.799999952316284,
-          "resources": 13,
-          "transferBytes": 1520,
-          "decodedBytes": 5804462,
-          "jsBytes": 0,
+          "dcl": 29.200000047683716,
+          "load": 29.59999990463257,
+          "ttfb": 4,
+          "resources": 7,
+          "transferBytes": 5808135,
+          "decodedBytes": 5806035,
+          "jsBytes": 42966,
           "cssBytes": 0,
           "imgBytes": 0,
-          "thirdPartyHosts": 1,
+          "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
         }
       },
@@ -1524,7 +1250,7 @@
             "fcp": 1,
             "lcp": 1,
             "cls": 0.6561705013093901,
-            "weight": 0.03385578947368417,
+            "weight": 0.03360614035087717,
             "scripts": 1,
             "tbt": 1
           },
@@ -1557,11 +1283,11 @@
       "http": {
         "status": 200,
         "finalUrl": "https://chatgpt.com/",
-        "elapsedMs": 471,
-        "bytes": 725401,
+        "elapsedMs": 10157,
+        "bytes": 725131,
         "encoding": "br",
         "cache": "private, no-store",
-        "csp": "default-src 'self'; script-src 'nonce-329eeca1-581d-4591-8f2f-840135ee6542' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'wasm-unsafe-eval' https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://accounts.google.com/gsi/client https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://js.stripe.com https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; script-src-elem 'nonce-329eeca1-581d-4591-8f2f-840135ee6542' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'sha256-eMuh8xiwcX72rRYNAGENurQBAcH7kLlAUQcoOri3BIo=' 'sha384-Sr5xwyR0H5rcDXa7/iDJDM3qBBvtHuR97A8ELbd+DFBDi32Caf72to9UVqvI8R95' auth0.openai.com challenges.cloudflare.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://analytics.tiktok.com https://bat.bing.com https://cdn.openaimerge.com/initialize.js https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.platform.openai.com https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://connect.facebook.net https://docs.google.com https://js.live.net/v7.2/OneDrive.js https://js.stripe.com https://oaistatic.com https://pixel-config.reddit.com https://sc-static.net/scevent.min.js https://snap.licdn.com https://snc.apps.openai.com https://www-onepick-opensocial.googleusercontent.com https://www.redditstatic.com wss://*.chatgpt.com wss://*.chatgpt.com/; img-src * blob: data:; style-src 'self' 'unsafe-inline' blob: https://*.chatgpt.com https://*.chatgpt.com/ https://*.oaistatic.com https://accounts.google.com/gsi/style https://chatgpt.com https://chatgpt.com/ https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; font-src 'self' data: https://*.oaistatic.com https://cdn.openai.com https://fonts.gstatic.com; connect-src 'self' *.blob.core.windows.net *.oaiusercontent.com api.mapbox.com blob: browser-intake-datadoghq.com events.mapbox.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.chatgpt.site/_internal/sites/session-bootstrap https://*.chatgpt.site/_portals/web-session https://*.oaistatic.com https://*.us.sentry.io https://accounts.google.com https://analytics.tiktok.com https://api.atlassian.com https://api.oaistatsig.com https://api.onedrive.com https://api.stripe.com https://bat.bing.com https://bzr.openai.com https://cdn.openai.com/beacons/ https://cdn.openai.com/chatgpt/clients/bazaar/business-agent-disclosure/2026-09-23/business-disclosure-animation-1754caf3cef014e7.lottie https://cdn.openai.com/common/fonts/openai-sans/v2/openai-sans-regular.full.typeface.json https://cdn.openai.com/emojibase/ https://cdn.openai.com/pdf/ https://cdn.platform.openai.com https://chatgpt.com https://chatgpt.com/ https://checkpoints-au.files.openai.com https://checkpoints-eu.files.openai.com https://checkpoints-gb.files.openai.com https://checkpoints-in.files.openai.com https://checkpoints-jp.files.openai.com https://checkpoints-kr.files.openai.com https://checkpoints-sg.files.openai.com https://checkpoints-us.files.openai.com https://content.googleapis.com https://docs.google.com https://events.statsigapi.net https://featuregates.org https://graph.microsoft.com https://images.openai.com https://js.verygoodvault.com https://js3.verygoodvault.com https://oaistatic.com https://pixel-config.reddit.com https://production.plaid.com https://px.ads.linkedin.com/ https://quota.browser-intake-datadoghq.com https://realtime.chatgpt-staging.com https://realtime.chatgpt.com https://sandbox.plaid.com https://snc.apps.openai.com https://test-drive-20-1053047382554.us-central1.run.app https://tr.snapchat.com/p https://transceiver.api.openai.com https://transceiver.api.openai.org https://us.sentry.io https://vgs-collect-keeper.apps.verygood.systems https://www.facebook.com/tr/ https://www.googleadservices.com https://www.googleapis.com https://www.googletagmanager.com https://www.redditstatic.com statsigapi.net wss://*.chatgpt.com wss://*.chatgpt.com/ wss://*.webpubsub.azure.com wss://chatgpt.com wss://multiplayer-u0.api.openai.com wss://pages-realtime.gateway.unified-0.api.openai.com wss://pages-realtime.gateway.unified-119.api.openai.com wss://pages-realtime.gateway.unified-15.api.openai.com wss://pages-realtime.gateway.unified-190.api.openai.com wss://pages-realtime.gateway.unified-23.api.openai.com wss://pages-realtime.gateway.unified-40.api.openai.com wss://pages-realtime.gateway.unified-72.api.openai.com wss://pages-realtime.gateway.unified-75.api.openai.com wss://pages-realtime.gateway.unified-8.api.openai.com wss://pages-realtime.gateway.unified-80.api.openai.com wss://pages-realtime.gateway.unified-82.api.openai.com wss://pages-realtime.gateway.unified-88.api.openai.com wss://pages-realtime.gateway.unified-94.api.openai.com; frame-src 'self' challenges.cloudflare.com https://*.chatgpt.site https://*.embed.chatgpt.site https://*.js.stripe.com https://*.sharepoint.com https://*.web-sandbox.oaiusercontent.com https://*.withpersona.com https://504-SWE-347.mktoweb.com https://accounts.google.com/gsi https://accounts.google.com/gsi/iframe/select https://auth.openai.com https://cdn.openaimerge.com https://cdn.plaid.com https://cdn.platform.openai.com https://codepen.io https://content.googleapis.com https://docs.google.com https://drive.google.com https://embed.apple-mapkit.com/v1/embed https://file-frame.oaistatic.com https://hooks.stripe.com https://js.stripe.com https://js.verygoodvault.com https://js3.verygoodvault.com https://mfe.prod.us-exp-api.experiancs.com https://mfe.uat.us-exp-api.experiancs.com https://onedrive.live.com https://services.sheerid.com https://web-sandbox.oaiusercontent.com https://www.facebook.com/tr/ https://www.google.com/maps https://www.google.com/maps/embed js.stripe.com player.vimeo.com www.youtube.com; worker-src 'self' blob:; media-src 'self' *.oaiusercontent.com blob: https: https://cdn.oaistatic.com https://cdn.openai.com https://persistent.oaistatic.com; frame-ancestors 'self' chrome-extension://hehggadaopoacecdllhhajmbjkdcmajg chrome-extension://iaiigpefkbhgjcmcmffmfkpmhemdhdnj chrome-extension://lfkehkpjohcoelkpembgemeipeppanef chrome-extension://odlomjlbamekndcpllcnffbgeohgkmjh; base-uri 'none'; report-to chatgpt-csp; report-uri https://chatgpt.com/ces/v1/telemetry/intake?ddsource=csp-report&dd-api-key=dummy-token",
+        "csp": "default-src 'self'; script-src 'nonce-63b9093b-d9de-47d4-ac5f-e6e56b5f7601' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'wasm-unsafe-eval' https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://accounts.google.com/gsi/client https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://js.stripe.com https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; script-src-elem 'nonce-63b9093b-d9de-47d4-ac5f-e6e56b5f7601' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'sha256-eMuh8xiwcX72rRYNAGENurQBAcH7kLlAUQcoOri3BIo=' 'sha384-Sr5xwyR0H5rcDXa7/iDJDM3qBBvtHuR97A8ELbd+DFBDi32Caf72to9UVqvI8R95' auth0.openai.com challenges.cloudflare.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://analytics.tiktok.com https://bat.bing.com https://cdn.openaimerge.com/initialize.js https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.platform.openai.com https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://connect.facebook.net https://docs.google.com https://js.live.net/v7.2/OneDrive.js https://js.stripe.com https://oaistatic.com https://pixel-config.reddit.com https://sc-static.net/scevent.min.js https://snap.licdn.com https://snc.apps.openai.com https://www-onepick-opensocial.googleusercontent.com https://www.redditstatic.com wss://*.chatgpt.com wss://*.chatgpt.com/; img-src * blob: data:; style-src 'self' 'unsafe-inline' blob: https://*.chatgpt.com https://*.chatgpt.com/ https://*.oaistatic.com https://accounts.google.com/gsi/style https://chatgpt.com https://chatgpt.com/ https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; font-src 'self' data: https://*.oaistatic.com https://cdn.openai.com https://fonts.gstatic.com; connect-src 'self' *.blob.core.windows.net *.oaiusercontent.com api.mapbox.com blob: browser-intake-datadoghq.com events.mapbox.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.chatgpt.site/_internal/sites/session-bootstrap https://*.chatgpt.site/_portals/web-session https://*.oaistatic.com https://*.us.sentry.io https://accounts.google.com https://analytics.tiktok.com https://api.atlassian.com https://api.oaistatsig.com https://api.onedrive.com https://api.stripe.com https://bat.bing.com https://bzr.openai.com https://cdn.openai.com/beacons/ https://cdn.openai.com/chatgpt/clients/bazaar/business-agent-disclosure/2026-09-23/business-disclosure-animation-1754caf3cef014e7.lottie https://cdn.openai.com/common/fonts/openai-sans/v2/openai-sans-regular.full.typeface.json https://cdn.openai.com/emojibase/ https://cdn.openai.com/pdf/ https://cdn.platform.openai.com https://chatgpt.com https://chatgpt.com/ https://checkpoints-au.files.openai.com https://checkpoints-eu.files.openai.com https://checkpoints-gb.files.openai.com https://checkpoints-in.files.openai.com https://checkpoints-jp.files.openai.com https://checkpoints-kr.files.openai.com https://checkpoints-sg.files.openai.com https://checkpoints-us.files.openai.com https://content.googleapis.com https://docs.google.com https://events.statsigapi.net https://featuregates.org https://graph.microsoft.com https://images.openai.com https://js.verygoodvault.com https://js3.verygoodvault.com https://oaistatic.com https://pixel-config.reddit.com https://production.plaid.com https://px.ads.linkedin.com/ https://quota.browser-intake-datadoghq.com https://realtime.chatgpt-staging.com https://realtime.chatgpt.com https://sandbox.plaid.com https://snc.apps.openai.com https://test-drive-20-1053047382554.us-central1.run.app https://tr.snapchat.com/p https://transceiver.api.openai.com https://transceiver.api.openai.org https://us.sentry.io https://vgs-collect-keeper.apps.verygood.systems https://www.facebook.com/tr/ https://www.googleadservices.com https://www.googleapis.com https://www.googletagmanager.com https://www.redditstatic.com statsigapi.net wss://*.chatgpt.com wss://*.chatgpt.com/ wss://*.webpubsub.azure.com wss://chatgpt.com wss://multiplayer-u0.api.openai.com wss://pages-realtime.gateway.unified-0.api.openai.com wss://pages-realtime.gateway.unified-119.api.openai.com wss://pages-realtime.gateway.unified-15.api.openai.com wss://pages-realtime.gateway.unified-190.api.openai.com wss://pages-realtime.gateway.unified-23.api.openai.com wss://pages-realtime.gateway.unified-40.api.openai.com wss://pages-realtime.gateway.unified-72.api.openai.com wss://pages-realtime.gateway.unified-75.api.openai.com wss://pages-realtime.gateway.unified-8.api.openai.com wss://pages-realtime.gateway.unified-80.api.openai.com wss://pages-realtime.gateway.unified-82.api.openai.com wss://pages-realtime.gateway.unified-88.api.openai.com wss://pages-realtime.gateway.unified-94.api.openai.com; frame-src 'self' challenges.cloudflare.com https://*.chatgpt.site https://*.embed.chatgpt.site https://*.js.stripe.com https://*.sharepoint.com https://*.web-sandbox.oaiusercontent.com https://*.withpersona.com https://504-SWE-347.mktoweb.com https://accounts.google.com/gsi https://accounts.google.com/gsi/iframe/select https://auth.openai.com https://cdn.openaimerge.com https://cdn.plaid.com https://cdn.platform.openai.com https://codepen.io https://content.googleapis.com https://docs.google.com https://drive.google.com https://embed.apple-mapkit.com/v1/embed https://file-frame.oaistatic.com https://hooks.stripe.com https://js.stripe.com https://js.verygoodvault.com https://js3.verygoodvault.com https://mfe.prod.us-exp-api.experiancs.com https://mfe.uat.us-exp-api.experiancs.com https://onedrive.live.com https://services.sheerid.com https://web-sandbox.oaiusercontent.com https://www.facebook.com/tr/ https://www.google.com/maps https://www.google.com/maps/embed js.stripe.com player.vimeo.com www.youtube.com; worker-src 'self' blob:; media-src 'self' *.oaiusercontent.com blob: https: https://cdn.oaistatic.com https://cdn.openai.com https://persistent.oaistatic.com; frame-ancestors 'self' chrome-extension://hehggadaopoacecdllhhajmbjkdcmajg chrome-extension://iaiigpefkbhgjcmcmffmfkpmhemdhdnj chrome-extension://lfkehkpjohcoelkpembgemeipeppanef chrome-extension://odlomjlbamekndcpllcnffbgeohgkmjh; base-uri 'none'; report-to chatgpt-csp; report-uri https://chatgpt.com/ces/v1/telemetry/intake?ddsource=csp-report&dd-api-key=dummy-token",
         "hsts": "max-age=31536000; includeSubDomains; preload",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -1576,7 +1302,7 @@
         "title": "ChatGPT: Chat, Work, Create & Code with AI",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Use ChatGPT to answer questions, write, create images, complete work, and code—all in one place. Get started for free or download the app.",
+        "description": "Use ChatGPT to answer questions, write, create images, complete work, and code\u2014all in one place. Get started for free or download the app.",
         "canonical": "https://chatgpt.com/",
         "og": true,
         "landmarks": {
@@ -1598,8 +1324,8 @@
           }
         ],
         "headingSkips": 0,
-        "ariaLive": 5,
-        "roleStatus": 8,
+        "ariaLive": 3,
+        "roleStatus": 6,
         "images": 0,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 0,
@@ -1644,65 +1370,50 @@
           ],
           "ctas": [
             {
+              "text": "Close sidebar",
+              "tag": "button",
+              "href": null
+            },
+            {
               "text": "Log in",
               "tag": "button",
               "href": null
             },
             {
-              "text": "Sign up for free",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "New chat",
+              "text": "Terms",
               "tag": "a",
-              "href": "/?noauth_recent_chat_failed=1"
+              "href": "https://openai.com/terms"
             },
             {
-              "text": "Images",
+              "text": "Privacy Policy",
               "tag": "a",
-              "href": "/images"
+              "href": "https://openai.com/privacy"
             },
             {
-              "text": "Plugins",
+              "text": "Learn more about how your data is used to improve AI models",
               "tag": "a",
-              "href": "/plugins?plugins_landing=1"
-            },
-            {
-              "text": "See plans and pricing",
-              "tag": "a",
-              "href": "https://openai.com/chatgpt/pricing/"
-            },
-            {
-              "text": "Help",
-              "tag": "a",
-              "href": "https://help.openai.com"
-            },
-            {
-              "text": "Deep research",
-              "tag": "button",
-              "href": null
+              "href": "https://help.openai.com/en/articles/5722486-how-your-data-is-used-to-improve-model-performance"
             }
           ],
-          "navItems": 6,
+          "navItems": 0,
           "wordCount": 79,
           "links": 25,
           "text": "Log in Sign up for free ChatGPT New chat Images Plugins See plans and pricing Help Deep research Settings Get responses tailored to you Log in to get answers based on saved chats, plus create images and upload files. Log in Where should we begin? What can you do? Chat with ChatGPT ChatGPT is AI. By using it, you agree to our Terms & Privacy Policy. Chats may be reviewed and used to improve our AI models. Learn more"
         },
         "metrics": {
-          "fcp": 772,
-          "lcp": 800,
+          "fcp": 4700,
+          "lcp": 4716,
           "cls": 0,
-          "longTasks": 2,
-          "tbt": 204,
-          "dcl": 812.7000000476837,
-          "load": 826.9000000953674,
-          "ttfb": 525.0999999046326,
-          "resources": 250,
-          "transferBytes": 1242513,
-          "decodedBytes": 3868800,
-          "jsBytes": 1040595,
-          "cssBytes": 148442,
+          "longTasks": 1,
+          "tbt": 19,
+          "dcl": 4713,
+          "load": 5108.600000143051,
+          "ttfb": 4248.600000143051,
+          "resources": 228,
+          "transferBytes": 1167014,
+          "decodedBytes": 3652177,
+          "jsBytes": 965135,
+          "cssBytes": 148365,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "chatgpt.com"
@@ -1713,7 +1424,7 @@
         "title": "ChatGPT: Chat, Work, Create & Code with AI",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Use ChatGPT to answer questions, write, create images, complete work, and code—all in one place. Get started for free or download the app.",
+        "description": "Use ChatGPT to answer questions, write, create images, complete work, and code\u2014all in one place. Get started for free or download the app.",
         "canonical": "https://chatgpt.com/",
         "og": true,
         "landmarks": {
@@ -1775,36 +1486,6 @@
           "h2": [],
           "ctas": [
             {
-              "text": "Open sidebar",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Log in",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "What can you do?",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Add files and more",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Start dictation",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Start Voice",
-              "tag": "a",
-              "href": "https://chatgpt.com/?mode=voice"
-            },
-            {
               "text": "Terms",
               "tag": "a",
               "href": "https://openai.com/terms"
@@ -1813,6 +1494,11 @@
               "text": "Privacy Policy",
               "tag": "a",
               "href": "https://openai.com/privacy"
+            },
+            {
+              "text": "Learn more about how your data is used to improve AI models",
+              "tag": "a",
+              "href": "https://help.openai.com/en/articles/5722486-how-your-data-is-used-to-improve-model-performance"
             }
           ],
           "navItems": 0,
@@ -1821,38 +1507,38 @@
           "text": "ChatGPT Log in What are you working on? What can you do? Chat with ChatGPT ChatGPT is AI. By using it, you agree to our Terms & Privacy Policy. Chats may be reviewed and used to improve our AI models. Learn more"
         },
         "metrics": {
-          "fcp": 468,
-          "lcp": 484,
+          "fcp": 2396,
+          "lcp": 2412,
           "cls": 0,
-          "longTasks": 3,
-          "tbt": 313,
-          "dcl": 461.90000009536743,
-          "load": 488.60000014305115,
-          "ttfb": 350.90000009536743,
+          "longTasks": 2,
+          "tbt": 272,
+          "dcl": 2413.4000000953674,
+          "load": 2433.5,
+          "ttfb": 2301.5,
           "resources": 250,
-          "transferBytes": 300,
-          "decodedBytes": 3780459,
+          "transferBytes": 0,
+          "decodedBytes": 3798579,
           "jsBytes": 0,
-          "cssBytes": 300,
+          "cssBytes": 0,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "chatgpt.com"
         }
       },
       "score": {
-        "perf": 79,
+        "perf": 43,
         "a11y": 83,
-        "ux": 79,
-        "overall": 80,
+        "ux": 71,
+        "overall": 67,
         "detail": {
           "perf": {
-            "ttfb": 0.8193888889418708,
-            "fcp": 1,
-            "lcp": 1,
+            "ttfb": 0,
+            "fcp": 0,
+            "lcp": 0.07473684210526321,
             "cls": 1,
-            "weight": 0.8346468421052632,
-            "scripts": 0,
-            "tbt": 0.8937931034482759
+            "weight": 0.8478922807017544,
+            "scripts": 0.09565217391304348,
+            "tbt": 1
           },
           "a11y": {
             "alt": 1,
@@ -1865,11 +1551,11 @@
           },
           "ux": {
             "h1": 1,
-            "nav": 1,
+            "nav": 0,
             "mobileNav": 1,
             "overflow": 0,
             "live": 1,
-            "cta": 0.5,
+            "cta": 1,
             "meta": 1
           }
         }
@@ -1883,11 +1569,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://claude.ai/",
-        "elapsedMs": 122,
+        "elapsedMs": 1786,
         "bytes": 5644,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-g12enoklbUcwHMqYI2Dypv' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-q86JjqSyCVjQgdwQP8DRgH' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": "max-age=31536000; includeSubDomains",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -1902,7 +1588,7 @@
         "title": "Sign in or create an account | Claude.ai",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Log in to Claude or create an account to start using the web app online. Hand off tasks, write, analyze, and code with Anthropic’s AI assistant.",
+        "description": "Log in to Claude or create an account to start using the web app online. Hand off tasks, write, analyze, and code with Anthropic\u2019s AI assistant.",
         "canonical": "https://claude.ai/login",
         "og": true,
         "landmarks": {
@@ -1916,7 +1602,7 @@
         "headings": [
           {
             "level": 1,
-            "text": "Question what’s next"
+            "text": "Question what\u2019s next"
           },
           {
             "level": 2,
@@ -1940,15 +1626,15 @@
           },
           {
             "level": 3,
-            "text": "What is Claude and how does it work? "
+            "text": "What is Claude and how does it work? \uf003"
           },
           {
             "level": 3,
-            "text": "What should I use Claude for? "
+            "text": "What should I use Claude for? \uf003"
           },
           {
             "level": 3,
-            "text": "How much does it cost to use? "
+            "text": "How much does it cost to use? \uf003"
           },
           {
             "level": 3,
@@ -2059,7 +1745,7 @@
         "fixedOverlayArea": 0.093,
         "firstScreen": {
           "h1": [
-            "Question what’s next"
+            "Question what\u2019s next"
           ],
           "h2": [
             "Explore plans",
@@ -2097,32 +1783,32 @@
               "href": null
             },
             {
-              "text": "Pause video",
+              "text": "Play video",
               "tag": "button",
               "href": null
             }
           ],
           "navItems": 0,
-          "wordCount": 427,
-          "links": 280,
-          "text": "Question what’s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic’s Privacy Policy. Free to get started. Download desktop app  Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude  Chat on web, desktop, and mobile  Search the web, create files, and run code  Memory across conversations  Connect your apps and tools  Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if bill"
+          "wordCount": 423,
+          "links": 183,
+          "text": "Question what\u2019s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic\u2019s Privacy Policy. Download desktop app \ue0c1 Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude \ue03b Chat on web, desktop, and mobile \ue03b Search the web, create files, and run code \ue03b Memory across conversations \ue03b Connect your apps and tools \ue03b Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claud"
         },
         "metrics": {
-          "fcp": 456,
-          "lcp": 1200,
-          "cls": 0.001308746999314129,
-          "longTasks": 8,
-          "tbt": 527,
-          "dcl": 404.7999999523163,
-          "load": 2605.9000000953674,
-          "ttfb": 133.29999995231628,
-          "resources": 110,
-          "transferBytes": 4390478,
-          "decodedBytes": 16178516,
-          "jsBytes": 364324,
-          "cssBytes": 3970418,
+          "fcp": 2400,
+          "lcp": 4844,
+          "cls": 0.0007639079110939644,
+          "longTasks": 1,
+          "tbt": 31,
+          "dcl": 2380.2000000476837,
+          "load": 0,
+          "ttfb": 1791.7999999523163,
+          "resources": 37,
+          "transferBytes": 557306,
+          "decodedBytes": 1807427,
+          "jsBytes": 362306,
+          "cssBytes": 184039,
           "imgBytes": 0,
-          "thirdPartyHosts": 8,
+          "thirdPartyHosts": 5,
           "host": "claude.ai"
         }
       },
@@ -2131,7 +1817,7 @@
         "title": "Sign in or create an account | Claude.ai",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Log in to Claude or create an account to start using the web app online. Hand off tasks, write, analyze, and code with Anthropic’s AI assistant.",
+        "description": "Log in to Claude or create an account to start using the web app online. Hand off tasks, write, analyze, and code with Anthropic\u2019s AI assistant.",
         "canonical": "https://claude.ai/login",
         "og": true,
         "landmarks": {
@@ -2145,7 +1831,7 @@
         "headings": [
           {
             "level": 1,
-            "text": "Question what’s next"
+            "text": "Question what\u2019s next"
           },
           {
             "level": 2,
@@ -2169,15 +1855,15 @@
           },
           {
             "level": 3,
-            "text": "What is Claude and how does it work? "
+            "text": "What is Claude and how does it work? \uf003"
           },
           {
             "level": 3,
-            "text": "What should I use Claude for? "
+            "text": "What should I use Claude for? \uf003"
           },
           {
             "level": 3,
-            "text": "How much does it cost to use? "
+            "text": "How much does it cost to use? \uf003"
           },
           {
             "level": 3,
@@ -2288,7 +1974,7 @@
         "fixedOverlayArea": 0.085,
         "firstScreen": {
           "h1": [
-            "Question what’s next"
+            "Question what\u2019s next"
           ],
           "h2": [
             "Explore plans",
@@ -2322,48 +2008,48 @@
             }
           ],
           "navItems": 0,
-          "wordCount": 423,
-          "links": 280,
-          "text": "Question what’s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic’s Privacy Policy. Free to get started. Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude  Chat on web, desktop, and mobile  Search the web, create files, and run code  Memory across conversations  Connect your apps and tools  Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claude "
+          "wordCount": 419,
+          "links": 183,
+          "text": "Question what\u2019s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic\u2019s Privacy Policy. Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude \ue03b Chat on web, desktop, and mobile \ue03b Search the web, create files, and run code \ue03b Memory across conversations \ue03b Connect your apps and tools \ue03b Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claude No commitment \u00b7 Cance"
         },
         "metrics": {
-          "fcp": 1296,
-          "lcp": 1336,
+          "fcp": 9272,
+          "lcp": 9272,
           "cls": 0,
-          "longTasks": 2,
-          "tbt": 71,
-          "dcl": 1370.6000001430511,
-          "load": 1933.2000000476837,
-          "ttfb": 900.9000000953674,
-          "resources": 127,
-          "transferBytes": 1949219,
-          "decodedBytes": 23980176,
+          "longTasks": 0,
+          "tbt": 0,
+          "dcl": 10610.200000047684,
+          "load": 10610.799999952316,
+          "ttfb": 8995.5,
+          "resources": 71,
+          "transferBytes": 815654,
+          "decodedBytes": 6393073,
           "jsBytes": 0,
-          "cssBytes": 1937188,
+          "cssBytes": 760261,
           "imgBytes": 0,
           "thirdPartyHosts": 8,
           "host": "claude.ai"
         }
       },
       "score": {
-        "perf": 79,
+        "perf": 65,
         "a11y": 84,
         "ux": 71,
-        "overall": 78,
+        "overall": 74,
         "detail": {
           "perf": {
-            "ttfb": 1,
-            "fcp": 1,
-            "lcp": 1,
+            "ttfb": 0.11566666669315762,
+            "fcp": 0.5,
+            "lcp": 0.04105263157894734,
             "cls": 1,
-            "weight": 0.28237228070175435,
-            "scripts": 0.6086956521739131,
-            "tbt": 0.6710344827586208
+            "weight": 0.9548585964912281,
+            "scripts": 0.9260869565217391,
+            "tbt": 1
           },
           "a11y": {
             "alt": 1,
             "names": 0.9900990099009901,
-            "contrast": 0.9437939110070258,
+            "contrast": 0.9432624113475178,
             "targets": 0.9801980198019802,
             "structure": 1,
             "skip": 0,
@@ -2397,7 +2083,7 @@
         "title": "Google Gemini",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
+        "description": "Meet Gemini, Google\u2019s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
         "canonical": "https://gemini.google.com/",
         "og": true,
         "landmarks": {
@@ -2424,7 +2110,7 @@
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 19,
+        "tapTargets": 18,
         "smallTargets": 3,
         "smallTargetsSample": [
           {
@@ -2499,25 +2185,25 @@
               "href": null
             }
           ],
-          "navItems": 3,
-          "wordCount": 62,
+          "navItems": 0,
+          "wordCount": 56,
           "links": 12,
-          "text": "Gemini New chat Images Sign in to save activity Settings Sign in Get App Hi, I'm Gemini. Where should we start? Tell me what you can do Flash-Lite Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. About Gemini Subscriptions For Business Get App Sign in"
+          "text": "Gemini New chat Images Sign in to save activity Settings Sign in Get App Hi, I'm Gemini. Where should we start? Flash-Lite Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. About Gemini Subscriptions For Business Get App Sign in"
         },
         "metrics": {
-          "fcp": 4316,
-          "lcp": 4504,
-          "cls": 0.05386562615539803,
-          "longTasks": 10,
-          "tbt": 882,
-          "dcl": 2305.100000143051,
-          "load": 8290.800000190735,
-          "ttfb": 1920.9000000953674,
-          "resources": 124,
-          "transferBytes": 1919412,
-          "decodedBytes": 1951950,
+          "fcp": 10056,
+          "lcp": 10632,
+          "cls": 0.041192992410542056,
+          "longTasks": 11,
+          "tbt": 1322,
+          "dcl": 7778.299999952316,
+          "load": 10775.699999809265,
+          "ttfb": 7009.299999952316,
+          "resources": 114,
+          "transferBytes": 1190365,
+          "decodedBytes": 1223188,
           "jsBytes": 0,
-          "cssBytes": 1901728,
+          "cssBytes": 1172676,
           "imgBytes": 1346,
           "thirdPartyHosts": 14,
           "host": "gemini.google.com"
@@ -2528,7 +2214,7 @@
         "title": "Google Gemini",
         "lang": "en-US",
         "hasViewport": true,
-        "description": "Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
+        "description": "Meet Gemini, Google\u2019s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
         "canonical": "https://gemini.google.com/",
         "og": true,
         "landmarks": {
@@ -2555,7 +2241,7 @@
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 8,
+        "tapTargets": 5,
         "smallTargets": 2,
         "smallTargetsSample": [
           {
@@ -2577,7 +2263,7 @@
         "bodyFontSize": "16px",
         "reducedMotionRule": true,
         "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.032,
+        "fixedOverlayArea": 0.012,
         "firstScreen": {
           "h1": [
             "Hi, I'm Gemini. Where should we start?"
@@ -2585,27 +2271,12 @@
           "h2": [],
           "ctas": [
             {
-              "text": "Main menu",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Open mode picker, currently 3.5 Flash-Lite",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Surprise me with what you can do",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Upload & tools",
               "tag": "button",
               "href": null
             },
             {
-              "text": "Dictate (⌘⇧D)",
+              "text": "Dictate (\u2318\u21e7D)",
               "tag": "button",
               "href": null
             },
@@ -2626,22 +2297,22 @@
             }
           ],
           "navItems": 0,
-          "wordCount": 44,
+          "wordCount": 34,
           "links": 9,
-          "text": "Gemini 3.5 Flash-Lite Hi, I'm Gemini. Where should we start? Surprise me with what you can do Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. Sign in"
+          "text": "Hi, I'm Gemini. Where should we start? Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. Sign in"
         },
         "metrics": {
-          "fcp": 1424,
-          "lcp": 1904,
-          "cls": 0.03301812627748703,
-          "longTasks": 7,
-          "tbt": 1179,
-          "dcl": 1204,
-          "load": 2059.4000000953674,
-          "ttfb": 211.40000009536743,
-          "resources": 106,
-          "transferBytes": 16629,
-          "decodedBytes": 1951902,
+          "fcp": 1944,
+          "lcp": 3024,
+          "cls": 0.023472069360526492,
+          "longTasks": 9,
+          "tbt": 1269,
+          "dcl": 1705.3000001907349,
+          "load": 2835.100000143051,
+          "ttfb": 488.60000014305115,
+          "resources": 102,
+          "transferBytes": 16635,
+          "decodedBytes": 1951901,
           "jsBytes": 0,
           "cssBytes": 0,
           "imgBytes": 300,
@@ -2650,32 +2321,32 @@
         }
       },
       "score": {
-        "perf": 39,
+        "perf": 36,
         "a11y": 83,
-        "ux": 93,
-        "overall": 73,
+        "ux": 79,
+        "overall": 68,
         "detail": {
           "perf": {
-            "ttfb": 0.0439444443914625,
+            "ttfb": 0,
             "fcp": 0,
-            "lcp": 0.1305263157894737,
-            "cls": 0.8973768904381878,
-            "weight": 0.7158926315789473,
-            "scripts": 0.5478260869565217,
-            "tbt": 0.42620689655172417
+            "lcp": 0,
+            "cls": 0.9357788108771453,
+            "weight": 0.8437956140350877,
+            "scripts": 0.5913043478260869,
+            "tbt": 0.12275862068965515
           },
           "a11y": {
             "alt": 1,
             "names": 1,
             "contrast": 1,
-            "targets": 0.8421052631578947,
+            "targets": 0.8333333333333334,
             "structure": 1,
             "skip": 0,
             "motion": 1
           },
           "ux": {
             "h1": 1,
-            "nav": 1,
+            "nav": 0,
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
@@ -2693,7 +2364,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://www.perplexity.ai/",
-        "elapsedMs": 189,
+        "elapsedMs": 183,
         "bytes": 19713,
         "encoding": "gzip",
         "cache": "no-cache, no-store",
@@ -2850,63 +2521,63 @@
           "h2": [],
           "ctas": [
             {
-              "text": "",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Search sessions",
+              "text": "Use incognito: create anonymous sessions that aren't saved t",
               "tag": "button",
               "href": null
             },
             {
-              "text": "Collapse sidebar",
+              "text": "Apps and more",
               "tag": "button",
               "href": null
             },
             {
-              "text": "New",
-              "tag": "a",
-              "href": "/"
+              "text": "Add files, plugins, and more",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Search",
+              "tag": "button",
+              "href": null
             },
             {
               "text": "Computer",
-              "tag": "a",
-              "href": "/computer/tasks"
+              "tag": "button",
+              "href": null
             },
             {
-              "text": "Automations",
-              "tag": "a",
-              "href": "/automations"
+              "text": "Model",
+              "tag": "button",
+              "href": null
             },
             {
-              "text": "Artifacts",
-              "tag": "a",
-              "href": "/artifacts"
+              "text": "Dictation",
+              "tag": "button",
+              "href": null
             },
             {
-              "text": "Plugins",
-              "tag": "a",
-              "href": "/computer/plugins"
+              "text": "Use voice mode",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 8,
+          "navItems": 0,
           "wordCount": 216,
           "links": 10,
-          "text": "New Computer Automations Artifacts Plugins Teammates Hire your first teammate Persistent agents that work for you. Create new teammate Projects No projects Recents No recent sessions View plans Sign In What do you want to know? What should we work on? What do you want to know? Type @ for connectors Search Computer Model Search anything Get fast and accurate answers from the most trusted sources. Get work done with Computer NEW Hand off your projects to get polished, reliable deliverables around the clock. Terms of Service · Privacy Notice Cookie Policy We and our partners use cookies, pixels, "
+          "text": "New Computer Automations Artifacts Plugins Teammates Hire your first teammate Persistent agents that work for you. Create new teammate Projects No projects Recents No recent sessions View plans Sign In What do you want to know? What should we work on? What do you want to know? Type @ for connectors Search Computer Model Search anything Get fast and accurate answers from the most trusted sources. Get work done with Computer NEW Hand off your projects to get polished, reliable deliverables around the clock. Terms of Service \u00b7 Privacy Notice Cookie Policy We and our partners use cookies, pixels, "
         },
         "metrics": {
-          "fcp": 2352,
-          "lcp": 4204,
+          "fcp": 2172,
+          "lcp": 3580,
           "cls": 0.0007850008573388203,
-          "longTasks": 13,
-          "tbt": 1464,
-          "dcl": 688,
-          "load": 2720.5,
-          "ttfb": 143.89999985694885,
+          "longTasks": 9,
+          "tbt": 1025,
+          "dcl": 463.80000019073486,
+          "load": 3738.100000143051,
+          "ttfb": 124.30000019073486,
           "resources": 165,
-          "transferBytes": 18665,
-          "decodedBytes": 69086,
+          "transferBytes": 18642,
+          "decodedBytes": 69091,
           "jsBytes": 300,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -3033,19 +2704,19 @@
           "navItems": 0,
           "wordCount": 145,
           "links": 2,
-          "text": "What do you want to know? What should we work on? What do you want to know? Ask anything… Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell third party ads on our services. Perplexity uses them to measure our ad performance on third party partner websites and to improve our services. If you continue using Perplexity, without adjusting your settings, you are consenting to these technologies. Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. P"
+          "text": "What do you want to know? What should we work on? What do you want to know? Ask anything\u2026 Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell third party ads on our services. Perplexity uses them to measure our ad performance on third party partner websites and to improve our services. If you continue using Perplexity, without adjusting your settings, you are consenting to these technologies. Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. P"
         },
         "metrics": {
-          "fcp": 1176,
-          "lcp": 2596,
+          "fcp": 792,
+          "lcp": 2184,
           "cls": 0.0012630167613209323,
-          "longTasks": 10,
-          "tbt": 838,
-          "dcl": 430.7999999523163,
-          "load": 3574.7999999523163,
-          "ttfb": 358.09999990463257,
+          "longTasks": 6,
+          "tbt": 281,
+          "dcl": 224.70000004768372,
+          "load": 2332.7999999523163,
+          "ttfb": 185.79999995231628,
           "resources": 138,
-          "transferBytes": 14544,
+          "transferBytes": 14572,
           "decodedBytes": 53883,
           "jsBytes": 300,
           "cssBytes": 0,
@@ -3055,19 +2726,19 @@
         }
       },
       "score": {
-        "perf": 59,
+        "perf": 66,
         "a11y": 74,
-        "ux": 93,
-        "overall": 76,
+        "ux": 79,
+        "overall": 73,
         "detail": {
           "perf": {
             "ttfb": 1,
-            "fcp": 0.515,
-            "lcp": 0.20947368421052637,
+            "fcp": 0.57125,
+            "lcp": 0.37368421052631584,
             "cls": 1,
             "weight": 1,
             "scripts": 0.3695652173913043,
-            "tbt": 0.024827586206896513
+            "tbt": 0.3275862068965517
           },
           "a11y": {
             "alt": 1,
@@ -3080,7 +2751,7 @@
           },
           "ux": {
             "h1": 1,
-            "nav": 1,
+            "nav": 0,
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
@@ -3098,11 +2769,11 @@
       "http": {
         "status": 200,
         "finalUrl": "https://copilot.com/",
-        "elapsedMs": 485,
-        "bytes": 320291,
+        "elapsedMs": 570,
+        "bytes": 320124,
         "encoding": "gzip",
         "cache": "public, max-age=300",
-        "csp": "default-src 'self';base-uri 'self';script-src 'nonce-t3D4NQOdExbxRcmWqzUJ+g==' 'strict-dynamic' 'report-sample' https:;report-to csp-endpoint;upgrade-insecure-requests;style-src 'self' 'report-sample' *.cdn.office.net *.microsoft.com res-dev.cdn.officeppe.net 'unsafe-inline' https://www.microsoft.com/;font-src 'self' data: *.cdn.office.net res-dev.cdn.officeppe.net data c.s-microsoft.com *.microsoft.com;connect-src 'self' https://browser.pipe.aria.microsoft.com https://browser.events.data.microsoft.com *.office.com *.office.microsoft.com *.cdn.office.net res-dev.cdn.officeppe.net https://consentreceiverfd-prod.azurefd.net https://*.clarity.ms/collect https://turbo.microsoft.com https://deeplinkservice.svc.cloud.microsoft https://sdf.deferreddeeplinkservice.microsoft.com https://config.edge.skype.com https://admin.microsoft.com https://config.centro.core.microsoft https://mem.gfx.ms https://js.monitor.azure.com data:;frame-src https://login.microsoftonline.com https://login.live.com mem.gfx.ms amcdn.msftauth.net amcdn.msauth.net;img-src * data: blob:;media-src 'self' *.cdn.office.net res-dev.cdn.officeppe.net;worker-src 'self' blob:;child-src 'self' blob:;report-uri https://csp.microsoft.com/report/Harmony-App-PROD;form-action https://login.microsoftonline.com;frame-ancestors 'self';",
+        "csp": "default-src 'self';base-uri 'self';script-src 'nonce-eF71zZnMPMr/e/lIRaHiug==' 'strict-dynamic' 'report-sample' https:;report-to csp-endpoint;upgrade-insecure-requests;style-src 'self' 'report-sample' *.cdn.office.net *.microsoft.com res-dev.cdn.officeppe.net 'unsafe-inline' https://www.microsoft.com/;font-src 'self' data: *.cdn.office.net res-dev.cdn.officeppe.net data c.s-microsoft.com *.microsoft.com;connect-src 'self' https://browser.pipe.aria.microsoft.com https://browser.events.data.microsoft.com *.office.com *.office.microsoft.com *.cdn.office.net res-dev.cdn.officeppe.net https://consentreceiverfd-prod.azurefd.net https://*.clarity.ms/collect https://turbo.microsoft.com https://deeplinkservice.svc.cloud.microsoft https://sdf.deferreddeeplinkservice.microsoft.com https://config.edge.skype.com https://admin.microsoft.com https://config.centro.core.microsoft https://mem.gfx.ms https://js.monitor.azure.com data:;frame-src https://login.microsoftonline.com https://login.live.com mem.gfx.ms amcdn.msftauth.net amcdn.msauth.net;img-src * data: blob:;media-src 'self' *.cdn.office.net res-dev.cdn.officeppe.net;worker-src 'self' blob:;child-src 'self' blob:;report-uri https://csp.microsoft.com/report/Harmony-App-PROD;form-action https://login.microsoftonline.com;frame-ancestors 'self';",
         "hsts": "max-age=31536000; includeSubDomains",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -3253,61 +2924,46 @@
           ],
           "ctas": [
             {
-              "text": "Microsoft",
-              "tag": "a",
-              "href": "https://www.microsoft.com"
-            },
-            {
-              "text": "Copilot",
-              "tag": "a",
-              "href": "https://copilot.com"
-            },
-            {
-              "text": "Features",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Download",
-              "tag": "a",
-              "href": "https://copilot.com/download"
-            },
-            {
-              "text": "Plans and Pricing",
-              "tag": "a",
-              "href": "https://www.microsoft.com/microsoft-365-copilot/pricing?ocid=cmm2nvxwm2c"
-            },
-            {
-              "text": "Sign in",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Sign In",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Sign in",
               "tag": "a",
               "href": "https://copilot.com/login?es=Click&ru=%2f%3ffromcode%3dcmmwuwpzorz"
+            },
+            {
+              "text": "",
+              "tag": "a",
+              "href": "https://copilot.com/login?es=Click&ru=%2f%3ffromcode%3dcmmwuwpzorz"
+            },
+            {
+              "text": "Work",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Life",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "School",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 8,
+          "navItems": 4,
           "wordCount": 312,
           "links": 128,
           "text": "Skip to main content Copilot Features Download Plans and Pricing Sign in ME Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work fast"
         },
         "metrics": {
-          "fcp": 2456,
-          "lcp": 2588,
+          "fcp": 956,
+          "lcp": 1176,
           "cls": 0.00014519088179976852,
-          "longTasks": 2,
-          "tbt": 26,
-          "dcl": 3705.2999999523163,
-          "load": 5721.799999952316,
-          "ttfb": 617.7000000476837,
-          "resources": 56,
+          "longTasks": 3,
+          "tbt": 14,
+          "dcl": 1323,
+          "load": 3322.800000190735,
+          "ttfb": 455.7000000476837,
+          "resources": 54,
           "transferBytes": 2693309,
           "decodedBytes": 3247819,
           "jsBytes": 157075,
@@ -3450,21 +3106,6 @@
           ],
           "ctas": [
             {
-              "text": "Microsoft",
-              "tag": "a",
-              "href": "https://www.microsoft.com"
-            },
-            {
-              "text": "Sign In",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Copilot",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Sign in",
               "tag": "a",
               "href": "https://copilot.com/login?es=Click&ru=%2f%3ffromcode%3dcmmwuwpzorz"
@@ -3490,20 +3131,20 @@
               "href": "https://m365.cloud.microsoft/chat?fromcode=cmmwuwpzorz"
             }
           ],
-          "navItems": 5,
+          "navItems": 1,
           "wordCount": 267,
           "links": 129,
           "text": "Skip to main content ME Copilot Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work faster. Start creating Did you know? Expand all "
         },
         "metrics": {
-          "fcp": 300,
-          "lcp": 356,
+          "fcp": 312,
+          "lcp": 376,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 438.2000000476837,
-          "load": 563.8999998569489,
-          "ttfb": 228.79999995231628,
+          "dcl": 443.7999999523163,
+          "load": 601,
+          "ttfb": 248.89999985694885,
           "resources": 49,
           "transferBytes": 0,
           "decodedBytes": 3120693,
@@ -3515,18 +3156,18 @@
         }
       },
       "score": {
-        "perf": 76,
+        "perf": 89,
         "a11y": 96,
-        "ux": 86,
-        "overall": 86,
+        "ux": 93,
+        "overall": 93,
         "detail": {
           "perf": {
-            "ttfb": 0.7679444444179535,
-            "fcp": 0.48250000000000004,
-            "lcp": 0.6347368421052632,
+            "ttfb": 0.8579444444179535,
+            "fcp": 0.95125,
+            "lcp": 1,
             "cls": 1,
             "weight": 0.5801212280701755,
-            "scripts": 0.8434782608695652,
+            "scripts": 0.8521739130434782,
             "tbt": 1
           },
           "a11y": {
@@ -3544,7 +3185,7 @@
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
-            "cta": 0.5,
+            "cta": 1,
             "meta": 0.5
           }
         }
@@ -3558,11 +3199,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://grok.com/",
-        "elapsedMs": 512,
+        "elapsedMs": 1905,
         "bytes": 5643,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-dgk1WpVE21fTwPG3tAkhvV' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-CWuKjzWRgimmZa4dphwxFI' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": null,
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -3653,23 +3294,23 @@
           "navItems": 0,
           "wordCount": 37,
           "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abe80bbb8cb856 Performance and Security by Cloudflare Privacy"
+          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abfdb38f41b016 Performance and Security by Cloudflare Privacy"
         },
         "metrics": {
-          "fcp": 696.579999923706,
-          "lcp": 696.579999923706,
+          "fcp": 2434.1150000095367,
+          "lcp": 2434.1150000095367,
           "cls": 0.000336076817558299,
           "longTasks": 3,
-          "tbt": 505,
-          "dcl": 194.25999999046326,
-          "load": 733.625,
-          "ttfb": 132.6050000190735,
+          "tbt": 92,
+          "dcl": 748.2750000953674,
+          "load": 2525.1150000095367,
+          "ttfb": 722.5750000476837,
           "resources": 7,
-          "transferBytes": 442909,
-          "decodedBytes": 966398,
-          "jsBytes": 254272,
+          "transferBytes": 436441,
+          "decodedBytes": 951071,
+          "jsBytes": 251820,
           "cssBytes": 0,
-          "imgBytes": 6190,
+          "imgBytes": 2125,
           "thirdPartyHosts": 1,
           "host": "grok.com"
         }
@@ -3755,21 +3396,21 @@
           "navItems": 0,
           "wordCount": 37,
           "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abe8456db12be9 Performance and Security by Cloudflare Privacy"
+          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abfdee5b80844c Performance and Security by Cloudflare Privacy"
         },
         "metrics": {
-          "fcp": 683.8599998950958,
-          "lcp": 683.8599998950958,
+          "fcp": 807.0950000286102,
+          "lcp": 807.0950000286102,
           "cls": 0.002257649659999113,
-          "longTasks": 4,
-          "tbt": 545,
-          "dcl": 52.18999981880188,
-          "load": 785.5649998188019,
-          "ttfb": 40.264999866485596,
+          "longTasks": 3,
+          "tbt": 80,
+          "dcl": 318.0150001049042,
+          "load": 868.7799999713898,
+          "ttfb": 302.5199999809265,
           "resources": 7,
-          "transferBytes": 442586,
-          "decodedBytes": 967135,
-          "jsBytes": 253886,
+          "transferBytes": 442503,
+          "decodedBytes": 966785,
+          "jsBytes": 253820,
           "cssBytes": 0,
           "imgBytes": 6169,
           "thirdPartyHosts": 1,
@@ -3777,19 +3418,19 @@
         }
       },
       "score": {
-        "perf": 95,
+        "perf": 83,
         "a11y": 79,
         "ux": 43,
-        "overall": 71,
+        "overall": 68,
         "detail": {
           "perf": {
-            "ttfb": 1,
-            "fcp": 1,
-            "lcp": 1,
+            "ttfb": 0.7096805555290646,
+            "fcp": 0.48933906249701975,
+            "lcp": 0.6752328947343325,
             "cls": 1,
-            "weight": 0.9749282456140351,
+            "weight": 0.9760629824561403,
             "scripts": 1,
-            "tbt": 0.6862068965517241
+            "tbt": 0.9710344827586207
           },
           "a11y": {
             "alt": 1,
@@ -3820,11 +3461,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://chat.mistral.ai/",
-        "elapsedMs": 818,
+        "elapsedMs": 840,
         "bytes": 5629,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-WGwLVbLp72ChklvH5f5i3B' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-EW0vIuDYkTSYeCCAfysc2J' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": "max-age=15552000; includeSubDomains; preload",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -3948,18 +3589,18 @@
           "text": "Good afternoon. Ready when you are Think Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
         },
         "metrics": {
-          "fcp": 2196,
-          "lcp": 6084,
+          "fcp": 2392,
+          "lcp": 6812,
           "cls": 0,
-          "longTasks": 8,
-          "tbt": 1476,
-          "dcl": 2186.9000000953674,
-          "load": 4523.099999904633,
-          "ttfb": 1759.4000000953674,
+          "longTasks": 9,
+          "tbt": 1439,
+          "dcl": 4409.199999809265,
+          "load": 5428,
+          "ttfb": 1606.7999999523163,
           "resources": 151,
-          "transferBytes": 3833617,
+          "transferBytes": 3832490,
           "decodedBytes": 11875905,
-          "jsBytes": 3578633,
+          "jsBytes": 3577506,
           "cssBytes": 250598,
           "imgBytes": 0,
           "thirdPartyHosts": 3,
@@ -4080,16 +3721,16 @@
           "text": "Good afternoon. Ready when you are Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
         },
         "metrics": {
-          "fcp": 1384,
-          "lcp": 3452,
+          "fcp": 868,
+          "lcp": 3164,
           "cls": 0,
-          "longTasks": 6,
-          "tbt": 521,
-          "dcl": 2574.2999999523163,
-          "load": 2575.7000000476837,
-          "ttfb": 1165.3999998569489,
+          "longTasks": 8,
+          "tbt": 583,
+          "dcl": 2333.2999999523163,
+          "load": 2333.699999809265,
+          "ttfb": 589,
           "resources": 149,
-          "transferBytes": 2908,
+          "transferBytes": 2895,
           "decodedBytes": 11860499,
           "jsBytes": 0,
           "cssBytes": 530,
@@ -4099,19 +3740,19 @@
         }
       },
       "score": {
-        "perf": 36,
+        "perf": 37,
         "a11y": 77,
         "ux": 79,
-        "overall": 65,
+        "overall": 66,
         "detail": {
           "perf": {
-            "ttfb": 0.13366666661368476,
-            "fcp": 0.56375,
+            "ttfb": 0.21844444447093536,
+            "fcp": 0.5025,
             "lcp": 0,
             "cls": 1,
-            "weight": 0.38006719298245617,
+            "weight": 0.3802649122807018,
             "scripts": 0.4304347826086956,
-            "tbt": 0.016551724137931045
+            "tbt": 0.042068965517241375
           },
           "a11y": {
             "alt": 1,
@@ -4142,7 +3783,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://duck.ai/",
-        "elapsedMs": 273,
+        "elapsedMs": 247,
         "bytes": 26559,
         "encoding": "br",
         "cache": "no-cache, no-cache, no-store, must-revalidate",
@@ -4232,12 +3873,12 @@
           "h2": [],
           "ctas": [
             {
-              "text": "Hide sidebar, ⌘ + ⇧ + S",
+              "text": "Hide sidebar, \u2318 + \u21e7 + S",
               "tag": "button",
               "href": null
             },
             {
-              "text": "New Chat ⌘ + ⇧ + O",
+              "text": "New Chat \u2318 + \u21e7 + O",
               "tag": "button",
               "href": null
             },
@@ -4247,7 +3888,7 @@
               "href": null
             },
             {
-              "text": "New Image ⌘ + ⇧ + I",
+              "text": "New Image \u2318 + \u21e7 + I",
               "tag": "button",
               "href": null
             },
@@ -4275,17 +3916,17 @@
           "navItems": 0,
           "wordCount": 62,
           "links": 3,
-          "text": "Duck.ai New Chat ⌘ + ⇧ + O New Voice Chat New Image ⌘ + ⇧ + I Settings & More Free by DuckDuckGo | Get the App Duck.ai, by DuckDuckGo Tools Fast 6 Luna Ask DuckDuckGo anonymizes your chats. By clicking 'Ask' you agree to our Privacy Policy and Terms of Service. How Duck.ai Works Chat Suggestions Create & Edit Images"
+          "text": "Duck.ai New Chat \u2318 + \u21e7 + O New Voice Chat New Image \u2318 + \u21e7 + I Settings & More Free by DuckDuckGo | Get the App Duck.ai, by DuckDuckGo Tools Fast 6 Luna Ask DuckDuckGo anonymizes your chats. By clicking 'Ask' you agree to our Privacy Policy and Terms of Service. How Duck.ai Works Chat Suggestions Create & Edit Images"
         },
         "metrics": {
-          "fcp": 924,
-          "lcp": 2868,
+          "fcp": 968,
+          "lcp": 3136,
           "cls": 0.02848765432098765,
-          "longTasks": 5,
-          "tbt": 897,
-          "dcl": 1903.7000000476837,
-          "load": 1903.9000000953674,
-          "ttfb": 441.5,
+          "longTasks": 3,
+          "tbt": 808,
+          "dcl": 2515.100000143051,
+          "load": 2515.9000000953674,
+          "ttfb": 398.90000009536743,
           "resources": 31,
           "transferBytes": 1743621,
           "decodedBytes": 6200987,
@@ -4408,14 +4049,14 @@
           "text": "FREE Duck.ai, by DuckDuckGo 6 Luna Ask DuckDuckGo anonymizes your chats. By clicking 'Ask' you agree to our Privacy Policy and Terms of Service. Voice Chat How Duck.ai Works Chat Suggestions Create & Edit Images"
         },
         "metrics": {
-          "fcp": 668,
-          "lcp": 744,
+          "fcp": 828,
+          "lcp": 896,
           "cls": 0,
           "longTasks": 1,
-          "tbt": 107,
-          "dcl": 473.2999999523163,
-          "load": 473.39999985694885,
-          "ttfb": 238.19999980926514,
+          "tbt": 76,
+          "dcl": 564.5,
+          "load": 564.6999998092651,
+          "ttfb": 376.09999990463257,
           "resources": 30,
           "transferBytes": 1088,
           "decodedBytes": 6185901,
@@ -4433,13 +4074,13 @@
         "overall": 79,
         "detail": {
           "perf": {
-            "ttfb": 0.8658333333333333,
-            "fcp": 0.96125,
-            "lcp": 0.5610526315789474,
+            "ttfb": 0.8894999999470181,
+            "fcp": 0.9475,
+            "lcp": 0.4905263157894737,
             "cls": 0.9742798353909465,
             "weight": 0.7467331578947368,
             "scripts": 0.9521739130434783,
-            "tbt": 0.41586206896551725
+            "tbt": 0.4772413793103448
           },
           "a11y": {
             "alt": 1,
@@ -4470,7 +4111,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://huggingface.co/chat/",
-        "elapsedMs": 413,
+        "elapsedMs": 402,
         "bytes": 159169,
         "encoding": "br",
         "cache": null,
@@ -4637,31 +4278,6 @@
               "href": null
             },
             {
-              "text": "HuggingChat",
-              "tag": "a",
-              "href": "https://huggingface.co/chat/"
-            },
-            {
-              "text": "New Chat",
-              "tag": "a",
-              "href": "/chat/"
-            },
-            {
-              "text": "Models 134",
-              "tag": "a",
-              "href": "/chat/models"
-            },
-            {
-              "text": "Settings",
-              "tag": "a",
-              "href": "/chat/settings/application"
-            },
-            {
-              "text": "Toggle theme",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Try it",
               "tag": "button",
               "href": null
@@ -4670,22 +4286,47 @@
               "text": "Dismiss",
               "tag": "button",
               "href": null
+            },
+            {
+              "text": "Doodle Jump game",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Generate an image",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Make my website",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Celebrate 3M models",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Latest world news",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 4,
+          "navItems": 0,
           "wordCount": 133,
           "links": 6,
-          "text": "HuggingChat New Chat Models 134 Settings HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers · training · spaces · datasets · eval · hub MCP (2) ML Intern NEW Omni Generated content may be inaccurate or false. Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI "
+          "text": "HuggingChat New Chat Models 134 Settings HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers \u00b7 training \u00b7 spaces \u00b7 datasets \u00b7 eval \u00b7 hub MCP (2) ML Intern NEW Omni Generated content may be inaccurate or false. Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI "
         },
         "metrics": {
           "fcp": 776,
-          "lcp": 1080,
+          "lcp": 1032,
           "cls": 0.02321397087191358,
           "longTasks": 1,
-          "tbt": 21,
-          "dcl": 709.5999999046326,
-          "load": 876,
-          "ttfb": 344.2999999523163,
+          "tbt": 14,
+          "dcl": 716.6000001430511,
+          "load": 860.2000000476837,
+          "ttfb": 324.40000009536743,
           "resources": 66,
           "transferBytes": 700939,
           "decodedBytes": 2043756,
@@ -4844,21 +4485,6 @@
           ],
           "ctas": [
             {
-              "text": "Open menu",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Share conversation",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "",
-              "tag": "a",
-              "href": "/chat/"
-            },
-            {
               "text": "Try it",
               "tag": "button",
               "href": null
@@ -4882,25 +4508,40 @@
               "text": "Make my website",
               "tag": "button",
               "href": null
+            },
+            {
+              "text": "Celebrate 3M models",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Latest world news",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Trending models",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 1,
+          "navItems": 0,
           "wordCount": 120,
           "links": 6,
-          "text": "HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers · training · spaces · datasets · eval · hub MCP (2) ML Intern NEW Omni Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI model to give you optimal answers depending on your requests. You can also choose from "
+          "text": "HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers \u00b7 training \u00b7 spaces \u00b7 datasets \u00b7 eval \u00b7 hub MCP (2) ML Intern NEW Omni Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI model to give you optimal answers depending on your requests. You can also choose from "
         },
         "metrics": {
-          "fcp": 1304,
-          "lcp": 1392,
+          "fcp": 352,
+          "lcp": 436,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 1202,
-          "load": 1336.7999999523163,
-          "ttfb": 1160.4000000953674,
+          "dcl": 311.59999990463257,
+          "load": 383.39999985694885,
+          "ttfb": 275.09999990463257,
           "resources": 64,
-          "transferBytes": 3545,
-          "decodedBytes": 2047916,
+          "transferBytes": 3409,
+          "decodedBytes": 2047780,
           "jsBytes": 2522,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -4911,11 +4552,11 @@
       "score": {
         "perf": 95,
         "a11y": 62,
-        "ux": 79,
-        "overall": 78,
+        "ux": 64,
+        "overall": 73,
         "detail": {
           "perf": {
-            "ttfb": 0.9198333333598243,
+            "ttfb": 0.930888888835907,
             "fcp": 1,
             "lcp": 1,
             "cls": 0.9902606943275346,
@@ -4934,7 +4575,7 @@
           },
           "ux": {
             "h1": 0,
-            "nav": 1,
+            "nav": 0,
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
@@ -4952,7 +4593,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://claude.com/product/overview",
-        "elapsedMs": 749,
+        "elapsedMs": 1771,
         "bytes": 796596,
         "encoding": "gzip",
         "cache": "public, max-age=0, must-revalidate",
@@ -5005,7 +4646,7 @@
           },
           {
             "level": 2,
-            "text": "Don’t know where to start? Ask Claude."
+            "text": "Don\u2019t know where to start? Ask Claude."
           },
           {
             "level": 2,
@@ -5218,34 +4859,14 @@
               "href": "/product/claude-duet"
             },
             {
-              "text": "",
+              "text": "Try Claude",
               "tag": "a",
-              "href": "/"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27"
             },
             {
-              "text": "Product",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Developers",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Enterprise",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Resources",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Pricing",
-              "tag": "button",
-              "href": null
+              "text": "Download for macOS",
+              "tag": "a",
+              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27/api/desktop/darwin/universal/dmg/latest/redirect"
             }
           ],
           "navItems": 4,
@@ -5254,14 +4875,14 @@
           "text": "Skip to main content Latest news Introducing Claude Duet A new app and proactive way to work with Claude, now in research preview. Join the waitlist Product Developers Enterprise Resources Pricing Login Contact sales Try Claude Product Explore here Campaign readout Call prep Audience intelligence QBR deck Earnings comps CRM hygiene Month-end close JD check Budget reforecast Survey readout Legal research drafting Merit analysis Deposition prep Action tracking Contract redline Metrics dashboard Asset creation QBR deck Campaign readout Call prep Audience intelligence Earnings comps JD check Month"
         },
         "metrics": {
-          "fcp": 5364,
-          "lcp": 7636,
-          "cls": 0.00000895945859053498,
-          "longTasks": 6,
-          "tbt": 387,
-          "dcl": 5455.900000095367,
-          "load": 6943.299999952316,
-          "ttfb": 139.10000014305115,
+          "fcp": 2508,
+          "lcp": 6916,
+          "cls": 8.95945859053498e-06,
+          "longTasks": 3,
+          "tbt": 206,
+          "dcl": 2781.600000143051,
+          "load": 6520.200000047684,
+          "ttfb": 647.7000000476837,
           "resources": 137,
           "transferBytes": 1532064,
           "decodedBytes": 3412250,
@@ -5323,7 +4944,7 @@
           },
           {
             "level": 2,
-            "text": "Don’t know where to start? Ask Claude."
+            "text": "Don\u2019t know where to start? Ask Claude."
           },
           {
             "level": 2,
@@ -5455,29 +5076,14 @@
               "href": "/product/claude-duet"
             },
             {
-              "text": "",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Toggle menu",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Explore here",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Try Claude",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.d294dc17-f471-42a3-93c6-4ba3cf1693fe"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27"
             },
             {
               "text": "Download for macOS",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.d294dc17-f471-42a3-93c6-4ba3cf1693fe/api/desktop/darwin/universal/dmg/latest/redirect"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27/api/desktop/darwin/universal/dmg/latest/redirect"
             },
             {
               "text": "Play: Claude product overview",
@@ -5491,17 +5097,17 @@
           "text": "Skip to main content Latest news Introducing Claude Duet A new app and proactive way to work with Claude, now in research preview. Join the waitlist Product Explore here Give Claude more Hand Claude a task, not just a question. Tackle routines, tangled ideas, and big projects. Try Claude Download for macOS Put Claude to work For everyone Keep up with meetings all day Claude reads each transcript, pulls action items and owners into one list, posts it for the team in Slack, and follows up on opens before the next meeting on Google Calendar. Organize customer feedback into a digest Claude pulls f"
         },
         "metrics": {
-          "fcp": 628,
-          "lcp": 628,
+          "fcp": 548,
+          "lcp": 548,
           "cls": 0,
           "longTasks": 1,
-          "tbt": 168,
-          "dcl": 716.2999999523163,
-          "load": 791.2000000476837,
-          "ttfb": 36.5,
-          "resources": 119,
+          "tbt": 90,
+          "dcl": 887.2999999523163,
+          "load": 931.7999999523163,
+          "ttfb": 135.90000009536743,
+          "resources": 118,
           "transferBytes": 10842,
-          "decodedBytes": 2976624,
+          "decodedBytes": 2882047,
           "jsBytes": 0,
           "cssBytes": 3900,
           "imgBytes": 6300,
@@ -5510,19 +5116,19 @@
         }
       },
       "score": {
-        "perf": 58,
+        "perf": 63,
         "a11y": 93,
-        "ux": 93,
-        "overall": 83,
+        "ux": 100,
+        "overall": 86,
         "detail": {
           "perf": {
-            "ttfb": 1,
-            "fcp": 0,
+            "ttfb": 0.7512777777512868,
+            "fcp": 0.46625000000000005,
             "lcp": 0,
             "cls": 1,
             "weight": 0.7838484210526315,
             "scripts": 0.491304347826087,
-            "tbt": 0.7675862068965518
+            "tbt": 0.8924137931034483
           },
           "a11y": {
             "alt": 1,
@@ -5539,7 +5145,7 @@
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
-            "cta": 0.5,
+            "cta": 1,
             "meta": 1
           }
         }
@@ -5553,7 +5159,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://mistral.ai/",
-        "elapsedMs": 1618,
+        "elapsedMs": 378,
         "bytes": 326017,
         "encoding": "br",
         "cache": "public,max-age=0,must-revalidate",
@@ -5612,7 +5218,7 @@
         "headingSkips": 0,
         "ariaLive": 0,
         "roleStatus": 0,
-        "images": 38,
+        "images": 35,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 33,
         "controls": 0,
@@ -5672,66 +5278,31 @@
           ],
           "ctas": [
             {
-              "text": "Go to homepage",
+              "text": "Le Chonk brings the brains. Studio puts it to work.",
               "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Research",
-              "tag": "a",
-              "href": "/research/"
-            },
-            {
-              "text": "Sovereign AI",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Cloud",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Customers",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Company",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Get in touch",
-              "tag": "a",
-              "href": "/contact"
-            },
-            {
-              "text": "Start building",
-              "tag": "a",
-              "href": "https://console.mistral.ai"
+              "href": "/news/build-with-studio/"
             }
           ],
-          "navItems": 31,
+          "navItems": 26,
           "wordCount": 557,
           "links": 82,
           "text": "Skip to content Research Sovereign AI Cloud Customers Company Get in touch Start building Why Sovereign AI Products Method Sovereign AI in practice Inference Compute Energy & utilities Manufacturing Financial services Public sector Cybersecurity All customers Blog Docs About us Careers Research Sovereign AI Cloud Customers Company Get in touch Start building Mistral is #1 in Sovereign AI. Mistral is #1 in Sovereign AI. Le Chonk brings the brains. Studio puts it to work. No one else should hold the strings to your Process knowledge Intellectual property Invention Data Core product development Q"
         },
         "metrics": {
-          "fcp": 2180,
-          "lcp": 4808,
-          "cls": 0.08859106019609421,
-          "longTasks": 6,
-          "tbt": 175,
-          "dcl": 2585.5,
-          "load": 3863.4000000953674,
-          "ttfb": 1856.9000000953674,
-          "resources": 63,
-          "transferBytes": 1741973,
-          "decodedBytes": 2966015,
+          "fcp": 1772,
+          "lcp": 5676,
+          "cls": 0.08549282606406795,
+          "longTasks": 3,
+          "tbt": 174,
+          "dcl": 3591.4000000953674,
+          "load": 4045,
+          "ttfb": 304.10000014305115,
+          "resources": 60,
+          "transferBytes": 1382995,
+          "decodedBytes": 2607937,
           "jsBytes": 359281,
           "cssBytes": 490478,
-          "imgBytes": 890382,
+          "imgBytes": 531404,
           "thirdPartyHosts": 12,
           "host": "mistral.ai"
         }
@@ -5781,7 +5352,7 @@
         "headingSkips": 0,
         "ariaLive": 0,
         "roleStatus": 0,
-        "images": 43,
+        "images": 40,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 37,
         "controls": 0,
@@ -5841,84 +5412,49 @@
           ],
           "ctas": [
             {
-              "text": "Go to homepage",
+              "text": "Le Chonk brings the brains. Studio puts it to work.",
               "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Get in touch",
-              "tag": "a",
-              "href": "/contact/"
-            },
-            {
-              "text": "Toggle menu",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Research",
-              "tag": "a",
-              "href": "/research/"
-            },
-            {
-              "text": "Sovereign AI",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Cloud",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Customers",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Company",
-              "tag": "button",
-              "href": null
+              "href": "/news/build-with-studio/"
             }
           ],
-          "navItems": 26,
+          "navItems": 21,
           "wordCount": 553,
           "links": 82,
           "text": "Skip to content Get in touch MENU Research Sovereign AI Cloud Customers Company Get in touch Start building Why Sovereign AI Products Method Sovereign AI in practice Inference Compute Energy & utilities Manufacturing Financial services Public sector Cybersecurity All customers Blog Docs About us Careers Mistral is #1 in Sovereign AI. Mistral is #1 in Sovereign AI. Le Chonk brings the brains. Studio puts it to work. No one else should hold the strings to your Process knowledge Intellectual property Invention Data Core product development Quality standards Discovery Proprietary AI Private code b"
         },
         "metrics": {
-          "fcp": 268,
-          "lcp": 2384,
-          "cls": 0.011068253443059718,
-          "longTasks": 1,
-          "tbt": 6,
-          "dcl": 310,
-          "load": 562.9000000953674,
-          "ttfb": 112.90000009536743,
-          "resources": 55,
+          "fcp": 380,
+          "lcp": 2644,
+          "cls": 0.011276636090487983,
+          "longTasks": 2,
+          "tbt": 139,
+          "dcl": 603,
+          "load": 654.7999999523163,
+          "ttfb": 117.29999995231628,
+          "resources": 61,
           "transferBytes": 365822,
-          "decodedBytes": 3022072,
+          "decodedBytes": 2663994,
           "jsBytes": 4380,
           "cssBytes": 0,
           "imgBytes": 361442,
-          "thirdPartyHosts": 8,
+          "thirdPartyHosts": 12,
           "host": "mistral.ai"
         }
       },
       "score": {
-        "perf": 57,
+        "perf": 71,
         "a11y": 99,
-        "ux": 73,
-        "overall": 77,
+        "ux": 80,
+        "overall": 84,
         "detail": {
           "perf": {
-            "ttfb": 0.07949999994701806,
-            "fcp": 0.56875,
-            "lcp": 0.05052631578947364,
-            "cls": 0.7921483024360781,
-            "weight": 0.7470222807017544,
-            "scripts": 0.8130434782608695,
-            "tbt": 0.9137931034482758
+            "ttfb": 0.9421666665871938,
+            "fcp": 0.69625,
+            "lcp": 0,
+            "cls": 0.8015368907149456,
+            "weight": 0.8100008771929824,
+            "scripts": 0.8260869565217391,
+            "tbt": 0.9144827586206896
           },
           "a11y": {
             "alt": 1,
@@ -5935,7 +5471,7 @@
             "mobileNav": 1,
             "overflow": 1,
             "live": 0,
-            "cta": 0.5,
+            "cta": 1,
             "meta": 1
           }
         }
@@ -5949,7 +5485,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://deepmind.google/models/gemini/",
-        "elapsedMs": 306,
+        "elapsedMs": 662,
         "bytes": 236810,
         "encoding": "gzip",
         "cache": "public, max-age=60",
@@ -5962,10 +5498,10 @@
         "server": "Google Frontend"
       },
       "refused": false,
-      "title": "Gemini — Google DeepMind",
+      "title": "Gemini \u2014 Google DeepMind",
       "desktop": {
         "url": "https://deepmind.google/models/gemini/",
-        "title": "Gemini — Google DeepMind",
+        "title": "Gemini \u2014 Google DeepMind",
         "lang": "en",
         "hasViewport": true,
         "description": "Our next era of frontier intelligence",
@@ -6140,44 +5676,19 @@
           ],
           "ctas": [
             {
-              "text": "Home",
+              "text": "Try in Gemini",
               "tag": "a",
-              "href": "/"
+              "href": "https://gemini.google.com?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content="
             },
             {
-              "text": "Open the website selector panel",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Models",
-              "tag": "a",
-              "href": "https://deepmind.google/models/"
-            },
-            {
-              "text": "Research",
-              "tag": "a",
-              "href": "https://deepmind.google/research/"
-            },
-            {
-              "text": "Science",
-              "tag": "a",
-              "href": "https://deepmind.google/science/"
-            },
-            {
-              "text": "About",
-              "tag": "a",
-              "href": "https://deepmind.google/about/"
-            },
-            {
-              "text": "Build with Gemini",
+              "text": "Try in Google AI Studio",
               "tag": "a",
               "href": "https://aistudio.google.com/prompts/new_chat?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content="
             },
             {
-              "text": "Try Gemini",
+              "text": "Try in Google Antigravity",
               "tag": "a",
-              "href": "https://gemini.google.com/?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content="
+              "href": "https://antigravity.google?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content="
             }
           ],
           "navItems": 7,
@@ -6186,14 +5697,14 @@
           "text": "Skip to main content Google DeepMind Models Research Science About Build with Gemini Try Gemini Gemini 4 Try in Gemini Try in Google AI Studio Try in Google Antigravity Our next era of frontier intelligence, built to solve your hardest problems. Announcements Introducing Gemini 4 Hydrogen November 2026 Models Learn more Gemini 4 Carbon is now available November 2026 Models Learn more Gemini 4 Carbon: Our next frontier model October 2026 Models Learn more Gemini 4 Argon: Built to solve your hardest problems October 2026 Models Learn more Developing Gemini 4 Argon responsibly and safely October "
         },
         "metrics": {
-          "fcp": 1008,
-          "lcp": 1008,
+          "fcp": 1088,
+          "lcp": 1088,
           "cls": 0.0010723844300572275,
-          "longTasks": 6,
-          "tbt": 53,
-          "dcl": 1020.9000000953674,
-          "load": 2919.600000143051,
-          "ttfb": 520.2000000476837,
+          "longTasks": 5,
+          "tbt": 71,
+          "dcl": 1126.7999999523163,
+          "load": 3517.2999999523163,
+          "ttfb": 534.9000000953674,
           "resources": 45,
           "transferBytes": 323817,
           "decodedBytes": 1137539,
@@ -6206,7 +5717,7 @@
       },
       "mobile": {
         "url": "https://deepmind.google/models/gemini/",
-        "title": "Gemini — Google DeepMind",
+        "title": "Gemini \u2014 Google DeepMind",
         "lang": "en",
         "hasViewport": true,
         "description": "Our next era of frontier intelligence",
@@ -6381,21 +5892,6 @@
           ],
           "ctas": [
             {
-              "text": "Open the site navigation",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Home",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Open the website selector panel",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Try in Gemini",
               "tag": "a",
               "href": "https://gemini.google.com?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content="
@@ -6417,38 +5913,38 @@
           "text": "Skip to main content Google DeepMind Gemini 4 Try in Gemini Try in Google AI Studio Try in Google Antigravity Our next era of frontier intelligence, built to solve your hardest problems. Announcements Introducing Gemini 4 Hydrogen November 2026 Models Learn more Gemini 4 Carbon is now available November 2026 Models Learn more Gemini 4 Carbon: Our next frontier model October 2026 Models Learn more Gemini 4 Argon: Built to solve your hardest problems October 2026 Models Learn more Developing Gemini 4 Argon responsibly and safely October 2026 Responsibility & Safety Learn more Gemini 4 Argon for "
         },
         "metrics": {
-          "fcp": 196,
-          "lcp": 196,
+          "fcp": 156,
+          "lcp": 156,
           "cls": 0,
-          "longTasks": 2,
-          "tbt": 112,
-          "dcl": 196.5,
-          "load": 2797.5999999046326,
-          "ttfb": 6.200000047683716,
-          "resources": 46,
-          "transferBytes": 0,
+          "longTasks": 0,
+          "tbt": 0,
+          "dcl": 55,
+          "load": 3244.300000190735,
+          "ttfb": 7.400000095367432,
+          "resources": 47,
+          "transferBytes": 16080,
           "decodedBytes": 3874591,
           "jsBytes": 0,
           "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 7,
+          "imgBytes": 16080,
+          "thirdPartyHosts": 8,
           "host": "deepmind.google"
         }
       },
       "score": {
-        "perf": 95,
+        "perf": 94,
         "a11y": 95,
-        "ux": 93,
-        "overall": 94,
+        "ux": 100,
+        "overall": 96,
         "detail": {
           "perf": {
-            "ttfb": 0.8221111110846202,
-            "fcp": 0.935,
+            "ttfb": 0.8139444443914625,
+            "fcp": 0.91,
             "lcp": 1,
             "cls": 1,
             "weight": 0.9958215789473684,
             "scripts": 0.8913043478260869,
-            "tbt": 0.9979310344827587
+            "tbt": 0.9855172413793103
           },
           "a11y": {
             "alt": 1,
@@ -6465,7 +5961,7 @@
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
-            "cta": 0.5,
+            "cta": 1,
             "meta": 1
           }
         }
@@ -6479,8 +5975,8 @@
       "http": {
         "status": 200,
         "finalUrl": "https://you.com/",
-        "elapsedMs": 1139,
-        "bytes": 545294,
+        "elapsedMs": 1104,
+        "bytes": 545297,
         "encoding": "gzip",
         "cache": "private, no-cache, no-store, max-age=0, must-revalidate",
         "csp": null,
@@ -6577,7 +6073,7 @@
         "smallTargets": 29,
         "smallTargetsSample": [
           {
-            "name": "Learn More →",
+            "name": "Learn More \u2192",
             "w": 910,
             "h": 20
           },
@@ -6727,44 +6223,44 @@
               "href": "/product/inference-router"
             },
             {
-              "text": "You.com home",
+              "text": "Get API key Y",
               "tag": "a",
-              "href": "/home"
+              "href": "/platform"
             },
             {
-              "text": "APIs",
+              "text": "Copy onboarding prompt",
               "tag": "button",
               "href": null
             },
             {
-              "text": "Docs",
-              "tag": "a",
-              "href": "https://you.com/docs/welcome"
+              "text": "Web Search",
+              "tag": "button",
+              "href": null
             },
             {
-              "text": "Pricing",
-              "tag": "a",
-              "href": "/pricing"
+              "text": "Contents",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 31,
+          "navItems": 6,
           "wordCount": 1244,
           "links": 50,
           "text": "This website utilizes technologies such as cookies to enable essential site functionality, as well as for analytics and personalization. To learn more, view the following link: Privacy Policy Terms and Conditions Skip to main content NEW You.com Inference Router: Enterprise-grade inference on demand, with an uptime SLA of at least 99.9% and ZDR. Learn More APIs Docs Pricing Benchmarks Company Blog Contact Sales C Sign in AI Search and Inference The core AI infrastructure you need to maximize accuracy while reducing latency and costs. Get API key Y Copy onboarding prompt Interactive Demo Web Se"
         },
         "metrics": {
-          "fcp": 696,
-          "lcp": 696,
-          "cls": 0.003386968382951817,
-          "longTasks": 12,
-          "tbt": 978,
-          "dcl": 909.2999999523163,
-          "load": 5912,
-          "ttfb": 389.2000000476837,
-          "resources": 218,
-          "transferBytes": 1705431,
-          "decodedBytes": 6018883,
-          "jsBytes": 1207704,
+          "fcp": 752,
+          "lcp": 752,
+          "cls": 0.003444550665710198,
+          "longTasks": 9,
+          "tbt": 596,
+          "dcl": 683.2999999523163,
+          "load": 5110.199999809265,
+          "ttfb": 387.09999990463257,
+          "resources": 214,
+          "transferBytes": 1704109,
+          "decodedBytes": 5872584,
+          "jsBytes": 1207699,
           "cssBytes": 181400,
           "imgBytes": 12582,
           "thirdPartyHosts": 35,
@@ -6871,7 +6367,7 @@
         "smallTargets": 29,
         "smallTargetsSample": [
           {
-            "name": "Learn More →",
+            "name": "Learn More \u2192",
             "w": 292,
             "h": 20
           },
@@ -7006,16 +6502,6 @@
               "href": "/product/inference-router"
             },
             {
-              "text": "You.com home",
-              "tag": "a",
-              "href": "/home"
-            },
-            {
-              "text": "Open navigation menu",
-              "tag": "button",
-              "href": null
-            },
-            {
               "text": "Get API key Y",
               "tag": "a",
               "href": "/platform"
@@ -7039,46 +6525,56 @@
               "text": "Answer",
               "tag": "button",
               "href": null
+            },
+            {
+              "text": "Research",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Run search",
+              "tag": "button",
+              "href": null
             }
           ],
-          "navItems": 26,
+          "navItems": 1,
           "wordCount": 1308,
           "links": 50,
-          "text": "Skip to main content NEW Inference Router: Enterprise-grade inference with ZDR and 99.9% uptime SLA. Learn More AI Search and Inference The core AI infrastructure you need to maximize accuracy while reducing latency and costs. Get API key Y Copy onboarding prompt Interactive Demo Web Search Contents Answer Research Run Visual JSON digital-strategy.ec.europa.eu · 3 months ago AI Act | Shaping Europe's digital future - European Union The AI Act is the first-ever legal framework on AI, which addresses the risks of AI and positions Europe to play a leading role globally. The AI Act (Regulation (EU"
+          "text": "Skip to main content NEW Inference Router: Enterprise-grade inference with ZDR and 99.9% uptime SLA. Learn More AI Search and Inference The core AI infrastructure you need to maximize accuracy while reducing latency and costs. Get API key Y Copy onboarding prompt Interactive Demo Web Search Contents Answer Research Run Visual JSON digital-strategy.ec.europa.eu \u00b7 3 months ago AI Act | Shaping Europe's digital future - European Union The AI Act is the first-ever legal framework on AI, which addresses the risks of AI and positions Europe to play a leading role globally. The AI Act (Regulation (EU"
         },
         "metrics": {
-          "fcp": 1216,
-          "lcp": 1216,
+          "fcp": 608,
+          "lcp": 608,
           "cls": 0,
-          "longTasks": 4,
-          "tbt": 120,
-          "dcl": 2841.7999999523163,
-          "load": 0,
-          "ttfb": 1080.2999999523163,
-          "resources": 169,
-          "transferBytes": 1387,
-          "decodedBytes": 4285314,
-          "jsBytes": 0,
+          "longTasks": 2,
+          "tbt": 26,
+          "dcl": 879,
+          "load": 2840.5999999046326,
+          "ttfb": 482.7000000476837,
+          "resources": 190,
+          "transferBytes": 12587,
+          "decodedBytes": 4305084,
+          "jsBytes": 3384,
           "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 24,
+          "imgBytes": 1368,
+          "thirdPartyHosts": 32,
           "host": "you.com"
         }
       },
       "score": {
-        "perf": 74,
+        "perf": 78,
         "a11y": 83,
-        "ux": 87,
-        "overall": 82,
+        "ux": 93,
+        "overall": 85,
         "detail": {
           "perf": {
-            "ttfb": 0.8948888888623979,
+            "ttfb": 0.8960555556085374,
             "fcp": 1,
             "lcp": 1,
             "cls": 1,
-            "weight": 0.7534331578947369,
-            "scripts": 0.13913043478260867,
-            "tbt": 0.36
+            "weight": 0.7536650877192983,
+            "scripts": 0.15652173913043477,
+            "tbt": 0.623448275862069
           },
           "a11y": {
             "alt": 1,
@@ -7091,7 +6587,7 @@
           },
           "ux": {
             "h1": 1,
-            "nav": 0.6,
+            "nav": 1,
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,

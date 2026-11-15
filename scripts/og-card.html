@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RAREXT OG card</title>
+    <style>
+      /* 1200x630, rendered by scripts/render-og.mjs. No external assets: the card
+         has to look the same on a machine that has never seen this repo. */
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+      body {
+        background:
+          radial-gradient(720px 420px at 8% -16%, rgba(99, 242, 196, 0.16), transparent 64%),
+          radial-gradient(620px 420px at 96% 8%, rgba(143, 184, 255, 0.1), transparent 60%),
+          #070a0d;
+        color: #f0f5f8;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Helvetica Neue", sans-serif;
+        padding: 64px 72px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+        gap: 56px;
+        align-items: center;
+      }
+      .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 46px; }
+      .mark { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 38px; height: 38px; }
+      .mark i { display: block; border-radius: 6px; background: #63f2c4; }
+      .mark i:nth-child(2) { background: #2f7d68; }
+      .mark i:nth-child(3) { background: #1f5a4c; }
+      .mark i:nth-child(4) { background: #f7b46a; }
+      .name { font-size: 24px; font-weight: 750; letter-spacing: 0.18em; }
+      .tag { font: 13px/1 ui-monospace, Menlo, monospace; letter-spacing: 0.1em; color: #8b9aa9; border-left: 1px solid #22303d; padding-left: 14px; }
+      h1 { margin: 0; font-size: 74px; line-height: 1.02; letter-spacing: -0.045em; font-weight: 760; }
+      h1 em { font-style: normal; color: #63f2c4; }
+      .lede { margin: 26px 0 0; max-width: 34ch; font-size: 23px; line-height: 1.45; color: #a9b7c4; }
+      .facts { display: flex; gap: 26px; margin-top: 44px; font: 14px/1.4 ui-monospace, Menlo, monospace; color: #8b9aa9; }
+      .facts b { color: #f0f5f8; font-weight: 600; }
+      .card {
+        border: 1px solid #22303d;
+        border-radius: 20px;
+        background: linear-gradient(180deg, #111923, #0c1117 52%);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+        padding: 22px;
+      }
+      .card-head { display: flex; align-items: center; justify-content: space-between; font: 11px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #8b9aa9; }
+      .badge { color: #63f2c4; border: 1px solid rgba(99, 242, 196, 0.34); background: rgba(99, 242, 196, 0.1); border-radius: 999px; padding: 6px 11px; }
+      .stream { margin: 18px 0; padding: 16px; min-height: 132px; border: 1px solid #18222c; border-radius: 12px; background: #070a0d; font: 15px/2 ui-monospace, Menlo, monospace; word-break: break-word; }
+      .stream .a { color: #f0f5f8; }
+      .stream .b { color: #63f2c4; }
+      .rows { display: grid; gap: 1px; border: 1px solid #18222c; border-radius: 10px; overflow: hidden; background: #18222c; }
+      .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; background: #0c1117; font: 12px/1.5 ui-monospace, Menlo, monospace; }
+      .row span { color: #8b9aa9; text-transform: uppercase; letter-spacing: 0.1em; }
+      .row b { color: #a9b7c4; font-weight: 400; }
+      .url { margin-top: 16px; font: 13px/1.4 ui-monospace, Menlo, monospace; color: #63f2c4; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="name">RAREXT</span>
+        <span class="tag">VERIFIABLE AI</span>
+      </div>
+      <h1>Don’t trust<br />the model.<br /><em>Check it.</em></h1>
+      <p class="lede">
+        A committed model runs in your browser. Every answer carries a replayable
+        trace. The proof is arithmetic — not a promise.
+      </p>
+      <p class="facts"><span><b>0</b> accounts</span><span><b>0</b> bytes uploaded</span><span><b>0</b> third parties</span></p>
+    </main>
+
+    <aside class="card">
+      <div class="card-head"><span>Live proof</span><span class="badge">verified</span></div>
+      <div class="stream">
+        <span class="b">The</span> <span class="a">proof</span> <span class="b">is</span>
+        <span class="a">not</span> <span class="b">a</span> <span class="a">promise.</span>
+        <span class="b">It</span> <span class="a">is</span> <span class="b">a</span>
+        <span class="a">message</span> <span class="b">you</span> <span class="a">can</span>
+        <span class="b">recompute.</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span>model</span><b>5748aebec95d…e8fd8a</b></div>
+        <div class="row"><span>trace</span><b>ee29cd38c158…d36ba5</b></div>
+        <div class="row"><span>replay</span><b style="color:#63f2c4">match · recomputed here</b></div>
+      </div>
+      <div class="url">rarext.com</div>
+    </aside>
+  </body>
+</html>

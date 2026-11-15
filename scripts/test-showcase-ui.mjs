@@ -127,6 +127,28 @@ try {
   check("labels, alt text, button names", structure.inputsLabelled && structure.imagesAltd && structure.buttonsNamed, "all controls named");
   check("required proof links present", structure.pinned && structure.links, "pinned verifier + ai/gallery/verify links");
 
+  // ── the links must reach the artifacts, not the landing page ───────────
+  // Pages serves site/ verbatim (the mirror lives under /registry/mirror), so a
+  // front door link to /mirror/ai.html can silently fall back to index.html.
+  // Fetching the link is the only check that catches that: the status is 200
+  // either way, and the page looks fine until you read it.
+  const origin = new global.URL(URL_UNDER_TEST).origin;
+  const destinations = [
+    ["/mirror/ai.html", "Make an AI proof"],
+    ["/mirror/gallery.html", "RAREXT media gallery"],
+    ["/mirror/verify.html", "Mirror verification"],
+  ];
+  for (const [path, expected] of destinations) {
+    try {
+      const response = await fetch(origin + path, { redirect: "follow" });
+      const body = await response.text();
+      const title = body.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
+      check(`link ${path} reaches its page`, response.ok && title.includes(expected), `${response.status} ${title}`);
+    } catch (error) {
+      check(`link ${path} reaches its page`, false, String(error));
+    }
+  }
+
   // ── the live proof ─────────────────────────────────────────────────────
   const initial = await evaluate(`(() => ({
     badge: document.getElementById("verdict-badge")?.textContent,
@@ -203,6 +225,45 @@ try {
   check("stylesheet under 40 KB", network.css < 40_000, `${network.css} bytes`);
   check("script under 40 KB", network.js < 40_000, `${network.js} bytes`);
 
+  // ── keyboard order and focus visibility ────────────────────────────────
+  await send("Page.navigate", { url: URL_UNDER_TEST });
+  await sleep(1800);
+  const firstFocus = [];
+  for (let i = 0; i < 16; i += 1) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await sleep(50);
+    firstFocus.push(await evaluate(`(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body) return null;
+      const style = getComputedStyle(el);
+      return {
+        text: (el.innerText || el.getAttribute("aria-label") || "").trim().replace(/\\s+/g, " ").slice(0, 32),
+        outline: style.outlineStyle + " " + style.outlineWidth,
+      };
+    })()`));
+  }
+  check("Tab starts at the skip link", firstFocus[0]?.text === "Skip to content", firstFocus[0]?.text ?? "none");
+  check("focus is visible on every stop", firstFocus.every((entry) => entry && /^solid 2px/.test(entry.outline)), firstFocus.map((e) => e?.outline).join(", "));
+  check("the proof controls are reachable by keyboard", firstFocus.some((entry) => /Run|Tamper|Seed/i.test(entry?.text ?? "")), firstFocus.map((e) => e?.text).join(" → "));
+
+  // ── light theme keeps its contrast ─────────────────────────────────────
+  await evaluate(`document.documentElement.dataset.theme = "light"`);
+  await sleep(200);
+  const light = JSON.parse(await evaluate(`(() => {
+    const parse = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+    const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const ratio = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+    const bg = parse(getComputedStyle(document.body).backgroundColor) || { r: 246, g: 247, b: 244 };
+    return JSON.stringify(["p.lede", "p.section-lede", "p.small", ".matrix tbody td"].map((selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return { selector, ratio: null };
+      return { selector, ratio: Number(ratio(parse(getComputedStyle(el).color), bg).toFixed(2)) };
+    }));
+  })()`));
+  check("light theme text stays above 4.5:1", light.every((entry) => entry.ratio === null || entry.ratio >= 4.5), light.map((e) => `${e.selector} ${e.ratio}`).join(", "));
+  await evaluate(`document.documentElement.dataset.theme = "dark"`);
+
   // ── mobile: no overflow, menu opens, Escape closes and restores focus ──
   await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await send("Page.navigate", { url: URL_UNDER_TEST });
@@ -219,6 +280,24 @@ try {
   check("primary CTA stays visible on mobile", mobile.ctaVisible, "displayed");
   check("desktop nav swaps to menu", mobile.navHidden && mobile.menuVisible, "nav hidden, menu shown");
 
+  // 320 px is the narrowest phone still in use; the 390 px pass does not cover it.
+  await send("Emulation.setDeviceMetricsOverride", { width: 320, height: 700, deviceScaleFactor: 2, mobile: true });
+  await send("Page.navigate", { url: URL_UNDER_TEST });
+  await sleep(1600);
+  const narrow = await evaluate(`(() => ({
+    overflow: document.documentElement.scrollWidth > innerWidth + 2,
+    width: document.documentElement.scrollWidth,
+    inner: innerWidth,
+    cta: (() => { const el = document.querySelector(".hero-actions .btn.primary"); if (!el) return null; const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), display: getComputedStyle(el).display }; })(),
+    small: [...document.querySelectorAll("a[href], button")].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 24 || r.height < 24); }).length,
+  }))()`);
+  check("no horizontal overflow at 320px", !narrow.overflow, `${narrow.width} <= ${narrow.inner}`);
+  check("CTA survives at 320px", narrow.cta?.display !== "none" && narrow.cta?.h >= 44, JSON.stringify(narrow.cta));
+  equal("no small targets at 320px", narrow.small, 0);
+
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await send("Page.navigate", { url: URL_UNDER_TEST });
+  await sleep(1600);
   await evaluate(`document.getElementById("menu-open").click()`);
   await sleep(250);
   const opened = await evaluate(`(() => ({

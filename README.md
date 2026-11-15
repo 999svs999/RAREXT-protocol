@@ -66,7 +66,7 @@ welcome.
   TTFB/FCP/LCP/CLS/TBT, bytes, third-party hosts, landmarks, contrast, tap targets,
   overflow, mobile behaviour, and screenshots. `npm run bench:ui` reproduces the
   table. The page was rebuilt around a proof that runs in the tab — verified on
-  load, refused after one flipped token — and scores **99 overall** (89 before),
+  load, refused after one flipped token — and scores **100 overall** (89 before),
   with 0 contrast failures, 0 horizontal overflow, and no third-party requests;
   `npm run test:showcase` keeps the behaviour from regressing. Where an app is
   login- or challenge-gated for anonymous visitors, the report says so instead of

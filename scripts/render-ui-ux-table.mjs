@@ -6,6 +6,7 @@ const data = JSON.parse(readFileSync(new URL("../bench/ui-ux.json", import.meta.
 const rows = data.results;
 
 const fmt = (n) => (n === null || n === undefined ? "—" : String(Math.round(n)));
+const cls = (n) => (n === null || n === undefined ? "—" : Number(n).toFixed(3));
 const flag = (r) => {
   if (r.refused) return "refused";
   if (r.http?.status >= 400) return `HTTP ${r.http.status}`;
@@ -21,7 +22,7 @@ for (const r of rows) {
   lines.push(
     `| ${r.name} | ${flag(r)} | ${s ? s.perf : "—"} | ${s ? s.a11y : "—"} | ${s ? s.ux : "—"} | ${
       s ? `**${s.overall}**` : "—"
-    } | ${fmt(m.ttfb)} ms | ${fmt(m.lcp)} ms | ${fmt(m.cls)} | ${fmt((m.transferBytes ?? 0) / 1024)} KB | ${fmt(
+    } | ${fmt(m.ttfb)} ms | ${fmt(m.lcp)} ms | ${cls(m.cls)} | ${fmt((m.transferBytes ?? 0) / 1024)} KB | ${fmt(
       m.resources,
     )} | ${fmt(m.thirdPartyHosts)} |`,
   );
