@@ -16,35 +16,69 @@ domain to GitHub Pages. Both need a credential this repository does not hold.
   `pending`, waiting on a CNAME).
 - **Both `rarext.com` and `rarext.co` are custom domains of the Worker `rarext`**
   today, so the hostname has to be released from the Worker as well as recorded.
-- The ops token at `~/.hermes/.env` (`CLOUDFLARE_API_TOKEN=cfat_adIVcI…`, account
-  `b37d1d7b…`) can **deploy Pages** but cannot edit **DNS** or **Workers**
-  (`zone/DNS/workers` writes return `Authentication error` / `Method not allowed
-  for this authentication scheme`). `bash scripts/cutover-rarext-com.sh` proves
-  this before it does anything and refuses.
+- `bash scripts/cutover-rarext-com.sh` probes every permission it needs before it
+  changes anything, and refuses rather than half-move the domain.
 
-So one of these two finishes it:
+**Which credential does what (measured 2026-11-15, not assumed):**
 
-**Two dashboard actions (no token needed)**
+| Capability | Holder | Evidence |
+| --- | --- | --- |
+| Deploy Pages | ops token `~/.hermes/.env` | live deployments |
+| **Workers:Edit** — release a custom domain, upload a script | ops token `~/.hermes/.env` | script upload reached the compiler; deleting a Worker custom domain returned `100114 Origin … not found`, not an auth error |
+| Pages:Edit — attach a custom domain | login token `~/.hermes/cloudflare-oauth.json` | add + delete of a Pages custom domain succeeded |
+| **Zone.DNS:Edit** — create/update the record | **nobody** | `Authentication error` on read and write, both zones |
 
-1. Workers & Pages → **`rarext`** (Worker) → Settings → Domains & Routes →
-   remove `rarext.com` and `www.rarext.com`. **Leave `rarext.co` and
-   `www.rarext.co` alone.**
-2. Workers & Pages → **`rarext-com`** (Pages) → Custom domains → add
-   `rarext.com` and `www.rarext.com`. The dashboard creates the proxied CNAMEs
-   for you (the same shape `saikougoods.com` uses:
-   `CNAME @  -> saikougoods.pages.dev`, proxied).
+So the earlier note that the ops token has "neither" was wrong: it has Workers.
+The only genuinely missing permission is DNS, and no login can be given more
+scope — an OAuth session may not mint an API token (`POST /user/tokens` returns
+`9109 Unauthorized`).
 
-**Or a token with `Zone.DNS:Edit` for `rarext.com` + `Workers:Edit`**
+Two more measured facts decide the order:
+
+- **Pages does not create the record for you.** Attaching `pages-probe.rarext.com`
+  left it `pending` with `"error_message": "CNAME record not set"` and DNS empty.
+  `pending` is the permanent state of an unattached hostname.
+- **The Worker release is one-way through the API.** `DELETE
+  /accounts/…/workers/domains/{id}` works with the ops token, but `POST` to the
+  same collection answers `10405 Method not allowed for this authentication
+  scheme`. Restoring the custom domain is a dashboard action.
+
+Either of these finishes it. Both need exactly one thing that does not exist on
+this machine yet: **Zone.DNS:Edit**.
+
+**Path 1 — one dashboard permission, no clicking through the move**
+
+Create an API token with a single permission, `Zone → DNS → Edit`, limited to the
+zone `rarext.com`, and put it in `~/.hermes/.env` as `CLOUDFLARE_DNS_TOKEN`. The
+script then uses the ops token for the Worker half and the login token for the
+Pages half:
 
 ```bash
 bash scripts/cutover-rarext-com.sh          # dry run: preflight + permission probe
-CLOUDFLARE_API_TOKEN=… bash scripts/cutover-rarext-com.sh --apply
+bash scripts/cutover-rarext-com.sh --apply  # release, record, attach, verify
 ```
 
-The script verifies every route on the preview first, creates the proxied CNAMEs
-`rarext.com` / `www.rarext.com` → `rarext-com.pages.dev`, releases the hostnames
-from the Worker, then curls the live host and prints the rollback if it is not
-healthy. `rarext.co` is never touched.
+**Path 2 — no token at all, four dashboard actions**
+
+1. Workers & Pages → **`rarext`** (Worker) → Settings → Domains & Routes →
+   remove `rarext.com` and `www.rarext.com`. **Leave `rarext.co` and
+   `www.rarext.co` alone.** `rarext.com` is unreachable from here until step 2.
+2. Workers & Pages → **`rarext-com`** (Pages) → Custom domains → add
+   `rarext.com`, then `www.rarext.com`. The dashboard creates the proxied CNAMEs
+   for you (the same shape `saikougoods.com` uses:
+   `CNAME @  -> saikougoods.pages.dev`, proxied).
+
+Either way the script verifies every route on the preview before touching
+anything, and curls the live host afterwards. `rarext.co` is never touched.
+
+Do it in this order, and do not pause between the two steps: while the hostname
+is released from the Worker and not yet recorded for Pages, it resolves to
+nothing. In the API path the gap is one round trip; in the dashboard path it is
+however long you take to click step 2.
+
+**What the move costs:** the Worker `rarext` answers `/api/v1`, `/llms.txt`, and
+the MCP surface on `rarext.com` today. Pages serves the showcase for every path,
+so those stop existing on `rarext.com` and keep working on `rarext.co`.
 
 Confirm when done:
 

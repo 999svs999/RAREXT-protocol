@@ -855,6 +855,85 @@ h3 {
 
 /* ── capability matrix ──────────────────────────────────────────────────── */
 
+/* ── the brand ranking, generated from bench/ui-ux.json ────────────────────
+   The markup between the TOP10 markers in index.html is written by
+   `node scripts/render-top10.mjs --write`; `npm run bench:top10` fails when it
+   drifts from the benchmark. Only the presentation lives here. */
+.rank {
+  margin-top: 30px;
+}
+
+.rank h3 {
+  margin: 0 0 10px;
+}
+
+.rank-wrap {
+  /* Six columns cannot fit a 320 px phone, and a page that scrolls sideways is
+     a page that fails its own audit. The table scrolls inside the wrapper
+     instead, so the document never does. */
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.rank table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.rank th,
+.rank td {
+  padding: 11px 15px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line-soft);
+  white-space: nowrap;
+}
+
+.rank thead th {
+  font: 11px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  background: var(--surface-2);
+}
+
+.rank tbody tr:last-child th,
+.rank tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.rank tbody th {
+  font: 12px/1.4 var(--mono);
+  font-weight: 500;
+  color: var(--faint);
+  width: 4ch;
+}
+
+.rank-brand {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: 10.5px/1.5 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rank tr.is-self {
+  background: var(--brand-soft);
+}
+
+.rank tr.is-self th,
+.rank tr.is-self td {
+  color: var(--text);
+  font-weight: 620;
+}
+
 .matrix-wrap {
   margin-top: 8px;
   border: 1px solid var(--line);

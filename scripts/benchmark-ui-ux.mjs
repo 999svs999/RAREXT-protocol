@@ -60,6 +60,13 @@ const TARGETS = [
   { id: "mistral-marketing", name: "Mistral site", url: "https://mistral.ai/", marketing: true },
   { id: "gemini-marketing", name: "Gemini (DeepMind) page", url: "https://deepmind.google/models/gemini/", marketing: true },
   { id: "youcom", name: "You.com", url: "https://you.com/", marketing: true },
+  // Three brands a "top 10" list has to include. They answered 403 to an
+  // anonymous browser, which is a finding about the gate, so they are measured
+  // and recorded as refused rather than quietly dropped.
+  { id: "deepseek", name: "DeepSeek", url: "https://chat.deepseek.com/" },
+  { id: "deepseek-site", name: "DeepSeek site", url: "https://www.deepseek.com/", marketing: true },
+  { id: "metaai", name: "Meta AI", url: "https://www.meta.ai/" },
+  { id: "poe", name: "Poe", url: "https://poe.com/" },
 ];
 
 /* ── the in-page audit ─────────────────────────────────────────────────── */

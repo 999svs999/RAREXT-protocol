@@ -24,6 +24,7 @@
     "bench:soak": "node --expose-gc bench/storage/soak.mjs",
     "bench:storage": "node bench/storage/cli.mjs",
     "bench:throughput": "node --expose-gc bench/storage/throughput.mjs",
+    "bench:top10": "node scripts/render-top10.mjs --check",
     "bench:ui": "node scripts/benchmark-ui-ux.mjs",
     "build": "npm run build:web",
     "build:packages": "node scripts/build-packages.mjs",

@@ -1,6 +1,6 @@
 {
   "kind": "rarext.ui-ux-benchmark.v1",
-  "createdAt": "2026-11-15T05:55:15.763Z",
+  "createdAt": "2026-11-15T12:34:46.383Z",
   "chrome": "headless 157",
   "viewports": {
     "desktop": "1440x900",
@@ -16,7 +16,7 @@
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/",
         "elapsedMs": 42,
-        "bytes": 22297,
+        "bytes": 25436,
         "encoding": null,
         "cache": "no-store",
         "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
@@ -100,6 +100,10 @@
           },
           {
             "level": 3,
+            "text": "Against the top AI brands"
+          },
+          {
+            "level": 3,
             "text": "Reproduce it in one shell"
           },
           {
@@ -137,7 +141,7 @@
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 31,
+        "tapTargets": 32,
         "smallTargets": 0,
         "smallTargetsSample": [],
         "contrastFailures": [],
@@ -180,24 +184,24 @@
             }
           ],
           "navItems": 8,
-          "wordCount": 1092,
-          "links": 35,
+          "wordCount": 1199,
+          "links": 36,
           "text": "Skip to content RAREXT verifiable AI Proof How it works Capabilities Evidence Limits Build GitHub \u2197 Live in this page \u00b7 no account \u00b7 no upload Don\u2019t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it \u2014 the same check anyone can repeat. Run the proof \u2193 Open the full workbench LIVE PROOF VERIFIED A committed model class runs here. Change the seed, or tamper with one token, and watch the verdict follow the bytes. Token bound"
         },
         "metrics": {
-          "fcp": 164,
-          "lcp": 164,
-          "cls": 0.0005548033746999314,
+          "fcp": 204,
+          "lcp": 204,
+          "cls": 0,
           "longTasks": 1,
-          "tbt": 28,
-          "dcl": 121.10000014305115,
-          "load": 125.20000004768372,
-          "ttfb": 4.700000047683716,
+          "tbt": 40,
+          "dcl": 37.59999990463257,
+          "load": 124.40000009536743,
+          "ttfb": 4,
           "resources": 4,
-          "transferBytes": 33175,
-          "decodedBytes": 31975,
+          "transferBytes": 34896,
+          "decodedBytes": 33696,
           "jsBytes": 5901,
-          "cssBytes": 25456,
+          "cssBytes": 27177,
           "imgBytes": 909,
           "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
@@ -274,6 +278,10 @@
           },
           {
             "level": 3,
+            "text": "Against the top AI brands"
+          },
+          {
+            "level": 3,
             "text": "Reproduce it in one shell"
           },
           {
@@ -311,7 +319,7 @@
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 25,
+        "tapTargets": 26,
         "smallTargets": 0,
         "smallTargetsSample": [],
         "contrastFailures": [],
@@ -344,24 +352,24 @@
             }
           ],
           "navItems": 1,
-          "wordCount": 1077,
-          "links": 35,
+          "wordCount": 1184,
+          "links": 36,
           "text": "Skip to content RAREXT Live in this page \u00b7 no account \u00b7 no upload Don\u2019t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it \u2014 the same check anyone can repeat. Run the proof \u2193 Open the full workbench LIVE PROOF VERIFIED A committed model class runs here. Change the seed, or tamper with one token, and watch the verdict follow the bytes. Token boundaries are colored; the output is their exact concatenation. SEED Run Tamper a"
         },
         "metrics": {
-          "fcp": 64,
-          "lcp": 64,
+          "fcp": 72,
+          "lcp": 72,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 45.5,
-          "load": 47.59999990463257,
-          "ttfb": 3,
+          "dcl": 47.30000019073486,
+          "load": 49.40000009536743,
+          "ttfb": 3.3000001907348633,
           "resources": 3,
-          "transferBytes": 32266,
-          "decodedBytes": 31366,
+          "transferBytes": 33987,
+          "decodedBytes": 33087,
           "jsBytes": 5901,
-          "cssBytes": 25456,
+          "cssBytes": 27177,
           "imgBytes": 909,
           "thirdPartyHosts": 0,
           "host": "127.0.0.1:8080"
@@ -411,7 +419,7 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/registry/mirror/ai.html",
-        "elapsedMs": 5,
+        "elapsedMs": 6,
         "bytes": 3498,
         "encoding": null,
         "cache": "no-store",
@@ -531,17 +539,17 @@
           "text": "AI lives here, not on a server This page runs the committed model in your browser \u2014 the same numbers the published bundle was generated with \u2014 and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 2 ms. The replay agrees \u2014 this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
         },
         "metrics": {
-          "fcp": 96,
-          "lcp": 96,
-          "cls": 0.03621918824749228,
+          "fcp": 128,
+          "lcp": 128,
+          "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 69.09999990463257,
-          "load": 72.79999995231628,
-          "ttfb": 4.700000047683716,
+          "dcl": 43.90000009536743,
+          "load": 77.30000019073486,
+          "ttfb": 5.700000286102295,
           "resources": 4,
-          "transferBytes": 195385,
-          "decodedBytes": 194185,
+          "transferBytes": 195386,
+          "decodedBytes": 194186,
           "jsBytes": 21681,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -662,20 +670,20 @@
           "navItems": 0,
           "wordCount": 300,
           "links": 2,
-          "text": "AI lives here, not on a server This page runs the committed model in your browser \u2014 the same numbers the published bundle was generated with \u2014 and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 1 ms. The replay agrees \u2014 this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
+          "text": "AI lives here, not on a server This page runs the committed model in your browser \u2014 the same numbers the published bundle was generated with \u2014 and assembles the evidence an attestation would carry. Nothing is fetched to run it, nothing is sent anywhere, and no key is involved: a signature is an identity claim, and a page has no identity. What you get is the PROOF, which anyone can recompute. Seed Steps Run the committed model here Ran here in 0 ms. The replay agrees \u2014 this output is the committed model's, and anyone can recompute it. alphaalphadeltaalphaalphagammaalphagammadeltadeltagammadelta"
         },
         "metrics": {
-          "fcp": 44,
-          "lcp": 44,
+          "fcp": 48,
+          "lcp": 48,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 18,
-          "load": 21,
-          "ttfb": 2.6000001430511475,
+          "dcl": 24.5,
+          "load": 27.40000009536743,
+          "ttfb": 3.5999999046325684,
           "resources": 3,
-          "transferBytes": 194476,
-          "decodedBytes": 193576,
+          "transferBytes": 194477,
+          "decodedBytes": 193577,
           "jsBytes": 21681,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -684,7 +692,7 @@
         }
       },
       "score": {
-        "perf": 99,
+        "perf": 100,
         "a11y": 73,
         "ux": 71,
         "overall": 80,
@@ -693,7 +701,7 @@
             "ttfb": 1,
             "fcp": 1,
             "lcp": 1,
-            "cls": 0.9508509447045689,
+            "cls": 1,
             "weight": 1,
             "scripts": 1,
             "tbt": 1
@@ -727,7 +735,7 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/registry/mirror/gallery.html",
-        "elapsedMs": 4,
+        "elapsedMs": 3,
         "bytes": 13800,
         "encoding": null,
         "cache": "no-store",
@@ -846,17 +854,17 @@
           "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route \u2014 the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png \u00b7 12420 bytes \u00b7 public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition \u00b7 generative \u00b7 ai-gener"
         },
         "metrics": {
-          "fcp": 76,
-          "lcp": 76,
+          "fcp": 72,
+          "lcp": 72,
           "cls": 0.008537372102462705,
           "longTasks": 1,
-          "tbt": 446,
-          "dcl": 31.299999952316284,
-          "load": 48.40000009536743,
-          "ttfb": 3.0999999046325684,
+          "tbt": 425,
+          "dcl": 55.89999961853027,
+          "load": 56,
+          "ttfb": 9.899999618530273,
           "resources": 6,
-          "transferBytes": 5958301,
-          "decodedBytes": 5956501,
+          "transferBytes": 5958303,
+          "decodedBytes": 5956503,
           "jsBytes": 21670,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -969,17 +977,17 @@
           "text": "Media stored on RAREXT meanings anchored: 5 of 5 committed digest(s) match the records this registry carries Every item below is a content-addressed blob in the RAREXT blob store. This page renders it from the node's raw blob route \u2014 the raw bytes with their stored media type. On a static mirror, blobs embedded in blobs.json are SHA-256 checked in this browser before they are shown. The hash in each caption is the address: change a byte and the address changes. image/png \u00b7 12420 bytes \u00b7 public 28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253 AI rendition \u00b7 generative \u00b7 ai-gener"
         },
         "metrics": {
-          "fcp": 40,
-          "lcp": 40,
+          "fcp": 28,
+          "lcp": 28,
           "cls": 0.01791520596157734,
           "longTasks": 1,
-          "tbt": 366,
-          "dcl": 22.90000009536743,
-          "load": 23.100000143051147,
-          "ttfb": 2.700000047683716,
+          "tbt": 369,
+          "dcl": 25.5,
+          "load": 25.600000381469727,
+          "ttfb": 3.5,
           "resources": 5,
-          "transferBytes": 5957392,
-          "decodedBytes": 5955892,
+          "transferBytes": 5957394,
+          "decodedBytes": 5955894,
           "jsBytes": 21670,
           "cssBytes": 41986,
           "imgBytes": 0,
@@ -998,9 +1006,9 @@
             "fcp": 1,
             "lcp": 1,
             "cls": 1,
-            "weight": 0.007315614035087736,
+            "weight": 0.007315263157894769,
             "scripts": 1,
-            "tbt": 0.7268965517241379
+            "tbt": 0.7413793103448276
           },
           "a11y": {
             "alt": 1,
@@ -1031,7 +1039,7 @@
       "http": {
         "status": 200,
         "finalUrl": "http://127.0.0.1:8080/registry/mirror/verify.html",
-        "elapsedMs": 8,
+        "elapsedMs": 7,
         "bytes": 31709,
         "encoding": null,
         "cache": "no-store",
@@ -1121,20 +1129,20 @@
           "navItems": 0,
           "wordCount": 937,
           "links": 0,
-          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Recomputed root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
+          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794 Recomputed root 42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
         },
         "metrics": {
-          "fcp": 76,
-          "lcp": 76,
+          "fcp": 68,
+          "lcp": 68,
           "cls": 0.13346373456790123,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 53.89999985694885,
-          "load": 55.59999990463257,
-          "ttfb": 4.5,
+          "dcl": 49.90000009536743,
+          "load": 51.09999990463257,
+          "ttfb": 4.700000286102295,
           "resources": 8,
-          "transferBytes": 5808445,
-          "decodedBytes": 5806045,
+          "transferBytes": 5808446,
+          "decodedBytes": 5806046,
           "jsBytes": 42966,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -1218,7 +1226,7 @@
           "navItems": 0,
           "wordCount": 937,
           "links": 0,
-          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Recomputed root 70c8ee6af90f828df17b3fc9f25e51fa0b9101cea3fc9eb4b6bcbe564a470bb5 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
+          "text": "This mirror is a copy. Here is whether it is a faithful one \u2014 and whether FUTURISTIC's published record holds. Served from ./bundle.json Publications 33 Anchored root 42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794 Recomputed root 42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794 Pinned chain root not supplied (open with ?root=...) This copy is faithful yes Meanings \u2014 anchored Committed records 5 of 5 digest(s) match the records this copy carries Federation \u2014 the registries this bundle commits to Committed digest 18f843a0b1341de4fafd6b54\u2026 Seed list at ../seed.js"
         },
         "metrics": {
           "fcp": 44,
@@ -1226,12 +1234,12 @@
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 29.200000047683716,
-          "load": 29.59999990463257,
-          "ttfb": 4,
+          "dcl": 24.800000190734863,
+          "load": 26.40000009536743,
+          "ttfb": 2.700000286102295,
           "resources": 7,
-          "transferBytes": 5808135,
-          "decodedBytes": 5806035,
+          "transferBytes": 5808136,
+          "decodedBytes": 5806036,
           "jsBytes": 42966,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -1250,7 +1258,7 @@
             "fcp": 1,
             "lcp": 1,
             "cls": 0.6561705013093901,
-            "weight": 0.03360614035087717,
+            "weight": 0.03360596491228074,
             "scripts": 1,
             "tbt": 1
           },
@@ -1283,11 +1291,11 @@
       "http": {
         "status": 200,
         "finalUrl": "https://chatgpt.com/",
-        "elapsedMs": 10157,
-        "bytes": 725131,
+        "elapsedMs": 528,
+        "bytes": 725694,
         "encoding": "br",
         "cache": "private, no-store",
-        "csp": "default-src 'self'; script-src 'nonce-63b9093b-d9de-47d4-ac5f-e6e56b5f7601' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'wasm-unsafe-eval' https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://accounts.google.com/gsi/client https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://js.stripe.com https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; script-src-elem 'nonce-63b9093b-d9de-47d4-ac5f-e6e56b5f7601' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'sha256-eMuh8xiwcX72rRYNAGENurQBAcH7kLlAUQcoOri3BIo=' 'sha384-Sr5xwyR0H5rcDXa7/iDJDM3qBBvtHuR97A8ELbd+DFBDi32Caf72to9UVqvI8R95' auth0.openai.com challenges.cloudflare.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://analytics.tiktok.com https://bat.bing.com https://cdn.openaimerge.com/initialize.js https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.platform.openai.com https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://connect.facebook.net https://docs.google.com https://js.live.net/v7.2/OneDrive.js https://js.stripe.com https://oaistatic.com https://pixel-config.reddit.com https://sc-static.net/scevent.min.js https://snap.licdn.com https://snc.apps.openai.com https://www-onepick-opensocial.googleusercontent.com https://www.redditstatic.com wss://*.chatgpt.com wss://*.chatgpt.com/; img-src * blob: data:; style-src 'self' 'unsafe-inline' blob: https://*.chatgpt.com https://*.chatgpt.com/ https://*.oaistatic.com https://accounts.google.com/gsi/style https://chatgpt.com https://chatgpt.com/ https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; font-src 'self' data: https://*.oaistatic.com https://cdn.openai.com https://fonts.gstatic.com; connect-src 'self' *.blob.core.windows.net *.oaiusercontent.com api.mapbox.com blob: browser-intake-datadoghq.com events.mapbox.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.chatgpt.site/_internal/sites/session-bootstrap https://*.chatgpt.site/_portals/web-session https://*.oaistatic.com https://*.us.sentry.io https://accounts.google.com https://analytics.tiktok.com https://api.atlassian.com https://api.oaistatsig.com https://api.onedrive.com https://api.stripe.com https://bat.bing.com https://bzr.openai.com https://cdn.openai.com/beacons/ https://cdn.openai.com/chatgpt/clients/bazaar/business-agent-disclosure/2026-09-23/business-disclosure-animation-1754caf3cef014e7.lottie https://cdn.openai.com/common/fonts/openai-sans/v2/openai-sans-regular.full.typeface.json https://cdn.openai.com/emojibase/ https://cdn.openai.com/pdf/ https://cdn.platform.openai.com https://chatgpt.com https://chatgpt.com/ https://checkpoints-au.files.openai.com https://checkpoints-eu.files.openai.com https://checkpoints-gb.files.openai.com https://checkpoints-in.files.openai.com https://checkpoints-jp.files.openai.com https://checkpoints-kr.files.openai.com https://checkpoints-sg.files.openai.com https://checkpoints-us.files.openai.com https://content.googleapis.com https://docs.google.com https://events.statsigapi.net https://featuregates.org https://graph.microsoft.com https://images.openai.com https://js.verygoodvault.com https://js3.verygoodvault.com https://oaistatic.com https://pixel-config.reddit.com https://production.plaid.com https://px.ads.linkedin.com/ https://quota.browser-intake-datadoghq.com https://realtime.chatgpt-staging.com https://realtime.chatgpt.com https://sandbox.plaid.com https://snc.apps.openai.com https://test-drive-20-1053047382554.us-central1.run.app https://tr.snapchat.com/p https://transceiver.api.openai.com https://transceiver.api.openai.org https://us.sentry.io https://vgs-collect-keeper.apps.verygood.systems https://www.facebook.com/tr/ https://www.googleadservices.com https://www.googleapis.com https://www.googletagmanager.com https://www.redditstatic.com statsigapi.net wss://*.chatgpt.com wss://*.chatgpt.com/ wss://*.webpubsub.azure.com wss://chatgpt.com wss://multiplayer-u0.api.openai.com wss://pages-realtime.gateway.unified-0.api.openai.com wss://pages-realtime.gateway.unified-119.api.openai.com wss://pages-realtime.gateway.unified-15.api.openai.com wss://pages-realtime.gateway.unified-190.api.openai.com wss://pages-realtime.gateway.unified-23.api.openai.com wss://pages-realtime.gateway.unified-40.api.openai.com wss://pages-realtime.gateway.unified-72.api.openai.com wss://pages-realtime.gateway.unified-75.api.openai.com wss://pages-realtime.gateway.unified-8.api.openai.com wss://pages-realtime.gateway.unified-80.api.openai.com wss://pages-realtime.gateway.unified-82.api.openai.com wss://pages-realtime.gateway.unified-88.api.openai.com wss://pages-realtime.gateway.unified-94.api.openai.com; frame-src 'self' challenges.cloudflare.com https://*.chatgpt.site https://*.embed.chatgpt.site https://*.js.stripe.com https://*.sharepoint.com https://*.web-sandbox.oaiusercontent.com https://*.withpersona.com https://504-SWE-347.mktoweb.com https://accounts.google.com/gsi https://accounts.google.com/gsi/iframe/select https://auth.openai.com https://cdn.openaimerge.com https://cdn.plaid.com https://cdn.platform.openai.com https://codepen.io https://content.googleapis.com https://docs.google.com https://drive.google.com https://embed.apple-mapkit.com/v1/embed https://file-frame.oaistatic.com https://hooks.stripe.com https://js.stripe.com https://js.verygoodvault.com https://js3.verygoodvault.com https://mfe.prod.us-exp-api.experiancs.com https://mfe.uat.us-exp-api.experiancs.com https://onedrive.live.com https://services.sheerid.com https://web-sandbox.oaiusercontent.com https://www.facebook.com/tr/ https://www.google.com/maps https://www.google.com/maps/embed js.stripe.com player.vimeo.com www.youtube.com; worker-src 'self' blob:; media-src 'self' *.oaiusercontent.com blob: https: https://cdn.oaistatic.com https://cdn.openai.com https://persistent.oaistatic.com; frame-ancestors 'self' chrome-extension://hehggadaopoacecdllhhajmbjkdcmajg chrome-extension://iaiigpefkbhgjcmcmffmfkpmhemdhdnj chrome-extension://lfkehkpjohcoelkpembgemeipeppanef chrome-extension://odlomjlbamekndcpllcnffbgeohgkmjh; base-uri 'none'; report-to chatgpt-csp; report-uri https://chatgpt.com/ces/v1/telemetry/intake?ddsource=csp-report&dd-api-key=dummy-token",
+        "csp": "default-src 'self'; script-src 'nonce-115f0cf0-351c-433e-809d-73abcbac4bb6' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'wasm-unsafe-eval' https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://accounts.google.com/gsi/client https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://js.stripe.com https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; script-src-elem 'nonce-115f0cf0-351c-433e-809d-73abcbac4bb6' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'sha256-eMuh8xiwcX72rRYNAGENurQBAcH7kLlAUQcoOri3BIo=' 'sha384-Sr5xwyR0H5rcDXa7/iDJDM3qBBvtHuR97A8ELbd+DFBDi32Caf72to9UVqvI8R95' auth0.openai.com challenges.cloudflare.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://analytics.tiktok.com https://bat.bing.com https://cdn.openaimerge.com/initialize.js https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.platform.openai.com https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://connect.facebook.net https://docs.google.com https://js.live.net/v7.2/OneDrive.js https://js.stripe.com https://oaistatic.com https://pixel-config.reddit.com https://sc-static.net/scevent.min.js https://snap.licdn.com https://snc.apps.openai.com https://www-onepick-opensocial.googleusercontent.com https://www.redditstatic.com wss://*.chatgpt.com wss://*.chatgpt.com/; img-src * blob: data:; style-src 'self' 'unsafe-inline' blob: https://*.chatgpt.com https://*.chatgpt.com/ https://*.oaistatic.com https://accounts.google.com/gsi/style https://chatgpt.com https://chatgpt.com/ https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; font-src 'self' data: https://*.oaistatic.com https://cdn.openai.com https://fonts.gstatic.com; connect-src 'self' *.blob.core.windows.net *.oaiusercontent.com api.mapbox.com blob: browser-intake-datadoghq.com events.mapbox.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.chatgpt.site/_internal/sites/session-bootstrap https://*.chatgpt.site/_portals/web-session https://*.oaistatic.com https://*.us.sentry.io https://accounts.google.com https://analytics.tiktok.com https://api.atlassian.com https://api.oaistatsig.com https://api.onedrive.com https://api.stripe.com https://bat.bing.com https://bzr.openai.com https://cdn.openai.com/beacons/ https://cdn.openai.com/chatgpt/clients/bazaar/business-agent-disclosure/2026-09-23/business-disclosure-animation-1754caf3cef014e7.lottie https://cdn.openai.com/common/fonts/openai-sans/v2/openai-sans-regular.full.typeface.json https://cdn.openai.com/emojibase/ https://cdn.openai.com/pdf/ https://cdn.platform.openai.com https://chatgpt.com https://chatgpt.com/ https://checkpoints-au.files.openai.com https://checkpoints-eu.files.openai.com https://checkpoints-gb.files.openai.com https://checkpoints-in.files.openai.com https://checkpoints-jp.files.openai.com https://checkpoints-kr.files.openai.com https://checkpoints-sg.files.openai.com https://checkpoints-us.files.openai.com https://content.googleapis.com https://docs.google.com https://events.statsigapi.net https://featuregates.org https://graph.microsoft.com https://images.openai.com https://js.verygoodvault.com https://js3.verygoodvault.com https://oaistatic.com https://pixel-config.reddit.com https://production.plaid.com https://px.ads.linkedin.com/ https://quota.browser-intake-datadoghq.com https://realtime.chatgpt-staging.com https://realtime.chatgpt.com https://sandbox.plaid.com https://snc.apps.openai.com https://test-drive-20-1053047382554.us-central1.run.app https://tr.snapchat.com/p https://transceiver.api.openai.com https://transceiver.api.openai.org https://us.sentry.io https://vgs-collect-keeper.apps.verygood.systems https://www.facebook.com/tr/ https://www.googleadservices.com https://www.googleapis.com https://www.googletagmanager.com https://www.redditstatic.com statsigapi.net wss://*.chatgpt.com wss://*.chatgpt.com/ wss://*.webpubsub.azure.com wss://chatgpt.com wss://multiplayer-u0.api.openai.com wss://pages-realtime.gateway.unified-0.api.openai.com wss://pages-realtime.gateway.unified-119.api.openai.com wss://pages-realtime.gateway.unified-15.api.openai.com wss://pages-realtime.gateway.unified-190.api.openai.com wss://pages-realtime.gateway.unified-23.api.openai.com wss://pages-realtime.gateway.unified-40.api.openai.com wss://pages-realtime.gateway.unified-72.api.openai.com wss://pages-realtime.gateway.unified-75.api.openai.com wss://pages-realtime.gateway.unified-8.api.openai.com wss://pages-realtime.gateway.unified-80.api.openai.com wss://pages-realtime.gateway.unified-82.api.openai.com wss://pages-realtime.gateway.unified-88.api.openai.com wss://pages-realtime.gateway.unified-94.api.openai.com; frame-src 'self' challenges.cloudflare.com https://*.chatgpt.site https://*.embed.chatgpt.site https://*.js.stripe.com https://*.sharepoint.com https://*.web-sandbox.oaiusercontent.com https://*.withpersona.com https://504-SWE-347.mktoweb.com https://accounts.google.com/gsi https://accounts.google.com/gsi/iframe/select https://auth.openai.com https://cdn.openaimerge.com https://cdn.plaid.com https://cdn.platform.openai.com https://codepen.io https://content.googleapis.com https://docs.google.com https://drive.google.com https://embed.apple-mapkit.com/v1/embed https://file-frame.oaistatic.com https://hooks.stripe.com https://js.stripe.com https://js.verygoodvault.com https://js3.verygoodvault.com https://mfe.prod.us-exp-api.experiancs.com https://mfe.uat.us-exp-api.experiancs.com https://onedrive.live.com https://services.sheerid.com https://web-sandbox.oaiusercontent.com https://www.facebook.com/tr/ https://www.google.com/maps https://www.google.com/maps/embed js.stripe.com player.vimeo.com www.youtube.com; worker-src 'self' blob:; media-src 'self' *.oaiusercontent.com blob: https: https://cdn.oaistatic.com https://cdn.openai.com https://persistent.oaistatic.com; frame-ancestors 'self' chrome-extension://hehggadaopoacecdllhhajmbjkdcmajg chrome-extension://iaiigpefkbhgjcmcmffmfkpmhemdhdnj chrome-extension://lfkehkpjohcoelkpembgemeipeppanef chrome-extension://odlomjlbamekndcpllcnffbgeohgkmjh; base-uri 'none'; report-to chatgpt-csp; report-uri https://chatgpt.com/ces/v1/telemetry/intake?ddsource=csp-report&dd-api-key=dummy-token",
         "hsts": "max-age=31536000; includeSubDomains; preload",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -1324,8 +1332,8 @@
           }
         ],
         "headingSkips": 0,
-        "ariaLive": 3,
-        "roleStatus": 6,
+        "ariaLive": 5,
+        "roleStatus": 8,
         "images": 0,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 0,
@@ -1401,19 +1409,19 @@
           "text": "Log in Sign up for free ChatGPT New chat Images Plugins See plans and pricing Help Deep research Settings Get responses tailored to you Log in to get answers based on saved chats, plus create images and upload files. Log in Where should we begin? What can you do? Chat with ChatGPT ChatGPT is AI. By using it, you agree to our Terms & Privacy Policy. Chats may be reviewed and used to improve our AI models. Learn more"
         },
         "metrics": {
-          "fcp": 4700,
-          "lcp": 4716,
+          "fcp": 916,
+          "lcp": 980,
           "cls": 0,
-          "longTasks": 1,
-          "tbt": 19,
-          "dcl": 4713,
-          "load": 5108.600000143051,
-          "ttfb": 4248.600000143051,
-          "resources": 228,
-          "transferBytes": 1167014,
-          "decodedBytes": 3652177,
-          "jsBytes": 965135,
-          "cssBytes": 148365,
+          "longTasks": 2,
+          "tbt": 204,
+          "dcl": 1002.5999999046326,
+          "load": 1015.5999999046326,
+          "ttfb": 620.6999998092651,
+          "resources": 250,
+          "transferBytes": 1247381,
+          "decodedBytes": 3878958,
+          "jsBytes": 1045428,
+          "cssBytes": 148429,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "chatgpt.com"
@@ -1507,38 +1515,38 @@
           "text": "ChatGPT Log in What are you working on? What can you do? Chat with ChatGPT ChatGPT is AI. By using it, you agree to our Terms & Privacy Policy. Chats may be reviewed and used to improve our AI models. Learn more"
         },
         "metrics": {
-          "fcp": 2396,
-          "lcp": 2412,
+          "fcp": 568,
+          "lcp": 584,
           "cls": 0,
           "longTasks": 2,
-          "tbt": 272,
-          "dcl": 2413.4000000953674,
-          "load": 2433.5,
-          "ttfb": 2301.5,
+          "tbt": 301,
+          "dcl": 580.4000000953674,
+          "load": 583.2999997138977,
+          "ttfb": 450.40000009536743,
           "resources": 250,
-          "transferBytes": 0,
-          "decodedBytes": 3798579,
+          "transferBytes": 300,
+          "decodedBytes": 3738817,
           "jsBytes": 0,
-          "cssBytes": 0,
+          "cssBytes": 300,
           "imgBytes": 0,
           "thirdPartyHosts": 0,
           "host": "chatgpt.com"
         }
       },
       "score": {
-        "perf": 43,
+        "perf": 78,
         "a11y": 83,
         "ux": 71,
-        "overall": 67,
+        "overall": 77,
         "detail": {
           "perf": {
-            "ttfb": 0,
-            "fcp": 0,
-            "lcp": 0.07473684210526321,
+            "ttfb": 0.7662777778837416,
+            "fcp": 0.96375,
+            "lcp": 1,
             "cls": 1,
-            "weight": 0.8478922807017544,
-            "scripts": 0.09565217391304348,
-            "tbt": 1
+            "weight": 0.8337928070175439,
+            "scripts": 0,
+            "tbt": 0.8937931034482759
           },
           "a11y": {
             "alt": 1,
@@ -1569,11 +1577,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://claude.ai/",
-        "elapsedMs": 1786,
+        "elapsedMs": 234,
         "bytes": 5644,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-q86JjqSyCVjQgdwQP8DRgH' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-wB89rtETgiVl2eNroxXn6l' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": "max-age=31536000; includeSubDomains",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -1783,32 +1791,32 @@
               "href": null
             },
             {
-              "text": "Play video",
+              "text": "Pause video",
               "tag": "button",
               "href": null
             }
           ],
           "navItems": 0,
           "wordCount": 423,
-          "links": 183,
-          "text": "Question what\u2019s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic\u2019s Privacy Policy. Download desktop app \ue0c1 Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude \ue03b Chat on web, desktop, and mobile \ue03b Search the web, create files, and run code \ue03b Memory across conversations \ue03b Connect your apps and tools \ue03b Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claud"
+          "links": 280,
+          "text": "Question what\u2019s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic\u2019s Privacy Policy. Download desktop app \ue0bb Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude \ue03b Chat on web, desktop, and mobile \ue03b Search the web, create files, and run code \ue03b Memory across conversations \ue03b Connect your apps and tools \ue03b Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claud"
         },
         "metrics": {
-          "fcp": 2400,
-          "lcp": 4844,
-          "cls": 0.0007639079110939644,
-          "longTasks": 1,
-          "tbt": 31,
-          "dcl": 2380.2000000476837,
-          "load": 0,
-          "ttfb": 1791.7999999523163,
-          "resources": 37,
-          "transferBytes": 557306,
-          "decodedBytes": 1807427,
-          "jsBytes": 362306,
-          "cssBytes": 184039,
+          "fcp": 444,
+          "lcp": 1368,
+          "cls": 0.0005947863082990398,
+          "longTasks": 2,
+          "tbt": 54,
+          "dcl": 331.5,
+          "load": 6760.800000190735,
+          "ttfb": 175.59999990463257,
+          "resources": 108,
+          "transferBytes": 3391780,
+          "decodedBytes": 13821575,
+          "jsBytes": 366140,
+          "cssBytes": 2969909,
           "imgBytes": 0,
-          "thirdPartyHosts": 5,
+          "thirdPartyHosts": 8,
           "host": "claude.ai"
         }
       },
@@ -2009,42 +2017,42 @@
           ],
           "navItems": 0,
           "wordCount": 419,
-          "links": 183,
+          "links": 280,
           "text": "Question what\u2019s next Your thinking partner for big ambitions Continue with Google Continue with Apple OR Continue with email By continuing, you acknowledge Anthropic\u2019s Privacy Policy. Explore plans Individual Team and Enterprise Free Try Claude $0 Free for everyone Try Claude \ue03b Chat on web, desktop, and mobile \ue03b Search the web, create files, and run code \ue03b Memory across conversations \ue03b Connect your apps and tools \ue03b Claude Design, Slides, and Docs Pro For everyday work $17 Per month with annual subscription discount ($200 billed up front). $20 if billed monthly. Try Claude No commitment \u00b7 Cance"
         },
         "metrics": {
-          "fcp": 9272,
-          "lcp": 9272,
+          "fcp": 400,
+          "lcp": 400,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 10610.200000047684,
-          "load": 10610.799999952316,
-          "ttfb": 8995.5,
-          "resources": 71,
-          "transferBytes": 815654,
-          "decodedBytes": 6393073,
+          "dcl": 439.30000019073486,
+          "load": 1152.9000000953674,
+          "ttfb": 103.09999990463257,
+          "resources": 126,
+          "transferBytes": 2346735,
+          "decodedBytes": 23917352,
           "jsBytes": 0,
-          "cssBytes": 760261,
+          "cssBytes": 2334721,
           "imgBytes": 0,
           "thirdPartyHosts": 8,
           "host": "claude.ai"
         }
       },
       "score": {
-        "perf": 65,
+        "perf": 86,
         "a11y": 84,
         "ux": 71,
-        "overall": 74,
+        "overall": 80,
         "detail": {
           "perf": {
-            "ttfb": 0.11566666669315762,
-            "fcp": 0.5,
-            "lcp": 0.04105263157894734,
+            "ttfb": 1,
+            "fcp": 1,
+            "lcp": 0.9557894736842105,
             "cls": 1,
-            "weight": 0.9548585964912281,
-            "scripts": 0.9260869565217391,
-            "tbt": 1
+            "weight": 0.45758245614035087,
+            "scripts": 0.6173913043478261,
+            "tbt": 0.9972413793103448
           },
           "a11y": {
             "alt": 1,
@@ -2191,19 +2199,19 @@
           "text": "Gemini New chat Images Sign in to save activity Settings Sign in Get App Hi, I'm Gemini. Where should we start? Flash-Lite Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. About Gemini Subscriptions For Business Get App Sign in"
         },
         "metrics": {
-          "fcp": 10056,
-          "lcp": 10632,
-          "cls": 0.041192992410542056,
-          "longTasks": 11,
-          "tbt": 1322,
-          "dcl": 7778.299999952316,
-          "load": 10775.699999809265,
-          "ttfb": 7009.299999952316,
+          "fcp": 1956,
+          "lcp": 2740,
+          "cls": 0.0057924554183813445,
+          "longTasks": 13,
+          "tbt": 1301,
+          "dcl": 656.5999999046326,
+          "load": 2513.5,
+          "ttfb": 211.5,
           "resources": 114,
-          "transferBytes": 1190365,
-          "decodedBytes": 1223188,
+          "transferBytes": 1919414,
+          "decodedBytes": 1951938,
           "jsBytes": 0,
-          "cssBytes": 1172676,
+          "cssBytes": 1901728,
           "imgBytes": 1346,
           "thirdPartyHosts": 14,
           "host": "gemini.google.com"
@@ -2241,7 +2249,7 @@
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 5,
+        "tapTargets": 7,
         "smallTargets": 2,
         "smallTargetsSample": [
           {
@@ -2263,13 +2271,23 @@
         "bodyFontSize": "16px",
         "reducedMotionRule": true,
         "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.012,
+        "fixedOverlayArea": 0.032,
         "firstScreen": {
           "h1": [
             "Hi, I'm Gemini. Where should we start?"
           ],
           "h2": [],
           "ctas": [
+            {
+              "text": "Main menu",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Open mode picker, currently 3.5 Flash-Lite",
+              "tag": "button",
+              "href": null
+            },
             {
               "text": "Upload & tools",
               "tag": "button",
@@ -2297,22 +2315,22 @@
             }
           ],
           "navItems": 0,
-          "wordCount": 34,
+          "wordCount": 37,
           "links": 9,
-          "text": "Hi, I'm Gemini. Where should we start? Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. Sign in"
+          "text": "Gemini 3.5 Flash-Lite Hi, I'm Gemini. Where should we start? Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. Sign in"
         },
         "metrics": {
-          "fcp": 1944,
-          "lcp": 3024,
-          "cls": 0.023472069360526492,
-          "longTasks": 9,
-          "tbt": 1269,
-          "dcl": 1705.3000001907349,
-          "load": 2835.100000143051,
-          "ttfb": 488.60000014305115,
-          "resources": 102,
-          "transferBytes": 16635,
-          "decodedBytes": 1951901,
+          "fcp": 1596,
+          "lcp": 2416,
+          "cls": 0.018513735091305227,
+          "longTasks": 10,
+          "tbt": 1328,
+          "dcl": 1367.0999999046326,
+          "load": 2256.699999809265,
+          "ttfb": 295.40000009536743,
+          "resources": 104,
+          "transferBytes": 16642,
+          "decodedBytes": 1951900,
           "jsBytes": 0,
           "cssBytes": 0,
           "imgBytes": 300,
@@ -2321,19 +2339,19 @@
         }
       },
       "score": {
-        "perf": 36,
+        "perf": 67,
         "a11y": 83,
         "ux": 79,
-        "overall": 68,
+        "overall": 77,
         "detail": {
           "perf": {
-            "ttfb": 0,
-            "fcp": 0,
-            "lcp": 0,
-            "cls": 0.9357788108771453,
-            "weight": 0.8437956140350877,
+            "ttfb": 0.9936111111111111,
+            "fcp": 0.6387499999999999,
+            "lcp": 0.5947368421052632,
+            "cls": 1,
+            "weight": 0.7158922807017544,
             "scripts": 0.5913043478260869,
-            "tbt": 0.12275862068965515
+            "tbt": 0.13724137931034486
           },
           "a11y": {
             "alt": 1,
@@ -2364,7 +2382,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://www.perplexity.ai/",
-        "elapsedMs": 183,
+        "elapsedMs": 148,
         "bytes": 19713,
         "encoding": "gzip",
         "cache": "no-cache, no-store",
@@ -2567,17 +2585,17 @@
           "text": "New Computer Automations Artifacts Plugins Teammates Hire your first teammate Persistent agents that work for you. Create new teammate Projects No projects Recents No recent sessions View plans Sign In What do you want to know? What should we work on? What do you want to know? Type @ for connectors Search Computer Model Search anything Get fast and accurate answers from the most trusted sources. Get work done with Computer NEW Hand off your projects to get polished, reliable deliverables around the clock. Terms of Service \u00b7 Privacy Notice Cookie Policy We and our partners use cookies, pixels, "
         },
         "metrics": {
-          "fcp": 2172,
-          "lcp": 3580,
+          "fcp": 1340,
+          "lcp": 2472,
           "cls": 0.0007850008573388203,
-          "longTasks": 9,
-          "tbt": 1025,
-          "dcl": 463.80000019073486,
-          "load": 3738.100000143051,
-          "ttfb": 124.30000019073486,
-          "resources": 165,
-          "transferBytes": 18642,
-          "decodedBytes": 69091,
+          "longTasks": 11,
+          "tbt": 667,
+          "dcl": 446.09999990463257,
+          "load": 2286.7999997138977,
+          "ttfb": 175.59999990463257,
+          "resources": 166,
+          "transferBytes": 18667,
+          "decodedBytes": 69086,
           "jsBytes": 300,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -2702,21 +2720,21 @@
             }
           ],
           "navItems": 0,
-          "wordCount": 145,
+          "wordCount": 149,
           "links": 2,
-          "text": "What do you want to know? What should we work on? What do you want to know? Ask anything\u2026 Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell third party ads on our services. Perplexity uses them to measure our ad performance on third party partner websites and to improve our services. If you continue using Perplexity, without adjusting your settings, you are consenting to these technologies. Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. P"
+          "text": "What do you want to know? What should we work on? What do you want to know? Ask anything\u2026 Type @ for connectors Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell third party ads on our services. Perplexity uses them to measure our ad performance on third party partner websites and to improve our services. If you continue using Perplexity, without adjusting your settings, you are consenting to these technologies. Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-"
         },
         "metrics": {
-          "fcp": 792,
-          "lcp": 2184,
+          "fcp": 564,
+          "lcp": 1484,
           "cls": 0.0012630167613209323,
-          "longTasks": 6,
-          "tbt": 281,
-          "dcl": 224.70000004768372,
-          "load": 2332.7999999523163,
-          "ttfb": 185.79999995231628,
+          "longTasks": 7,
+          "tbt": 294,
+          "dcl": 142.59999990463257,
+          "load": 2242.300000190735,
+          "ttfb": 102.30000019073486,
           "resources": 138,
-          "transferBytes": 14572,
+          "transferBytes": 14579,
           "decodedBytes": 53883,
           "jsBytes": 300,
           "cssBytes": 0,
@@ -2726,19 +2744,19 @@
         }
       },
       "score": {
-        "perf": 66,
+        "perf": 78,
         "a11y": 74,
         "ux": 79,
-        "overall": 73,
+        "overall": 77,
         "detail": {
           "perf": {
             "ttfb": 1,
-            "fcp": 0.57125,
-            "lcp": 0.37368421052631584,
+            "fcp": 0.83125,
+            "lcp": 0.6652631578947368,
             "cls": 1,
             "weight": 1,
-            "scripts": 0.3695652173913043,
-            "tbt": 0.3275862068965517
+            "scripts": 0.3652173913043478,
+            "tbt": 0.5744827586206896
           },
           "a11y": {
             "alt": 1,
@@ -2769,11 +2787,11 @@
       "http": {
         "status": 200,
         "finalUrl": "https://copilot.com/",
-        "elapsedMs": 570,
-        "bytes": 320124,
+        "elapsedMs": 748,
+        "bytes": 320279,
         "encoding": "gzip",
         "cache": "public, max-age=300",
-        "csp": "default-src 'self';base-uri 'self';script-src 'nonce-eF71zZnMPMr/e/lIRaHiug==' 'strict-dynamic' 'report-sample' https:;report-to csp-endpoint;upgrade-insecure-requests;style-src 'self' 'report-sample' *.cdn.office.net *.microsoft.com res-dev.cdn.officeppe.net 'unsafe-inline' https://www.microsoft.com/;font-src 'self' data: *.cdn.office.net res-dev.cdn.officeppe.net data c.s-microsoft.com *.microsoft.com;connect-src 'self' https://browser.pipe.aria.microsoft.com https://browser.events.data.microsoft.com *.office.com *.office.microsoft.com *.cdn.office.net res-dev.cdn.officeppe.net https://consentreceiverfd-prod.azurefd.net https://*.clarity.ms/collect https://turbo.microsoft.com https://deeplinkservice.svc.cloud.microsoft https://sdf.deferreddeeplinkservice.microsoft.com https://config.edge.skype.com https://admin.microsoft.com https://config.centro.core.microsoft https://mem.gfx.ms https://js.monitor.azure.com data:;frame-src https://login.microsoftonline.com https://login.live.com mem.gfx.ms amcdn.msftauth.net amcdn.msauth.net;img-src * data: blob:;media-src 'self' *.cdn.office.net res-dev.cdn.officeppe.net;worker-src 'self' blob:;child-src 'self' blob:;report-uri https://csp.microsoft.com/report/Harmony-App-PROD;form-action https://login.microsoftonline.com;frame-ancestors 'self';",
+        "csp": "default-src 'self';base-uri 'self';script-src 'nonce-jGaZnzEt7iiqno+oYHvz8A==' 'strict-dynamic' 'report-sample' https:;report-to csp-endpoint;upgrade-insecure-requests;style-src 'self' 'report-sample' *.cdn.office.net *.microsoft.com res-dev.cdn.officeppe.net 'unsafe-inline' https://www.microsoft.com/;font-src 'self' data: *.cdn.office.net res-dev.cdn.officeppe.net data c.s-microsoft.com *.microsoft.com;connect-src 'self' https://browser.pipe.aria.microsoft.com https://browser.events.data.microsoft.com *.office.com *.office.microsoft.com *.cdn.office.net res-dev.cdn.officeppe.net https://consentreceiverfd-prod.azurefd.net https://*.clarity.ms/collect https://turbo.microsoft.com https://deeplinkservice.svc.cloud.microsoft https://sdf.deferreddeeplinkservice.microsoft.com https://config.edge.skype.com https://admin.microsoft.com https://config.centro.core.microsoft https://mem.gfx.ms https://js.monitor.azure.com data:;frame-src https://login.microsoftonline.com https://login.live.com mem.gfx.ms amcdn.msftauth.net amcdn.msauth.net;img-src * data: blob:;media-src 'self' *.cdn.office.net res-dev.cdn.officeppe.net;worker-src 'self' blob:;child-src 'self' blob:;report-uri https://csp.microsoft.com/report/Harmony-App-PROD;form-action https://login.microsoftonline.com;frame-ancestors 'self';",
         "hsts": "max-age=31536000; includeSubDomains",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -2955,15 +2973,15 @@
           "text": "Skip to main content Copilot Features Download Plans and Pricing Sign in ME Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work fast"
         },
         "metrics": {
-          "fcp": 956,
-          "lcp": 1176,
+          "fcp": 1140,
+          "lcp": 1260,
           "cls": 0.00014519088179976852,
-          "longTasks": 3,
-          "tbt": 14,
-          "dcl": 1323,
-          "load": 3322.800000190735,
-          "ttfb": 455.7000000476837,
-          "resources": 54,
+          "longTasks": 2,
+          "tbt": 18,
+          "dcl": 1725.9000000953674,
+          "load": 2450.0999999046326,
+          "ttfb": 473.09999990463257,
+          "resources": 53,
           "transferBytes": 2693309,
           "decodedBytes": 3247819,
           "jsBytes": 157075,
@@ -3137,14 +3155,14 @@
           "text": "Skip to main content ME Copilot Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work faster. Start creating Did you know? Expand all "
         },
         "metrics": {
-          "fcp": 312,
-          "lcp": 376,
+          "fcp": 268,
+          "lcp": 284,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 443.7999999523163,
-          "load": 601,
-          "ttfb": 248.89999985694885,
+          "dcl": 370.30000019073486,
+          "load": 505.40000009536743,
+          "ttfb": 187.80000019073486,
           "resources": 49,
           "transferBytes": 0,
           "decodedBytes": 3120693,
@@ -3156,18 +3174,18 @@
         }
       },
       "score": {
-        "perf": 89,
+        "perf": 88,
         "a11y": 96,
         "ux": 93,
         "overall": 93,
         "detail": {
           "perf": {
-            "ttfb": 0.8579444444179535,
-            "fcp": 0.95125,
-            "lcp": 1,
+            "ttfb": 0.8482777778307597,
+            "fcp": 0.89375,
+            "lcp": 0.9842105263157894,
             "cls": 1,
             "weight": 0.5801212280701755,
-            "scripts": 0.8521739130434782,
+            "scripts": 0.8565217391304347,
             "tbt": 1
           },
           "a11y": {
@@ -3199,11 +3217,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://grok.com/",
-        "elapsedMs": 1905,
+        "elapsedMs": 191,
         "bytes": 5643,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-CWuKjzWRgimmZa4dphwxFI' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-3al2hbzbanQthfYhwgGNPk' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": null,
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -3294,23 +3312,23 @@
           "navItems": 0,
           "wordCount": 37,
           "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abfdb38f41b016 Performance and Security by Cloudflare Privacy"
+          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5ae4544e8385f06 Performance and Security by Cloudflare Privacy"
         },
         "metrics": {
-          "fcp": 2434.1150000095367,
-          "lcp": 2434.1150000095367,
+          "fcp": 704.3699998855591,
+          "lcp": 704.3699998855591,
           "cls": 0.000336076817558299,
           "longTasks": 3,
-          "tbt": 92,
-          "dcl": 748.2750000953674,
-          "load": 2525.1150000095367,
-          "ttfb": 722.5750000476837,
+          "tbt": 91,
+          "dcl": 355.2300000190735,
+          "load": 803.210000038147,
+          "ttfb": 261.125,
           "resources": 7,
-          "transferBytes": 436441,
-          "decodedBytes": 951071,
-          "jsBytes": 251820,
+          "transferBytes": 437960,
+          "decodedBytes": 965917,
+          "jsBytes": 249420,
           "cssBytes": 0,
-          "imgBytes": 2125,
+          "imgBytes": 6190,
           "thirdPartyHosts": 1,
           "host": "grok.com"
         }
@@ -3396,21 +3414,21 @@
           "navItems": 0,
           "wordCount": 37,
           "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abfdee5b80844c Performance and Security by Cloudflare Privacy"
+          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5ae457f1a97a361 Performance and Security by Cloudflare Privacy"
         },
         "metrics": {
-          "fcp": 807.0950000286102,
-          "lcp": 807.0950000286102,
-          "cls": 0.002257649659999113,
+          "fcp": 525.75,
+          "lcp": 525.75,
+          "cls": 0,
           "longTasks": 3,
-          "tbt": 80,
-          "dcl": 318.0150001049042,
-          "load": 868.7799999713898,
-          "ttfb": 302.5199999809265,
+          "tbt": 55,
+          "dcl": 166.0199999809265,
+          "load": 567.579999923706,
+          "ttfb": 140.40000009536743,
           "resources": 7,
-          "transferBytes": 442503,
-          "decodedBytes": 966785,
-          "jsBytes": 253820,
+          "transferBytes": 436095,
+          "decodedBytes": 943875,
+          "jsBytes": 247461,
           "cssBytes": 0,
           "imgBytes": 6169,
           "thirdPartyHosts": 1,
@@ -3418,19 +3436,19 @@
         }
       },
       "score": {
-        "perf": 83,
+        "perf": 99,
         "a11y": 79,
         "ux": 43,
-        "overall": 68,
+        "overall": 72,
         "detail": {
           "perf": {
-            "ttfb": 0.7096805555290646,
-            "fcp": 0.48933906249701975,
-            "lcp": 0.6752328947343325,
+            "ttfb": 0.9660416666666667,
+            "fcp": 1,
+            "lcp": 1,
             "cls": 1,
-            "weight": 0.9760629824561403,
+            "weight": 0.9757964912280702,
             "scripts": 1,
-            "tbt": 0.9710344827586207
+            "tbt": 0.9717241379310345
           },
           "a11y": {
             "alt": 1,
@@ -3461,11 +3479,11 @@
       "http": {
         "status": 403,
         "finalUrl": "https://chat.mistral.ai/",
-        "elapsedMs": 840,
+        "elapsedMs": 1165,
         "bytes": 5629,
         "encoding": "br",
         "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-EW0vIuDYkTSYeCCAfysc2J' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "csp": "default-src 'none'; script-src 'nonce-m2kYNjevSzUQCAjvg4qGtR' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
         "hsts": "max-age=15552000; includeSubDomains; preload",
         "nosniff": "nosniff",
         "frame": "SAMEORIGIN",
@@ -3494,7 +3512,7 @@
         "headings": [
           {
             "level": 1,
-            "text": "Good afternoon. Ready when you are"
+            "text": "Good evening. What\u2019s on your mind?"
           },
           {
             "level": 2,
@@ -3536,7 +3554,7 @@
         "fixedOverlayArea": 1,
         "firstScreen": {
           "h1": [
-            "Good afternoon. Ready when you are"
+            "Good evening. What\u2019s on your mind?"
           ],
           "h2": [
             "Vibe Terms of Service"
@@ -3586,21 +3604,21 @@
           "navItems": 0,
           "wordCount": 32,
           "links": 2,
-          "text": "Good afternoon. Ready when you are Think Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
+          "text": "Good evening. What\u2019s on your mind? Think Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
         },
         "metrics": {
-          "fcp": 2392,
-          "lcp": 6812,
+          "fcp": 2276,
+          "lcp": 6536,
           "cls": 0,
-          "longTasks": 9,
-          "tbt": 1439,
-          "dcl": 4409.199999809265,
-          "load": 5428,
-          "ttfb": 1606.7999999523163,
-          "resources": 151,
-          "transferBytes": 3832490,
-          "decodedBytes": 11875905,
-          "jsBytes": 3577506,
+          "longTasks": 7,
+          "tbt": 1167,
+          "dcl": 2255.9000000953674,
+          "load": 5265.799999713898,
+          "ttfb": 1765.1999998092651,
+          "resources": 150,
+          "transferBytes": 3832122,
+          "decodedBytes": 11875731,
+          "jsBytes": 3577274,
           "cssBytes": 250598,
           "imgBytes": 0,
           "thirdPartyHosts": 3,
@@ -3626,7 +3644,7 @@
         "headings": [
           {
             "level": 1,
-            "text": "Good afternoon. Ready when you are"
+            "text": "Good evening. What\u2019s on your mind?"
           },
           {
             "level": 2,
@@ -3668,7 +3686,7 @@
         "fixedOverlayArea": 1,
         "firstScreen": {
           "h1": [
-            "Good afternoon. Ready when you are"
+            "Good evening. What\u2019s on your mind?"
           ],
           "h2": [
             "Vibe Terms of Service"
@@ -3718,17 +3736,17 @@
           "navItems": 0,
           "wordCount": 31,
           "links": 2,
-          "text": "Good afternoon. Ready when you are Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
+          "text": "Good evening. What\u2019s on your mind? Sign in Sign up Vibe Terms of Service You must accept our Terms of Service and Privacy Policy to start using Vibe. Accept and continue"
         },
         "metrics": {
-          "fcp": 868,
-          "lcp": 3164,
+          "fcp": 932,
+          "lcp": 2736,
           "cls": 0,
-          "longTasks": 8,
-          "tbt": 583,
-          "dcl": 2333.2999999523163,
-          "load": 2333.699999809265,
-          "ttfb": 589,
+          "longTasks": 6,
+          "tbt": 384,
+          "dcl": 1917.2000002861023,
+          "load": 1917.5,
+          "ttfb": 629.2000002861023,
           "resources": 149,
           "transferBytes": 2895,
           "decodedBytes": 11860499,
@@ -3740,19 +3758,19 @@
         }
       },
       "score": {
-        "perf": 37,
+        "perf": 39,
         "a11y": 77,
         "ux": 79,
         "overall": 66,
         "detail": {
           "perf": {
-            "ttfb": 0.21844444447093536,
-            "fcp": 0.5025,
+            "ttfb": 0.13044444455040827,
+            "fcp": 0.5387500000000001,
             "lcp": 0,
             "cls": 1,
-            "weight": 0.3802649122807018,
-            "scripts": 0.4304347826086956,
-            "tbt": 0.042068965517241375
+            "weight": 0.38032947368421055,
+            "scripts": 0.4347826086956522,
+            "tbt": 0.22965517241379307
           },
           "a11y": {
             "alt": 1,
@@ -3783,7 +3801,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://duck.ai/",
-        "elapsedMs": 247,
+        "elapsedMs": 605,
         "bytes": 26559,
         "encoding": "br",
         "cache": "no-cache, no-cache, no-store, must-revalidate",
@@ -3919,14 +3937,14 @@
           "text": "Duck.ai New Chat \u2318 + \u21e7 + O New Voice Chat New Image \u2318 + \u21e7 + I Settings & More Free by DuckDuckGo | Get the App Duck.ai, by DuckDuckGo Tools Fast 6 Luna Ask DuckDuckGo anonymizes your chats. By clicking 'Ask' you agree to our Privacy Policy and Terms of Service. How Duck.ai Works Chat Suggestions Create & Edit Images"
         },
         "metrics": {
-          "fcp": 968,
-          "lcp": 3136,
+          "fcp": 1308,
+          "lcp": 2668,
           "cls": 0.02848765432098765,
           "longTasks": 3,
-          "tbt": 808,
-          "dcl": 2515.100000143051,
-          "load": 2515.9000000953674,
-          "ttfb": 398.90000009536743,
+          "tbt": 494,
+          "dcl": 2238.0999999046326,
+          "load": 2238.800000190735,
+          "ttfb": 791.0999999046326,
           "resources": 31,
           "transferBytes": 1743621,
           "decodedBytes": 6200987,
@@ -4049,15 +4067,15 @@
           "text": "FREE Duck.ai, by DuckDuckGo 6 Luna Ask DuckDuckGo anonymizes your chats. By clicking 'Ask' you agree to our Privacy Policy and Terms of Service. Voice Chat How Duck.ai Works Chat Suggestions Create & Edit Images"
         },
         "metrics": {
-          "fcp": 828,
-          "lcp": 896,
+          "fcp": 688,
+          "lcp": 756,
           "cls": 0,
           "longTasks": 1,
-          "tbt": 76,
-          "dcl": 564.5,
-          "load": 564.6999998092651,
-          "ttfb": 376.09999990463257,
-          "resources": 30,
+          "tbt": 68,
+          "dcl": 465.2000002861023,
+          "load": 465.30000019073486,
+          "ttfb": 291.90000009536743,
+          "resources": 32,
           "transferBytes": 1088,
           "decodedBytes": 6185901,
           "jsBytes": 0,
@@ -4074,13 +4092,13 @@
         "overall": 79,
         "detail": {
           "perf": {
-            "ttfb": 0.8894999999470181,
-            "fcp": 0.9475,
-            "lcp": 0.4905263157894737,
+            "ttfb": 0.671611111164093,
+            "fcp": 0.84125,
+            "lcp": 0.6136842105263158,
             "cls": 0.9742798353909465,
             "weight": 0.7467331578947368,
             "scripts": 0.9521739130434783,
-            "tbt": 0.4772413793103448
+            "tbt": 0.6937931034482758
           },
           "a11y": {
             "alt": 1,
@@ -4111,8 +4129,8 @@
       "http": {
         "status": 200,
         "finalUrl": "https://huggingface.co/chat/",
-        "elapsedMs": 402,
-        "bytes": 159169,
+        "elapsedMs": 384,
+        "bytes": 159166,
         "encoding": "br",
         "cache": null,
         "csp": "frame-ancestors https://huggingface.co;",
@@ -4316,17 +4334,17 @@
           "navItems": 0,
           "wordCount": 133,
           "links": 6,
-          "text": "HuggingChat New Chat Models 134 Settings HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers \u00b7 training \u00b7 spaces \u00b7 datasets \u00b7 eval \u00b7 hub MCP (2) ML Intern NEW Omni Generated content may be inaccurate or false. Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI "
+          "text": "HuggingChat New Chat Models 132 Settings HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers \u00b7 training \u00b7 spaces \u00b7 datasets \u00b7 eval \u00b7 hub MCP (2) ML Intern NEW Omni Generated content may be inaccurate or false. Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI "
         },
         "metrics": {
-          "fcp": 776,
-          "lcp": 1032,
+          "fcp": 856,
+          "lcp": 1164,
           "cls": 0.02321397087191358,
           "longTasks": 1,
-          "tbt": 14,
-          "dcl": 716.6000001430511,
-          "load": 860.2000000476837,
-          "ttfb": 324.40000009536743,
+          "tbt": 16,
+          "dcl": 768.7000002861023,
+          "load": 962.5,
+          "ttfb": 380.09999990463257,
           "resources": 66,
           "transferBytes": 700939,
           "decodedBytes": 2043756,
@@ -4531,17 +4549,17 @@
           "text": "HuggingChat Have an ML idea? NEW ML Intern plans and runs it for you. No PhD required. Try it Doodle Jump game Generate an image Make my website Celebrate 3M models Latest world news Trending models Plan a trip Compare technologies Find a dataset Gift ideas Learn something new ML Intern ML Intern, mode on papers \u00b7 training \u00b7 spaces \u00b7 datasets \u00b7 eval \u00b7 hub MCP (2) ML Intern NEW Omni Now with ML Intern! Welcome to HuggingChat, the chat app powered by open source AI models. Omni automatically picks the best AI model to give you optimal answers depending on your requests. You can also choose from "
         },
         "metrics": {
-          "fcp": 352,
-          "lcp": 436,
+          "fcp": 400,
+          "lcp": 440,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 311.59999990463257,
-          "load": 383.39999985694885,
-          "ttfb": 275.09999990463257,
+          "dcl": 339.40000009536743,
+          "load": 421.30000019073486,
+          "ttfb": 315.1000003814697,
           "resources": 64,
-          "transferBytes": 3409,
-          "decodedBytes": 2047780,
+          "transferBytes": 3545,
+          "decodedBytes": 2047916,
           "jsBytes": 2522,
           "cssBytes": 0,
           "imgBytes": 0,
@@ -4550,14 +4568,14 @@
         }
       },
       "score": {
-        "perf": 95,
+        "perf": 94,
         "a11y": 62,
         "ux": 64,
-        "overall": 73,
+        "overall": 72,
         "detail": {
           "perf": {
-            "ttfb": 0.930888888835907,
-            "fcp": 1,
+            "ttfb": 0.8999444444974264,
+            "fcp": 0.9825,
             "lcp": 1,
             "cls": 0.9902606943275346,
             "weight": 0.9296598245614035,
@@ -4593,7 +4611,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://claude.com/product/overview",
-        "elapsedMs": 1771,
+        "elapsedMs": 773,
         "bytes": 796596,
         "encoding": "gzip",
         "cache": "public, max-age=0, must-revalidate",
@@ -4861,12 +4879,12 @@
             {
               "text": "Try Claude",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.c4eaf5f1-7065-4b72-882f-b4e81782012d"
             },
             {
               "text": "Download for macOS",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27/api/desktop/darwin/universal/dmg/latest/redirect"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.c4eaf5f1-7065-4b72-882f-b4e81782012d/api/desktop/darwin/universal/dmg/latest/redirect"
             }
           ],
           "navItems": 4,
@@ -4875,19 +4893,19 @@
           "text": "Skip to main content Latest news Introducing Claude Duet A new app and proactive way to work with Claude, now in research preview. Join the waitlist Product Developers Enterprise Resources Pricing Login Contact sales Try Claude Product Explore here Campaign readout Call prep Audience intelligence QBR deck Earnings comps CRM hygiene Month-end close JD check Budget reforecast Survey readout Legal research drafting Merit analysis Deposition prep Action tracking Contract redline Metrics dashboard Asset creation QBR deck Campaign readout Call prep Audience intelligence Earnings comps JD check Month"
         },
         "metrics": {
-          "fcp": 2508,
-          "lcp": 6916,
-          "cls": 8.95945859053498e-06,
-          "longTasks": 3,
-          "tbt": 206,
-          "dcl": 2781.600000143051,
-          "load": 6520.200000047684,
-          "ttfb": 647.7000000476837,
-          "resources": 137,
-          "transferBytes": 1532064,
-          "decodedBytes": 3412250,
+          "fcp": 1092,
+          "lcp": 1792,
+          "cls": 0,
+          "longTasks": 4,
+          "tbt": 215,
+          "dcl": 1278,
+          "load": 1329.6000003814697,
+          "ttfb": 392,
+          "resources": 138,
+          "transferBytes": 1520694,
+          "decodedBytes": 3390679,
           "jsBytes": 483932,
-          "cssBytes": 1010509,
+          "cssBytes": 999139,
           "imgBytes": 35039,
           "thirdPartyHosts": 3,
           "host": "claude.com"
@@ -5078,12 +5096,12 @@
             {
               "text": "Try Claude",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.c4eaf5f1-7065-4b72-882f-b4e81782012d"
             },
             {
               "text": "Download for macOS",
               "tag": "a",
-              "href": "https://claude.ai/redirect/claudedotcom.v1.5a954da3-9d86-4f65-9042-89f782285c27/api/desktop/darwin/universal/dmg/latest/redirect"
+              "href": "https://claude.ai/redirect/claudedotcom.v1.c4eaf5f1-7065-4b72-882f-b4e81782012d/api/desktop/darwin/universal/dmg/latest/redirect"
             },
             {
               "text": "Play: Claude product overview",
@@ -5097,17 +5115,17 @@
           "text": "Skip to main content Latest news Introducing Claude Duet A new app and proactive way to work with Claude, now in research preview. Join the waitlist Product Explore here Give Claude more Hand Claude a task, not just a question. Tackle routines, tangled ideas, and big projects. Try Claude Download for macOS Put Claude to work For everyone Keep up with meetings all day Claude reads each transcript, pulls action items and owners into one list, posts it for the team in Slack, and follows up on opens before the next meeting on Google Calendar. Organize customer feedback into a digest Claude pulls f"
         },
         "metrics": {
-          "fcp": 548,
-          "lcp": 548,
+          "fcp": 468,
+          "lcp": 468,
           "cls": 0,
           "longTasks": 1,
-          "tbt": 90,
-          "dcl": 887.2999999523163,
-          "load": 931.7999999523163,
-          "ttfb": 135.90000009536743,
-          "resources": 118,
+          "tbt": 96,
+          "dcl": 610.6999998092651,
+          "load": 1052.7999997138977,
+          "ttfb": 134.59999990463257,
+          "resources": 119,
           "transferBytes": 10842,
-          "decodedBytes": 2882047,
+          "decodedBytes": 2976624,
           "jsBytes": 0,
           "cssBytes": 3900,
           "imgBytes": 6300,
@@ -5116,19 +5134,19 @@
         }
       },
       "score": {
-        "perf": 63,
+        "perf": 83,
         "a11y": 93,
         "ux": 100,
-        "overall": 86,
+        "overall": 92,
         "detail": {
           "perf": {
-            "ttfb": 0.7512777777512868,
-            "fcp": 0.46625000000000005,
-            "lcp": 0,
+            "ttfb": 0.8933333333333333,
+            "fcp": 0.90875,
+            "lcp": 0.8442105263157895,
             "cls": 1,
-            "weight": 0.7838484210526315,
-            "scripts": 0.491304347826087,
-            "tbt": 0.8924137931034483
+            "weight": 0.7858431578947369,
+            "scripts": 0.4869565217391304,
+            "tbt": 0.8862068965517241
           },
           "a11y": {
             "alt": 1,
@@ -5159,7 +5177,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://mistral.ai/",
-        "elapsedMs": 378,
+        "elapsedMs": 536,
         "bytes": 326017,
         "encoding": "br",
         "cache": "public,max-age=0,must-revalidate",
@@ -5289,19 +5307,19 @@
           "text": "Skip to content Research Sovereign AI Cloud Customers Company Get in touch Start building Why Sovereign AI Products Method Sovereign AI in practice Inference Compute Energy & utilities Manufacturing Financial services Public sector Cybersecurity All customers Blog Docs About us Careers Research Sovereign AI Cloud Customers Company Get in touch Start building Mistral is #1 in Sovereign AI. Mistral is #1 in Sovereign AI. Le Chonk brings the brains. Studio puts it to work. No one else should hold the strings to your Process knowledge Intellectual property Invention Data Core product development Q"
         },
         "metrics": {
-          "fcp": 1772,
-          "lcp": 5676,
-          "cls": 0.08549282606406795,
-          "longTasks": 3,
-          "tbt": 174,
-          "dcl": 3591.4000000953674,
-          "load": 4045,
-          "ttfb": 304.10000014305115,
+          "fcp": 636,
+          "lcp": 3056,
+          "cls": 0.10014608259436517,
+          "longTasks": 4,
+          "tbt": 119,
+          "dcl": 802.4000000953674,
+          "load": 2145,
+          "ttfb": 287.5,
           "resources": 60,
-          "transferBytes": 1382995,
+          "transferBytes": 1383003,
           "decodedBytes": 2607937,
-          "jsBytes": 359281,
-          "cssBytes": 490478,
+          "jsBytes": 359276,
+          "cssBytes": 490491,
           "imgBytes": 531404,
           "thirdPartyHosts": 12,
           "host": "mistral.ai"
@@ -5423,38 +5441,38 @@
           "text": "Skip to content Get in touch MENU Research Sovereign AI Cloud Customers Company Get in touch Start building Why Sovereign AI Products Method Sovereign AI in practice Inference Compute Energy & utilities Manufacturing Financial services Public sector Cybersecurity All customers Blog Docs About us Careers Mistral is #1 in Sovereign AI. Mistral is #1 in Sovereign AI. Le Chonk brings the brains. Studio puts it to work. No one else should hold the strings to your Process knowledge Intellectual property Invention Data Core product development Quality standards Discovery Proprietary AI Private code b"
         },
         "metrics": {
-          "fcp": 380,
-          "lcp": 2644,
-          "cls": 0.011276636090487983,
-          "longTasks": 2,
-          "tbt": 139,
-          "dcl": 603,
-          "load": 654.7999999523163,
-          "ttfb": 117.29999995231628,
-          "resources": 61,
-          "transferBytes": 365822,
-          "decodedBytes": 2663994,
-          "jsBytes": 4380,
+          "fcp": 272,
+          "lcp": 2372,
+          "cls": 0.011369278197151557,
+          "longTasks": 1,
+          "tbt": 8,
+          "dcl": 340,
+          "load": 528.7999997138977,
+          "ttfb": 147.7999997138977,
+          "resources": 51,
+          "transferBytes": 365817,
+          "decodedBytes": 2640566,
+          "jsBytes": 4375,
           "cssBytes": 0,
           "imgBytes": 361442,
-          "thirdPartyHosts": 12,
+          "thirdPartyHosts": 8,
           "host": "mistral.ai"
         }
       },
       "score": {
-        "perf": 71,
+        "perf": 83,
         "a11y": 99,
         "ux": 80,
-        "overall": 84,
+        "overall": 88,
         "detail": {
           "perf": {
-            "ttfb": 0.9421666665871938,
-            "fcp": 0.69625,
-            "lcp": 0,
-            "cls": 0.8015368907149456,
-            "weight": 0.8100008771929824,
+            "ttfb": 0.9513888888888888,
+            "fcp": 1,
+            "lcp": 0.5115789473684211,
+            "cls": 0.7571330830473783,
+            "weight": 0.8099994736842105,
             "scripts": 0.8260869565217391,
-            "tbt": 0.9144827586206896
+            "tbt": 0.9524137931034483
           },
           "a11y": {
             "alt": 1,
@@ -5485,7 +5503,7 @@
       "http": {
         "status": 200,
         "finalUrl": "https://deepmind.google/models/gemini/",
-        "elapsedMs": 662,
+        "elapsedMs": 378,
         "bytes": 236810,
         "encoding": "gzip",
         "cache": "public, max-age=60",
@@ -5697,14 +5715,14 @@
           "text": "Skip to main content Google DeepMind Models Research Science About Build with Gemini Try Gemini Gemini 4 Try in Gemini Try in Google AI Studio Try in Google Antigravity Our next era of frontier intelligence, built to solve your hardest problems. Announcements Introducing Gemini 4 Hydrogen November 2026 Models Learn more Gemini 4 Carbon is now available November 2026 Models Learn more Gemini 4 Carbon: Our next frontier model October 2026 Models Learn more Gemini 4 Argon: Built to solve your hardest problems October 2026 Models Learn more Developing Gemini 4 Argon responsibly and safely October "
         },
         "metrics": {
-          "fcp": 1088,
-          "lcp": 1088,
+          "fcp": 800,
+          "lcp": 800,
           "cls": 0.0010723844300572275,
-          "longTasks": 5,
-          "tbt": 71,
-          "dcl": 1126.7999999523163,
-          "load": 3517.2999999523163,
-          "ttfb": 534.9000000953674,
+          "longTasks": 1,
+          "tbt": 20,
+          "dcl": 811.7999997138977,
+          "load": 2715.699999809265,
+          "ttfb": 252.7999997138977,
           "resources": 45,
           "transferBytes": 323817,
           "decodedBytes": 1137539,
@@ -5913,38 +5931,38 @@
           "text": "Skip to main content Google DeepMind Gemini 4 Try in Gemini Try in Google AI Studio Try in Google Antigravity Our next era of frontier intelligence, built to solve your hardest problems. Announcements Introducing Gemini 4 Hydrogen November 2026 Models Learn more Gemini 4 Carbon is now available November 2026 Models Learn more Gemini 4 Carbon: Our next frontier model October 2026 Models Learn more Gemini 4 Argon: Built to solve your hardest problems October 2026 Models Learn more Developing Gemini 4 Argon responsibly and safely October 2026 Responsibility & Safety Learn more Gemini 4 Argon for "
         },
         "metrics": {
-          "fcp": 156,
-          "lcp": 156,
+          "fcp": 660,
+          "lcp": 660,
           "cls": 0,
           "longTasks": 0,
           "tbt": 0,
-          "dcl": 55,
-          "load": 3244.300000190735,
-          "ttfb": 7.400000095367432,
+          "dcl": 569.8000001907349,
+          "load": 2643,
+          "ttfb": 532.0999999046326,
           "resources": 47,
-          "transferBytes": 16080,
+          "transferBytes": 0,
           "decodedBytes": 3874591,
           "jsBytes": 0,
           "cssBytes": 0,
-          "imgBytes": 16080,
+          "imgBytes": 0,
           "thirdPartyHosts": 8,
           "host": "deepmind.google"
         }
       },
       "score": {
-        "perf": 94,
+        "perf": 98,
         "a11y": 95,
         "ux": 100,
-        "overall": 96,
+        "overall": 98,
         "detail": {
           "perf": {
-            "ttfb": 0.8139444443914625,
-            "fcp": 0.91,
+            "ttfb": 0.9706666668256124,
+            "fcp": 1,
             "lcp": 1,
             "cls": 1,
             "weight": 0.9958215789473684,
             "scripts": 0.8913043478260869,
-            "tbt": 0.9855172413793103
+            "tbt": 1
           },
           "a11y": {
             "alt": 1,
@@ -5975,8 +5993,8 @@
       "http": {
         "status": 200,
         "finalUrl": "https://you.com/",
-        "elapsedMs": 1104,
-        "bytes": 545297,
+        "elapsedMs": 1479,
+        "bytes": 545294,
         "encoding": "gzip",
         "cache": "private, no-cache, no-store, max-age=0, must-revalidate",
         "csp": null,
@@ -6249,18 +6267,18 @@
           "text": "This website utilizes technologies such as cookies to enable essential site functionality, as well as for analytics and personalization. To learn more, view the following link: Privacy Policy Terms and Conditions Skip to main content NEW You.com Inference Router: Enterprise-grade inference on demand, with an uptime SLA of at least 99.9% and ZDR. Learn More APIs Docs Pricing Benchmarks Company Blog Contact Sales C Sign in AI Search and Inference The core AI infrastructure you need to maximize accuracy while reducing latency and costs. Get API key Y Copy onboarding prompt Interactive Demo Web Se"
         },
         "metrics": {
-          "fcp": 752,
-          "lcp": 752,
-          "cls": 0.003444550665710198,
-          "longTasks": 9,
-          "tbt": 596,
-          "dcl": 683.2999999523163,
-          "load": 5110.199999809265,
-          "ttfb": 387.09999990463257,
-          "resources": 214,
-          "transferBytes": 1704109,
-          "decodedBytes": 5872584,
-          "jsBytes": 1207699,
+          "fcp": 824,
+          "lcp": 824,
+          "cls": 0.003322075327597201,
+          "longTasks": 7,
+          "tbt": 400,
+          "dcl": 812.2999997138977,
+          "load": 3296.7999997138977,
+          "ttfb": 371.69999980926514,
+          "resources": 216,
+          "transferBytes": 1707194,
+          "decodedBytes": 6023821,
+          "jsBytes": 1207689,
           "cssBytes": 181400,
           "imgBytes": 12582,
           "thirdPartyHosts": 35,
@@ -6543,18 +6561,18 @@
           "text": "Skip to main content NEW Inference Router: Enterprise-grade inference with ZDR and 99.9% uptime SLA. Learn More AI Search and Inference The core AI infrastructure you need to maximize accuracy while reducing latency and costs. Get API key Y Copy onboarding prompt Interactive Demo Web Search Contents Answer Research Run Visual JSON digital-strategy.ec.europa.eu \u00b7 3 months ago AI Act | Shaping Europe's digital future - European Union The AI Act is the first-ever legal framework on AI, which addresses the risks of AI and positions Europe to play a leading role globally. The AI Act (Regulation (EU"
         },
         "metrics": {
-          "fcp": 608,
-          "lcp": 608,
+          "fcp": 484,
+          "lcp": 484,
           "cls": 0,
-          "longTasks": 2,
-          "tbt": 26,
-          "dcl": 879,
-          "load": 2840.5999999046326,
-          "ttfb": 482.7000000476837,
+          "longTasks": 1,
+          "tbt": 21,
+          "dcl": 484.90000009536743,
+          "load": 1309,
+          "ttfb": 356.90000009536743,
           "resources": 190,
-          "transferBytes": 12587,
-          "decodedBytes": 4305084,
-          "jsBytes": 3384,
+          "transferBytes": 12577,
+          "decodedBytes": 4305088,
+          "jsBytes": 3367,
           "cssBytes": 0,
           "imgBytes": 1368,
           "thirdPartyHosts": 32,
@@ -6562,19 +6580,19 @@
         }
       },
       "score": {
-        "perf": 78,
+        "perf": 79,
         "a11y": 83,
         "ux": 93,
         "overall": 85,
         "detail": {
           "perf": {
-            "ttfb": 0.8960555556085374,
-            "fcp": 1,
+            "ttfb": 0.9046111112170749,
+            "fcp": 0.9925,
             "lcp": 1,
             "cls": 1,
-            "weight": 0.7536650877192983,
-            "scripts": 0.15652173913043477,
-            "tbt": 0.623448275862069
+            "weight": 0.7531238596491228,
+            "scripts": 0.14782608695652177,
+            "tbt": 0.7586206896551724
           },
           "a11y": {
             "alt": 1,
@@ -6593,6 +6611,1368 @@
             "live": 1,
             "cta": 0.5,
             "meta": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "url": "https://chat.deepseek.com/",
+      "local": false,
+      "http": {
+        "status": 202,
+        "finalUrl": "https://chat.deepseek.com/",
+        "elapsedMs": 190,
+        "bytes": 0,
+        "encoding": null,
+        "cache": "no-store, max-age=0",
+        "csp": null,
+        "hsts": null,
+        "nosniff": null,
+        "frame": null,
+        "referrer": null,
+        "permissions": null,
+        "server": "CloudFront"
+      },
+      "refused": false,
+      "title": "DeepSeek - Into the Unknown",
+      "desktop": {
+        "url": "https://chat.deepseek.com/sign_in",
+        "title": "DeepSeek - Into the Unknown",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "Chat with DeepSeek AI \u2013 your intelligent assistant for coding, content creation, file reading, and more. Upload documents, engage in long-context conversations, and get expert help in AI, natural language processing, and beyond. | \u6df1\u5ea6\u6c42\u7d22\uff08DeepSeek\uff09\u52a9\u529b\u7f16\u7a0b\u4ee3\u7801\u5f00\u53d1\u3001\u521b\u610f\u5199\u4f5c\u3001\u6587\u4ef6\u5904\u7406\u7b49\u4efb\u52a1\uff0c\u652f\u6301\u6587\u4ef6\u4e0a\u4f20\u53ca\u957f\u6587\u672c\u5bf9\u8bdd\uff0c\u968f\u65f6\u4e3a\u60a8\u63d0\u4f9b\u9ad8\u6548\u7684AI\u652f\u6301\u3002",
+        "canonical": null,
+        "og": true,
+        "landmarks": {
+          "header": 0,
+          "nav": 0,
+          "main": 0,
+          "footer": 0,
+          "h1": 0
+        },
+        "skipLink": false,
+        "headings": [],
+        "headingSkips": 0,
+        "ariaLive": 0,
+        "roleStatus": 0,
+        "images": 0,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 0,
+        "controls": 2,
+        "unlabeledControls": 2,
+        "unnamedButtons": 1,
+        "nestedInteractive": 0,
+        "tapTargets": 10,
+        "smallTargets": 7,
+        "smallTargetsSample": [
+          {
+            "name": "",
+            "w": 16,
+            "h": 16
+          },
+          {
+            "name": "Terms of Use",
+            "w": 82,
+            "h": 19
+          },
+          {
+            "name": "Privacy Policy",
+            "w": 85,
+            "h": 19
+          },
+          {
+            "name": "Forgot password?",
+            "w": 101,
+            "h": 18
+          },
+          {
+            "name": "Sign up",
+            "w": 43,
+            "h": 18
+          },
+          {
+            "name": "Log in with Google",
+            "w": 106,
+            "h": 18
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontalOverflow": false,
+        "bodyFontSize": "14px",
+        "reducedMotionRule": false,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0,
+        "firstScreen": {
+          "h1": [],
+          "h2": [],
+          "ctas": [
+            {
+              "text": "Terms of Use",
+              "tag": "a",
+              "href": "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html?locale=en_US"
+            },
+            {
+              "text": "Privacy Policy",
+              "tag": "a",
+              "href": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html?locale=en_US"
+            },
+            {
+              "text": "\u6d59ICP\u59072023025841\u53f7",
+              "tag": "a",
+              "href": "https://beian.miit.gov.cn"
+            },
+            {
+              "text": "Contact us",
+              "tag": "a",
+              "href": "https://trtgsjkv6r.feishu.cn/share/base/form/shrcnhcHE4A6lQaQ3v0raCXmBAg?hide_uid=1&hide_source=1&hide_app_version=1&hide_os_version=1&hide_device_brand=1&hide_device_model=1&hide_app_locale=1&hide_screen_resolution=1&prefill_source=web_auth&prefill_app_version=2.8.0&prefill_app_locale=en-US&prefill_screen_resolution=1440x900"
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 33,
+          "links": 4,
+          "text": "By signing up or logging in, you consent to DeepSeek's Terms of Use and Privacy Policy. Forgot password? Sign up Log in Log in with Google Login with Apple \u6d59ICP\u59072023025841\u53f7 \u00b7 Contact us"
+        },
+        "metrics": {
+          "fcp": 988,
+          "lcp": 988,
+          "cls": 0,
+          "longTasks": 3,
+          "tbt": 254,
+          "dcl": 887.7000002861023,
+          "load": 1568.5,
+          "ttfb": 210.80000019073486,
+          "resources": 26,
+          "transferBytes": 1363290,
+          "decodedBytes": 4288485,
+          "jsBytes": 1186994,
+          "cssBytes": 53615,
+          "imgBytes": 0,
+          "thirdPartyHosts": 6,
+          "host": "chat.deepseek.com"
+        }
+      },
+      "mobile": {
+        "url": "https://chat.deepseek.com/sign_in",
+        "title": "DeepSeek - Into the Unknown",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "Chat with DeepSeek AI \u2013 your intelligent assistant for coding, content creation, file reading, and more. Upload documents, engage in long-context conversations, and get expert help in AI, natural language processing, and beyond. | \u6df1\u5ea6\u6c42\u7d22\uff08DeepSeek\uff09\u52a9\u529b\u7f16\u7a0b\u4ee3\u7801\u5f00\u53d1\u3001\u521b\u610f\u5199\u4f5c\u3001\u6587\u4ef6\u5904\u7406\u7b49\u4efb\u52a1\uff0c\u652f\u6301\u6587\u4ef6\u4e0a\u4f20\u53ca\u957f\u6587\u672c\u5bf9\u8bdd\uff0c\u968f\u65f6\u4e3a\u60a8\u63d0\u4f9b\u9ad8\u6548\u7684AI\u652f\u6301\u3002",
+        "canonical": null,
+        "og": true,
+        "landmarks": {
+          "header": 0,
+          "nav": 0,
+          "main": 0,
+          "footer": 0,
+          "h1": 0
+        },
+        "skipLink": false,
+        "headings": [],
+        "headingSkips": 0,
+        "ariaLive": 0,
+        "roleStatus": 0,
+        "images": 0,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 0,
+        "controls": 2,
+        "unlabeledControls": 2,
+        "unnamedButtons": 1,
+        "nestedInteractive": 0,
+        "tapTargets": 10,
+        "smallTargets": 7,
+        "smallTargetsSample": [
+          {
+            "name": "",
+            "w": 16,
+            "h": 16
+          },
+          {
+            "name": "Terms of Use",
+            "w": 82,
+            "h": 19
+          },
+          {
+            "name": "Privacy Policy",
+            "w": 85,
+            "h": 19
+          },
+          {
+            "name": "Forgot password?",
+            "w": 101,
+            "h": 18
+          },
+          {
+            "name": "Sign up",
+            "w": 43,
+            "h": 18
+          },
+          {
+            "name": "Log in with Google",
+            "w": 106,
+            "h": 18
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontalOverflow": false,
+        "bodyFontSize": "14px",
+        "reducedMotionRule": false,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0,
+        "firstScreen": {
+          "h1": [],
+          "h2": [],
+          "ctas": [
+            {
+              "text": "Terms of Use",
+              "tag": "a",
+              "href": "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html?locale=en_US"
+            },
+            {
+              "text": "Privacy Policy",
+              "tag": "a",
+              "href": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html?locale=en_US"
+            },
+            {
+              "text": "\u6d59ICP\u59072023025841\u53f7",
+              "tag": "a",
+              "href": "https://beian.miit.gov.cn"
+            },
+            {
+              "text": "Contact us",
+              "tag": "a",
+              "href": "https://trtgsjkv6r.feishu.cn/share/base/form/shrcnhcHE4A6lQaQ3v0raCXmBAg?hide_uid=1&hide_source=1&hide_app_version=1&hide_os_version=1&hide_device_brand=1&hide_device_model=1&hide_app_locale=1&hide_screen_resolution=1&prefill_source=web_auth&prefill_app_version=2.8.0&prefill_app_locale=en-US&prefill_screen_resolution=780x1688"
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 33,
+          "links": 4,
+          "text": "By signing up or logging in, you consent to DeepSeek's Terms of Use and Privacy Policy. Forgot password? Sign up Log in Log in with Google Login with Apple \u6d59ICP\u59072023025841\u53f7 \u00b7 Contact us"
+        },
+        "metrics": {
+          "fcp": 380,
+          "lcp": 380,
+          "cls": 0,
+          "longTasks": 1,
+          "tbt": 1,
+          "dcl": 345,
+          "load": 537.2999997138977,
+          "ttfb": 188.5,
+          "resources": 25,
+          "transferBytes": 21094,
+          "decodedBytes": 414582,
+          "jsBytes": 2100,
+          "cssBytes": 900,
+          "imgBytes": 0,
+          "thirdPartyHosts": 6,
+          "host": "chat.deepseek.com"
+        }
+      },
+      "score": {
+        "perf": 94,
+        "a11y": 46,
+        "ux": 57,
+        "overall": 64,
+        "detail": {
+          "perf": {
+            "ttfb": 0.9939999998940362,
+            "fcp": 0.94125,
+            "lcp": 1,
+            "cls": 1,
+            "weight": 0.813457894736842,
+            "scripts": 0.9739130434782609,
+            "tbt": 0.8593103448275862
+          },
+          "a11y": {
+            "alt": 1,
+            "names": 0.7,
+            "contrast": 1,
+            "targets": 0.30000000000000004,
+            "structure": 0.25,
+            "skip": 0,
+            "motion": 0
+          },
+          "ux": {
+            "h1": 0,
+            "nav": 0,
+            "mobileNav": 1,
+            "overflow": 1,
+            "live": 0,
+            "cta": 1,
+            "meta": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "deepseek-site",
+      "name": "DeepSeek site",
+      "url": "https://www.deepseek.com/",
+      "local": false,
+      "http": {
+        "status": 200,
+        "finalUrl": "https://www.deepseek.com/",
+        "elapsedMs": 265,
+        "bytes": 115941,
+        "encoding": "gzip",
+        "cache": "no-cache",
+        "csp": null,
+        "hsts": null,
+        "nosniff": null,
+        "frame": null,
+        "referrer": null,
+        "permissions": null,
+        "server": "AmazonS3"
+      },
+      "refused": false,
+      "title": "DeepSeek | Into the Unknown",
+      "desktop": {
+        "url": "https://www.deepseek.com/en/",
+        "title": "DeepSeek | Into the Unknown",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "DeepSeek is an AI research company focused on building world-leading general artificial intelligence. We develop and open-source frontier LLMs including DeepSeek-V4, DeepSeek-R1, and DeepSeek-Coder. Chat with DeepSeek AI or integrate via API.",
+        "canonical": "https://www.deepseek.com/en/",
+        "og": true,
+        "landmarks": {
+          "header": 0,
+          "nav": 1,
+          "main": 1,
+          "footer": 1,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Into the Unknown"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 0,
+        "roleStatus": 0,
+        "images": 3,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 2,
+        "controls": 1,
+        "unlabeledControls": 1,
+        "unnamedButtons": 4,
+        "nestedInteractive": 0,
+        "tapTargets": 48,
+        "smallTargets": 24,
+        "smallTargetsSample": [
+          {
+            "name": "",
+            "w": 143,
+            "h": 23
+          },
+          {
+            "name": "",
+            "w": 143,
+            "h": 23
+          },
+          {
+            "name": "\u6d59ICP\u59072023025841\u53f7",
+            "w": 240,
+            "h": 21
+          },
+          {
+            "name": "\u6d59B2-20250178",
+            "w": 240,
+            "h": 21
+          },
+          {
+            "name": "\u6d59\u516c\u7f51\u5b89\u590733010502011812\u53f7",
+            "w": 240,
+            "h": 21
+          },
+          {
+            "name": "Downloads",
+            "w": 121,
+            "h": 21
+          }
+        ],
+        "contrastFailures": [
+          {
+            "text": "Search",
+            "ratio": 3.53,
+            "need": 4.5,
+            "size": 13,
+            "color": "rgb(65, 118, 230)",
+            "bg": "rgb(229, 235, 248)"
+          }
+        ],
+        "contrastFailureCount": 1,
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": false,
+        "fixedOverlayArea": 0.048,
+        "firstScreen": {
+          "h1": [
+            "Into the Unknown"
+          ],
+          "h2": [],
+          "ctas": [
+            {
+              "text": "",
+              "tag": "a",
+              "href": "/en/"
+            },
+            {
+              "text": "Get App",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "\u4e2d\u6587",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "EN",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "",
+              "tag": "a",
+              "href": "/en/"
+            },
+            {
+              "text": "",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "\u4e2d\u6587",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "EN",
+              "tag": "button",
+              "href": null
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 127,
+          "links": 39,
+          "text": "Get App Scan to get DeepSeek App \u4e2d\u6587 EN DeepSeek Web DeepSeek Harness API Platform API Docs Downloads Join Us \u4e2d\u6587 EN DeepSeek V4.1 Flash has been updated to version V4.1-Flash-1017, with significantly enhanced project development capabilities, enabling tasks to be completed at lower cost and faster speed. Additionally, the API now supports web search and fetch. Into the Unknown DeepThink Search Chat with DeepSeek API Platform Harness Desktop \u6d59ICP\u59072023025841\u53f7 \u6d59B2-20250178 \u6d59\u516c\u7f51\u5b89\u590733010502011812\u53f7 Scan to follow DeepSeek on WeChat Products Downloads DeepSeek Web DeepSeek Harness API Platform API Docs "
+        },
+        "metrics": {
+          "fcp": 640,
+          "lcp": 1428,
+          "cls": 0,
+          "longTasks": 2,
+          "tbt": 25,
+          "dcl": 148.40000009536743,
+          "load": 304.09999990463257,
+          "ttfb": 129.69999980926514,
+          "resources": 43,
+          "transferBytes": 557337,
+          "decodedBytes": 2032836,
+          "jsBytes": 168555,
+          "cssBytes": 68783,
+          "imgBytes": 82542,
+          "thirdPartyHosts": 5,
+          "host": "www.deepseek.com"
+        }
+      },
+      "mobile": {
+        "url": "https://www.deepseek.com/en/",
+        "title": "DeepSeek | Into the Unknown",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "DeepSeek is an AI research company focused on building world-leading general artificial intelligence. We develop and open-source frontier LLMs including DeepSeek-V4, DeepSeek-R1, and DeepSeek-Coder. Chat with DeepSeek AI or integrate via API.",
+        "canonical": "https://www.deepseek.com/en/",
+        "og": true,
+        "landmarks": {
+          "header": 0,
+          "nav": 1,
+          "main": 1,
+          "footer": 1,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Into the Unknown"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 0,
+        "roleStatus": 0,
+        "images": 2,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 1,
+        "controls": 1,
+        "unlabeledControls": 1,
+        "unnamedButtons": 5,
+        "nestedInteractive": 0,
+        "tapTargets": 48,
+        "smallTargets": 24,
+        "smallTargetsSample": [
+          {
+            "name": "",
+            "w": 143,
+            "h": 23
+          },
+          {
+            "name": "",
+            "w": 143,
+            "h": 23
+          },
+          {
+            "name": "\u6d59ICP\u59072023025841\u53f7",
+            "w": 342,
+            "h": 21
+          },
+          {
+            "name": "\u6d59B2-20250178",
+            "w": 342,
+            "h": 21
+          },
+          {
+            "name": "\u6d59\u516c\u7f51\u5b89\u590733010502011812\u53f7",
+            "w": 342,
+            "h": 21
+          },
+          {
+            "name": "Downloads",
+            "w": 121,
+            "h": 21
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": false,
+        "fixedOverlayArea": 0.06,
+        "firstScreen": {
+          "h1": [
+            "Into the Unknown"
+          ],
+          "h2": [],
+          "ctas": [
+            {
+              "text": "",
+              "tag": "a",
+              "href": "/en/"
+            },
+            {
+              "text": "",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "",
+              "tag": "a",
+              "href": "/en/"
+            },
+            {
+              "text": "",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "\u4e2d\u6587",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "EN",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "DeepSeek V4.1 Flash has been updated to version V4.1-Flash-1",
+              "tag": "a",
+              "href": "https://api-docs.deepseek.com/api/search"
+            },
+            {
+              "text": "DeepThink",
+              "tag": "button",
+              "href": null
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 118,
+          "links": 39,
+          "text": "DeepSeek Web DeepSeek Harness API Platform API Docs Downloads Join Us \u4e2d\u6587 EN DeepSeek V4.1 Flash has been updated to version V4.1-Flash-1017, with significantly enhanced project development capabilities, enabling tasks to be completed at lower cost and faster speed. Additionally, the API now supports web search and fetch. Into the Unknown Chat with DeepSeek API Platform Harness Desktop \u6d59ICP\u59072023025841\u53f7 \u6d59B2-20250178 \u6d59\u516c\u7f51\u5b89\u590733010502011812\u53f7 Scan to follow DeepSeek on WeChat Products Downloads DeepSeek Web DeepSeek Harness API Platform API Docs API Pricing Service Status Research DeepSeek V4.1 DeepSe"
+        },
+        "metrics": {
+          "fcp": 1136,
+          "lcp": 1136,
+          "cls": 0,
+          "longTasks": 0,
+          "tbt": 0,
+          "dcl": 48.30000019073486,
+          "load": 71.60000038146973,
+          "ttfb": 35.10000038146973,
+          "resources": 40,
+          "transferBytes": 2005,
+          "decodedBytes": 1983307,
+          "jsBytes": 0,
+          "cssBytes": 0,
+          "imgBytes": 0,
+          "thirdPartyHosts": 5,
+          "host": "www.deepseek.com"
+        }
+      },
+      "score": {
+        "perf": 97,
+        "a11y": 76,
+        "ux": 64,
+        "overall": 78,
+        "detail": {
+          "perf": {
+            "ttfb": 1,
+            "fcp": 1,
+            "lcp": 0.94,
+            "cls": 1,
+            "weight": 0.9548531578947368,
+            "scripts": 0.9,
+            "tbt": 1
+          },
+          "a11y": {
+            "alt": 1,
+            "names": 0.8958333333333334,
+            "contrast": 0.905511811023622,
+            "targets": 0.5,
+            "structure": 1,
+            "skip": 0,
+            "motion": 1
+          },
+          "ux": {
+            "h1": 1,
+            "nav": 0,
+            "mobileNav": 1,
+            "overflow": 1,
+            "live": 0,
+            "cta": 0.5,
+            "meta": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "metaai",
+      "name": "Meta AI",
+      "url": "https://www.meta.ai/",
+      "local": false,
+      "http": {
+        "status": 403,
+        "finalUrl": "https://www.meta.ai/",
+        "elapsedMs": 205,
+        "bytes": 478,
+        "encoding": null,
+        "cache": "no-cache",
+        "csp": null,
+        "hsts": null,
+        "nosniff": null,
+        "frame": null,
+        "referrer": null,
+        "permissions": null,
+        "server": null
+      },
+      "refused": false,
+      "title": "Meta AI - Your AI Assistant for Images, Shopping and More",
+      "desktop": {
+        "url": "https://www.meta.ai/",
+        "title": "Meta AI - Your AI Assistant for Images, Shopping and More",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "Use Meta AI to get things done. Create AI-generated images for free, edit photos, shop, find places to go, and get answers to any question. Start now.",
+        "canonical": "https://www.meta.ai/",
+        "og": false,
+        "landmarks": {
+          "header": 0,
+          "nav": 2,
+          "main": 1,
+          "footer": 1,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Meta AI, the personal assistant that , , researches any topic , ,"
+          },
+          {
+            "level": 2,
+            "text": "Describe the image you want"
+          },
+          {
+            "level": 2,
+            "text": "Edit photos with ease"
+          },
+          {
+            "level": 2,
+            "text": "Discover and shop products that match your style"
+          },
+          {
+            "level": 2,
+            "text": "Find the best spots around you"
+          },
+          {
+            "level": 2,
+            "text": "Go deeper with research"
+          },
+          {
+            "level": 2,
+            "text": "Stay connected to your business"
+          },
+          {
+            "level": 2,
+            "text": "Write the caption, plan the post"
+          },
+          {
+            "level": 2,
+            "text": "Ready to try Meta AI?"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 2,
+        "roleStatus": 0,
+        "images": 20,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 8,
+        "controls": 1,
+        "unlabeledControls": 0,
+        "unnamedButtons": 0,
+        "nestedInteractive": 0,
+        "tapTargets": 24,
+        "smallTargets": 3,
+        "smallTargetsSample": [
+          {
+            "name": "Muse",
+            "w": 35,
+            "h": 20
+          },
+          {
+            "name": "Vibes",
+            "w": 36,
+            "h": 20
+          },
+          {
+            "name": "AI Learning Hub",
+            "w": 103,
+            "h": 20
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0.084,
+        "firstScreen": {
+          "h1": [
+            "Meta AI, the personal assistant that , , researches any topic , ,"
+          ],
+          "h2": [
+            "Describe the image you want",
+            "Edit photos with ease"
+          ],
+          "ctas": [
+            {
+              "text": "Download app",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Log in",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Add attachment",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Send",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Learn more",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Mac",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "iOS",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Android",
+              "tag": "button",
+              "href": null
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 729,
+          "links": 3,
+          "text": "Download app Log in Meta AI, the personal assistant that , , researches any topic , , Learn more Describe the image you want Generate images just by having a conversation with Meta AI - a logo, a tattoo you are thinking about, a thumbnail, a birthday card. Create images A capsule wardrobe of neutral autumn clothing laid out flat, photographed from above on a warm linen backdrop, soft studio light Edit photos with ease Touch up photos, remove unwanted backgrounds, restyle, and more by asking Meta AI or sketching directly on the photo. Edit a photo Change the background to a neutral blue Discove"
+        },
+        "metrics": {
+          "fcp": 1944,
+          "lcp": 3408,
+          "cls": 0,
+          "longTasks": 4,
+          "tbt": 165,
+          "dcl": 1747.5,
+          "load": 2424.199999809265,
+          "ttfb": 873.1999998092651,
+          "resources": 181,
+          "transferBytes": 3022856,
+          "decodedBytes": 8255166,
+          "jsBytes": 2442714,
+          "cssBytes": 192712,
+          "imgBytes": 371249,
+          "thirdPartyHosts": 1,
+          "host": "www.meta.ai"
+        }
+      },
+      "mobile": {
+        "url": "https://www.meta.ai/",
+        "title": "Meta AI - Your AI Assistant for Images, Shopping and More",
+        "lang": "en-US",
+        "hasViewport": true,
+        "description": "Use Meta AI to get things done. Create AI-generated images for free, edit photos, shop, find places to go, and get answers to any question. Start now.",
+        "canonical": "https://www.meta.ai/",
+        "og": false,
+        "landmarks": {
+          "header": 0,
+          "nav": 1,
+          "main": 1,
+          "footer": 1,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Meta AI, the personal assistant that , , researches any topic , ,"
+          },
+          {
+            "level": 2,
+            "text": "Describe the image you want"
+          },
+          {
+            "level": 2,
+            "text": "Edit photos with ease"
+          },
+          {
+            "level": 2,
+            "text": "Discover and shop products that match your style"
+          },
+          {
+            "level": 2,
+            "text": "Find the best spots around you"
+          },
+          {
+            "level": 2,
+            "text": "Go deeper with research"
+          },
+          {
+            "level": 2,
+            "text": "Stay connected to your business"
+          },
+          {
+            "level": 2,
+            "text": "Write the caption, plan the post"
+          },
+          {
+            "level": 2,
+            "text": "Ready to try Meta AI?"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 2,
+        "roleStatus": 0,
+        "images": 17,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 6,
+        "controls": 1,
+        "unlabeledControls": 0,
+        "unnamedButtons": 0,
+        "nestedInteractive": 0,
+        "tapTargets": 18,
+        "smallTargets": 3,
+        "smallTargetsSample": [
+          {
+            "name": "Muse",
+            "w": 35,
+            "h": 20
+          },
+          {
+            "name": "Vibes",
+            "w": 36,
+            "h": 20
+          },
+          {
+            "name": "AI Learning Hub",
+            "w": 103,
+            "h": 20
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0.072,
+        "firstScreen": {
+          "h1": [
+            "Meta AI, the personal assistant that , , researches any topic , ,"
+          ],
+          "h2": [
+            "Describe the image you want",
+            "Edit photos with ease"
+          ],
+          "ctas": [
+            {
+              "text": "Toggle Sidebar",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Log in",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Add attachment",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Send",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Learn more",
+              "tag": "button",
+              "href": null
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 710,
+          "links": 2,
+          "text": "Log in Meta AI, the personal assistant that , , researches any topic , , Learn more Describe the image you want A capsule wardrobe of neutral autumn clothing laid out flat, photographed from above on a warm linen backdrop, soft studio light Generate images just by having a conversation with Meta AI - a logo, a tattoo you are thinking about, a thumbnail, a birthday card. Create images Edit photos with ease Change the background to a neutral blue Touch up photos, remove unwanted backgrounds, restyle, and more by asking Meta AI or sketching directly on the photo. Edit a photo Discover and shop pr"
+        },
+        "metrics": {
+          "fcp": 904,
+          "lcp": 904,
+          "cls": 0,
+          "longTasks": 1,
+          "tbt": 11,
+          "dcl": 726,
+          "load": 727.1999998092651,
+          "ttfb": 226.7999997138977,
+          "resources": 178,
+          "transferBytes": 1586,
+          "decodedBytes": 8249805,
+          "jsBytes": 0,
+          "cssBytes": 871,
+          "imgBytes": 0,
+          "thirdPartyHosts": 0,
+          "host": "www.meta.ai"
+        }
+      },
+      "score": {
+        "perf": 63,
+        "a11y": 84,
+        "ux": 71,
+        "overall": 73,
+        "detail": {
+          "perf": {
+            "ttfb": 0.6260000001059638,
+            "fcp": 0.6425000000000001,
+            "lcp": 0.4189473684210526,
+            "cls": 1,
+            "weight": 0.5223059649122808,
+            "scripts": 0.30000000000000004,
+            "tbt": 0.9206896551724137
+          },
+          "a11y": {
+            "alt": 1,
+            "names": 1,
+            "contrast": 1,
+            "targets": 0.875,
+            "structure": 1,
+            "skip": 0,
+            "motion": 1
+          },
+          "ux": {
+            "h1": 1,
+            "nav": 0,
+            "mobileNav": 1,
+            "overflow": 1,
+            "live": 1,
+            "cta": 0.5,
+            "meta": 0.5
+          }
+        }
+      }
+    },
+    {
+      "id": "poe",
+      "name": "Poe",
+      "url": "https://poe.com/",
+      "local": false,
+      "http": {
+        "status": 403,
+        "finalUrl": "https://poe.com/login?redirect_url=%2F",
+        "elapsedMs": 619,
+        "bytes": 5681,
+        "encoding": "br",
+        "cache": null,
+        "csp": "default-src 'none'; script-src 'nonce-yfrJWvp95zrToirnjuWKOG' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+        "hsts": null,
+        "nosniff": "nosniff",
+        "frame": "SAMEORIGIN",
+        "referrer": "same-origin",
+        "permissions": "accelerometer=(),camera=(),clipboard-read=(),clipboard-write=(),geolocation=(),gyroscope=(),hid=(),magnetometer=(),microphone=(),payment=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),sync-xhr=(),usb=(),xr-spatial-tracking=*",
+        "server": "cloudflare"
+      },
+      "refused": false,
+      "title": "Poe - Fast, Helpful AI Chat",
+      "desktop": {
+        "url": "https://poe.com/login?redirect_url=%2F",
+        "title": "Poe - Fast, Helpful AI Chat",
+        "lang": "en",
+        "hasViewport": true,
+        "description": "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe.",
+        "canonical": null,
+        "og": false,
+        "landmarks": {
+          "header": 0,
+          "nav": 0,
+          "main": 1,
+          "footer": 0,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": ""
+          },
+          {
+            "level": 2,
+            "text": "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 2,
+        "roleStatus": 2,
+        "images": 21,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 1,
+        "controls": 1,
+        "unlabeledControls": 1,
+        "unnamedButtons": 0,
+        "nestedInteractive": 0,
+        "tapTargets": 9,
+        "smallTargets": 4,
+        "smallTargetsSample": [
+          {
+            "name": "Terms of Service",
+            "w": 109,
+            "h": 17
+          },
+          {
+            "name": "Privacy Policy",
+            "w": 88,
+            "h": 17
+          },
+          {
+            "name": "Leaderboard",
+            "w": 84,
+            "h": 20
+          },
+          {
+            "name": "Get Poe",
+            "w": 52,
+            "h": 20
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 1440,
+        "innerWidth": 1440,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0.012,
+        "firstScreen": {
+          "h1": [
+            ""
+          ],
+          "h2": [
+            "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe."
+          ],
+          "ctas": [
+            {
+              "text": "Poe",
+              "tag": "a",
+              "href": "/login"
+            },
+            {
+              "text": "Continue with Google",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Continue with Apple",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Go",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Use phone",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Terms of Service",
+              "tag": "a",
+              "href": "https://poe.com/tos"
+            },
+            {
+              "text": "Privacy Policy",
+              "tag": "a",
+              "href": "https://poe.com/privacy"
+            },
+            {
+              "text": "Leaderboard",
+              "tag": "a",
+              "href": "/leaderboard"
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 70,
+          "links": 6,
+          "text": "Mistral-Large-4 Grok-4.7 Gemini-4-Carbon Claude-Fable-5.2 GPT-6-Astra Claude-Opus-5.5 Gemini-4-Hydrogen Gemini-4-Argon Kimi-K3.1-Pro Claude-Sonnet-5.5 Gemini-3.5-Flash-Lite Claude-Fable-5.1 GPT-Image-2.6-Sunburst Gemini-Omni-1.2-Flash GPT-6.1-Sol Gemini-3.8-Flash GPT-Image-2.6-Flare Nano-Banana-2-Lite Claude-Fable-5 GPT-6.1-Terra Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe. Continue with Google Continue with Apple or Go Use phone By continuing, you are agreei"
+        },
+        "metrics": {
+          "fcp": 924,
+          "lcp": 924,
+          "cls": 0,
+          "longTasks": 6,
+          "tbt": 155,
+          "dcl": 1023.2000002861023,
+          "load": 3032.2000002861023,
+          "ttfb": 560.7000002861023,
+          "resources": 144,
+          "transferBytes": 1207616,
+          "decodedBytes": 7456618,
+          "jsBytes": 586542,
+          "cssBytes": 395275,
+          "imgBytes": 155883,
+          "thirdPartyHosts": 16,
+          "host": "poe.com"
+        }
+      },
+      "mobile": {
+        "url": "https://poe.com/login?redirect_url=%2F",
+        "title": "Poe - Fast, Helpful AI Chat",
+        "lang": "en",
+        "hasViewport": true,
+        "description": "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe.",
+        "canonical": null,
+        "og": false,
+        "landmarks": {
+          "header": 0,
+          "nav": 0,
+          "main": 1,
+          "footer": 0,
+          "h1": 1
+        },
+        "skipLink": false,
+        "headings": [
+          {
+            "level": 1,
+            "text": ""
+          },
+          {
+            "level": 2,
+            "text": "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude"
+          }
+        ],
+        "headingSkips": 0,
+        "ariaLive": 2,
+        "roleStatus": 2,
+        "images": 21,
+        "imgsNoAlt": 0,
+        "imgsNoDimensions": 1,
+        "controls": 1,
+        "unlabeledControls": 1,
+        "unnamedButtons": 0,
+        "nestedInteractive": 0,
+        "tapTargets": 9,
+        "smallTargets": 3,
+        "smallTargetsSample": [
+          {
+            "name": "Privacy Policy",
+            "w": 88,
+            "h": 17
+          },
+          {
+            "name": "Leaderboard",
+            "w": 84,
+            "h": 20
+          },
+          {
+            "name": "Get Poe",
+            "w": 52,
+            "h": 20
+          }
+        ],
+        "contrastFailures": [],
+        "contrastFailureCount": 0,
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "horizontalOverflow": false,
+        "bodyFontSize": "16px",
+        "reducedMotionRule": true,
+        "darkSchemeQueried": true,
+        "fixedOverlayArea": 0.047,
+        "firstScreen": {
+          "h1": [
+            ""
+          ],
+          "h2": [
+            "Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe."
+          ],
+          "ctas": [
+            {
+              "text": "Poe",
+              "tag": "a",
+              "href": "/login"
+            },
+            {
+              "text": "Continue with Google",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Continue with Apple",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Go",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Use phone",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Terms of Service",
+              "tag": "a",
+              "href": "https://poe.com/tos"
+            },
+            {
+              "text": "Privacy Policy",
+              "tag": "a",
+              "href": "https://poe.com/privacy"
+            }
+          ],
+          "navItems": 0,
+          "wordCount": 70,
+          "links": 6,
+          "text": "Mistral-Large-4 Grok-4.7 Gemini-4-Carbon Claude-Fable-5.2 GPT-6-Astra Claude-Opus-5.5 Gemini-4-Hydrogen Gemini-4-Argon Kimi-K3.1-Pro Claude-Sonnet-5.5 Gemini-3.5-Flash-Lite Claude-Fable-5.1 GPT-Image-2.6-Sunburst Gemini-Omni-1.2-Flash GPT-6.1-Sol Gemini-3.8-Flash GPT-Image-2.6-Flare Nano-Banana-2-Lite Claude-Fable-5 GPT-6.1-Terra Chat with the best AI, privately or in a group chat. Explore GPT-6-Astra, Claude-Opus-5.5, Claude-Fable-5.2, Gemini-4-Hydrogen, Gemini-4-Carbon, and thousands of others, all on Poe. Continue with Google Continue with Apple or Go Use phone By continuing, you are agreei"
+        },
+        "metrics": {
+          "fcp": 752,
+          "lcp": 752,
+          "cls": 0,
+          "longTasks": 0,
+          "tbt": 0,
+          "dcl": 720.5999999046326,
+          "load": 724.5,
+          "ttfb": 388.30000019073486,
+          "resources": 82,
+          "transferBytes": 7528,
+          "decodedBytes": 3661445,
+          "jsBytes": 3392,
+          "cssBytes": 0,
+          "imgBytes": 0,
+          "thirdPartyHosts": 15,
+          "host": "poe.com"
+        }
+      },
+      "score": {
+        "perf": 86,
+        "a11y": 78,
+        "ux": 71,
+        "overall": 78,
+        "detail": {
+          "perf": {
+            "ttfb": 0.7996111109521654,
+            "fcp": 0.96125,
+            "lcp": 1,
+            "cls": 1,
+            "weight": 0.8407691228070175,
+            "scripts": 0.4608695652173913,
+            "tbt": 0.9275862068965517
+          },
+          "a11y": {
+            "alt": 1,
+            "names": 0.8888888888888888,
+            "contrast": 1,
+            "targets": 0.5555555555555556,
+            "structure": 1,
+            "skip": 0,
+            "motion": 1
+          },
+          "ux": {
+            "h1": 1,
+            "nav": 0,
+            "mobileNav": 1,
+            "overflow": 1,
+            "live": 1,
+            "cta": 0.5,
+            "meta": 0.5
           }
         }
       }

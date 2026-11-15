@@ -159,36 +159,69 @@ PY
 
 rollback() {
   echo "--- ROLLBACK ---"
-  python3 - "$APE" "$WWW" "$ZONE" "$BACKUP" "$ACCOUNT" "$CLOUDFLARE_CUTOVER_TOKEN" <<'PY'
+  # Honest about its own limits: releasing a Worker custom domain works with the
+  # Workers token, but re-creating one does not (POST /workers/domains answers
+  # 10405 "Method not allowed for this authentication scheme"), so the last step
+  # may have to be a dashboard click. The script says so instead of reporting a
+  # clean rollback it did not achieve.
+  python3 - "$APE" "$WWW" "$ZONE" "$BACKUP" "$ACCOUNT" "${TOKENS[*]}" <<'PY'
 import json, subprocess, sys
-ape, www, zone, backup, acct, token = sys.argv[1:7]
+ape, www, zone, backup, acct, token_list = sys.argv[1:7]
+tokens = token_list.split()
 data = json.load(open(backup))
 
 def api(method, url, body=None):
-    args = ["curl", "-s", "-X", method, "-H", f"Authorization: Bearer {token}",
-            "-H", "content-type: application/json"]
-    if body is not None:
-        args += ["--data", json.dumps(body)]
-    args.append(url)
-    try:
-        return json.loads(subprocess.run(args, capture_output=True, text=True).stdout or "{}")
-    except json.JSONDecodeError:
-        return {}
+    """First token allowed to make the call wins; a denied call changes nothing."""
+    out = {}
+    for token in tokens:
+        args = ["curl", "-s", "-X", method, "-H", f"Authorization: Bearer {token}",
+                "-H", "content-type: application/json"]
+        if body is not None:
+            args += ["--data", json.dumps(body)]
+        args.append(url)
+        try:
+            out = json.loads(subprocess.run(args, capture_output=True, text=True).stdout or "{}")
+        except json.JSONDecodeError:
+            out = {}
+        if out.get("success"):
+            return out
+    return out
 
-# Put the Worker's DNS records back first, then re-attach the custom domains.
+# 1. Remove the CNAMEs this run created, so the hostnames are free again.
+for host in (ape, www):
+    listed = api("GET", f"https://api.cloudflare.com/client/v4/zones/{zone}/dns_records?name={host}")
+    for record in listed.get("result") or []:
+        if record.get("type") == "CNAME" and "pages.dev" in (record.get("content") or ""):
+            api("DELETE", f"https://api.cloudflare.com/client/v4/zones/{zone}/dns_records/{record['id']}")
+            print(f"  removed the pages CNAME for {host}")
+
+# 2. Put the pre-cutover records back, whatever they were.
 for host, records in data["dns"].items():
     for record in records:
         body = {k: record[k] for k in ("type", "name", "content", "proxied", "ttl") if record.get(k) is not None}
-        if record.get("id"):
-            api("PUT", f"https://api.cloudflare.com/client/v4/zones/{zone}/dns_records/{record['id']}", body)
-        else:
-            api("POST", f"https://api.cloudflare.com/client/v4/zones/{zone}/dns_records", body)
-        print(f"  restored dns {record['type']} {record['name']}")
+        result = api("PUT" if record.get("id") else "POST",
+                     f"https://api.cloudflare.com/client/v4/zones/{zone}/dns_records"
+                     + (f"/{record['id']}" if record.get("id") else ""), body)
+        print(f"  restored dns {record['type']} {record['name']}: {result.get('success')}")
+
+# 3. Re-attach the Worker custom domains, which is what actually served the site.
+pending = []
 for worker in data["workers"]:
-    api("POST", f"https://api.cloudflare.com/client/v4/accounts/{acct}/workers/domains",
-        {"zone_id": zone, "hostname": worker["hostname"], "service": worker.get("service", "rarext"),
-         "environment": worker.get("environment", "production")})
-    print(f"  re-attached worker custom domain {worker['hostname']}")
+    result = api("POST", f"https://api.cloudflare.com/client/v4/accounts/{acct}/workers/domains",
+                 {"zone_id": zone, "hostname": worker["hostname"], "service": worker.get("service", "rarext"),
+                  "environment": worker.get("environment", "production")})
+    if result.get("success"):
+        print(f"  re-attached worker custom domain {worker['hostname']}")
+    else:
+        pending.append(worker["hostname"])
+
+if pending:
+    print("")
+    print("  These could not be restored through the API:")
+    for host in pending:
+        print(f"    {host}")
+    print("  Restore them in the dashboard: Workers & Pages -> rarext (Worker) ->")
+    print("  Settings -> Domains & Routes -> Add -> Custom Domain.")
 PY
   echo "rollback attempted; verify manually before assuming it is clean."
 }
