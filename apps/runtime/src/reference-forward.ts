@@ -114,10 +114,16 @@ export function referenceForward(
     if (parsed.tensors[name] === undefined) throw new Error(`the reference pass needs ${name}`);
     return engine.dequantRows!(model, name) as unknown as Tensor;
   };
+  // Qwen2 (and Phi-2) carry additive biases on the projections; a reference
+  // pass that skips them silently disagrees with the engine on the same bytes.
+  // Optional tensors are read by name and applied only when present.
+  const optional = (name: string): Tensor | null =>
+    parsed.tensors[name] === undefined ? null : (engine.dequantRows!(model, name) as unknown as Tensor);
 
   const embed = tensor("token_embd.weight");
   const output = parsed.tensors["output.weight"] === undefined ? embed : tensor("output.weight");
   const outputNorm = tensor("output_norm.weight");
+  const outputBias = optional("output.bias");
   const layers = Array.from({ length: nLayer }, (_, index) => {
     const prefix = `blk.${index}.`;
     return {
@@ -125,6 +131,9 @@ export function referenceForward(
       attnQ: tensor(`${prefix}attn_q.weight`),
       attnK: tensor(`${prefix}attn_k.weight`),
       attnV: tensor(`${prefix}attn_v.weight`),
+      attnQb: optional(`${prefix}attn_q.bias`),
+      attnKb: optional(`${prefix}attn_k.bias`),
+      attnVb: optional(`${prefix}attn_v.bias`),
       attnOutput: tensor(`${prefix}attn_output.weight`),
       ffnNorm: phi2 ? null : tensor(`${prefix}ffn_norm.weight`),
       ffnGate: phi2 ? null : tensor(`${prefix}ffn_gate.weight`),
@@ -179,6 +188,9 @@ export function referenceForward(
       matVec(weights.attnQ, norm, q);
       matVec(weights.attnK, norm, k);
       matVec(weights.attnV, norm, v);
+      if (weights.attnQb !== null) for (let i = 0; i < nEmbd; i += 1) q[i] = q[i]! + weights.attnQb.values[i]!;
+      if (weights.attnKb !== null) for (let i = 0; i < kvDim; i += 1) k[i] = k[i]! + weights.attnKb.values[i]!;
+      if (weights.attnVb !== null) for (let i = 0; i < kvDim; i += 1) v[i] = v[i]! + weights.attnVb.values[i]!;
       rope(q, nHead, headDim, position, base, neox);
       rope(k, nHeadKv, headDim, position, base, neox);
       cacheK[layer]!.push(q.constructor === Float32Array ? k.slice() : k.slice());
@@ -235,6 +247,7 @@ export function referenceForward(
       rmsNorm(norm, x, outputNorm.values, eps);
       const next = new Float32Array(output.rows);
       matVec(output, norm, next);
+      if (outputBias !== null) for (let i = 0; i < output.rows; i += 1) next[i] = next[i]! + outputBias.values[i]!;
       logits = next;
     }
   }

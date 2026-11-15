@@ -11,6 +11,23 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **AI capability audit — measured, including the parts that lose.** New
+  [docs/AI-CAPABILITY-AUDIT.md](docs/AI-CAPABILITY-AUDIT.md) and
+  `npm run audit:ai` stand up a real node, shard a 504 MiB Qwen2.5-0.5B container
+  into 64 content-addressed blobs, serve the engine as a RAREXT artifact too, and
+  probe the OpenAI surface live: **14/15 pass, 0 critical** — chat, per-token SSE
+  (24 chunks = 24 trace tokens), seeded replay, stop, logprobs, JSON-schema
+  output, 896-dim embeddings, and multimodal refusal by name; tool calling is a
+  protocol pass but the 0.5B missed the live prompt. Throughput is **0.50 tok/s**
+  against **15.2 tok/s** for llama.cpp on the same 0.5B model (Q4_K_M vs Q8_0; ≈30×, an order-of-magnitude gap rather than a matched-precision ratio), and 1G
+  is the only shipped model class. The audit also found and fixed two defects:
+  `reference-forward.ts` ignored Qwen2's Q/K/V/output biases, so the "independent"
+  benchmark falsely disagreed (`argmax 115878 vs 576` → `576 vs 576`), and the HF
+  converter dropped `tokenizer.chat_template`, so converted instruct models lost
+  their chat format. Both carry tests. `demo:web4-model` 34/34 and
+  `demo:ai-on-rarext` (two nodes, same trace, weight perturbation changes the run)
+  are quoted in the audit.
+
 - **The showcase is deployed to Cloudflare Pages, one DNS step from `rarext.com`.**
   `rarext.com` and `rarext.co` are both custom domains of the Worker `rarext`
   today; the web4 AI showcase is deployed to the Pages project `rarext-com` and

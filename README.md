@@ -51,6 +51,15 @@ welcome.
   and the deploy carries a custom domain in one guarded command
   (`RAREXT_LAUNCH_CONFIRM=1 npm run deploy:site -- --domain rarext.com`) that refuses to fire
   without the DNS in place.
+- **Can it do everything other AI can?** — [docs/AI-CAPABILITY-AUDIT.md](docs/AI-CAPABILITY-AUDIT.md)
+  is the measured answer, not the pitch: a real 0.5B container served from 64
+  verified shards, 14/15 live capability probes, **0.50 tok/s** against llama.cpp's
+  **15.2 tok/s** on the same 0.5B model (Q4_K_M vs Q8_0), no vision/audio, 1G the only shipped model
+  class — and on the other side, content-addressed weights **and** engine, tamper
+  refusal, byte-identical seeded replay, signed receipts, and two-node agreement.
+  It also records the two defects the audit found and fixed: a reference forward
+  pass that ignored Qwen2's biases (so the benchmark was wrong, not the engine)
+  and an HF converter that dropped the chat template.
 - **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely. It also defines **RAREXT's own architecture-free cloud model** — `rarext.cloud-model.v1`, declared by capability and unable to carry a weight file's vocabulary, speaking RAREXT's own `rarext.cloud-infer.v1` wire — so RAREXT's future AI is not bound to the architectures and weights of today.
 
 You do not need permission to fork, run a node, or publish a verifier. If you

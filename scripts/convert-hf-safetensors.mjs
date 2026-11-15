@@ -387,6 +387,13 @@ export function tokenizeSection(dir, config) {
   const tokenizerConfig = existsSync(tokenizerConfigPath)
     ? JSON.parse(readFileSync(tokenizerConfigPath, "utf8"))
     : {};
+  // An instruct checkpoint's chat format lives here, not in config.json. Drop
+  // it and a converted model is still the same weights but no longer the same
+  // assistant: the provider falls back to a plain "user:/assistant:" prompt.
+  const chatTemplate =
+    typeof tokenizerConfig.chat_template === "string" && tokenizerConfig.chat_template.length > 0
+      ? { "tokenizer.chat_template": tokenizerConfig.chat_template }
+      : {};
   const spmPath = join(dir, "tokenizer.model");
   if (!existsSync(join(dir, "tokenizer.json")) && existsSync(spmPath)) {
     const { pieces, scores, types } = parseSentencePieceModel(readFileSync(spmPath));
@@ -399,6 +406,7 @@ export function tokenizeSection(dir, config) {
         tokenizerConfig.add_bos_token === undefined ? true : tokenizerConfig.add_bos_token,
       ...(config.bos_token_id !== undefined ? { "tokenizer.ggml.bos_token_id": config.bos_token_id } : {}),
       ...(config.eos_token_id !== undefined ? { "tokenizer.ggml.eos_token_id": config.eos_token_id } : {}),
+      ...chatTemplate,
     };
   }
   const tokenizerPath = join(dir, "tokenizer.json");
@@ -431,6 +439,7 @@ export function tokenizeSection(dir, config) {
         tokenizerConfig.add_bos_token === undefined ? true : tokenizerConfig.add_bos_token,
       ...(config.bos_token_id !== undefined ? { "tokenizer.ggml.bos_token_id": config.bos_token_id } : {}),
       ...(config.eos_token_id !== undefined ? { "tokenizer.ggml.eos_token_id": config.eos_token_id } : {}),
+      ...chatTemplate,
     };
   }
   if (model.type !== "BPE") {
@@ -452,6 +461,7 @@ export function tokenizeSection(dir, config) {
     "tokenizer.ggml.merges": merges,
     ...(config.bos_token_id !== undefined ? { "tokenizer.ggml.bos_token_id": config.bos_token_id } : {}),
     ...(config.eos_token_id !== undefined ? { "tokenizer.ggml.eos_token_id": config.eos_token_id } : {}),
+    ...chatTemplate,
   };
 }
 

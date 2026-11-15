@@ -31,6 +31,7 @@ Those are names, not links, so every document is linked once in the reference be
 | [AI-VERIFICATION.md](AI-VERIFICATION.md) | How does RAREXT verify AI artifacts — exact, generative, and bounded claims — and how do I check one myself? |
 | [MODEL-RUNTIME.md](MODEL-RUNTIME.md) | How do I deploy a large model (local engine, remote provider, or RAREXT network) and publish every inference as an exact, replayable RAREXT transcript? |
 | [WEB4-MODEL.md](WEB4-MODEL.md) | How do the weights and the engine themselves live on RAREXT — model bundles, sharded blobs, portable engine runtimes, a provider node that fetches and verifies both, and a run a stranger can replay? |
+| [AI-CAPABILITY-AUDIT.md](AI-CAPABILITY-AUDIT.md) | Can RAREXT AI do everything other AI can do, and do it better — measured live against a real 0.5B container, with the gaps and the two defects the audit found and fixed? |
 | [CLOUD-RUNTIME.md](CLOUD-RUNTIME.md) | How do I run the model entirely in the cloud — remote endpoint, no local weights or inference, a public gateway, and the registry/mirror/anchor/discover path? |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What are the components, what talks to what, and which parts are still target-state? |
 | [BRANDING.md](BRANDING.md) | Which brand is speaking, and what may each one claim? |

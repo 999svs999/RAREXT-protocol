@@ -7568,11 +7568,90 @@ test("a container built from safetensors by RAREXT's own converter decodes exact
   );
   writeSafetensors(join(dir, "model.safetensors"), entries);
 
+  // The chat format is part of an instruct checkpoint, and the converter must
+  // carry it: without it the provider falls back to a plain "user:" prompt and
+  // the same weights no longer behave like the assistant they were tuned to be.
+  const template = "{% for m in messages %}{{ m.role }}: {{ m.content }}\n{% endfor %}assistant:";
+  writeFileSync(join(dir, "tokenizer_config.json"), JSON.stringify({ chat_template: template }));
+
   const container = convertHfDirectory(dir);
   assert.deepEqual(container.ggmlTypes, ["F32"], "the container carries plain F32 weights");
+  assert.equal(
+    engine.parseContainer!(new Uint8Array(container.bytes)).kv["tokenizer.chat_template"],
+    template,
+    "the converted container keeps the tokenizer's chat template",
+  );
   const hfModel = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
   const served = engine.run(hfModel, { prompt: "a b", steps: 3, temperature: 0 }).tokens.join(",");
   assert.equal(served, reference, "the converted container decodes exactly like the GGUF fixture");
+});
+
+test("the reference pass applies Qwen2's projection biases, not just the engine", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const ggufBytes = tinyGgufModel({ arch: "qwen2", tokenizer: "gpt2" });
+  const parsed = engine.parseGguf!(new Uint8Array(ggufBytes));
+  const source = new Uint8Array(ggufBytes);
+  const entries: { name: string; dtype: string; shape: number[]; bytes: Buffer }[] = Object.values(
+    parsed.tensors,
+  ).map((tensor) => {
+    const length = tensor.rowBytes * tensor.rows;
+    return {
+      name: ggufToHfName(tensor.name),
+      dtype: "F32",
+      shape: [tensor.rows, tensor.cols],
+      bytes: Buffer.from(source.subarray(parsed.dataStart + tensor.offset, parsed.dataStart + tensor.offset + length)),
+    };
+  });
+  // Qwen2 carries q/k/v projection biases. Non-zero values make an omission in
+  // either implementation visible: a reference pass that skips them drifts away
+  // from the engine on the same bytes.
+  const nEmbd = Number(parsed.kv["qwen2.embedding_length"]);
+  const kvDim = Number(parsed.kv["qwen2.attention.head_count_kv"]) * (nEmbd / Number(parsed.kv["qwen2.attention.head_count"]));
+  const bias = (size: number, value: number): Buffer =>
+    Buffer.from(new Float32Array(Array.from({ length: size }, () => value)).buffer);
+  entries.push(
+    { name: "model.layers.0.self_attn.q_proj.bias", dtype: "F32", shape: [nEmbd], bytes: bias(nEmbd, 3) },
+    { name: "model.layers.0.self_attn.k_proj.bias", dtype: "F32", shape: [kvDim], bytes: bias(kvDim, -3) },
+    { name: "model.layers.0.self_attn.v_proj.bias", dtype: "F32", shape: [kvDim], bytes: bias(kvDim, 3) },
+  );
+  const tokens = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (let i = 0; i < 24; i += 1) tokens.push(`<x${i}>`);
+  const dir = mkdtempSync(join(tmpdir(), "rarext-hf-bias-"));
+  writeFileSync(
+    join(dir, "config.json"),
+    JSON.stringify({
+      model_type: "qwen2",
+      hidden_size: nEmbd,
+      num_attention_heads: Number(parsed.kv["qwen2.attention.head_count"]),
+      num_key_value_heads: Number(parsed.kv["qwen2.attention.head_count_kv"]),
+      intermediate_size: Number(parsed.kv["qwen2.feed_forward_length"]),
+      num_hidden_layers: 1,
+      rms_norm_eps: 1e-6,
+      rope_theta: 10000,
+      max_position_embeddings: 64,
+      bos_token_id: 0,
+      eos_token_id: 1,
+    }),
+  );
+  writeFileSync(
+    join(dir, "tokenizer.json"),
+    JSON.stringify({
+      model: { type: "BPE", vocab: Object.fromEntries(tokens.map((token, id) => [token, id])), merges: [] },
+      added_tokens: [],
+    }),
+  );
+  writeSafetensors(join(dir, "model.safetensors"), entries);
+  const container = convertHfDirectory(dir);
+  const model = { kind: "hf" as const, bytes: new Uint8Array(container.bytes) };
+  for (const prompt of ["ab", "abc"]) {
+    const reference = referenceForward(engine, model, { prompt });
+    const run = engine.run(model, { prompt, steps: 1, temperature: 0, seed: 0 });
+    assert.equal(
+      reference.argmax,
+      run.tokens[0],
+      `the biased reference agrees with the engine on ${JSON.stringify(prompt)}`,
+    );
+  }
 });
 
 test("the safetensors converter refuses architectures it does not implement", () => {
