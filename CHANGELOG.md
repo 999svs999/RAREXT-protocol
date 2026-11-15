@@ -40,25 +40,28 @@ break a client or invalidate stored data.
   `scripts/probe-engine-divergence.mjs` now reports the two tokenizers agreeing
   on **7/7** probes.
 
-- **Withdrawn and replaced with a stronger result: RAREXT's forward pass is
-  independently verified.** An earlier entry in this changelog reported that the
-  engine's forward pass diverged from llama.cpp on 2/7 probes. That claim was
-  wrong, and the correction is published in
-  [docs/SOTA-COMPARISON.md](docs/SOTA-COMPARISON.md) rather than deleted. The
-  divergence was in the probe: `temperature: 0` is **not** greedy in ollama
-  (its defaults also apply `repeat_penalty: 1.1`, which suppresses tokens from
-  the prompt — exactly what turns an echoing completion into a fluent one), and
-  ollama reuses a cached KV prefix between requests, so prompts sharing a suffix
-  with the previous request answer from the cached tail. With every sampler
-  disabled, llama.cpp on the same 34-token template returns the same tokens
-  RAREXT does. The replacement evidence is a **third implementation** in
-  `tools/oracle/`, written from the architecture and the ggml formats rather than
-  from the engine: the quantized weights are **bit-exact** against an independent
-  dequantizer (`max|engine − numpy| = 0.000000e+00` on Q5_0, Q6_K, Q8_0, F32),
-  the tokenizers agree on **7/7** probes, and a vectorized NumPy forward pass
-  returns the engine's first token on 13-, 30- and 34-token chat templates.
-  `npm run oracle:dump`, `oracle:dequant`, and `oracle:forward` reproduce all
-  three checks.
+- **Two wrong claims withdrawn; the accurate position published.** This
+  changelog first reported that the engine's forward pass diverged from
+  llama.cpp on 2/7 probes, then (in a later edit) that it did *not* diverge and
+  the difference was only ollama's sampler. Both were overstatements, and
+  [docs/SOTA-COMPARISON.md](docs/SOTA-COMPARISON.md) now carries the corrected,
+  reproducible account. What is established: ollama's defaults are **not greedy**
+  (`temperature: 0` still applies `repeat_penalty: 1.1`, which is what produced
+  `"Paris."` instead of the true-greedy `"The capital of"`), so both comparison
+  scripts now disable every sampler explicitly; the engine's quantized weights are
+  **bit-exact** against an independent ggml reimplementation
+  (`max|engine − numpy| = 0.000000e+00` on Q5_0, Q6_K, Q8_0 and F32, via
+  `npm run oracle:dequant`); a clean-room vectorized NumPy forward pass in
+  `tools/oracle/` returns the engine's first token on 13-, 30- and 34-token chat
+  templates (`npm run oracle:forward`); and the tokenizers agree on 7/7 probes.
+  What is *not* established: agreement with llama.cpp on templated prompts. With
+  samplers off, in both orders, and against a second server with an empty cache,
+  llama.cpp still answers differently, and `"Paris"` is the better answer — a real
+  reason to suspect the engine and the oracle share a misreading of some Qwen2
+  detail, since an implementation written by the same hand is not an independent
+  interpretation. Settling it needs `llama-cli --verbose-prompt`, i.e. building
+  llama.cpp; `brew install llama.cpp` did not finish in fifteen minutes on this
+  Intel host and was stopped.
 
 - **Benchmarked against the top 10 AI brands, and topped them — measured.** The
   UI/UX harness now covers **13 brands over 21 targets**, adding the three that
