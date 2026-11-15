@@ -1,0 +1,183 @@
+{
+  "kind": "rarext.engine-divergence.v1",
+  "model": "sha256-c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+  "steps": 3,
+  "llamaCppOptions": {
+    "num_predict": 3,
+    "temperature": 0,
+    "seed": 0,
+    "repeat_penalty": 1,
+    "repeat_last_n": 0,
+    "presence_penalty": 0,
+    "frequency_penalty": 0,
+    "top_k": 0,
+    "top_p": 1,
+    "min_p": 0,
+    "typical_p": 1,
+    "tfs_z": 1
+  },
+  "rows": [
+    {
+      "probe": "5 · bare words",
+      "rarextTokens": 5,
+      "rarextFirstIds": [
+        785,
+        6722,
+        315,
+        9625
+      ],
+      "rarextText": " Paris. It",
+      "llamaCppTokens": 5,
+      "llamaCppText": " ______. A",
+      "llamaCppSecondText": " ______. A",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": false
+    },
+    {
+      "probe": "6 · one control token first",
+      "rarextTokens": 6,
+      "rarextFirstIds": [
+        151645,
+        785,
+        6722,
+        315
+      ],
+      "rarextText": " Paris. It",
+      "llamaCppTokens": 6,
+      "llamaCppText": " Paris. It",
+      "llamaCppSecondText": " Paris. It",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": true
+    },
+    {
+      "probe": "6 · other control token first",
+      "rarextTokens": 6,
+      "rarextFirstIds": [
+        151644,
+        785,
+        6722,
+        315
+      ],
+      "rarextText": " Paris. It",
+      "llamaCppTokens": 6,
+      "llamaCppText": " Paris. It",
+      "llamaCppSecondText": " Paris. It",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": true
+    },
+    {
+      "probe": "6 · a newline first",
+      "rarextTokens": 6,
+      "rarextFirstIds": [
+        198,
+        785,
+        6722,
+        315
+      ],
+      "rarextText": " Paris\nThe",
+      "llamaCppTokens": 6,
+      "llamaCppText": " Paris. The",
+      "llamaCppSecondText": " Paris. The",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": false
+    },
+    {
+      "probe": "13 · user + assistant",
+      "rarextTokens": 13,
+      "rarextFirstIds": [
+        151644,
+        872,
+        198,
+        785
+      ],
+      "rarextText": "The capital of",
+      "llamaCppTokens": 13,
+      "llamaCppText": "Paris",
+      "llamaCppSecondText": "Paris",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": false
+    },
+    {
+      "probe": "30 · system + user + assistant",
+      "rarextTokens": 30,
+      "rarextFirstIds": [
+        151644,
+        8948,
+        198,
+        2610
+      ],
+      "rarextText": "I'm sorry",
+      "llamaCppTokens": 30,
+      "llamaCppText": "The capital of",
+      "llamaCppSecondText": "The capital of",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": false
+    },
+    {
+      "probe": "34 · full chat template",
+      "rarextTokens": 34,
+      "rarextFirstIds": [
+        151644,
+        8948,
+        198,
+        2610
+      ],
+      "rarextText": "Hello! I",
+      "llamaCppTokens": 34,
+      "llamaCppText": "The capital of",
+      "llamaCppSecondText": "The capital of",
+      "llamaCppStable": true,
+      "tokensAgree": true,
+      "textAgrees": false
+    }
+  ],
+  "summary": {
+    "probes": 7,
+    "tokenizersAgree": 7,
+    "forwardPassAgrees": 2,
+    "llamaCppOrderSensitive": "0/7",
+    "reversedPass": [
+      {
+        "probe": "34 · full chat template",
+        "text": "The capital of",
+        "sameAsForward": true
+      },
+      {
+        "probe": "30 · system + user + assistant",
+        "text": "The capital of",
+        "sameAsForward": true
+      },
+      {
+        "probe": "13 · user + assistant",
+        "text": "Paris",
+        "sameAsForward": true
+      },
+      {
+        "probe": "6 · a newline first",
+        "text": " Paris. The",
+        "sameAsForward": true
+      },
+      {
+        "probe": "6 · other control token first",
+        "text": " Paris. It",
+        "sameAsForward": true
+      },
+      {
+        "probe": "6 · one control token first",
+        "text": " Paris. It",
+        "sameAsForward": true
+      },
+      {
+        "probe": "5 · bare words",
+        "text": " ______. A",
+        "sameAsForward": true
+      }
+    ]
+  }
+}

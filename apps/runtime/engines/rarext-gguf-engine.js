@@ -2341,7 +2341,58 @@
       var length = this.tokens[t].length;
       if (length <= 64 && length > this.maxTokenLength) this.maxTokenLength = length;
     }
+    // Atomic control tokens. A GGUF records a type per token, and CONTROL (3)
+    // and USER_DEFINED (4) tokens are matched literally — as one token — by
+    // llama.cpp and by every Hugging Face tokenizer. This engine used to ignore
+    // the type table, so "<|im_start|>" was BPE-split into six ordinary tokens
+    // (27, 91, 318, 4906, 91, 29) instead of id 151644. Every chat template was
+    // therefore mis-tokenized, which makes an answer to a templated prompt a
+    // different question from the one every other engine was asked.
+    this.specialTokens = [];
+    var tokenTypes = kv["tokenizer.ggml.token_type"];
+    if (Array.isArray(tokenTypes)) {
+      for (var st = 0; st < this.tokens.length; st += 1) {
+        var type = tokenTypes[st];
+        if ((type === 3 || type === 4) && typeof this.tokens[st] === "string" && this.tokens[st].length > 0) {
+          this.specialTokens.push({ text: this.tokens[st], id: st });
+        }
+      }
+      // Longest first, so "<|im_start|>" wins over any prefix of itself.
+      this.specialTokens.sort(function (a, b) { return b.text.length - a.text.length; });
+    }
   }
+
+  /** Split on control tokens, then tokenize the text between them normally. */
+  Tokenizer.prototype.encodeWithSpecials = function (text) {
+    var specials = this.specialTokens;
+    if (specials.length === 0) return null;
+    var ids = [];
+    var rest = text;
+    while (rest.length > 0) {
+      var bestAt = -1;
+      var best = null;
+      for (var s = 0; s < specials.length; s += 1) {
+        var at = rest.indexOf(specials[s].text);
+        if (at === -1) continue;
+        if (bestAt === -1 || at < bestAt || (at === bestAt && specials[s].text.length > best.text.length)) {
+          bestAt = at;
+          best = specials[s];
+        }
+      }
+      if (best === null) break;
+      if (bestAt > 0) {
+        var head = this.encodePlain(rest.slice(0, bestAt));
+        for (var h = 0; h < head.length; h += 1) ids.push(head[h]);
+      }
+      ids.push(best.id);
+      rest = rest.slice(bestAt + best.text.length);
+    }
+    if (rest.length > 0) {
+      var tail = this.encodePlain(rest);
+      for (var k = 0; k < tail.length; k += 1) ids.push(tail[k]);
+    }
+    return ids;
+  };
 
   Tokenizer.prototype.pieces = function (text) {
     var out = [];
@@ -2382,6 +2433,16 @@
   };
 
   Tokenizer.prototype.encode = function (text) {
+    // Control tokens first, for both tokenizer families: a template is text
+    // with atomic markers in it, and the markers are not words.
+    if (this.specialTokens !== undefined && this.specialTokens.length > 0) {
+      var withSpecials = this.encodeWithSpecials(text);
+      if (withSpecials !== null) return withSpecials;
+    }
+    return this.encodePlain(text);
+  };
+
+  Tokenizer.prototype.encodePlain = function (text) {
     if (this.spm) return this.encodeSpm(text);
     var ids = [];
     var pieces = this.pieces(text);

@@ -11,6 +11,55 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Measured against the state of the art, and honest about the answer.** New
+  `docs/SOTA-COMPARISON.md` and `npm run bench:sota` put RAREXT's engine and
+  llama.cpp on the **same 379 MB GGUF, same box, same greedy decode**. The result:
+  RAREXT **wins the verifiability axes** — a per-response receipt naming the
+  weights, engine, and tokens, against twelve response fields from llama.cpp none
+  of which names the weights — and **loses throughput 20.3x** (0.96 tok/s against
+  19.6, prefill 4.2 s against 74 ms). The objective's headline claim, "better than
+  any top state-of-the-art model in any size", is documented as **unreachable on
+  this hardware**: 4 cores, 8 GiB, no usable accelerator, and the only models
+  present are 0.5B class. A runtime serves committed weights; it cannot build a
+  frontier model, and this document says so instead of implying otherwise.
+
+- **Fixed: every request re-parsed the container and rebuilt the tokenizer.**
+  `run()` recomputed both on every call, though both are pure functions of the
+  bytes. Measured per call: 308 ms to parse, 335 ms to build the 151,936-entry
+  tokenizer and encode one prompt. A `WeakMap` keyed on the handle now reuses
+  them, cutting a one-token request from **1436 ms to 1069 ms (26%)** and a
+  two-token request from 2458 ms to 2177 ms. Verified bit-exact: the engine
+  benchmark's fingerprint is unchanged, and `npm run test:runtime` stays 181/181.
+
+- **Fixed: the tokenizer ignored the GGUF control-token table.**
+  `tokenizer.ggml.token_type` marks 22 tokens as CONTROL/USER_DEFINED in this
+  file, and the engine BPE-split them instead of matching them atomically — so
+  `<|im_start|>` became six ordinary tokens rather than id 151644, and a chat
+  template tokenized to **56** tokens where llama.cpp sees **34**. RAREXT was
+  silently answering a different question from every other engine.
+  `scripts/probe-engine-divergence.mjs` now reports the two tokenizers agreeing
+  on **7/7** probes.
+
+- **Withdrawn and replaced with a stronger result: RAREXT's forward pass is
+  independently verified.** An earlier entry in this changelog reported that the
+  engine's forward pass diverged from llama.cpp on 2/7 probes. That claim was
+  wrong, and the correction is published in
+  [docs/SOTA-COMPARISON.md](docs/SOTA-COMPARISON.md) rather than deleted. The
+  divergence was in the probe: `temperature: 0` is **not** greedy in ollama
+  (its defaults also apply `repeat_penalty: 1.1`, which suppresses tokens from
+  the prompt — exactly what turns an echoing completion into a fluent one), and
+  ollama reuses a cached KV prefix between requests, so prompts sharing a suffix
+  with the previous request answer from the cached tail. With every sampler
+  disabled, llama.cpp on the same 34-token template returns the same tokens
+  RAREXT does. The replacement evidence is a **third implementation** in
+  `tools/oracle/`, written from the architecture and the ggml formats rather than
+  from the engine: the quantized weights are **bit-exact** against an independent
+  dequantizer (`max|engine − numpy| = 0.000000e+00` on Q5_0, Q6_K, Q8_0, F32),
+  the tokenizers agree on **7/7** probes, and a vectorized NumPy forward pass
+  returns the engine's first token on 13-, 30- and 34-token chat templates.
+  `npm run oracle:dump`, `oracle:dequant`, and `oracle:forward` reproduce all
+  three checks.
+
 - **Benchmarked against the top 10 AI brands, and topped them — measured.** The
   UI/UX harness now covers **13 brands over 21 targets**, adding the three that
   an earlier draft dropped for being inconvenient: **DeepSeek, Meta AI, and Poe**.

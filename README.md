@@ -60,6 +60,14 @@ welcome.
   It also records the two defects the audit found and fixed: a reference forward
   pass that ignored Qwen2's biases (so the benchmark was wrong, not the engine)
   and an HF converter that dropped the chat template.
+- **Is RAREXT better than the state of the art?** — [docs/SOTA-COMPARISON.md](docs/SOTA-COMPARISON.md)
+  puts RAREXT's engine and llama.cpp on the same 379 MB GGUF, same box, same
+  greedy decode. It wins the axes it can win — a per-response receipt naming the
+  weights, engine, and tokens — and loses throughput **20.3x** (0.96 against 19.6
+  tok/s). `npm run bench:sota` reproduces it; `npm run probe:divergence` reports
+  the forward-pass disagreement it uncovered, which is documented as an open
+  defect rather than hidden.
+
 - **Does the front door work for people?** — [docs/UI-UX-BENCHMARK.md](docs/UI-UX-BENCHMARK.md)
   measures the AI apps people actually use (ChatGPT, Claude, Gemini, Perplexity,
   Copilot, Grok, Le Chat, Duck.ai, HuggingChat) and RAREXT on one instrument:

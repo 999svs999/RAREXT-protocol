@@ -24,9 +24,9 @@
       374
     ],
     "deterministic": true,
-    "prefillMs": 4170.799037999997,
-    "decodeMsPerToken": 1038.199563000002,
-    "tokensPerSecond": 0.9632059534973991,
+    "prefillMs": 4184.002228999998,
+    "decodeMsPerToken": 1038.7623840000015,
+    "tokensPerSecond": 0.9626840703927517,
     "tamper": {
       "tensor": "blk.0.ffn_down.weight",
       "flips": 8,
@@ -36,7 +36,7 @@
     },
     "receipt": {
       "weightsSha256": "c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
-      "engineSha256": "a90e9b1e59c6c512ce4585ab4bf42e5efd4e7f714cbc0a3a860018f76e76ff0d",
+      "engineSha256": "4fb578124d2147902d78194085dcc5d5f317c58c12257d8c0d51c757105dc357",
       "tokensSha256": "894f4bcb487aaf711c3c58b1b40f76e92e2d8db5e9cabd2acf92c015c2d41b40"
     }
   },
@@ -46,10 +46,10 @@
     "deterministic": true,
     "tokens": 3,
     "promptTokens": 34,
-    "msPerToken": 40.86332933333333,
-    "tokensPerSecond": 24.471819020000233,
-    "promptEvalMs": 72.909823,
-    "loadMs": 2154.983499,
+    "msPerToken": 51.068061,
+    "tokensPerSecond": 19.581710768301935,
+    "promptEvalMs": 73.50233,
+    "loadMs": 1925.446095,
     "responseFields": [
       "context",
       "created_at",
@@ -69,25 +69,25 @@
     "compared": true,
     "renderedPrompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nThe capital of France is<|im_end|>\n<|im_start|>assistant\n",
     "promptTokens": {
-      "rarext": 56,
+      "rarext": 34,
       "llamaCpp": 34
     },
-    "promptTokensMatch": false,
+    "promptTokensMatch": true,
     "text": {
-      "rarext": "The capital of France",
+      "rarext": "Hello! I'm",
       "llamaCpp": "Paris."
     },
     "sameWeightsSameText": false
   },
   "throughput": {
     "rarext": {
-      "msPerToken": 1038.199563000002,
-      "tokensPerSecond": 0.9632059534973991
+      "msPerToken": 1038.7623840000015,
+      "tokensPerSecond": 0.9626840703927517
     },
     "llamaCpp": {
-      "msPerToken": 40.86332933333333,
-      "tokensPerSecond": 24.471819020000233
+      "msPerToken": 51.068061,
+      "tokensPerSecond": 19.581710768301935
     },
-    "llamaCppFasterBy": 25.406631812379377
+    "llamaCppFasterBy": 20.340744560479816
   }
 }
