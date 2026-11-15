@@ -430,6 +430,14 @@ h3 {
   margin-right: auto;
 }
 
+/* Prose keeps the section's left edge. Auto margins on every band child would
+   centre a 68ch lede under a full-width heading, which reads as a mistake. */
+.band > .section-lede,
+.band > .small {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .band {
   padding-left: 0;
   padding-right: 0;
@@ -440,10 +448,25 @@ h3 {
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  grid-template-areas:
+    "copy panel"
+    "facts facts";
   align-items: center;
   gap: clamp(32px, 5vw, 64px);
   padding-top: clamp(40px, 6vw, 72px);
   padding-bottom: clamp(48px, 7vw, 84px);
+}
+
+.hero-copy {
+  grid-area: copy;
+}
+
+.proof-panel {
+  grid-area: panel;
+}
+
+.hero-facts {
+  grid-area: facts;
 }
 
 .status-pill {
@@ -869,6 +892,11 @@ h3 {
   color: var(--muted);
 }
 
+.matrix thead th:nth-child(2),
+.matrix tbody td:nth-child(2) {
+  width: 130px;
+}
+
 .matrix tbody tr:last-child th,
 .matrix tbody tr:last-child td {
   border-bottom: 0;
@@ -1133,6 +1161,10 @@ h3 {
 
   .hero {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "copy"
+      "panel"
+      "facts";
     gap: 32px;
   }
 

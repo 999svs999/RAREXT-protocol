@@ -143,15 +143,20 @@ menuOpen?.addEventListener("click", () => {
 });
 const closeMenu = (): void => {
   menu?.close();
-  menuOpen?.setAttribute("aria-expanded", "false");
-  menuOpen?.focus();
 };
 menuClose?.addEventListener("click", closeMenu);
 menu?.addEventListener("click", (event) => {
   if (event.target === menu) closeMenu();
 });
 menu?.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
-menu?.addEventListener("close", () => menuOpen?.setAttribute("aria-expanded", "false"));
+// Escape closes the dialog natively, so the state reset and the focus return
+// cannot live in the button handler: they have to hang off the close event.
+// Without this, Escape drops focus to the document and a keyboard user loses
+// their place — the exact bug a "menu opens" check would never catch.
+menu?.addEventListener("close", () => {
+  menuOpen?.setAttribute("aria-expanded", "false");
+  menuOpen?.focus();
+});
 
 /* ── copy the reproduce command ─────────────────────────────────────────── */
 const copyButton = $<HTMLButtonElement>("copy-command");

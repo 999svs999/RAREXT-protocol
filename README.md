@@ -60,6 +60,18 @@ welcome.
   It also records the two defects the audit found and fixed: a reference forward
   pass that ignored Qwen2's biases (so the benchmark was wrong, not the engine)
   and an HF converter that dropped the chat template.
+- **Does the front door work for people?** — [docs/UI-UX-BENCHMARK.md](docs/UI-UX-BENCHMARK.md)
+  measures the AI apps people actually use (ChatGPT, Claude, Gemini, Perplexity,
+  Copilot, Grok, Le Chat, Duck.ai, HuggingChat) and RAREXT on one instrument:
+  TTFB/FCP/LCP/CLS/TBT, bytes, third-party hosts, landmarks, contrast, tap targets,
+  overflow, mobile behaviour, and screenshots. `npm run bench:ui` reproduces the
+  table. The page was rebuilt around a proof that runs in the tab — verified on
+  load, refused after one flipped token — and scores **99 overall** (89 before),
+  with 0 contrast failures, 0 horizontal overflow, and no third-party requests;
+  `npm run test:showcase` keeps the behaviour from regressing. Where an app is
+  login- or challenge-gated for anonymous visitors, the report says so instead of
+  pretending a gate is the product.
+
 - **AI on RAREXT** — [docs/AI-VERIFICATION.md](docs/AI-VERIFICATION.md): how AI artifacts are verified on-chain by representation kind — exact bytes, generative replay from a committed model + seed, or a bounded metric against a committed reference — and how to check a claim yourself without trusting the server. [docs/WEB4-MODEL.md](docs/WEB4-MODEL.md) is the thesis end to end: the **weights and the engine** are content-addressed RAREXT artifacts, a provider fetches and verifies both, and the asker runs nothing. Neither needs a third-party model server, a container runtime, a GPU, or a hardware root of trust; those are optional assurance levels, and [docs/MODEL-RUNTIME.md](docs/MODEL-RUNTIME.md) covers the local/Ollama and remote-provider placements for anyone who has one. [docs/CLOUD-RUNTIME.md](docs/CLOUD-RUNTIME.md) is the cloud-only path: commit a remote endpoint, run the control plane on `0.0.0.0` behind TLS, and keep the weights, inference, and local model files off your machine entirely. It also defines **RAREXT's own architecture-free cloud model** — `rarext.cloud-model.v1`, declared by capability and unable to carry a weight file's vocabulary, speaking RAREXT's own `rarext.cloud-infer.v1` wire — so RAREXT's future AI is not bound to the architectures and weights of today.
 
 You do not need permission to fork, run a node, or publish a verifier. If you

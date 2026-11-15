@@ -11,6 +11,35 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Front door redesigned around a working proof, not a promise.** The landing page
+  now opens with a live in-browser run of the committed model: 32 tokens generated
+  in the visitor's tab, the model and trace digests shown beside them, and a
+  **Tamper** control that flips one token so the replay verdict becomes `refused`.
+  The widget is a 5.5 KB bundle of `apps/web/src/proof-widget.ts`, which calls the
+  same `runCommittedModel` / `checkClaim` functions the workbench and tests use, so
+  the page cannot invent a second answer; it loads no third-party code, fonts, or
+  analytics. The page adds an honest capability matrix (including `0.50 tok/s`,
+  1G-only model classes, and no vision/audio), an evidence block with the commands
+  behind each number, and a limits section that says what the claim does not cover.
+  Measured with the new harness below: **89 → 99 overall** (performance 100 → 98,
+  accessibility 90 → 100, UX 79 → 100) on the same instrument, with contrast
+  failures at 0, horizontal overflow at 0, and both themes working. The redesign
+  also fixed a real defect the harness found: the nav class `.primary` matched the
+  primary CTA button, so "Run the proof" was hidden below 1040px.
+
+- **`npm run bench:ui`: a measured UI/UX benchmark of the AI apps people use.**
+  New `scripts/benchmark-ui-ux.mjs` drives a real Chrome over CDP and records
+  TTFB/FCP/LCP/CLS/TBT, transfer bytes, requests, third-party hosts, landmarks,
+  heading order, skip links, contrast failures, tap targets, overflow, and the
+  first screen, plus desktop and mobile screenshots. It runs headful and parked
+  off-screen because Cloudflare's managed challenge treats a headless browser as a
+  bot, and a gate is not the product; sites that still refuse are recorded as
+  refused rather than scored zero. Results and per-app observations are in
+  [docs/UI-UX-BENCHMARK.md](docs/UI-UX-BENCHMARK.md) and `bench/ui-ux.json`.
+  `npm run test:showcase` is the behavioural regression test for the front door:
+  verified-on-load, tamper refusal, seed change, theme persistence, mobile modal
+  focus handling, no third-party hosts, and a page-weight budget.
+
 - **AI capability audit — measured, including the parts that lose.** New
   [docs/AI-CAPABILITY-AUDIT.md](docs/AI-CAPABILITY-AUDIT.md) and
   `npm run audit:ai` stand up a real node, shard a 504 MiB Qwen2.5-0.5B container
