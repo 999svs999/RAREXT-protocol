@@ -20,7 +20,10 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://rarext.com/" />
-    <meta property="og:image" content="https://rarext.com/og.png" />
+    <!-- The showcase is deployed on Pages while rarext.com waits for its DNS
+         cutover; rarext.com/og.png is a 404 there today. Point the card at the
+         host that actually serves these bytes. It stays valid after cutover. -->
+    <meta property="og:image" content="https://rarext-com.pages.dev/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="RAREXT — AI you can verify, with a live in-browser proof." />
@@ -381,6 +384,12 @@
           </a>
         </div>
 
+        <p class="small">
+          <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/UI-UX-BENCHMARK.md">
+            How this page measures against ChatGPT, Claude, Gemini, Copilot, and the rest →
+          </a>
+        </p>
+
         <div class="reproduce">
           <div class="reproduce-head">
             <h3>Reproduce it in one shell</h3>
@@ -389,8 +398,9 @@
           <pre id="reproduce-command"><code>git clone https://github.com/999svs999/RAREXT-protocol
 cd RAREXT-protocol
 npm ci
-npm run test:runtime   # 181 / 181
-npm run audit:ai       # 14 / 15, 0 critical</code></pre>
+npm run test:runtime     # 181 / 181
+npm run audit:ai         # 14 / 15, 0 critical
+npm run test:showcase    # 44 / 44</code></pre>
           <p class="small" id="copy-status" role="status" aria-live="polite"></p>
         </div>
       </section>
@@ -450,7 +460,7 @@ npm run audit:ai       # 14 / 15, 0 critical</code></pre>
             <h3>Verify this registry</h3>
             <p>Rebuild the Merkle root from the live bundle and compare it with the root the chain holds.</p>
           </div>
-          <a class="btn primary" href="./mirror/verify.html?root=7dd37b46e053245841f72f76b7cecdedf9901b3f8ef1a96ed2eb2d09e180bc19" data-pin-root>Verify this registry</a>
+          <a class="btn primary" href="./mirror/verify.html?root=84bc50b0ae73288e981c23822c199d982b944b89b00a307bce5dda04f27dfd4c" data-pin-root>Verify this registry</a>
         </div>
       </section>
     </main>
@@ -463,7 +473,7 @@ npm run audit:ai       # 14 / 15, 0 critical</code></pre>
       <nav aria-label="Footer">
         <a href="./mirror/ai.html">Workbench</a>
         <a href="./mirror/gallery.html">Gallery</a>
-        <a href="./mirror/verify.html?root=7dd37b46e053245841f72f76b7cecdedf9901b3f8ef1a96ed2eb2d09e180bc19" data-pin-root>Verifier</a>
+        <a href="./mirror/verify.html?root=84bc50b0ae73288e981c23822c199d982b944b89b00a307bce5dda04f27dfd4c" data-pin-root>Verifier</a>
         <a href="./registry/">Registry</a>
         <a href="https://github.com/999svs999/RAREXT-protocol">Source</a>
       </nav>

@@ -672,7 +672,10 @@ h3 {
 }
 
 .token-stream {
-  min-height: 136px;
+  /* The stream is empty until the widget's first run. Reserve the height the
+     32-token output actually takes (160 px at the desktop column width) so the
+     panel does not grow after first paint and shove the hero down. */
+  min-height: 160px;
   margin: 14px 0;
   padding: 14px;
   border: 1px solid var(--line-soft);

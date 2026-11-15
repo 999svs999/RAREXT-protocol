@@ -1,0 +1,9 @@
+# The page makes no third-party requests; these headers keep it that way and
+# tell the browser what the page is allowed to do. Inline script and style stay
+# enabled because the theme is resolved before first paint and the token stream
+# is generated in the tab.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
