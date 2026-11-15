@@ -139,6 +139,7 @@ function collectFiles() {
   const files = [];
   const fixed = [
     ["index.html", "index.html"],
+    ["proof-widget.js", "proof-widget.js"],
     ["favicon.svg", "favicon.svg"],
     ["og.png", "og.png"],
     ["styles.css", "styles.css"],
