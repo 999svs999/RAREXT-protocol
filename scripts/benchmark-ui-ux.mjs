@@ -179,10 +179,11 @@ const PAGE_AUDIT = String.raw`
     h1: [...document.querySelectorAll("h1")].filter(visible).map((h) => (h.innerText || "").trim().replace(/\s+/g, " ")).slice(0, 2),
     h2: [...document.querySelectorAll("h2")].filter(visible).slice(0, 2).map((h) => (h.innerText || "").trim().replace(/\s+/g, " ")),
     ctas: [...document.querySelectorAll("a[href], button")].filter(visible)
+      .filter((el) => !el.closest("nav, header, footer"))
       .filter((el) => el.getBoundingClientRect().top < innerHeight && el.getBoundingClientRect().bottom > 0)
       .map((el) => ({ text: nameOf(el).slice(0, 60), tag: el.tagName.toLowerCase(), href: el.getAttribute("href") || null }))
       .slice(0, 8),
-    navItems: [...document.querySelectorAll("nav a, header a, [role=navigation] a")].filter(visible).length,
+    navItems: [...document.querySelectorAll("header nav a, header [role=navigation] a, header a")].filter(visible).length,
     wordCount: (document.body.innerText || "").trim().split(/\s+/).filter(Boolean).length,
     links: document.querySelectorAll("a[href]").length,
     text: (document.body.innerText || "").trim().replace(/\s+/g, " ").slice(0, 600),

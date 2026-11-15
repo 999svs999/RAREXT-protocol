@@ -1,6 +1,6 @@
 {
   "kind": "rarext.ui-ux-benchmark.v1",
-  "createdAt": "2026-11-15T05:31:43.811Z",
+  "createdAt": "2026-11-15T05:38:22.795Z",
   "chrome": "headless 157",
   "viewports": {
     "desktop": "1440x900",
@@ -8,369 +8,352 @@
   },
   "results": [
     {
-      "id": "chatgpt",
-      "name": "ChatGPT",
-      "url": "https://chatgpt.com/",
-      "local": false,
+      "id": "rarext",
+      "name": "RAREXT showcase (current)",
+      "url": "http://127.0.0.1:8080/",
+      "local": true,
       "http": {
         "status": 200,
-        "finalUrl": "https://chatgpt.com/",
-        "elapsedMs": 642,
-        "bytes": 725389,
-        "encoding": "br",
-        "cache": "private, no-store",
-        "csp": "default-src 'self'; script-src 'nonce-4d8ce938-4408-4731-9e8c-e12c3ef4bf2c' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'wasm-unsafe-eval' https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://accounts.google.com/gsi/client https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://js.stripe.com https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; script-src-elem 'nonce-4d8ce938-4408-4731-9e8c-e12c3ef4bf2c' 'self' 'sha256-0qPQ8TbRMhIKuxrQHW6yy8DsXNh2it03McoHfWW1F7w=' 'sha256-Z5we4+MWtdDkWs67HhZwjrbqNxc9ymzHYfHGNEF7JoM=' 'sha256-eMuh8xiwcX72rRYNAGENurQBAcH7kLlAUQcoOri3BIo=' 'sha384-Sr5xwyR0H5rcDXa7/iDJDM3qBBvtHuR97A8ELbd+DFBDi32Caf72to9UVqvI8R95' auth0.openai.com challenges.cloudflare.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.js.stripe.com https://*.oaistatic.com https://analytics.tiktok.com https://bat.bing.com https://cdn.openaimerge.com/initialize.js https://cdn.plaid.com/link/v2/stable/link-initialize.js https://cdn.platform.openai.com https://cdn.withpersona.com https://chatgpt.com https://chatgpt.com/ https://connect.facebook.net https://docs.google.com https://js.live.net/v7.2/OneDrive.js https://js.stripe.com https://oaistatic.com https://pixel-config.reddit.com https://sc-static.net/scevent.min.js https://snap.licdn.com https://snc.apps.openai.com https://www-onepick-opensocial.googleusercontent.com https://www.redditstatic.com wss://*.chatgpt.com wss://*.chatgpt.com/; img-src * blob: data:; style-src 'self' 'unsafe-inline' blob: https://*.chatgpt.com https://*.chatgpt.com/ https://*.oaistatic.com https://accounts.google.com/gsi/style https://chatgpt.com https://chatgpt.com/ https://oaistatic.com https://snc.apps.openai.com wss://*.chatgpt.com wss://*.chatgpt.com/; font-src 'self' data: https://*.oaistatic.com https://cdn.openai.com https://fonts.gstatic.com; connect-src 'self' *.blob.core.windows.net *.oaiusercontent.com api.mapbox.com blob: browser-intake-datadoghq.com events.mapbox.com https://*.chatgpt.com https://*.chatgpt.com/ https://*.chatgpt.site/_internal/sites/session-bootstrap https://*.chatgpt.site/_portals/web-session https://*.oaistatic.com https://*.us.sentry.io https://accounts.google.com https://analytics.tiktok.com https://api.atlassian.com https://api.oaistatsig.com https://api.onedrive.com https://api.stripe.com https://bat.bing.com https://bzr.openai.com https://cdn.openai.com/beacons/ https://cdn.openai.com/chatgpt/clients/bazaar/business-agent-disclosure/2026-09-23/business-disclosure-animation-1754caf3cef014e7.lottie https://cdn.openai.com/common/fonts/openai-sans/v2/openai-sans-regular.full.typeface.json https://cdn.openai.com/emojibase/ https://cdn.openai.com/pdf/ https://cdn.platform.openai.com https://chatgpt.com https://chatgpt.com/ https://checkpoints-au.files.openai.com https://checkpoints-eu.files.openai.com https://checkpoints-gb.files.openai.com https://checkpoints-in.files.openai.com https://checkpoints-jp.files.openai.com https://checkpoints-kr.files.openai.com https://checkpoints-sg.files.openai.com https://checkpoints-us.files.openai.com https://content.googleapis.com https://docs.google.com https://events.statsigapi.net https://featuregates.org https://graph.microsoft.com https://images.openai.com https://js.verygoodvault.com https://js3.verygoodvault.com https://oaistatic.com https://pixel-config.reddit.com https://production.plaid.com https://px.ads.linkedin.com/ https://quota.browser-intake-datadoghq.com https://realtime.chatgpt-staging.com https://realtime.chatgpt.com https://sandbox.plaid.com https://snc.apps.openai.com https://test-drive-20-1053047382554.us-central1.run.app https://tr.snapchat.com/p https://transceiver.api.openai.com https://transceiver.api.openai.org https://us.sentry.io https://vgs-collect-keeper.apps.verygood.systems https://www.facebook.com/tr/ https://www.googleadservices.com https://www.googleapis.com https://www.googletagmanager.com https://www.redditstatic.com statsigapi.net wss://*.chatgpt.com wss://*.chatgpt.com/ wss://*.webpubsub.azure.com wss://chatgpt.com wss://multiplayer-u0.api.openai.com wss://pages-realtime.gateway.unified-0.api.openai.com wss://pages-realtime.gateway.unified-119.api.openai.com wss://pages-realtime.gateway.unified-15.api.openai.com wss://pages-realtime.gateway.unified-190.api.openai.com wss://pages-realtime.gateway.unified-23.api.openai.com wss://pages-realtime.gateway.unified-40.api.openai.com wss://pages-realtime.gateway.unified-72.api.openai.com wss://pages-realtime.gateway.unified-75.api.openai.com wss://pages-realtime.gateway.unified-8.api.openai.com wss://pages-realtime.gateway.unified-80.api.openai.com wss://pages-realtime.gateway.unified-82.api.openai.com wss://pages-realtime.gateway.unified-88.api.openai.com wss://pages-realtime.gateway.unified-94.api.openai.com; frame-src 'self' challenges.cloudflare.com https://*.chatgpt.site https://*.embed.chatgpt.site https://*.js.stripe.com https://*.sharepoint.com https://*.web-sandbox.oaiusercontent.com https://*.withpersona.com https://504-SWE-347.mktoweb.com https://accounts.google.com/gsi https://accounts.google.com/gsi/iframe/select https://auth.openai.com https://cdn.openaimerge.com https://cdn.plaid.com https://cdn.platform.openai.com https://codepen.io https://content.googleapis.com https://docs.google.com https://drive.google.com https://embed.apple-mapkit.com/v1/embed https://file-frame.oaistatic.com https://hooks.stripe.com https://js.stripe.com https://js.verygoodvault.com https://js3.verygoodvault.com https://mfe.prod.us-exp-api.experiancs.com https://mfe.uat.us-exp-api.experiancs.com https://onedrive.live.com https://services.sheerid.com https://web-sandbox.oaiusercontent.com https://www.facebook.com/tr/ https://www.google.com/maps https://www.google.com/maps/embed js.stripe.com player.vimeo.com www.youtube.com; worker-src 'self' blob:; media-src 'self' *.oaiusercontent.com blob: https: https://cdn.oaistatic.com https://cdn.openai.com https://persistent.oaistatic.com; frame-ancestors 'self' chrome-extension://hehggadaopoacecdllhhajmbjkdcmajg chrome-extension://iaiigpefkbhgjcmcmffmfkpmhemdhdnj chrome-extension://lfkehkpjohcoelkpembgemeipeppanef chrome-extension://odlomjlbamekndcpllcnffbgeohgkmjh; base-uri 'none'; report-to chatgpt-csp; report-uri https://chatgpt.com/ces/v1/telemetry/intake?ddsource=csp-report&dd-api-key=dummy-token",
-        "hsts": "max-age=31536000; includeSubDomains; preload",
+        "finalUrl": "http://127.0.0.1:8080/",
+        "elapsedMs": 78,
+        "bytes": 21954,
+        "encoding": null,
+        "cache": "no-store",
+        "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "hsts": null,
         "nosniff": "nosniff",
-        "frame": "SAMEORIGIN",
+        "frame": null,
         "referrer": "strict-origin-when-cross-origin",
         "permissions": null,
-        "server": "cloudflare"
+        "server": null
       },
       "refused": false,
-      "title": "Just a moment...",
+      "title": "RAREXT — don’t trust the model. Check it.",
       "desktop": {
-        "url": "https://chatgpt.com/",
-        "title": "Just a moment...",
-        "lang": "en-us",
+        "url": "http://127.0.0.1:8080/",
+        "title": "RAREXT — don’t trust the model. Check it.",
+        "lang": "en",
         "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
+        "description": "RAREXT is verifiable AI: the weights and the engine are content-addressed, every answer carries a replayable token trace, and anyone can recompute the proof. Run a committed model in this page — no account, no server, no upload.",
+        "canonical": "https://rarext.com/",
+        "og": true,
         "landmarks": {
-          "header": 0,
-          "nav": 0,
+          "header": 1,
+          "nav": 3,
           "main": 1,
-          "footer": 0,
-          "h1": 0
+          "footer": 1,
+          "h1": 1
         },
-        "skipLink": false,
-        "headings": [],
+        "skipLink": true,
+        "headings": [
+          {
+            "level": 1,
+            "text": "Don’t trust the model. Check it."
+          },
+          {
+            "level": 2,
+            "text": "LIVE PROOF"
+          },
+          {
+            "level": 2,
+            "text": "Four steps. None of them asks you to believe a server."
+          },
+          {
+            "level": 3,
+            "text": "Commit the weights and the engine"
+          },
+          {
+            "level": 3,
+            "text": "Decode deterministically"
+          },
+          {
+            "level": 3,
+            "text": "Record the trace, not just the text"
+          },
+          {
+            "level": 3,
+            "text": "Verify by recomputation"
+          },
+          {
+            "level": 2,
+            "text": "What it does. What it does not."
+          },
+          {
+            "level": 2,
+            "text": "The numbers have commands behind them."
+          },
+          {
+            "level": 3,
+            "text": "14 / 15 live probes"
+          },
+          {
+            "level": 3,
+            "text": "34 / 34 phases"
+          },
+          {
+            "level": 3,
+            "text": "A bundle you can rebuild"
+          },
+          {
+            "level": 3,
+            "text": "Artifacts that check themselves"
+          },
+          {
+            "level": 3,
+            "text": "Reproduce it in one shell"
+          },
+          {
+            "level": 2,
+            "text": "The claim says what it does not cover."
+          },
+          {
+            "level": 2,
+            "text": "Build with us"
+          },
+          {
+            "level": 3,
+            "text": "Contribute"
+          },
+          {
+            "level": 3,
+            "text": "Port a model"
+          },
+          {
+            "level": 3,
+            "text": "Write an RFC"
+          },
+          {
+            "level": 3,
+            "text": "Verify this registry"
+          }
+        ],
         "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
+        "ariaLive": 2,
+        "roleStatus": 2,
+        "images": 2,
         "imgsNoAlt": 0,
         "imgsNoDimensions": 0,
-        "controls": 0,
+        "controls": 1,
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 0,
-        "smallTargets": 0,
-        "smallTargetsSample": [],
+        "tapTargets": 30,
+        "smallTargets": 2,
+        "smallTargetsSample": [
+          {
+            "name": "Read the full audit, probe by probe →",
+            "w": 225,
+            "h": 16
+          },
+          {
+            "name": "Read the open limits in full →",
+            "w": 175,
+            "h": 16
+          }
+        ],
         "contrastFailures": [],
         "contrastFailureCount": 0,
         "scrollWidth": 1440,
         "innerWidth": 1440,
         "horizontalOverflow": false,
         "bodyFontSize": "16px",
-        "reducedMotionRule": false,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
+        "reducedMotionRule": true,
+        "darkSchemeQueried": false,
+        "fixedOverlayArea": 0.076,
         "firstScreen": {
-          "h1": [],
-          "h2": [],
-          "ctas": [],
-          "navItems": 0,
-          "wordCount": 0,
-          "links": 0,
-          "text": ""
+          "h1": [
+            "Don’t trust the model. Check it."
+          ],
+          "h2": [
+            "LIVE PROOF",
+            "Four steps. None of them asks you to believe a server."
+          ],
+          "ctas": [
+            {
+              "text": "RAREXT home",
+              "tag": "a",
+              "href": "./"
+            },
+            {
+              "text": "Proof",
+              "tag": "a",
+              "href": "#proof"
+            },
+            {
+              "text": "How it works",
+              "tag": "a",
+              "href": "#how"
+            },
+            {
+              "text": "Capabilities",
+              "tag": "a",
+              "href": "#capabilities"
+            },
+            {
+              "text": "Evidence",
+              "tag": "a",
+              "href": "#evidence"
+            },
+            {
+              "text": "Limits",
+              "tag": "a",
+              "href": "#limits"
+            },
+            {
+              "text": "Build",
+              "tag": "a",
+              "href": "#build"
+            },
+            {
+              "text": "Switch to light theme",
+              "tag": "button",
+              "href": null
+            }
+          ],
+          "navItems": 13,
+          "wordCount": 1062,
+          "links": 34,
+          "text": "Skip to content RAREXT verifiable AI Proof How it works Capabilities Evidence Limits Build GitHub ↗ Live in this page · no account · no upload Don’t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it — the same check anyone can repeat. Run the proof ↓ Open the full workbench 0 accounts Value before signup 0 bytes uploaded The model runs locally 0 third parties No fonts, trackers, or CDNs LIVE PROOF VERIFIED A committed mo"
         },
         "metrics": {
-          "fcp": 918.295000076294,
-          "lcp": null,
-          "cls": 0.00009139051893991162,
-          "longTasks": 3,
-          "tbt": 209,
-          "dcl": 461.875,
-          "load": 945.7700002193451,
-          "ttfb": 417.7700002193451,
-          "resources": 5,
-          "transferBytes": 404092,
-          "decodedBytes": 934183,
-          "jsBytes": 228240,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 1,
-          "host": "chatgpt.com"
-        }
-      },
-      "mobile": {
-        "url": "https://chatgpt.com/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 0
-        },
-        "skipLink": false,
-        "headings": [],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 0,
-        "smallTargets": 0,
-        "smallTargetsSample": [],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": false,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [],
-          "h2": [],
-          "ctas": [],
-          "navItems": 0,
-          "wordCount": 0,
-          "links": 0,
-          "text": ""
-        },
-        "metrics": {
-          "fcp": 408.0200002193451,
-          "lcp": null,
-          "cls": 0.00035493549860365523,
-          "longTasks": 3,
-          "tbt": 90,
-          "dcl": 111.74500012397766,
-          "load": 419.78000020980835,
-          "ttfb": 94.78000020980835,
+          "fcp": 424,
+          "lcp": 424,
+          "cls": 0,
+          "longTasks": 2,
+          "tbt": 164,
+          "dcl": 50.200000047683716,
+          "load": 143.40000009536743,
+          "ttfb": 4.6000001430511475,
           "resources": 4,
-          "transferBytes": 405991,
-          "decodedBytes": 947739,
-          "jsBytes": 230137,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 1,
-          "host": "chatgpt.com"
-        }
-      },
-      "score": {
-        "perf": 82,
-        "a11y": 68,
-        "ux": 14,
-        "overall": 53,
-        "detail": {
-          "perf": {
-            "ttfb": 0.8790166665448083,
-            "fcp": 0.9630328124761581,
-            "lcp": 0,
-            "cls": 1,
-            "weight": 0.9817382456140351,
-            "scripts": 1,
-            "tbt": 0.8903448275862069
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 1,
-            "contrast": 1,
-            "targets": 1,
-            "structure": 0.75,
-            "skip": 0,
-            "motion": 0
-          },
-          "ux": {
-            "h1": 0,
-            "nav": 0,
-            "mobileNav": 0,
-            "overflow": 1,
-            "live": 0,
-            "cta": 0,
-            "meta": 0
-          }
-        }
-      }
-    },
-    {
-      "id": "claude",
-      "name": "Claude",
-      "url": "https://claude.ai/",
-      "local": false,
-      "http": {
-        "status": 403,
-        "finalUrl": "https://claude.ai/",
-        "elapsedMs": 133,
-        "bytes": 5644,
-        "encoding": "br",
-        "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-VrY0WjhjcvWLmEE7hTCdjJ' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
-        "hsts": "max-age=31536000; includeSubDomains",
-        "nosniff": "nosniff",
-        "frame": "SAMEORIGIN",
-        "referrer": "same-origin",
-        "permissions": "accelerometer=(),camera=(),clipboard-read=(),clipboard-write=(),geolocation=(),gyroscope=(),hid=(),magnetometer=(),microphone=(),payment=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),sync-xhr=(),usb=(),xr-spatial-tracking=*",
-        "server": "cloudflare"
-      },
-      "refused": false,
-      "title": "Just a moment...",
-      "desktop": {
-        "url": "https://claude.ai/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "claude.ai"
-          },
-          {
-            "level": 2,
-            "text": "Performing security verification"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 1,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 1,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 2,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
-          },
-          {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "claude.ai"
-          ],
-          "h2": [
-            "Performing security verification"
-          ],
-          "ctas": [
-            {
-              "text": "Cloudflare, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
-            },
-            {
-              "text": "Privacy, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "claude.ai Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abdcb3a946f4b1 Performance and Security by Cloudflare Privacy"
-        },
-        "metrics": {
-          "fcp": 481.33000016212463,
-          "lcp": 481.33000016212463,
-          "cls": 0,
-          "longTasks": 3,
-          "tbt": 80,
-          "dcl": 197.92000007629395,
-          "load": 503.6300001144409,
-          "ttfb": 165.63499999046326,
-          "resources": 6,
-          "transferBytes": 408879,
-          "decodedBytes": 938350,
-          "jsBytes": 230273,
-          "cssBytes": 0,
-          "imgBytes": 2685,
-          "thirdPartyHosts": 1,
-          "host": "claude.ai"
+          "transferBytes": 32083,
+          "decodedBytes": 30883,
+          "jsBytes": 5940,
+          "cssBytes": 24325,
+          "imgBytes": 909,
+          "thirdPartyHosts": 0,
+          "host": "127.0.0.1:8080"
         }
       },
       "mobile": {
-        "url": "https://claude.ai/",
-        "title": "Just a moment...",
-        "lang": "en-us",
+        "url": "http://127.0.0.1:8080/",
+        "title": "RAREXT — don’t trust the model. Check it.",
+        "lang": "en",
         "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
+        "description": "RAREXT is verifiable AI: the weights and the engine are content-addressed, every answer carries a replayable token trace, and anyone can recompute the proof. Run a committed model in this page — no account, no server, no upload.",
+        "canonical": "https://rarext.com/",
+        "og": true,
         "landmarks": {
-          "header": 0,
-          "nav": 0,
+          "header": 1,
+          "nav": 3,
           "main": 1,
-          "footer": 0,
+          "footer": 1,
           "h1": 1
         },
-        "skipLink": false,
+        "skipLink": true,
         "headings": [
           {
             "level": 1,
-            "text": "claude.ai"
+            "text": "Don’t trust the model. Check it."
           },
           {
             "level": 2,
-            "text": "Performing security verification"
+            "text": "LIVE PROOF"
+          },
+          {
+            "level": 2,
+            "text": "Four steps. None of them asks you to believe a server."
+          },
+          {
+            "level": 3,
+            "text": "Commit the weights and the engine"
+          },
+          {
+            "level": 3,
+            "text": "Decode deterministically"
+          },
+          {
+            "level": 3,
+            "text": "Record the trace, not just the text"
+          },
+          {
+            "level": 3,
+            "text": "Verify by recomputation"
+          },
+          {
+            "level": 2,
+            "text": "What it does. What it does not."
+          },
+          {
+            "level": 2,
+            "text": "The numbers have commands behind them."
+          },
+          {
+            "level": 3,
+            "text": "14 / 15 live probes"
+          },
+          {
+            "level": 3,
+            "text": "34 / 34 phases"
+          },
+          {
+            "level": 3,
+            "text": "A bundle you can rebuild"
+          },
+          {
+            "level": 3,
+            "text": "Artifacts that check themselves"
+          },
+          {
+            "level": 3,
+            "text": "Reproduce it in one shell"
+          },
+          {
+            "level": 2,
+            "text": "The claim says what it does not cover."
+          },
+          {
+            "level": 2,
+            "text": "Build with us"
+          },
+          {
+            "level": 3,
+            "text": "Contribute"
+          },
+          {
+            "level": 3,
+            "text": "Port a model"
+          },
+          {
+            "level": 3,
+            "text": "Write an RFC"
+          },
+          {
+            "level": 3,
+            "text": "Verify this registry"
           }
         ],
         "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 1,
+        "ariaLive": 2,
+        "roleStatus": 2,
+        "images": 2,
         "imgsNoAlt": 0,
-        "imgsNoDimensions": 1,
-        "controls": 0,
+        "imgsNoDimensions": 0,
+        "controls": 1,
         "unlabeledControls": 0,
         "unnamedButtons": 0,
         "nestedInteractive": 0,
-        "tapTargets": 2,
+        "tapTargets": 21,
         "smallTargets": 2,
         "smallTargetsSample": [
           {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
+            "name": "Read the full audit, probe by probe →",
+            "w": 225,
+            "h": 16
           },
           {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
+            "name": "Read the open limits in full →",
+            "w": 175,
+            "h": 16
           }
         ],
         "contrastFailures": [],
@@ -380,1771 +363,94 @@
         "horizontalOverflow": false,
         "bodyFontSize": "16px",
         "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
+        "darkSchemeQueried": false,
+        "fixedOverlayArea": 0.081,
         "firstScreen": {
           "h1": [
-            "claude.ai"
+            "Don’t trust the model. Check it."
           ],
           "h2": [
-            "Performing security verification"
+            "LIVE PROOF",
+            "Four steps. None of them asks you to believe a server."
           ],
           "ctas": [
             {
-              "text": "Cloudflare, opens in a new tab",
+              "text": "RAREXT home",
               "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
+              "href": "./"
             },
             {
-              "text": "Privacy, opens in a new tab",
+              "text": "Switch to light theme",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Open menu",
+              "tag": "button",
+              "href": null
+            },
+            {
+              "text": "Open the full workbench",
               "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
+              "href": "./mirror/ai.html"
             }
           ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "claude.ai Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abdce04b8070fa Performance and Security by Cloudflare Privacy"
+          "navItems": 6,
+          "wordCount": 1039,
+          "links": 34,
+          "text": "Skip to content RAREXT Live in this page · no account · no upload Don’t trust the model. Check it. Every RAREXT answer names the weights, the engine, and the exact token trace that produced it. This page runs a committed model on your device right now, then shows you the arithmetic that proves it — the same check anyone can repeat. Open the full workbench 0 accounts Value before signup 0 bytes uploaded The model runs locally 0 third parties No fonts, trackers, or CDNs LIVE PROOF VERIFIED A committed model class runs here. Change the seed, or tamper with one token, and watch the verdict follow "
         },
         "metrics": {
-          "fcp": 321.1799998283386,
-          "lcp": 321.1799998283386,
+          "fcp": 80,
+          "lcp": 80,
           "cls": 0,
-          "longTasks": 3,
-          "tbt": 111,
-          "dcl": 59.139999866485596,
-          "load": 391.37999987602234,
-          "ttfb": 39.3199999332428,
-          "resources": 5,
-          "transferBytes": 412414,
-          "decodedBytes": 947836,
-          "jsBytes": 236466,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 1,
-          "host": "claude.ai"
+          "longTasks": 0,
+          "tbt": 0,
+          "dcl": 66.5,
+          "load": 68.70000004768372,
+          "ttfb": 4.200000047683716,
+          "resources": 3,
+          "transferBytes": 31174,
+          "decodedBytes": 30274,
+          "jsBytes": 5940,
+          "cssBytes": 24325,
+          "imgBytes": 909,
+          "thirdPartyHosts": 0,
+          "host": "127.0.0.1:8080"
         }
       },
       "score": {
         "perf": 99,
-        "a11y": 79,
-        "ux": 43,
-        "overall": 72,
+        "a11y": 99,
+        "ux": 87,
+        "overall": 95,
         "detail": {
           "perf": {
             "ttfb": 1,
             "fcp": 1,
             "lcp": 1,
             "cls": 1,
-            "weight": 0.9808984210526316,
-            "scripts": 1,
-            "tbt": 0.9793103448275862
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 1,
-            "contrast": 1,
-            "targets": 0.5,
-            "structure": 1,
-            "skip": 0,
-            "motion": 1
-          },
-          "ux": {
-            "h1": 1,
-            "nav": 0,
-            "mobileNav": 0,
-            "overflow": 1,
-            "live": 0,
-            "cta": 1,
-            "meta": 0
-          }
-        }
-      }
-    },
-    {
-      "id": "gemini",
-      "name": "Gemini",
-      "url": "https://gemini.google.com/",
-      "local": false,
-      "http": {
-        "status": 0,
-        "error": "TypeError: fetch failed"
-      },
-      "refused": false,
-      "title": "Google Gemini",
-      "desktop": {
-        "url": "https://gemini.google.com/app",
-        "title": "Google Gemini",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
-        "canonical": "https://gemini.google.com/",
-        "og": true,
-        "landmarks": {
-          "header": 0,
-          "nav": 4,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "Hi, I'm Gemini. Where should we start?"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 2,
-        "roleStatus": 1,
-        "images": 1,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 1,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 17,
-        "smallTargets": 3,
-        "smallTargetsSample": [
-          {
-            "name": "Sign in",
-            "w": 40,
-            "h": 17
-          },
-          {
-            "name": "Google Terms Opens in a new window",
-            "w": 84,
-            "h": 17
-          },
-          {
-            "name": "Google Privacy Policy Opens in a new win",
-            "w": 129,
-            "h": 17
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.022,
-        "firstScreen": {
-          "h1": [
-            "Hi, I'm Gemini. Where should we start?"
-          ],
-          "h2": [],
-          "ctas": [
-            {
-              "text": "New chat",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Close sidebar",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "New chat",
-              "tag": "a",
-              "href": "/app"
-            },
-            {
-              "text": "Images",
-              "tag": "a",
-              "href": "/images"
-            },
-            {
-              "text": "Sign in",
-              "tag": "a",
-              "href": "#"
-            },
-            {
-              "text": "Settings",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Sign in",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Get App",
-              "tag": "button",
-              "href": null
-            }
-          ],
-          "navItems": 3,
-          "wordCount": 55,
-          "links": 12,
-          "text": "Gemini New chat Images Sign in to save activity Settings Sign in Get App Hi, I'm Gemini. Where should we start? Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. About Gemini Subscriptions For Business Get App Sign in"
-        },
-        "metrics": {
-          "fcp": 6064,
-          "lcp": 6668,
-          "cls": 0.00728755574457148,
-          "longTasks": 10,
-          "tbt": 938,
-          "dcl": 1655.1000001430511,
-          "load": 6699,
-          "ttfb": 1198.7999999523163,
-          "resources": 111,
-          "transferBytes": 1190350,
-          "decodedBytes": 1223186,
-          "jsBytes": 0,
-          "cssBytes": 1172676,
-          "imgBytes": 1346,
-          "thirdPartyHosts": 14,
-          "host": "gemini.google.com"
-        }
-      },
-      "mobile": {
-        "url": "https://gemini.google.com/app",
-        "title": "Google Gemini",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Meet Gemini, Google’s AI assistant. Get help with writing, planning, brainstorming, and more. Experience the power of generative AI.",
-        "canonical": "https://gemini.google.com/",
-        "og": true,
-        "landmarks": {
-          "header": 0,
-          "nav": 4,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "Hi, I'm Gemini. Where should we start?"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 2,
-        "roleStatus": 1,
-        "images": 1,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 1,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 7,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Google Terms Opens in a new window",
-            "w": 84,
-            "h": 17
-          },
-          {
-            "name": "Google Privacy Policy Opens in a new win",
-            "w": 129,
-            "h": 17
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.032,
-        "firstScreen": {
-          "h1": [
-            "Hi, I'm Gemini. Where should we start?"
-          ],
-          "h2": [],
-          "ctas": [
-            {
-              "text": "Main menu",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Open mode picker, currently 3.5 Flash-Lite",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Upload & tools",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Dictate (⌘⇧D)",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Google Terms Opens in a new window",
-              "tag": "a",
-              "href": "https://policies.google.com/terms"
-            },
-            {
-              "text": "Google Privacy Policy Opens in a new window",
-              "tag": "a",
-              "href": "https://policies.google.com/privacy"
-            },
-            {
-              "text": "Sign in",
-              "tag": "button",
-              "href": null
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 9,
-          "text": "Gemini 3.5 Flash-Lite Hi, I'm Gemini. Where should we start? Google Terms Opens in a new window and the Google Privacy Policy Opens in a new window apply. Gemini is AI and can make mistakes. Sign in"
-        },
-        "metrics": {
-          "fcp": 1384,
-          "lcp": 2224,
-          "cls": 0.026998495092203676,
-          "longTasks": 7,
-          "tbt": 760,
-          "dcl": 434.5,
-          "load": 1991.0999999046326,
-          "ttfb": 205.89999985694885,
-          "resources": 104,
-          "transferBytes": 428942,
-          "decodedBytes": 1585499,
-          "jsBytes": 0,
-          "cssBytes": 412317,
-          "imgBytes": 300,
-          "thirdPartyHosts": 9,
-          "host": "gemini.google.com"
-        }
-      },
-      "score": {
-        "perf": 47,
-        "a11y": 83,
-        "ux": 93,
-        "overall": 76,
-        "detail": {
-          "perf": {
-            "ttfb": 0.44511111113760204,
-            "fcp": 0,
-            "lcp": 0,
-            "cls": 1,
-            "weight": 0.843798245614035,
-            "scripts": 0.6043478260869566,
-            "tbt": 0.38758620689655177
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 1,
-            "contrast": 1,
-            "targets": 0.8235294117647058,
-            "structure": 1,
-            "skip": 0,
-            "motion": 1
-          },
-          "ux": {
-            "h1": 1,
-            "nav": 1,
-            "mobileNav": 1,
-            "overflow": 1,
-            "live": 1,
-            "cta": 0.5,
-            "meta": 1
-          }
-        }
-      }
-    },
-    {
-      "id": "perplexity",
-      "name": "Perplexity",
-      "url": "https://www.perplexity.ai/",
-      "local": false,
-      "http": {
-        "status": 200,
-        "finalUrl": "https://www.perplexity.ai/",
-        "elapsedMs": 114,
-        "bytes": 19713,
-        "encoding": "gzip",
-        "cache": "no-cache, no-store",
-        "csp": "object-src 'none'; base-uri 'self'; form-action 'self' perplexity-app: https://onedrive.live.com https://*.sharepoint.com https://*.paypal.com https://*.venmo.com; frame-ancestors 'self' https://onedrive.live.com https://*.sharepoint.com https://app.athina.ai; upgrade-insecure-requests",
-        "hsts": "max-age=31536000; includeSubDomains; preload",
-        "nosniff": "nosniff",
-        "frame": "DENY",
-        "referrer": "strict-origin",
-        "permissions": "accelerometer=(), ambient-light-sensor=(), autoplay=(self \"https://www.youtube.com\"), battery=(), bluetooth=(), camera=(self), clipboard-read=(self), clipboard-write=(self \"https://js.stripe.com\"), compute-pressure=(), display-capture=(self), encrypted-media=(self \"https://www.youtube.com\"), fullscreen=(self \"https://www.youtube.com\"), geolocation=(self), gyroscope=(), hid=(), identity-credentials-get=(self \"https://accounts.google.com\"), idle-detection=(), magnetometer=(), microphone=(self), midi=(), payment=(self \"https://js.stripe.com\" \"https://checkout.link.com\" \"https://www.paypal.com\" \"https://www.sandbox.paypal.com\" \"https://www.test28.stage.paypal.com\"), picture-in-picture=(self \"https://www.youtube.com\"), publickey-credentials-get=(self \"https://js.stripe.com\" \"https://checkout.link.com\" \"https://www.paypal.com\" \"https://www.sandbox.paypal.com\" \"https://www.test28.stage.paypal.com\" \"https://acs.capitalone.com\" \"https://capitalone.com\"), publickey-credentials-create=(self \"https://js.stripe.com\" \"https://checkout.link.com\" \"https://www.paypal.com\" \"https://www.sandbox.paypal.com\" \"https://www.test28.stage.paypal.com\"), screen-wake-lock=(), serial=(), speaker-selection=(), usb=(), web-share=(), window-management=(), xr-spatial-tracking=()",
-        "server": "cloudflare"
-      },
-      "refused": false,
-      "title": "Perplexity",
-      "desktop": {
-        "url": "https://www.perplexity.ai/",
-        "title": "Perplexity",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Perplexity is a free AI-powered answer engine that provides accurate, trusted, and real-time answers to any question.",
-        "canonical": "https://www.perplexity.ai/",
-        "og": true,
-        "landmarks": {
-          "header": 0,
-          "nav": 1,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "What do you want to know? What should we work on? What do you want to know?"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 1,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 1,
-        "nestedInteractive": 0,
-        "tapTargets": 30,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Terms of Service",
-            "w": 97,
-            "h": 16
-          },
-          {
-            "name": "Privacy Notice",
-            "w": 83,
-            "h": 16
-          }
-        ],
-        "contrastFailures": [
-          {
-            "text": "New",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Computer",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Automations",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Artifacts",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Plugins",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "View plans",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 12,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Sign In",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "What do you want to know?",
-            "ratio": 1.35,
-            "need": 3,
-            "size": 26,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Get fast and accurate answers from the most truste",
-            "ratio": 3.97,
-            "need": 4.5,
-            "size": 12,
-            "color": "rgba(255, 255, 255, 0.7)",
-            "bg": "rgb(1, 106, 113)"
-          },
-          {
-            "text": "Cookie Policy",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 16,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          }
-        ],
-        "contrastFailureCount": 11,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.093,
-        "firstScreen": {
-          "h1": [
-            "What do you want to know? What should we work on? What do you want to know?"
-          ],
-          "h2": [],
-          "ctas": [
-            {
-              "text": "",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Search sessions",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Collapse sidebar",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "New",
-              "tag": "a",
-              "href": "/"
-            },
-            {
-              "text": "Computer",
-              "tag": "a",
-              "href": "/computer/tasks"
-            },
-            {
-              "text": "Automations",
-              "tag": "a",
-              "href": "/automations"
-            },
-            {
-              "text": "Artifacts",
-              "tag": "a",
-              "href": "/artifacts"
-            },
-            {
-              "text": "Plugins",
-              "tag": "a",
-              "href": "/computer/plugins"
-            }
-          ],
-          "navItems": 8,
-          "wordCount": 200,
-          "links": 10,
-          "text": "New Computer Automations Artifacts Plugins Projects No projects Recents No recent sessions View plans Sign In What do you want to know? What should we work on? What do you want to know? Ask anything… Search Computer Model Search anything Get fast and accurate answers from the most trusted sources. Get work done with Computer NEW Hand off your projects to get polished, reliable deliverables around the clock. Terms of Service · Privacy Notice Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell th"
-        },
-        "metrics": {
-          "fcp": 5908,
-          "lcp": 6892,
-          "cls": 0.0008690046391204654,
-          "longTasks": 6,
-          "tbt": 501,
-          "dcl": 1582.5,
-          "load": 5382.399999856949,
-          "ttfb": 116.39999985694885,
-          "resources": 149,
-          "transferBytes": 18658,
-          "decodedBytes": 69094,
-          "jsBytes": 300,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 8,
-          "host": "www.perplexity.ai"
-        }
-      },
-      "mobile": {
-        "url": "https://www.perplexity.ai/",
-        "title": "Perplexity",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Perplexity is a free AI-powered answer engine that provides accurate, trusted, and real-time answers to any question.",
-        "canonical": "https://www.perplexity.ai/",
-        "og": true,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "What do you want to know? What should we work on? What do you want to know?"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 1,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 10,
-        "smallTargets": 0,
-        "smallTargetsSample": [],
-        "contrastFailures": [
-          {
-            "text": "What do you want to know?",
-            "ratio": 1.35,
-            "need": 3,
-            "size": 26,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Cookie Policy",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 16,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          },
-          {
-            "text": "Decline optional",
-            "ratio": 1.35,
-            "need": 4.5,
-            "size": 14,
-            "color": "rgb(219, 222, 227)",
-            "bg": "rgb(255, 255, 255)"
-          }
-        ],
-        "contrastFailureCount": 3,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0.3,
-        "firstScreen": {
-          "h1": [
-            "What do you want to know? What should we work on? What do you want to know?"
-          ],
-          "h2": [],
-          "ctas": [
-            {
-              "text": "Open sidebar",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Use incognito: create anonymous sessions that aren't saved t",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Add files, plugins, and more",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Search",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Computer",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Model",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Dictation",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Submit",
-              "tag": "button",
-              "href": null
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 145,
-          "links": 2,
-          "text": "What do you want to know? What should we work on? What do you want to know? Ask anything… Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. Perplexity does not use these technologies to sell third party ads on our services. Perplexity uses them to measure our ad performance on third party partner websites and to improve our services. If you continue using Perplexity, without adjusting your settings, you are consenting to these technologies. Cookie Policy We and our partners use cookies, pixels, SDKs, APIs, and server-to-server integrations. P"
-        },
-        "metrics": {
-          "fcp": 620,
-          "lcp": 1404,
-          "cls": 0.0012630167613209323,
-          "longTasks": 6,
-          "tbt": 179,
-          "dcl": 197,
-          "load": 891.7999999523163,
-          "ttfb": 50.700000047683716,
-          "resources": 138,
-          "transferBytes": 14576,
-          "decodedBytes": 53891,
-          "jsBytes": 300,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 11,
-          "host": "www.perplexity.ai"
-        }
-      },
-      "score": {
-        "perf": 59,
-        "a11y": 75,
-        "ux": 93,
-        "overall": 77,
-        "detail": {
-          "perf": {
-            "ttfb": 1,
-            "fcp": 0,
-            "lcp": 0,
-            "cls": 1,
             "weight": 1,
-            "scripts": 0.4391304347826087,
-            "tbt": 0.6889655172413793
+            "scripts": 1,
+            "tbt": 0.9213793103448276
           },
           "a11y": {
             "alt": 1,
-            "names": 0.9666666666666667,
-            "contrast": 0.3400000000000001,
-            "targets": 0.9333333333333333,
-            "structure": 1,
-            "skip": 0,
-            "motion": 1
-          },
-          "ux": {
-            "h1": 1,
-            "nav": 1,
-            "mobileNav": 1,
-            "overflow": 1,
-            "live": 1,
-            "cta": 0.5,
-            "meta": 1
-          }
-        }
-      }
-    },
-    {
-      "id": "copilot",
-      "name": "Microsoft Copilot",
-      "url": "https://copilot.microsoft.com/",
-      "local": false,
-      "http": {
-        "status": 200,
-        "finalUrl": "https://copilot.com/",
-        "elapsedMs": 400,
-        "bytes": 320478,
-        "encoding": "gzip",
-        "cache": "public, max-age=300",
-        "csp": "default-src 'self';base-uri 'self';script-src 'nonce-jQS9K+4lAHeLuNHW+RwvXw==' 'strict-dynamic' 'report-sample' https:;report-to csp-endpoint;upgrade-insecure-requests;style-src 'self' 'report-sample' *.cdn.office.net *.microsoft.com res-dev.cdn.officeppe.net 'unsafe-inline' https://www.microsoft.com/;font-src 'self' data: *.cdn.office.net res-dev.cdn.officeppe.net data c.s-microsoft.com *.microsoft.com;connect-src 'self' https://browser.pipe.aria.microsoft.com https://browser.events.data.microsoft.com *.office.com *.office.microsoft.com *.cdn.office.net res-dev.cdn.officeppe.net https://consentreceiverfd-prod.azurefd.net https://*.clarity.ms/collect https://turbo.microsoft.com https://deeplinkservice.svc.cloud.microsoft https://sdf.deferreddeeplinkservice.microsoft.com https://config.edge.skype.com https://admin.microsoft.com https://config.centro.core.microsoft https://mem.gfx.ms https://js.monitor.azure.com data:;frame-src https://login.microsoftonline.com https://login.live.com mem.gfx.ms amcdn.msftauth.net amcdn.msauth.net;img-src * data: blob:;media-src 'self' *.cdn.office.net res-dev.cdn.officeppe.net;worker-src 'self' blob:;child-src 'self' blob:;report-uri https://csp.microsoft.com/report/Harmony-App-PROD;form-action https://login.microsoftonline.com;frame-ancestors 'self';",
-        "hsts": "max-age=31536000; includeSubDomains",
-        "nosniff": "nosniff",
-        "frame": "SAMEORIGIN",
-        "referrer": "strict-origin-when-cross-origin",
-        "permissions": null,
-        "server": null
-      },
-      "refused": false,
-      "title": "Microsoft Copilot | Sign in",
-      "desktop": {
-        "url": "https://copilot.com/",
-        "title": "Microsoft Copilot | Sign in",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Microsoft Copilot is AI built to help you get things done. Create, brainstorm, learn, and solve problems with AI chat that works across your day.",
-        "canonical": "https://copilot.com/",
-        "og": false,
-        "landmarks": {
-          "header": 1,
-          "nav": 2,
-          "main": 1,
-          "footer": 1,
-          "h1": 1
-        },
-        "skipLink": true,
-        "headings": [
-          {
-            "level": 1,
-            "text": "Sign into Copilot"
-          },
-          {
-            "level": 2,
-            "text": "One Copilot for every part of your day"
-          },
-          {
-            "level": 3,
-            "text": "Get started with chat"
-          },
-          {
-            "level": 3,
-            "text": "Find what you need"
-          },
-          {
-            "level": 3,
-            "text": "Create with AI"
-          },
-          {
-            "level": 3,
-            "text": "Download for desktop"
-          },
-          {
-            "level": 3,
-            "text": "Download on mobile"
-          },
-          {
-            "level": 2,
-            "text": "Did you know?"
-          },
-          {
-            "level": 3,
-            "text": "01/ One Microsoft Copilot experience across work and life"
-          },
-          {
-            "level": 3,
-            "text": "02/ No download or reinstall is required"
-          },
-          {
-            "level": 3,
-            "text": "03/ Your conversations move with you while remaining separate by account"
-          },
-          {
-            "level": 3,
-            "text": "04/ Several Copilot features have new names"
-          },
-          {
-            "level": 3,
-            "text": "05/ Copilot Chat helps you ask questions, explore ideas, and get things done"
-          },
-          {
-            "level": 3,
-            "text": "06/ Microsoft Copilot is free with a signed-in Microsoft account"
-          },
-          {
-            "level": 3,
-            "text": "07/ You're in control of your data and AI experiences"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 1,
-        "roleStatus": 3,
-        "images": 6,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 6,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 1,
-        "nestedInteractive": 0,
-        "tapTargets": 35,
-        "smallTargets": 8,
-        "smallTargetsSample": [
-          {
-            "name": "Sign in",
-            "w": 39,
-            "h": 17
-          },
-          {
-            "name": "Language settings: English (United State",
-            "w": 170,
-            "h": 20
-          },
-          {
-            "name": "Your Privacy Choices",
-            "w": 182,
-            "h": 18
-          },
-          {
-            "name": "Privacy",
-            "w": 45,
-            "h": 18
-          },
-          {
-            "name": "Consumer Health Policy",
-            "w": 152,
-            "h": 18
-          },
-          {
-            "name": "Terms of Use",
-            "w": 82,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "Sign into Copilot"
-          ],
-          "h2": [
-            "One Copilot for every part of your day",
-            "Did you know?"
-          ],
-          "ctas": [
-            {
-              "text": "Microsoft",
-              "tag": "a",
-              "href": "https://www.microsoft.com"
-            },
-            {
-              "text": "Copilot",
-              "tag": "a",
-              "href": "https://copilot.com"
-            },
-            {
-              "text": "Features",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Download",
-              "tag": "a",
-              "href": "https://copilot.com/download"
-            },
-            {
-              "text": "Plans and Pricing",
-              "tag": "a",
-              "href": "https://www.microsoft.com/microsoft-365-copilot/pricing?ocid=cmm2nvxwm2c"
-            },
-            {
-              "text": "Sign in",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Sign In",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Sign in",
-              "tag": "a",
-              "href": "https://copilot.com/login?es=Click&ru=%2f%3ffromcode%3dcmmwuwpzorz"
-            }
-          ],
-          "navItems": 8,
-          "wordCount": 312,
-          "links": 128,
-          "text": "Skip to main content Copilot Features Download Plans and Pricing Sign in ME Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work fast"
-        },
-        "metrics": {
-          "fcp": 1156,
-          "lcp": 1192,
-          "cls": 0.00016072791343147807,
-          "longTasks": 2,
-          "tbt": 19,
-          "dcl": 2188.7999999523163,
-          "load": 4352,
-          "ttfb": 290.5,
-          "resources": 55,
-          "transferBytes": 2693309,
-          "decodedBytes": 3247819,
-          "jsBytes": 157075,
-          "cssBytes": 189677,
-          "imgBytes": 2062309,
-          "thirdPartyHosts": 7,
-          "host": "copilot.com"
-        }
-      },
-      "mobile": {
-        "url": "https://copilot.com/",
-        "title": "Microsoft Copilot | Sign in",
-        "lang": "en-US",
-        "hasViewport": true,
-        "description": "Microsoft Copilot is AI built to help you get things done. Create, brainstorm, learn, and solve problems with AI chat that works across your day.",
-        "canonical": "https://copilot.com/",
-        "og": false,
-        "landmarks": {
-          "header": 1,
-          "nav": 2,
-          "main": 1,
-          "footer": 1,
-          "h1": 1
-        },
-        "skipLink": true,
-        "headings": [
-          {
-            "level": 1,
-            "text": "Sign into Copilot"
-          },
-          {
-            "level": 2,
-            "text": "One Copilot for every part of your day"
-          },
-          {
-            "level": 3,
-            "text": "Get started with chat"
-          },
-          {
-            "level": 3,
-            "text": "Find what you need"
-          },
-          {
-            "level": 3,
-            "text": "Create with AI"
-          },
-          {
-            "level": 2,
-            "text": "Did you know?"
-          },
-          {
-            "level": 3,
-            "text": "One Microsoft Copilot experience across work and life"
-          },
-          {
-            "level": 3,
-            "text": "No download or reinstall is required"
-          },
-          {
-            "level": 3,
-            "text": "Your conversations move with you while remaining separate by account"
-          },
-          {
-            "level": 3,
-            "text": "Several Copilot features have new names"
-          },
-          {
-            "level": 3,
-            "text": "Copilot Chat helps you ask questions, explore ideas, and get things done"
-          },
-          {
-            "level": 3,
-            "text": "Microsoft Copilot is free with a signed-in Microsoft account"
-          },
-          {
-            "level": 3,
-            "text": "You're in control of your data and AI experiences"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 1,
-        "roleStatus": 3,
-        "images": 5,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 4,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 26,
-        "smallTargets": 8,
-        "smallTargetsSample": [
-          {
-            "name": "Language settings: English (United State",
-            "w": 170,
-            "h": 20
-          },
-          {
-            "name": "Your Privacy Choices",
-            "w": 182,
-            "h": 18
-          },
-          {
-            "name": "Privacy",
-            "w": 45,
-            "h": 18
-          },
-          {
-            "name": "Consumer Health Policy",
-            "w": 152,
-            "h": 18
-          },
-          {
-            "name": "Terms of Use",
-            "w": 82,
-            "h": 18
-          },
-          {
-            "name": "Learn more",
-            "w": 60,
-            "h": 14
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "Sign into Copilot"
-          ],
-          "h2": [
-            "One Copilot for every part of your day",
-            "Did you know?"
-          ],
-          "ctas": [
-            {
-              "text": "Microsoft",
-              "tag": "a",
-              "href": "https://www.microsoft.com"
-            },
-            {
-              "text": "Sign In",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Copilot",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Sign in",
-              "tag": "a",
-              "href": "https://copilot.com/login?es=Click&ru=%2f%3ffromcode%3dcmmwuwpzorz"
-            },
-            {
-              "text": "Work",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Life",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "School",
-              "tag": "button",
-              "href": null
-            },
-            {
-              "text": "Go to Chat",
-              "tag": "a",
-              "href": "https://m365.cloud.microsoft/chat?fromcode=cmmwuwpzorz"
-            }
-          ],
-          "navItems": 5,
-          "wordCount": 267,
-          "links": 129,
-          "text": "Skip to main content ME Copilot Sign into Copilot Chat to find answers, create content, and complete tasks with AI that understands your work. Sign in One Copilot for every part of your day Work Life School Get started with chat Think through projects, summarize information, and keep work moving forward in one conversation. Go to Chat Find what you need Get grounded answers and quickly find the information, files, and insights you need to get work done. Go to Search Create with AI Draft content, generate images, and turn ideas into polished work faster. Start creating Did you know? Expand all "
-        },
-        "metrics": {
-          "fcp": 412,
-          "lcp": 440,
-          "cls": 0,
-          "longTasks": 1,
-          "tbt": 1,
-          "dcl": 517.2000000476837,
-          "load": 646.7000000476837,
-          "ttfb": 328.5,
-          "resources": 49,
-          "transferBytes": 0,
-          "decodedBytes": 3120693,
-          "jsBytes": 0,
-          "cssBytes": 0,
-          "imgBytes": 0,
-          "thirdPartyHosts": 7,
-          "host": "copilot.com"
-        }
-      },
-      "score": {
-        "perf": 90,
-        "a11y": 96,
-        "ux": 86,
-        "overall": 91,
-        "detail": {
-          "perf": {
-            "ttfb": 0.9497222222222222,
-            "fcp": 0.88875,
-            "lcp": 1,
-            "cls": 1,
-            "weight": 0.5801212280701755,
-            "scripts": 0.8478260869565217,
-            "tbt": 1
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 0.9714285714285714,
+            "names": 1,
             "contrast": 1,
-            "targets": 0.7714285714285715,
+            "targets": 0.9333333333333333,
             "structure": 1,
             "skip": 1,
             "motion": 1
           },
           "ux": {
             "h1": 1,
-            "nav": 1,
+            "nav": 0.6,
             "mobileNav": 1,
             "overflow": 1,
             "live": 1,
             "cta": 0.5,
-            "meta": 0.5
-          }
-        }
-      }
-    },
-    {
-      "id": "grok",
-      "name": "Grok",
-      "url": "https://grok.com/",
-      "local": false,
-      "http": {
-        "status": 403,
-        "finalUrl": "https://grok.com/",
-        "elapsedMs": 114,
-        "bytes": 5643,
-        "encoding": "br",
-        "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-t4INiwvNYjhlh0bXns1llQ' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
-        "hsts": null,
-        "nosniff": "nosniff",
-        "frame": "SAMEORIGIN",
-        "referrer": "same-origin",
-        "permissions": "accelerometer=(),camera=(),clipboard-read=(),clipboard-write=(),geolocation=(),gyroscope=(),hid=(),magnetometer=(),microphone=(),payment=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),sync-xhr=(),usb=(),xr-spatial-tracking=*",
-        "server": "cloudflare"
-      },
-      "refused": false,
-      "title": "Just a moment...",
-      "desktop": {
-        "url": "https://grok.com/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "grok.com"
-          },
-          {
-            "level": 2,
-            "text": "Performing security verification"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 2,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
-          },
-          {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "grok.com"
-          ],
-          "h2": [
-            "Performing security verification"
-          ],
-          "ctas": [
-            {
-              "text": "Cloudflare, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
-            },
-            {
-              "text": "Privacy, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abde1f2bc6a361 Performance and Security by Cloudflare Privacy"
-        },
-        "metrics": {
-          "fcp": 608.8650000095367,
-          "lcp": 608.8650000095367,
-          "cls": 0.0003720407574446115,
-          "longTasks": 3,
-          "tbt": 100,
-          "dcl": 212.20500016212463,
-          "load": 670.2300000190735,
-          "ttfb": 170.625,
-          "resources": 7,
-          "transferBytes": 429531,
-          "decodedBytes": 938721,
-          "jsBytes": 245220,
-          "cssBytes": 0,
-          "imgBytes": 2124,
-          "thirdPartyHosts": 1,
-          "host": "grok.com"
-        }
-      },
-      "mobile": {
-        "url": "https://grok.com/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "grok.com"
-          },
-          {
-            "level": 2,
-            "text": "Performing security verification"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 2,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
-          },
-          {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "grok.com"
-          ],
-          "h2": [
-            "Performing security verification"
-          ],
-          "ctas": [
-            {
-              "text": "Cloudflare, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
-            },
-            {
-              "text": "Privacy, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "grok.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abde4bdb296962 Performance and Security by Cloudflare Privacy"
-        },
-        "metrics": {
-          "fcp": 428.9100000858307,
-          "lcp": 428.9100000858307,
-          "cls": 0,
-          "longTasks": 3,
-          "tbt": 70,
-          "dcl": 70.26500010490417,
-          "load": 987.8199999332428,
-          "ttfb": 51.24000000953674,
-          "resources": 7,
-          "transferBytes": 433607,
-          "decodedBytes": 948042,
-          "jsBytes": 244921,
-          "cssBytes": 0,
-          "imgBytes": 6510,
-          "thirdPartyHosts": 1,
-          "host": "grok.com"
-        }
-      },
-      "score": {
-        "perf": 99,
-        "a11y": 79,
-        "ux": 43,
-        "overall": 72,
-        "detail": {
-          "perf": {
-            "ttfb": 1,
-            "fcp": 1,
-            "lcp": 1,
-            "cls": 1,
-            "weight": 0.9772752631578947,
-            "scripts": 1,
-            "tbt": 0.9655172413793104
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 1,
-            "contrast": 1,
-            "targets": 0.5,
-            "structure": 1,
-            "skip": 0,
-            "motion": 1
-          },
-          "ux": {
-            "h1": 1,
-            "nav": 0,
-            "mobileNav": 0,
-            "overflow": 1,
-            "live": 0,
-            "cta": 1,
-            "meta": 0
-          }
-        }
-      }
-    },
-    {
-      "id": "lechat",
-      "name": "Mistral Le Chat",
-      "url": "https://chat.mistral.ai/",
-      "local": false,
-      "http": {
-        "status": 403,
-        "finalUrl": "https://chat.mistral.ai/",
-        "elapsedMs": 698,
-        "bytes": 5629,
-        "encoding": "br",
-        "cache": null,
-        "csp": "default-src 'none'; script-src 'nonce-aI2eRNLW3uT043AAaBg70J' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
-        "hsts": "max-age=15552000; includeSubDomains; preload",
-        "nosniff": "nosniff",
-        "frame": "SAMEORIGIN",
-        "referrer": "same-origin",
-        "permissions": "accelerometer=(),camera=(),clipboard-read=(),clipboard-write=(),geolocation=(),gyroscope=(),hid=(),magnetometer=(),microphone=(),payment=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),sync-xhr=(),usb=(),xr-spatial-tracking=*",
-        "server": "cloudflare"
-      },
-      "refused": false,
-      "title": "Just a moment...",
-      "desktop": {
-        "url": "https://chat.mistral.ai/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "chat.mistral.ai"
-          },
-          {
-            "level": 2,
-            "text": "Performing security verification"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 2,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
-          },
-          {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 1440,
-        "innerWidth": 1440,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "chat.mistral.ai"
-          ],
-          "h2": [
-            "Performing security verification"
-          ],
-          "ctas": [
-            {
-              "text": "Cloudflare, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
-            },
-            {
-              "text": "Privacy, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "chat.mistral.ai Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abde7d6ce0fbc7 Performance and Security by Cloudflare Privacy"
-        },
-        "metrics": {
-          "fcp": 2071.8550000190735,
-          "lcp": 2071.8550000190735,
-          "cls": 0.0005132169377249328,
-          "longTasks": 3,
-          "tbt": 81,
-          "dcl": 1229.2149999141693,
-          "load": 2273.9800000190735,
-          "ttfb": 1201.1400001049042,
-          "resources": 6,
-          "transferBytes": 422997,
-          "decodedBytes": 952764,
-          "jsBytes": 236712,
-          "cssBytes": 0,
-          "imgBytes": 6496,
-          "thirdPartyHosts": 1,
-          "host": "chat.mistral.ai"
-        }
-      },
-      "mobile": {
-        "url": "https://chat.mistral.ai/",
-        "title": "Just a moment...",
-        "lang": "en-us",
-        "hasViewport": true,
-        "description": null,
-        "canonical": null,
-        "og": false,
-        "landmarks": {
-          "header": 0,
-          "nav": 0,
-          "main": 1,
-          "footer": 0,
-          "h1": 1
-        },
-        "skipLink": false,
-        "headings": [
-          {
-            "level": 1,
-            "text": "chat.mistral.ai"
-          },
-          {
-            "level": 2,
-            "text": "Performing security verification"
-          }
-        ],
-        "headingSkips": 0,
-        "ariaLive": 0,
-        "roleStatus": 0,
-        "images": 0,
-        "imgsNoAlt": 0,
-        "imgsNoDimensions": 0,
-        "controls": 0,
-        "unlabeledControls": 0,
-        "unnamedButtons": 0,
-        "nestedInteractive": 0,
-        "tapTargets": 2,
-        "smallTargets": 2,
-        "smallTargetsSample": [
-          {
-            "name": "Cloudflare, opens in a new tab",
-            "w": 58,
-            "h": 18
-          },
-          {
-            "name": "Privacy, opens in a new tab",
-            "w": 41,
-            "h": 18
-          }
-        ],
-        "contrastFailures": [],
-        "contrastFailureCount": 0,
-        "scrollWidth": 390,
-        "innerWidth": 390,
-        "horizontalOverflow": false,
-        "bodyFontSize": "16px",
-        "reducedMotionRule": true,
-        "darkSchemeQueried": true,
-        "fixedOverlayArea": 0,
-        "firstScreen": {
-          "h1": [
-            "chat.mistral.ai"
-          ],
-          "h2": [
-            "Performing security verification"
-          ],
-          "ctas": [
-            {
-              "text": "Cloudflare, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com?utm_source=challenge&utm_campaign=m"
-            },
-            {
-              "text": "Privacy, opens in a new tab",
-              "tag": "a",
-              "href": "https://www.cloudflare.com/privacypolicy/"
-            }
-          ],
-          "navItems": 0,
-          "wordCount": 37,
-          "links": 2,
-          "text": "chat.mistral.ai Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a5abdeae1bb5f0a7 Performance and Security by Cloudflare Privacy"
-        },
-        "metrics": {
-          "fcp": 1491.4349999427795,
-          "lcp": 1491.4349999427795,
-          "cls": 0.0031143470756237767,
-          "longTasks": 3,
-          "tbt": 72,
-          "dcl": 752.5599999427795,
-          "load": 1724.3349997997284,
-          "ttfb": 725.4800000190735,
-          "resources": 6,
-          "transferBytes": 416273,
-          "decodedBytes": 955290,
-          "jsBytes": 229736,
-          "cssBytes": 0,
-          "imgBytes": 6517,
-          "thirdPartyHosts": 1,
-          "host": "chat.mistral.ai"
-        }
-      },
-      "score": {
-        "perf": 82,
-        "a11y": 79,
-        "ux": 43,
-        "overall": 67,
-        "detail": {
-          "perf": {
-            "ttfb": 0.443811111052831,
-            "fcp": 0.6025453124940395,
-            "lcp": 0.7705644736791912,
-            "cls": 1,
-            "weight": 0.9784215789473685,
-            "scripts": 1,
-            "tbt": 0.9786206896551725
-          },
-          "a11y": {
-            "alt": 1,
-            "names": 1,
-            "contrast": 1,
-            "targets": 0.5,
-            "structure": 1,
-            "skip": 0,
-            "motion": 1
-          },
-          "ux": {
-            "h1": 1,
-            "nav": 0,
-            "mobileNav": 0,
-            "overflow": 1,
-            "live": 0,
-            "cta": 1,
-            "meta": 0
+            "meta": 1
           }
         }
       }
