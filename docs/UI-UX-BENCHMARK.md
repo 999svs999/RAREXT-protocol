@@ -89,6 +89,18 @@ numbers in `bench/ui-ux.json` and disagree precisely.
 three RAREXT rows are the pinned artifacts it links to, measured for honesty
 rather than for the headline.
 
+The same page measured on the deployed host — Cloudflare Pages, brotli, CDN —
+scores **100** as well (performance 100, accessibility 100, UX 100): TTFB 212 ms,
+LCP 448 ms, CLS 0.0006, **10 KB compressed over 4 requests, 0 third-party hosts**,
+0 contrast failures, no horizontal overflow. Local and live agree, so the row
+above is a conservative floor rather than a dev-server artefact. The deployment
+also fixed a real routing defect the local preview could not show: Pages serves
+`site/` verbatim, so the front door's `./mirror/*` links fell back to
+`index.html` with a 200. A `_redirects` rewrite maps `/mirror/*` onto
+`/registry/mirror/*`, `404.html` answers unknown paths honestly, and
+`test:showcase` fetches each linked page and checks its title, not just its
+status.
+
 ## Against the top 10 AI brands
 
 The brands people name when they list AI, each represented by its best-measured
@@ -126,6 +138,15 @@ into a sweep. The margin over the best external *overall* score is **+2** (100 v
 98), which is honest about how close the top of this table is: Google's DeepMind
 page is a fast, accessible, well-built page and it is the real competition, not
 the login walls.
+
+**What this is not.** This ranks front doors and product surfaces, not model
+quality, throughput, or breadth. On model capability RAREXT is explicitly behind
+the frontier, and says so in its own audit: a 504 MiB Qwen2.5-0.5B class
+container, no vision, no audio, `0.50 tok/s`
+([AI-CAPABILITY-AUDIT.md](AI-CAPABILITY-AUDIT.md)). Being first in this table
+means the *door* is the best of the set on performance, accessibility, and UX,
+and that the door opens onto a working proof. It does not mean the model behind
+it beats GPT-class systems, and no row here should be read as claiming that.
 
 **Six surfaces refused an anonymous visitor** — Claude, Grok, Le Chat, Meta AI,
 and Poe with HTTP 403, and the Gemini app with no response at all. Those rows

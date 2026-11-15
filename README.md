@@ -67,7 +67,10 @@ welcome.
   overflow, mobile behaviour, and screenshots. `npm run bench:ui` reproduces the
   table. The page was rebuilt around a proof that runs in the tab — verified on
   load, refused after one flipped token — and scores **100 overall** (89 before),
-  with 0 contrast failures, 0 horizontal overflow, and no third-party requests;
+  first against **13 AI brands over 21 targets**: 100 to Gemini's 98, Copilot's
+  93, Claude's 92, with 0 contrast failures, 0 horizontal overflow, and no
+  third-party requests. `npm run bench:top10` asserts the ranking and fails if
+  any brand beats it on any axis, or if the page's published ranking goes stale;
   `npm run test:showcase` keeps the behaviour from regressing. Where an app is
   login- or challenge-gated for anonymous visitors, the report says so instead of
   pretending a gate is the product.

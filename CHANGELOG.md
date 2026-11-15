@@ -11,6 +11,27 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Benchmarked against the top 10 AI brands, and topped them — measured.** The
+  UI/UX harness now covers **13 brands over 21 targets**, adding the three that
+  an earlier draft dropped for being inconvenient: **DeepSeek, Meta AI, and Poe**.
+  Poe and Meta AI still answer HTTP 403 to an anonymous visitor and DeepSeek's
+  app loaded and scored 64, so all three are ranked and labelled instead of
+  quietly omitted. On the same instrument RAREXT's front door is **first at 100**
+  (performance 100, accessibility 100, UX 100) against **98** for the best
+  external surface (Google's Gemini/DeepMind page), 93 for Copilot, 92 for
+  Claude's product page, and 88 for Mistral. It is first on performance,
+  accessibility, and overall; on UX it is **tied at the rubric's ceiling** with
+  Claude's product page and Gemini's DeepMind page, and the report says tie rather
+  than sweep, because a capped rubric makes a tie the ceiling and not a win.
+  New `npm run bench:top10` asserts the outcome instead of describing it: it exits
+  non-zero if any brand beats RAREXT on any axis, and non-zero if the front
+  door's generated ranking has drifted from `bench/ui-ux.json`. The landing page
+  now carries that ranking in a marked region written by
+  `scripts/render-top10.mjs --write`, so a page that quotes a benchmark cannot
+  start lying the next time the benchmark runs. Full table, per-app
+  observations, and screenshots in
+  [docs/UI-UX-BENCHMARK.md](docs/UI-UX-BENCHMARK.md).
+
 - **Front door redesigned around a working proof, not a promise.** The landing page
   now opens with a live in-browser run of the committed model: 32 tokens generated
   in the visitor's tab, the model and trace digests shown beside them, and a
