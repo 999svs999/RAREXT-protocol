@@ -1297,6 +1297,11 @@
       dataStart: dataStart,
       bytes: src.streaming ? null : input,
       view: src.streaming ? null : new DataView(input.buffer, input.byteOffset, input.byteLength),
+      // Byte and signed-byte views over the same buffer. A DataView call per
+      // weight is a call per weight; these are plain indexed loads, and the dot
+      // product is the whole cost of a decode step.
+      u8: src.streaming ? null : new Uint8Array(input.buffer, input.byteOffset, input.byteLength),
+      i8: src.streaming ? null : new Int8Array(input.buffer, input.byteOffset, input.byteLength),
       source: src,
       streaming: src.streaming,
     };
@@ -1349,10 +1354,50 @@
       dataStart: Math.ceil((16 + jsonLen) / 32) * 32,
       bytes: bytes,
       view: view,
+      u8: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      i8: new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
     };
   }
 
   /** Dispatch on the container magic: GGUF bytes or a RAREXT "RXHF" container. */
+  /**
+   * Parsed container metadata and its tokenizer, reused across calls.
+   *
+   * Both are pure functions of the model's bytes, and both were being recomputed
+   * on every request. Measured on a Qwen2.5-0.5B Q4_K_M GGUF, per call:
+   *
+   *   parseModel        308 ms
+   *   new Tokenizer     335 ms   (151,936 token strings, byte-encoded once)
+   *
+   * That is ~640 ms of identical work in front of every request — 45% of a
+   * one-token call, and pure latency on every call after the first. Keyed weakly
+   * on the handle (its bytes when they are resident, the handle itself when it
+   * streams, since a streaming parse depends on its reader), so a dropped handle
+   * takes its entry with it and two different containers never share one.
+   */
+  var CONTEXT_CACHE = typeof WeakMap === "function" ? new WeakMap() : null;
+
+  function contextFor(model) {
+    var key = null;
+    if (CONTEXT_CACHE !== null) {
+      key = ArrayBuffer.isView(model && model.bytes) ? model.bytes : model;
+    }
+    if (key === null) return { gguf: parseModel(model), tokenizer: null };
+    var hit = CONTEXT_CACHE.get(key);
+    if (hit === undefined) {
+      hit = { gguf: parseModel(model), tokenizer: null };
+      CONTEXT_CACHE.set(key, hit);
+    }
+    return hit;
+  }
+
+  function tokenizerFor(context) {
+    if (context.tokenizer === null || context.tokenizer === undefined) {
+      context.tokenizer = new Tokenizer(context.gguf);
+    }
+    return context.tokenizer;
+  }
+
   function parseModel(model) {
     if (model.kind === "hf") {
       if (!ArrayBuffer.isView(model.bytes)) {
@@ -1876,12 +1921,17 @@
    * 0.5B model is served without ever materializing its weights as floats. */
   function dotRow(model, tensor, row, vec) {
     var view = model.view;
+    var u8 = model.u8;
+    var i8 = model.i8;
     var base = model.dataStart + tensor.offset + row * tensor.rowBytes;
     if (view === null) {
       // Streaming: one bounded read per row (the row cache in the source keeps
-      // this from re-reading the same bytes).
+      // this from re-reading the same bytes). Views over the row cost nothing —
+      // they share the buffer the slice already copied.
       var streamedRow = model.source.slice(base, tensor.rowBytes);
       view = new DataView(streamedRow.buffer, streamedRow.byteOffset, streamedRow.byteLength);
+      u8 = streamedRow;
+      i8 = new Int8Array(streamedRow.buffer, streamedRow.byteOffset, streamedRow.byteLength);
       base = 0;
     }
     var cols = tensor.cols;
@@ -1894,15 +1944,18 @@
         for (i = 0; i < cols; i += 1) total += view.getFloat32(base + i * 4, true) * vec[i];
         return total;
       case TYPE_F16:
-        for (i = 0; i < cols; i += 1) total += f16(view.getUint16(base + i * 2, true)) * vec[i];
+        for (i = 0; i < cols; i += 1) {
+          var hbase = base + i * 2;
+          total += f16(u8[hbase] | (u8[hbase + 1] << 8)) * vec[i];
+        }
         return total;
       case TYPE_Q4_0:
         for (block = 0; block < cols; block += 32) {
           var q4base = base + (block / 32) * 18;
-          var d4 = f16(view.getUint16(q4base, true));
+          var d4 = f16(u8[q4base] | (u8[q4base + 1] << 8));
           sum = 0;
           for (i = 0; i < 16; i += 1) {
-            var q4 = view.getUint8(q4base + 2 + i);
+            var q4 = u8[q4base + 2 + i];
             sum += ((q4 & 15) - 8) * vec[block + i];
             sum += ((q4 >> 4) - 8) * vec[block + i + 16];
           }
@@ -1912,11 +1965,11 @@
       case TYPE_Q5_0:
         for (block = 0; block < cols; block += 32) {
           var q5base = base + (block / 32) * 22;
-          var d5 = f16(view.getUint16(q5base, true));
-          var qh = view.getUint32(q5base + 2, true);
+          var d5 = f16(u8[q5base] | (u8[q5base + 1] << 8));
+          var qh = u8[q5base + 2] | (u8[q5base + 3] << 8) | (u8[q5base + 4] << 16) | (u8[q5base + 5] << 24);
           sum = 0;
           for (i = 0; i < 16; i += 1) {
-            var q5 = view.getUint8(q5base + 6 + i);
+            var q5 = u8[q5base + 6 + i];
             sum += (((q5 & 15) | (((qh >> i) & 1) << 4)) - 16) * vec[block + i];
             sum += (((q5 >> 4) | (((qh >> (i + 16)) & 1) << 4)) - 16) * vec[block + i + 16];
           }
@@ -1926,9 +1979,9 @@
       case TYPE_Q8_0:
         for (block = 0; block < cols; block += 32) {
           var q8base = base + (block / 32) * 34;
-          var d8 = f16(view.getUint16(q8base, true));
+          var d8 = f16(u8[q8base] | (u8[q8base + 1] << 8));
           sum = 0;
-          for (i = 0; i < 32; i += 1) sum += view.getInt8(q8base + 2 + i) * vec[block + i];
+          for (i = 0; i < 32; i += 1) sum += i8[q8base + 2 + i] * vec[block + i];
           total += d8 * sum;
         }
         return total;
@@ -1936,25 +1989,50 @@
         sum = 0;
         for (var sb = 0; sb < cols; sb += 256) {
           var kbase = base + (sb / 256) * 144;
-          var kd = f16(view.getUint16(kbase, true));
-          var kmin = f16(view.getUint16(kbase + 2, true));
+          var kd = f16(u8[kbase] | (u8[kbase + 1] << 8));
+          var kmin = f16(u8[kbase + 2] | (u8[kbase + 3] << 8));
           var scales = kbase + 4;
           var qs = kbase + 16;
           var is = 0;
           var qpos = 0;
           var vpos = sb;
           for (var group = 0; group < 256; group += 64) {
-            var s0 = scaleMinK4(view, scales, is);
-            var s1 = scaleMinK4(view, scales, is + 1);
-            var d0 = kd * s0.d;
-            var m0 = kmin * s0.m;
-            var d1 = kd * s1.d;
-            var m1 = kmin * s1.m;
+            // scaleMinK4 inlined. It used to return a fresh {d, m} object, twice
+            // per 64 weights — about 15 million allocations per token on this
+            // model, which cost more than every multiply it fed. Same integers,
+            // same order of operations, no allocation.
+            var qa = u8[scales + is];
+            var qa4 = u8[scales + is + 4];
+            var s0d;
+            var s0m;
+            if (is < 4) {
+              s0d = qa & 63;
+              s0m = qa4 & 63;
+            } else {
+              s0d = (qa4 & 15) | (((u8[scales + is - 4] >> 6) & 3) << 4);
+              s0m = (qa4 >> 4) | (((qa >> 6) & 3) << 4);
+            }
+            var qb1 = is + 1;
+            var qbb = u8[scales + qb1];
+            var qbb4 = u8[scales + qb1 + 4];
+            var s1d;
+            var s1m;
+            if (qb1 < 4) {
+              s1d = qbb & 63;
+              s1m = qbb4 & 63;
+            } else {
+              s1d = (qbb4 & 15) | (((u8[scales + qb1 - 4] >> 6) & 3) << 4);
+              s1m = (qbb4 >> 4) | (((qbb >> 6) & 3) << 4);
+            }
+            var d0 = kd * s0d;
+            var m0 = kmin * s0m;
+            var d1 = kd * s1d;
+            var m1 = kmin * s1m;
             for (i = 0; i < 32; i += 1) {
-              sum += (d0 * (view.getUint8(qs + qpos + i) & 15) - m0) * vec[vpos + i];
+              sum += (d0 * (u8[qs + qpos + i] & 15) - m0) * vec[vpos + i];
             }
             for (i = 0; i < 32; i += 1) {
-              sum += (d1 * (view.getUint8(qs + qpos + i) >> 4) - m1) * vec[vpos + 32 + i];
+              sum += (d1 * (u8[qs + qpos + i] >> 4) - m1) * vec[vpos + 32 + i];
             }
             qpos += 32;
             vpos += 64;
@@ -1965,7 +2043,7 @@
       case TYPE_Q6_K:
         for (var kb = 0; kb < cols; kb += 256) {
           var q6base = base + (kb / 256) * 210;
-          var q6d = f16(view.getUint16(q6base + 208, true));
+          var q6d = f16(u8[q6base + 208] | (u8[q6base + 209] << 8));
           var qlBase = q6base;
           var qhBase = q6base + 128;
           var scBase = q6base + 192;
@@ -1973,18 +2051,18 @@
             for (i = 0; i < 32; i += 1) {
               var idx = half * 32 + i;
               var is6 = i < 16 ? 0 : 1;
-              var ql0 = view.getUint8(qlBase + idx);
-              var ql1 = view.getUint8(qlBase + idx + 32);
-              var qh = view.getUint8(qhBase + idx);
+              var ql0 = u8[qlBase + idx];
+              var ql1 = u8[qlBase + idx + 32];
+              var qh = u8[qhBase + idx];
               var q1 = ((ql0 & 15) | (((qh >> 0) & 3) << 4)) - 32;
               var q2 = ((ql1 & 15) | (((qh >> 2) & 3) << 4)) - 32;
               var q3 = ((ql0 >> 4) | (((qh >> 4) & 3) << 4)) - 32;
               var q4 = ((ql1 >> 4) | (((qh >> 6) & 3) << 4)) - 32;
               var o = kb + half * 128 + i;
-              total += q6d * view.getInt8(scBase + half * 8 + is6 + 0) * q1 * vec[o];
-              total += q6d * view.getInt8(scBase + half * 8 + is6 + 2) * q2 * vec[o + 32];
-              total += q6d * view.getInt8(scBase + half * 8 + is6 + 4) * q3 * vec[o + 64];
-              total += q6d * view.getInt8(scBase + half * 8 + is6 + 6) * q4 * vec[o + 96];
+              total += q6d * i8[scBase + half * 8 + is6 + 0] * q1 * vec[o];
+              total += q6d * i8[scBase + half * 8 + is6 + 2] * q2 * vec[o + 32];
+              total += q6d * i8[scBase + half * 8 + is6 + 4] * q3 * vec[o + 64];
+              total += q6d * i8[scBase + half * 8 + is6 + 6] * q4 * vec[o + 96];
             }
           }
         }
@@ -2759,7 +2837,8 @@
     ) {
       throw new Error('the rarext gguf engine needs a model { kind: "gguf" | "hf", bytes: Uint8Array }');
     }
-    var gguf = parseModel(model);
+    var context = contextFor(model);
+    var gguf = context.gguf;
     var kv = gguf.kv;
     var arch = kv["general.architecture"];
     var ARCHS = { qwen2: true, llama: true, mistral: true, mixtral: true, gemma: true, phi3: true, phi2: true };
@@ -2802,7 +2881,7 @@
     var ropeOrigCtx = kv[arch + ".rope.scaling.original_context_length"] || 0;
     var group = nHead / nHeadKv;
 
-    var tokenizer = new Tokenizer(gguf);
+    var tokenizer = tokenizerFor(context);
     var embd = tensorOrNull(gguf, "token_embd.weight");
     if (embd === undefined) throw new Error("GGUF has no token_embd.weight");
     // Some architectures (Llama) ship a separate output matrix; others tie it to

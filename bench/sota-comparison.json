@@ -1,0 +1,93 @@
+{
+  "kind": "rarext.sota-comparison.v1",
+  "host": {
+    "cpu": "Intel i5-8257U",
+    "cores": 4,
+    "ramGiB": 8,
+    "gpu": "Intel Iris Plus 645 (no usable LLM compute)"
+  },
+  "prompt": "The capital of France is",
+  "steps": 4,
+  "weights": {
+    "file": "sha256-c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+    "bytes": 397807936,
+    "sha256": "c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+    "note": "the same file both engines read"
+  },
+  "rarext": {
+    "engine": "rarext-gguf-engine (pure JS, no third party)",
+    "textA": " Paris. It is",
+    "tokens": [
+      12095,
+      13,
+      1084,
+      374
+    ],
+    "deterministic": true,
+    "prefillMs": 4170.799037999997,
+    "decodeMsPerToken": 1038.199563000002,
+    "tokensPerSecond": 0.9632059534973991,
+    "tamper": {
+      "tensor": "blk.0.ffn_down.weight",
+      "flips": 8,
+      "changedOutput": 0,
+      "digestChangesAlways": true,
+      "firstTokenWithTamper": 12095
+    },
+    "receipt": {
+      "weightsSha256": "c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+      "engineSha256": "a90e9b1e59c6c512ce4585ab4bf42e5efd4e7f714cbc0a3a860018f76e76ff0d",
+      "tokensSha256": "894f4bcb487aaf711c3c58b1b40f76e92e2d8db5e9cabd2acf92c015c2d41b40"
+    }
+  },
+  "llamaCpp": {
+    "model": "qwen2.5:0.5b",
+    "textA": "Paris.",
+    "deterministic": true,
+    "tokens": 3,
+    "promptTokens": 34,
+    "msPerToken": 40.86332933333333,
+    "tokensPerSecond": 24.471819020000233,
+    "promptEvalMs": 72.909823,
+    "loadMs": 2154.983499,
+    "responseFields": [
+      "context",
+      "created_at",
+      "done",
+      "done_reason",
+      "eval_count",
+      "eval_duration",
+      "load_duration",
+      "model",
+      "prompt_eval_count",
+      "prompt_eval_duration",
+      "response",
+      "total_duration"
+    ]
+  },
+  "fair": {
+    "compared": true,
+    "renderedPrompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nThe capital of France is<|im_end|>\n<|im_start|>assistant\n",
+    "promptTokens": {
+      "rarext": 56,
+      "llamaCpp": 34
+    },
+    "promptTokensMatch": false,
+    "text": {
+      "rarext": "The capital of France",
+      "llamaCpp": "Paris."
+    },
+    "sameWeightsSameText": false
+  },
+  "throughput": {
+    "rarext": {
+      "msPerToken": 1038.199563000002,
+      "tokensPerSecond": 0.9632059534973991
+    },
+    "llamaCpp": {
+      "msPerToken": 40.86332933333333,
+      "tokensPerSecond": 24.471819020000233
+    },
+    "llamaCppFasterBy": 25.406631812379377
+  }
+}
