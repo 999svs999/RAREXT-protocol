@@ -384,9 +384,89 @@
           </a>
         </div>
 
+        <!-- The ranking below is generated from bench/ui-ux.json by
+             `node scripts/render-top10.mjs --write`, and `npm run bench:top10`
+             fails when it goes stale. Do not hand-edit between the markers. -->
+        <!-- TOP10:START -->
+        <div class="rank">
+          <h3>Against the top AI brands</h3>
+          <p class="small">
+            One harness, one weighting — performance 30%, accessibility 35%, UX 35% — on each brand's
+            best-measured surface. The top six are shown; the full table, the method, and the six
+            surfaces that refuse an anonymous visitor are in the
+            <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/UI-UX-BENCHMARK.md">benchmark</a>.
+          </p>
+          <div class="rank-wrap">
+            <table>
+            <caption class="sr-only">RAREXT ranked against the top AI brands by overall score</caption>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Measured surface</th>
+                <th scope="col">Perf</th>
+                <th scope="col">A11y</th>
+                <th scope="col">UX</th>
+                <th scope="col">Overall</th>
+              </tr>
+            </thead>
+            <tbody>
+            <tr class="is-self">
+              <th scope="row">1</th>
+              <td>RAREXT front door</td>
+              <td>100</td>
+              <td>100</td>
+              <td>100</td>
+              <td>100</td>
+            </tr>
+            <tr>
+              <th scope="row">2</th>
+              <td><span class="rank-brand">Google</span> Gemini (DeepMind) page</td>
+              <td>98</td>
+              <td>95</td>
+              <td>100</td>
+              <td>98</td>
+            </tr>
+            <tr>
+              <th scope="row">3</th>
+              <td><span class="rank-brand">Microsoft</span> Microsoft Copilot</td>
+              <td>88</td>
+              <td>96</td>
+              <td>93</td>
+              <td>93</td>
+            </tr>
+            <tr>
+              <th scope="row">4</th>
+              <td><span class="rank-brand">Anthropic</span> Claude product page</td>
+              <td>83</td>
+              <td>93</td>
+              <td>100</td>
+              <td>92</td>
+            </tr>
+            <tr>
+              <th scope="row">5</th>
+              <td><span class="rank-brand">Mistral</span> Mistral site</td>
+              <td>83</td>
+              <td>99</td>
+              <td>80</td>
+              <td>88</td>
+            </tr>
+            <tr>
+              <th scope="row">6</th>
+              <td><span class="rank-brand">You.com</span> You.com</td>
+              <td>79</td>
+              <td>83</td>
+              <td>93</td>
+              <td>85</td>
+            </tr>
+            </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- TOP10:END -->
+
         <p class="small">
           <a href="https://github.com/999svs999/RAREXT-protocol/blob/main/docs/UI-UX-BENCHMARK.md">
-            How this page measures against ChatGPT, Claude, Gemini, Copilot, and the rest →
+            The full comparison: method, per-app observations, and screenshots →
           </a>
         </p>
 
@@ -460,7 +540,7 @@ npm run test:showcase    # 44 / 44</code></pre>
             <h3>Verify this registry</h3>
             <p>Rebuild the Merkle root from the live bundle and compare it with the root the chain holds.</p>
           </div>
-          <a class="btn primary" href="./mirror/verify.html?root=42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794" data-pin-root>Verify this registry</a>
+          <a class="btn primary" href="./mirror/verify.html?root=35d2a8e11e582145455112027c8a0d19a7124d32179a8b69dd905016fcb4a000" data-pin-root>Verify this registry</a>
         </div>
       </section>
     </main>
@@ -473,7 +553,7 @@ npm run test:showcase    # 44 / 44</code></pre>
       <nav aria-label="Footer">
         <a href="./mirror/ai.html">Workbench</a>
         <a href="./mirror/gallery.html">Gallery</a>
-        <a href="./mirror/verify.html?root=42e863c3c160c8be8fa6d3ee6849bb549b8eb2cc4023ab94096fda537675b794" data-pin-root>Verifier</a>
+        <a href="./mirror/verify.html?root=35d2a8e11e582145455112027c8a0d19a7124d32179a8b69dd905016fcb4a000" data-pin-root>Verifier</a>
         <a href="./registry/">Registry</a>
         <a href="https://github.com/999svs999/RAREXT-protocol">Source</a>
       </nav>
