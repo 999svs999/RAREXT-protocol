@@ -28,6 +28,7 @@
     "train:native": "node scripts/train-native-lm.mjs",
     "bench:native": "node scripts/native-scaling.mjs",
     "demo:native": "node scripts/demo-native-ai.mjs",
+    "demo:native-web4": "RAREXT_WEB4_GGUF=\"$PWD/bench/native/rarext-native-1.rnlm\" RAREXT_WEB4_ENGINE_MODULE=\"$PWD/apps/runtime/engines/rarext-native-lm-engine.js\" RAREXT_WEB4_PROMPT=\"RAREXT is \" node scripts/demo-ai-on-rarext.mjs",
     "bench:storage": "node bench/storage/cli.mjs",
     "bench:throughput": "node --expose-gc bench/storage/throughput.mjs",
     "bench:top10": "node scripts/render-top10.mjs --check",

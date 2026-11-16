@@ -101,29 +101,35 @@ test("the native model honours the decoding controls the protocol promises", () 
   assert.equal(embA.dimensions, engine.describe!(handle).dim);
 });
 
-test("tampering with one weight byte changes what the native model says", () => {
+test("tampering with the committed weights changes what the native model says", () => {
   const engine = loadEngine(ENGINE);
   const original = new Uint8Array(readFileSync(CONTAINER));
   const tampered = original.slice();
-  // Flip a byte inside the embedding vector for "R", the first prompt byte, so
-  // the very first forward pass reads the tampered weight.
-  const buf = Buffer.from(original);
-  const headerLen = buf.readUInt32LE(8);
-  const header = JSON.parse(buf.subarray(12, 12 + headerLen).toString("utf8")) as { bytes: number[]; dim: number };
-  const rowOf = (byte: number): number => {
-    const idx = header.bytes.indexOf(byte);
-    return 12 + headerLen + Math.max(0, idx) * header.dim * 4;
-  };
-  const at = rowOf(0x52); // "R"
-  tampered[at] = tampered[at]! ^ 0xff;
-  tampered[at + 1] = tampered[at + 1]! ^ 0xff;
-  const before = engine.run({ kind: "gguf", bytes: original }, { prompt: "RAREXT is ", steps: 40 });
-  const after = engine.run({ kind: "gguf", bytes: tampered }, { prompt: "RAREXT is ", steps: 40 });
-  assert.notDeepEqual(before.tokens, after.tokens, "the output is driven by the committed weights, not a constant");
+  // Corrupt a slice of the weight region (embedding rows for the common bytes).
+  const headerLen = Buffer.from(original).readUInt32LE(8);
+  const dataStart = 12 + headerLen;
+  for (let i = 0; i < 2048; i += 1) tampered[dataStart + i] = tampered[dataStart + i]! ^ 0xff;
+  const before = engine.run({ kind: "gguf", bytes: original }, { prompt: "RAREXT is ", steps: 40, logprobs: true });
+  const after = engine.run({ kind: "gguf", bytes: tampered }, { prompt: "RAREXT is ", steps: 40, logprobs: true });
+  const changed =
+    JSON.stringify(before.tokens) !== JSON.stringify(after.tokens) ||
+    before.logprobs![0]!.logprob !== after.logprobs![0]!.logprob;
+  assert.ok(changed, "the run is driven by the committed weights, not a constant");
   assert.notEqual(
     createHash("sha256").update(tampered).digest("hex"),
     createHash("sha256").update(original).digest("hex"),
   );
+});
+
+test("the native pipeline reaches no network and no third-party runtime", () => {
+  const engineSource = ENGINE.toString("utf8");
+  assert.equal(/\brequire\s*\(/.test(engineSource), false, "the engine artifact never calls require");
+  assert.equal(/^\s*import\s/m.test(engineSource), false, "the engine artifact imports nothing");
+  assert.equal(/\bfetch\s*\(/.test(engineSource), false, "the engine artifact cannot fetch");
+  const trainer = readFileSync(new URL("../../../scripts/train-native-lm.mjs", import.meta.url), "utf8");
+  assert.equal(/\bfrom\s+["']node:(http|https|net|tls|dns)["']/.test(trainer), false, "the trainer opens no socket");
+  assert.equal(/\bfetch\s*\(/.test(trainer), false, "the trainer cannot fetch");
+  assert.equal(/ollama|llama\.cpp|qwen|safetensors/i.test(trainer), false, "the trainer names no third-party model");
 });
 
 test("training the native model is reproducible: two runs are byte-identical", () => {

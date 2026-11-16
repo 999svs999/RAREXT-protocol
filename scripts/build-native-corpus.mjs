@@ -12,7 +12,7 @@
  * Output: bench/native/corpus.txt (committed), and a digest line on stdout.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -89,10 +89,28 @@ for (const file of FILES) {
 }
 
 const corpus = chunks.join("").replace(/[ \t]+$/gm, "").trimEnd() + "\n";
+const digest = createHash("sha256").update(corpus).digest("hex");
+
+// The snapshot is the frozen source of truth a trained model names in its
+// header. Regenerating it after editing a source document produces DIFFERENT
+// text, which silently invalidates every model trained on the old bytes — so
+// refuse to overwrite unless the operator asks with --force, and say what a
+// change means.
+if (existsSync(OUT) && !process.argv.includes("--force")) {
+  const existing = readFileSync(OUT, "utf8");
+  const existingDigest = createHash("sha256").update(existing).digest("hex");
+  if (existingDigest !== digest) {
+    console.error(`refusing to overwrite the frozen corpus snapshot at ${OUT}`);
+    console.error(`  committed sha256 ${existingDigest}`);
+    console.error(`  regenerated      ${digest}`);
+    console.error("  a source document changed. Re-run with --force, then RETRAIN every");
+    console.error("  model that names the old digest (`npm run train:native`).");
+    process.exit(2);
+  }
+}
+
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(OUT, corpus);
-
-const digest = createHash("sha256").update(corpus).digest("hex");
 const distinct = new Set([...Buffer.from(corpus, "utf8")]);
 console.log(`corpus   ${OUT}`);
 console.log(`bytes    ${Buffer.byteLength(corpus, "utf8")}`);

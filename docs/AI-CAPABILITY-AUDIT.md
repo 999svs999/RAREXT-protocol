@@ -40,6 +40,17 @@ deterministic fixture. The same engine accepts llama, mistral, mixtral, qwen2,
 gemma, phi2, and phi3 containers. The runtime can host a larger model; the
 host cannot hold one, and the ladder says so instead of pretending.
 
+**That framing is no longer the whole story, and the difference matters.** Until
+[NATIVE-MODEL.md](NATIVE-MODEL.md), the capable model on RAREXT's path — the one
+this audit actually ran — was *borrowed*: Qwen2.5-0.5B, trained by someone else
+for someone else's purpose. RAREXT could verify and receipt a borrowed model; it
+could not grow one. It now can. `bench/native/rarext-native-1.rnlm` is a language
+model RAREXT trained from a seeded initialization on its own prose, with no
+pretrained checkpoint (`pretrained=false`, `externalModelBytes=0`), and RAREXT's
+own engine runs it. It is 99,418 parameters and ~3 bits/byte — small, and the
+document says so — but it is RAREXT's, and its loss falls as training compute
+rises. The audit's capability finding is unchanged; the *dependency* finding is.
+
 ## What was measured
 
 Host: 8.0 GiB RAM, Intel Core i5-8257U, macOS, Node v24.15.0.

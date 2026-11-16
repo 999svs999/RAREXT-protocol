@@ -87,14 +87,30 @@ function spawnReady(args, ready) {
  *  engine reads are genuinely different (the header/tokenizer stay intact). */
 function perturbContainer(source, target) {
   const bytes = readFileSync(source);
-  const jsonLen = Number(bytes.readBigUInt64LE(8));
-  const dataStart = Math.ceil((16 + jsonLen) / 32) * 32;
+  // RXHF/GGUF keep their header length as a big-endian u64 at offset 8; a
+  // RAREXT-native-lm container ("RNLM") keeps a little-endian u32 there.
+  const isNativeLm = bytes.slice(0, 4).toString("ascii") === "RNLM";
+  const jsonLen = isNativeLm ? bytes.readUInt32LE(8) : Number(bytes.readBigUInt64LE(8));
+  const dataStart = isNativeLm ? 12 + jsonLen : Math.ceil((16 + jsonLen) / 32) * 32;
   const copy = Buffer.from(bytes);
   let changed = 0;
-  for (let offset = dataStart; offset < copy.length; offset += 16) {
-    if (copy[offset] !== 0) {
-      copy[offset] = 0;
-      changed += 1;
+  if (isNativeLm) {
+    // A native-lm container stores float32 weights. Zeroing single bytes only
+    // touches the least-significant mantissa bits, so zero a whole weight every
+    // few columns instead — the run is then genuinely driven by different
+    // numbers, not by rounding noise.
+    for (let offset = dataStart; offset + 4 <= copy.length; offset += 16) {
+      if (copy.readFloatLE(offset) !== 0) {
+        copy.writeFloatLE(0, offset);
+        changed += 1;
+      }
+    }
+  } else {
+    for (let offset = dataStart; offset < copy.length; offset += 16) {
+      if (copy[offset] !== 0) {
+        copy[offset] = 0;
+        changed += 1;
+      }
     }
   }
   writeFileSync(target, copy);

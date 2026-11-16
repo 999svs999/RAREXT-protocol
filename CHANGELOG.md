@@ -11,6 +11,33 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **RAREXT now trains its own language model — the third-party model dependency
+  is gone.** Until now the capable model on RAREXT's path was borrowed:
+  Qwen2.5-0.5B, built by someone else, carrying someone else's tokenizer and
+  corpus. `scripts/train-native-lm.mjs` grows a model from a **seeded xorshift32
+  initialization** on RAREXT's own prose (`bench/native/corpus.txt`, 321,246
+  bytes, `sha256:1eddb9f745964ef6…`) with hand-written backprop in pure JS — no
+  framework, no pretrained checkpoint, no network. The container
+  `bench/native/rarext-native-1.rnlm` (399,101 bytes,
+  `sha256:615fb449c4a5a2bd…`) declares `pretrained=false` and
+  `externalModelBytes=0` in its own header and is run by a new RAREXT engine
+  artifact, `apps/runtime/engines/rarext-native-lm-engine.js`, evaluated in a
+  no-`require`, no-filesystem `node:vm`. It is small on purpose (99,418 params,
+  **2.0552 nats/byte** held loss) and `docs/NATIVE-MODEL.md` refuses to pretend
+  otherwise. What it establishes: capability is a **compute dial** RAREXT turns —
+  the same architecture falls from 3.54 to 2.97 bits/byte as steps rise
+  1,000 → 12,000 — not a checkpoint RAREXT has to borrow. Training is
+  byte-reproducible (two runs, one digest), proven by a test; `npm run demo:native`
+  checks the lineage, the corpus digest, determinism, seeded replay, pinned
+  tokens, stop sequences, and a tamper case. One run is recorded *against* the
+  scaling story: the wider model (`rarext-wide-1`, 246,722 params, 6,000 steps)
+  scored 2.3669, worse than the narrow model's 12,000-step 2.0552. The model and
+  its engine also run on the network — `npm run demo:native-web4` shards both into
+  RAREXT, has two independent nodes fetch and verify them, reproduces the same
+  trace, and shows a perturbed copy of the committed weights answering
+  differently — so the whole path is RAREXT's, with no third-party model anywhere
+  in it.
+
 - **Fixed: a Q6_K dequantization stride bug corrupted every Q6_K tensor — and the
   oracle meant to catch it shared the same misreading.** A Q6_K super-block holds
   256 values as two halves; each half consumes **64 `ql` bytes and 32 `qh`
