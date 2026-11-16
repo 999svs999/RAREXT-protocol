@@ -1,0 +1,294 @@
+{
+  "kind": "rarext.native-lm-training.v1",
+  "label": "rarext-native-1",
+  "container": "bench/native/rarext-native-1.rnlm",
+  "containerSha256": "615fb449c4a5a2bd4b5f02cdedc963d0dbe0475ea630879a1643770db8bfbecb",
+  "containerBytes": 399101,
+  "params": 99418,
+  "config": {
+    "context": 24,
+    "dim": 16,
+    "hidden": 192,
+    "steps": 12000,
+    "batch": 32,
+    "lr": 0.003,
+    "seed": 1380012613,
+    "vocab": 122
+  },
+  "corpus": {
+    "path": "bench/native/corpus.txt",
+    "bytes": 321246,
+    "sha256": "1eddb9f745964ef647929046a8ca9ac1aa07567f87bed42bda7ecf89564952ed"
+  },
+  "lineage": {
+    "pretrained": false,
+    "externalModelBytes": 0,
+    "initialization": "xorshift32 seeded in scripts/train-native-lm.mjs",
+    "corpus": "RAREXT's own documents, snapshotted in-repo",
+    "trainedBy": "scripts/train-native-lm.mjs (pure JS, no framework)"
+  },
+  "final": {
+    "heldLoss": 2.0552,
+    "bitsPerByte": 2.9651,
+    "seconds": 362.4
+  },
+  "history": [
+    {
+      "step": 1,
+      "batchLoss": 4.8325,
+      "heldLoss": 4.7654
+    },
+    {
+      "step": 250,
+      "batchLoss": 2.3353,
+      "heldLoss": 2.6935
+    },
+    {
+      "step": 500,
+      "batchLoss": 2.7178,
+      "heldLoss": 2.5362
+    },
+    {
+      "step": 750,
+      "batchLoss": 2.0641,
+      "heldLoss": 2.5111
+    },
+    {
+      "step": 1000,
+      "batchLoss": 2.5284,
+      "heldLoss": 2.4534,
+      "sample": "rongerand red iod red and fare fing re the ne terend int a der fion the ront red ard and ferend the den the the deces and ing and rend rones and rend the ront r"
+    },
+    {
+      "step": 1250,
+      "batchLoss": 2.6158,
+      "heldLoss": 2.4503
+    },
+    {
+      "step": 1500,
+      "batchLoss": 2.0297,
+      "heldLoss": 2.435
+    },
+    {
+      "step": 1750,
+      "batchLoss": 2.2677,
+      "heldLoss": 2.3861
+    },
+    {
+      "step": 2000,
+      "batchLoss": 2.334,
+      "heldLoss": 2.3939,
+      "sample": "and rope and the cher and it ing res ing ing the cher the cher ane the prover the the the whe der ane the che ing the cheres int ing the ded and ropust ing the "
+    },
+    {
+      "step": 2250,
+      "batchLoss": 2.623,
+      "heldLoss": 2.3712
+    },
+    {
+      "step": 2500,
+      "batchLoss": 2.3225,
+      "heldLoss": 2.3668
+    },
+    {
+      "step": 2750,
+      "batchLoss": 2.268,
+      "heldLoss": 2.3646
+    },
+    {
+      "step": 3000,
+      "batchLoss": 2.3997,
+      "heldLoss": 2.36,
+      "sample": "ron and nor anthe commit in the complit on the ronthe complit rom the fored the mand and the pore coren and and an the commit ron s and ingent ron and an wored "
+    },
+    {
+      "step": 3250,
+      "batchLoss": 1.94,
+      "heldLoss": 2.3496
+    },
+    {
+      "step": 3500,
+      "batchLoss": 2.4423,
+      "heldLoss": 2.3394
+    },
+    {
+      "step": 3750,
+      "batchLoss": 2.796,
+      "heldLoss": 2.3268
+    },
+    {
+      "step": 4000,
+      "batchLoss": 2.2693,
+      "heldLoss": 2.3218,
+      "sample": "mathe ded fine the shathe de the she che ken with the shat and and ing the deathe prate prot che ken whe des and the dect and the shathe de the samest an wath t"
+    },
+    {
+      "step": 4250,
+      "batchLoss": 1.6764,
+      "heldLoss": 2.3277
+    },
+    {
+      "step": 4500,
+      "batchLoss": 2.076,
+      "heldLoss": 2.3132
+    },
+    {
+      "step": 4750,
+      "batchLoss": 2.3192,
+      "heldLoss": 2.2985
+    },
+    {
+      "step": 5000,
+      "batchLoss": 1.8007,
+      "heldLoss": 2.3023,
+      "sample": "the comene the cherded and the camestred the sarded and the camest the seres and the seres and the seres and the seres and the seres and the seres and the seres"
+    },
+    {
+      "step": 5250,
+      "batchLoss": 1.7584,
+      "heldLoss": 2.2879
+    },
+    {
+      "step": 5500,
+      "batchLoss": 2.2009,
+      "heldLoss": 2.2766
+    },
+    {
+      "step": 5750,
+      "batchLoss": 2.2199,
+      "heldLoss": 2.2603
+    },
+    {
+      "step": 6000,
+      "batchLoss": 2.3758,
+      "heldLoss": 2.2573,
+      "sample": "mathe the comant a mares the come the camise the commits a pages (te the tore the commute the som the comist co the ded and the come the camist an weres the com"
+    },
+    {
+      "step": 6250,
+      "batchLoss": 1.9825,
+      "heldLoss": 2.2531
+    },
+    {
+      "step": 6500,
+      "batchLoss": 2.2113,
+      "heldLoss": 2.2446
+    },
+    {
+      "step": 6750,
+      "batchLoss": 1.7628,
+      "heldLoss": 2.2289
+    },
+    {
+      "step": 7000,
+      "batchLoss": 2.2339,
+      "heldLoss": 2.2281,
+      "sample": "proct pate coperstit a the propent a pertite a dint the prot cons the prot and recoren the contite bund the and a parsithe pront the proper a const the campled "
+    },
+    {
+      "step": 7250,
+      "batchLoss": 2.1383,
+      "heldLoss": 2.2108
+    },
+    {
+      "step": 7500,
+      "batchLoss": 2.5513,
+      "heldLoss": 2.2015
+    },
+    {
+      "step": 7750,
+      "batchLoss": 3.0106,
+      "heldLoss": 2.1919
+    },
+    {
+      "step": 8000,
+      "batchLoss": 2.2669,
+      "heldLoss": 2.1839,
+      "sample": "the some the stote not counst the store the chits it the some the the minted the store the the minted the store the the minted the store the the minted the stor"
+    },
+    {
+      "step": 8250,
+      "batchLoss": 2.0725,
+      "heldLoss": 2.1565
+    },
+    {
+      "step": 8500,
+      "batchLoss": 2.2905,
+      "heldLoss": 2.1778
+    },
+    {
+      "step": 8750,
+      "batchLoss": 1.9591,
+      "heldLoss": 2.1374
+    },
+    {
+      "step": 9000,
+      "batchLoss": 2.8527,
+      "heldLoss": 2.1278,
+      "sample": "is nover foom A fient a cloved fo merves the some and a fise fare fared a clains and a fermith a proved fore fare fare frote foot the provider foom the seand th"
+    },
+    {
+      "step": 9250,
+      "batchLoss": 1.7727,
+      "heldLoss": 2.1343
+    },
+    {
+      "step": 9500,
+      "batchLoss": 2.1859,
+      "heldLoss": 2.1371
+    },
+    {
+      "step": 9750,
+      "batchLoss": 2.2527,
+      "heldLoss": 2.1221
+    },
+    {
+      "step": 10000,
+      "batchLoss": 1.9085,
+      "heldLoss": 2.086,
+      "sample": "real chal call mine provider is real dester and reportes the minemented refore stor the reportes the reploy coll male — and the miner the provider fis the rep"
+    },
+    {
+      "step": 10250,
+      "batchLoss": 1.9629,
+      "heldLoss": 2.098
+    },
+    {
+      "step": 10500,
+      "batchLoss": 2.1991,
+      "heldLoss": 2.0862
+    },
+    {
+      "step": 10750,
+      "batchLoss": 1.6407,
+      "heldLoss": 2.0881
+    },
+    {
+      "step": 11000,
+      "batchLoss": 1.9522,
+      "heldLoss": 2.068,
+      "sample": "nothe and the doce and a boul the a chain age soke sound and a file a key and verifier both and a committed and at is now a butes the come and and verifier beco"
+    },
+    {
+      "step": 11250,
+      "batchLoss": 2.5062,
+      "heldLoss": 2.0617
+    },
+    {
+      "step": 11500,
+      "batchLoss": 2.6547,
+      "heldLoss": 2.0542
+    },
+    {
+      "step": 11750,
+      "batchLoss": 2.0269,
+      "heldLoss": 2.0583
+    },
+    {
+      "step": 12000,
+      "batchLoss": 2.3214,
+      "heldLoss": 2.0552,
+      "sample": "inster in the dectide inded to not the recompt the server the recompt the and the recorded in inted. A RAREXT's own server ho horder the regined the signed by t"
+    }
+  ]
+}

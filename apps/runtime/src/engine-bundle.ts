@@ -421,6 +421,25 @@ export interface NativeEngine {
   ): { set: "long" | "short"; values: number[] } | null;
   /** Present on the wasm runtime: the instantiated module's exports. */
   wasm?: WebAssembly.Exports;
+  /**
+   * Present on the native-lm runtime: the container's own declaration of what
+   * it is (architecture, parameter count, context, lineage, training record).
+   */
+  describe?(model: unknown): {
+    kind: string;
+    label: string;
+    architecture: string;
+    family: string;
+    parameters: number;
+    contextLength: number;
+    dim: number;
+    hidden: number;
+    vocab: number;
+    quantization: string | null;
+    format: string;
+    lineage: Record<string, unknown>;
+    training: Record<string, unknown>;
+  };
   /** Present on the GGUF runtime: LayerNorm (Phi-2), for tests. */
   layerNorm?(
     out: Float32Array,
@@ -656,6 +675,7 @@ export function loadEngine(
     decodeTokens?: unknown;
     decodePrefixes?: unknown;
     embed?: unknown;
+    describe?: unknown;
   };
   const run = exports.run;
   if (typeof run !== "function") {
@@ -707,6 +727,9 @@ export function loadEngine(
       : {}),
     ...(typeof exports.embed === "function"
       ? { embed: exports.embed as NonNullable<NativeEngine["embed"]> }
+      : {}),
+    ...(typeof exports.describe === "function"
+      ? { describe: exports.describe as NonNullable<NativeEngine["describe"]> }
       : {}),
   };
 }

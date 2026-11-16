@@ -1,0 +1,84 @@
+{
+  "kind": "rarext.native-scaling.v1",
+  "host": "Intel i5-8257U · 8 GiB · macOS · Node v24.15.0",
+  "corpus": {
+    "path": "bench/native/corpus.txt",
+    "bytes": 321246,
+    "sha256": "1eddb9f745964ef647929046a8ca9ac1aa07567f87bed42bda7ecf89564952ed"
+  },
+  "claim": "A RAREXT-native language model trained from a seeded initialization on RAREXT's own corpus. No pretrained weights, no downloaded checkpoint, no framework, no network.",
+  "runs": [
+    {
+      "label": "scale-s",
+      "container": "bench/native/scale-s.rnlm",
+      "containerSha256": "16b80567d8e5fbc13fde487dd67c896b661b39a96ec33d5f1afc1c81768e93c3",
+      "architecture": {
+        "context": 24,
+        "dim": 16,
+        "hidden": 192
+      },
+      "params": 99418,
+      "steps": 1000,
+      "compute": 99418000,
+      "seconds": 36.3,
+      "heldLossNatsPerByte": 2.4534,
+      "heldBitsPerByte": 3.5395,
+      "pretrained": false,
+      "externalModelBytes": 0
+    },
+    {
+      "label": "scale-m",
+      "container": "bench/native/scale-m.rnlm",
+      "containerSha256": "4d2ae1f5bd0622138bbc1ed86d09d7ba6621fa5846a781e02b36dec66de4d5e0",
+      "architecture": {
+        "context": 24,
+        "dim": 16,
+        "hidden": 192
+      },
+      "params": 99418,
+      "steps": 4000,
+      "compute": 397672000,
+      "seconds": 124.8,
+      "heldLossNatsPerByte": 2.3218,
+      "heldBitsPerByte": 3.3497,
+      "pretrained": false,
+      "externalModelBytes": 0
+    },
+    {
+      "label": "rarext-native-1",
+      "container": "bench/native/rarext-native-1.rnlm",
+      "containerSha256": "615fb449c4a5a2bd4b5f02cdedc963d0dbe0475ea630879a1643770db8bfbecb",
+      "architecture": {
+        "context": 24,
+        "dim": 16,
+        "hidden": 192
+      },
+      "params": 99418,
+      "steps": 12000,
+      "compute": 1193016000,
+      "seconds": 362.4,
+      "heldLossNatsPerByte": 2.0552,
+      "heldBitsPerByte": 2.9651,
+      "pretrained": false,
+      "externalModelBytes": 0
+    },
+    {
+      "label": "rarext-wide-1",
+      "container": "bench/native/rarext-wide-1.rnlm",
+      "containerSha256": "e014f406f9d89f9705385701db58fc3ce73b44f2c44124b7045a4f2dcadbe9a8",
+      "architecture": {
+        "context": 32,
+        "dim": 20,
+        "hidden": 320
+      },
+      "params": 246722,
+      "steps": 6000,
+      "compute": 1480332000,
+      "seconds": 306.5,
+      "heldLossNatsPerByte": 2.3669,
+      "heldBitsPerByte": 3.4147,
+      "pretrained": false,
+      "externalModelBytes": 0
+    }
+  ]
+}

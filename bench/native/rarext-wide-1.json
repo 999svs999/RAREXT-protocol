@@ -1,0 +1,74 @@
+{
+  "kind": "rarext.native-lm-training.v1",
+  "label": "rarext-wide-1",
+  "container": "bench/native/rarext-wide-1.rnlm",
+  "containerSha256": "e014f406f9d89f9705385701db58fc3ce73b44f2c44124b7045a4f2dcadbe9a8",
+  "containerBytes": 988316,
+  "params": 246722,
+  "config": {
+    "context": 32,
+    "dim": 20,
+    "hidden": 320,
+    "steps": 6000,
+    "batch": 32,
+    "lr": 0.003,
+    "seed": 1380012613,
+    "vocab": 122
+  },
+  "corpus": {
+    "path": "bench/native/corpus.txt",
+    "bytes": 321246,
+    "sha256": "1eddb9f745964ef647929046a8ca9ac1aa07567f87bed42bda7ecf89564952ed"
+  },
+  "lineage": {
+    "pretrained": false,
+    "externalModelBytes": 0,
+    "initialization": "xorshift32 seeded in scripts/train-native-lm.mjs",
+    "corpus": "RAREXT's own documents, snapshotted in-repo",
+    "trainedBy": "scripts/train-native-lm.mjs (pure JS, no framework)"
+  },
+  "final": {
+    "heldLoss": 2.3669,
+    "bitsPerByte": 3.4147,
+    "seconds": 306.5
+  },
+  "history": [
+    {
+      "step": 1,
+      "batchLoss": 4.7935,
+      "heldLoss": 4.7359
+    },
+    {
+      "step": 1000,
+      "batchLoss": 2.4201,
+      "heldLoss": 2.5041
+    },
+    {
+      "step": 2000,
+      "batchLoss": 2.3145,
+      "heldLoss": 2.441
+    },
+    {
+      "step": 3000,
+      "batchLoss": 2.4603,
+      "heldLoss": 2.4273
+    },
+    {
+      "step": 4000,
+      "batchLoss": 2.3221,
+      "heldLoss": 2.3831,
+      "sample": "ine the pand the pund the bect an the provede the ne the the the sede the deco ped ige the the the sede the dect re the prot and the sede the sede the ment and "
+    },
+    {
+      "step": 5000,
+      "batchLoss": 2.2275,
+      "heldLoss": 2.3684
+    },
+    {
+      "step": 6000,
+      "batchLoss": 1.6712,
+      "heldLoss": 2.3669,
+      "sample": "ine rove and at ing it the pune the pallit the the prove ( and the palis the pond in the prover fis the pertit the cond the pale the palis the pon the patis the"
+    }
+  ]
+}

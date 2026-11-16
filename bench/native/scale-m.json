@@ -1,0 +1,126 @@
+{
+  "kind": "rarext.native-lm-training.v1",
+  "label": "scale-m",
+  "container": "bench/native/scale-m.rnlm",
+  "containerSha256": "4d2ae1f5bd0622138bbc1ed86d09d7ba6621fa5846a781e02b36dec66de4d5e0",
+  "containerBytes": 399092,
+  "params": 99418,
+  "config": {
+    "context": 24,
+    "dim": 16,
+    "hidden": 192,
+    "steps": 4000,
+    "batch": 32,
+    "lr": 0.003,
+    "seed": 1380012613,
+    "vocab": 122
+  },
+  "corpus": {
+    "path": "bench/native/corpus.txt",
+    "bytes": 321246,
+    "sha256": "1eddb9f745964ef647929046a8ca9ac1aa07567f87bed42bda7ecf89564952ed"
+  },
+  "lineage": {
+    "pretrained": false,
+    "externalModelBytes": 0,
+    "initialization": "xorshift32 seeded in scripts/train-native-lm.mjs",
+    "corpus": "RAREXT's own documents, snapshotted in-repo",
+    "trainedBy": "scripts/train-native-lm.mjs (pure JS, no framework)"
+  },
+  "final": {
+    "heldLoss": 2.3218,
+    "bitsPerByte": 3.3497,
+    "seconds": 124.8
+  },
+  "history": [
+    {
+      "step": 1,
+      "batchLoss": 4.8325,
+      "heldLoss": 4.7654
+    },
+    {
+      "step": 250,
+      "batchLoss": 2.3353,
+      "heldLoss": 2.6935
+    },
+    {
+      "step": 500,
+      "batchLoss": 2.7178,
+      "heldLoss": 2.5362
+    },
+    {
+      "step": 750,
+      "batchLoss": 2.0641,
+      "heldLoss": 2.5111
+    },
+    {
+      "step": 1000,
+      "batchLoss": 2.5284,
+      "heldLoss": 2.4534,
+      "sample": "rongerand red iod red and fare fing re the ne terend int a der fion the ront red ard and ferend the den the the deces and ing and rend rones and rend the ront r"
+    },
+    {
+      "step": 1250,
+      "batchLoss": 2.6158,
+      "heldLoss": 2.4503
+    },
+    {
+      "step": 1500,
+      "batchLoss": 2.0297,
+      "heldLoss": 2.435
+    },
+    {
+      "step": 1750,
+      "batchLoss": 2.2677,
+      "heldLoss": 2.3861
+    },
+    {
+      "step": 2000,
+      "batchLoss": 2.334,
+      "heldLoss": 2.3939,
+      "sample": "and rope and the cher and it ing res ing ing the cher the cher ane the prover the the the whe der ane the che ing the cheres int ing the ded and ropust ing the "
+    },
+    {
+      "step": 2250,
+      "batchLoss": 2.623,
+      "heldLoss": 2.3712
+    },
+    {
+      "step": 2500,
+      "batchLoss": 2.3225,
+      "heldLoss": 2.3668
+    },
+    {
+      "step": 2750,
+      "batchLoss": 2.268,
+      "heldLoss": 2.3646
+    },
+    {
+      "step": 3000,
+      "batchLoss": 2.3997,
+      "heldLoss": 2.36,
+      "sample": "ron and nor anthe commit in the complit on the ronthe complit rom the fored the mand and the pore coren and and an the commit ron s and ingent ron and an wored "
+    },
+    {
+      "step": 3250,
+      "batchLoss": 1.94,
+      "heldLoss": 2.3496
+    },
+    {
+      "step": 3500,
+      "batchLoss": 2.4423,
+      "heldLoss": 2.3394
+    },
+    {
+      "step": 3750,
+      "batchLoss": 2.796,
+      "heldLoss": 2.3268
+    },
+    {
+      "step": 4000,
+      "batchLoss": 2.2693,
+      "heldLoss": 2.3218,
+      "sample": "mathe ded fine the shathe de the she che ken with the shat and and ing the deathe prate prot che ken whe des and the dect and the shathe de the samest an wath t"
+    }
+  ]
+}

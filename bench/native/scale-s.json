@@ -1,0 +1,63 @@
+{
+  "kind": "rarext.native-lm-training.v1",
+  "label": "scale-s",
+  "container": "bench/native/scale-s.rnlm",
+  "containerSha256": "16b80567d8e5fbc13fde487dd67c896b661b39a96ec33d5f1afc1c81768e93c3",
+  "containerBytes": 399092,
+  "params": 99418,
+  "config": {
+    "context": 24,
+    "dim": 16,
+    "hidden": 192,
+    "steps": 1000,
+    "batch": 32,
+    "lr": 0.003,
+    "seed": 1380012613,
+    "vocab": 122
+  },
+  "corpus": {
+    "path": "bench/native/corpus.txt",
+    "bytes": 321246,
+    "sha256": "1eddb9f745964ef647929046a8ca9ac1aa07567f87bed42bda7ecf89564952ed"
+  },
+  "lineage": {
+    "pretrained": false,
+    "externalModelBytes": 0,
+    "initialization": "xorshift32 seeded in scripts/train-native-lm.mjs",
+    "corpus": "RAREXT's own documents, snapshotted in-repo",
+    "trainedBy": "scripts/train-native-lm.mjs (pure JS, no framework)"
+  },
+  "final": {
+    "heldLoss": 2.4534,
+    "bitsPerByte": 3.5395,
+    "seconds": 36.3
+  },
+  "history": [
+    {
+      "step": 1,
+      "batchLoss": 4.8325,
+      "heldLoss": 4.7654
+    },
+    {
+      "step": 250,
+      "batchLoss": 2.3353,
+      "heldLoss": 2.6935
+    },
+    {
+      "step": 500,
+      "batchLoss": 2.7178,
+      "heldLoss": 2.5362
+    },
+    {
+      "step": 750,
+      "batchLoss": 2.0641,
+      "heldLoss": 2.5111
+    },
+    {
+      "step": 1000,
+      "batchLoss": 2.5284,
+      "heldLoss": 2.4534,
+      "sample": "rongerand red iod red and fare fing re the ne terend int a der fion the ront red ard and ferend the den the the deces and ing and rend rones and rend the ront r"
+    }
+  ]
+}
