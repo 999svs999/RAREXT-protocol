@@ -1,4 +1,13 @@
-# The front door links ./mirror/* — the same layout the gh-pages projection
-# publishes. Pages serves site/ verbatim, where the mirror lives under
-# registry/mirror, so rewrite (200, not 302) to keep the URL the page links to.
-/mirror/*  /registry/mirror/:splat  200
+# The front door links ./mirror/*.html — the same layout the gh-pages
+# projection publishes. Pages serves site/ verbatim, where the mirror lives
+# under registry/mirror, so rewrite (200, not 302) to keep the URL the page
+# links to.
+#
+# The target is the extensionless path on purpose: Pages answers any request
+# for *.html with a 308 to the extensionless URL, even after a rewrite. Pointing
+# the rewrite straight at /registry/mirror/<name> serves the page in one hop
+# instead of two. Measured: /mirror/verify.html was 308 -> 200, and is 200 after
+# this change (scripts/test-showcase-ui.mjs asserts the titles either way).
+/mirror/ai.html       /registry/mirror/ai       200
+/mirror/gallery.html  /registry/mirror/gallery  200
+/mirror/verify.html   /registry/mirror/verify   200
