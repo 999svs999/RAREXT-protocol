@@ -1,99 +1,111 @@
 # Launch the RAREXT web4 AI showcase on rarext.com
 
-The showcase is the committed `site/` tree. It is already live on the reference
-host (`https://999svs999.github.io/RAREXT-protocol/`), and `rarext.com` is a
-Cloudflare-hosted property today, so there are two ways to put it at the sketch:
-**Path A** keeps Cloudflare and replaces what `.com` serves; **Path B** moves the
-domain to GitHub Pages. Both need a credential this repository does not hold.
+The showcase is the committed `site/` tree. It is live at **`https://rarext.com/`**
+and **`https://www.rarext.com/`**, served from the Cloudflare Pages project
+`rarext-com`. `rarext.co` was deliberately left alone and still serves the old
+Worker.
 
-> **`rarext.co` is not touched by either path.** It stays exactly as it is.
+> **`rarext.co` is not touched by the cutover.** It still serves the Worker
+> `rarext`, byte for byte.
 
-## Status (2026-11-15): deployed, one DNS step from live
+## Status (2026-11-16): cut over and verified live
 
-- The showcase is **deployed** to the Pages project `rarext-com` and serving at
-  `https://rarext-com.pages.dev/`.
-- `rarext.com` is **registered on that project** (domain enabled; status
-  `pending`, waiting on a CNAME).
-- **Both `rarext.com` and `rarext.co` are custom domains of the Worker `rarext`**
-  today, so the hostname has to be released from the Worker as well as recorded.
-- `bash scripts/cutover-rarext-com.sh` probes every permission it needs before it
-  changes anything, and refuses rather than half-move the domain.
+`rarext.com` and `www.rarext.com` now serve the Pages showcase. Measured after
+the move, not asserted:
 
-**Which credential does what (measured 2026-11-15, not assumed):**
+| Check | Result |
+| --- | --- |
+| Routes on `https://rarext.com` | **7/7** — `/`, `/mirror/{ai,gallery,verify}.html`, `/registry/`, `/styles.css`, `/proof-widget.js` all **200 without a redirect** |
+| Title | `<title>RAREXT — don’t trust the model. Check it.</title>` |
+| Pages custom domains | `rarext.com` **active**, `www.rarext.com` **active** |
+| DNS | proxied `CNAME rarext.com` and `CNAME www.rarext.com` → `rarext-com.pages.dev` |
+| Worker custom domains remaining | only `rarext.co` and `www.rarext.co` |
+| TLS | `CN=rarext.com`, Google Trust Services WE1, valid to 2027-02-14 |
+| Unknown path | `/definitely-not-a-page` → **404** |
+| Showcase suite against the apex | **44/44** (`SHOWCASE_URL=https://rarext.com/ npm run test:showcase`) |
+| `rarext.co` | 40232 B, old title — unchanged |
+| Live UI/UX score | **100** warm (99 cold first hit), TTFB 466 → 283 → **205 ms** |
+
+The cutover is `bash scripts/cutover-rarext-com.sh --apply`, idempotent — a
+second run reports "already moved", re-asserts the records, and finds the Pages
+domains already `active,active`.
+
+**Which credential did what (measured 2026-11-16, not assumed):**
 
 | Capability | Holder | Evidence |
 | --- | --- | --- |
 | Deploy Pages | ops token `~/.hermes/.env` | live deployments |
-| **Workers:Edit** — release a custom domain, upload a script | ops token `~/.hermes/.env` | script upload reached the compiler; deleting a Worker custom domain returned `100114 Origin … not found`, not an auth error |
-| Pages:Edit — attach a custom domain | login token `~/.hermes/cloudflare-oauth.json` | add + delete of a Pages custom domain succeeded |
-| **Zone.DNS:Edit** — create/update the record | **nobody** | `Authentication error` on read and write, both zones |
+| Workers:Edit — release a custom domain | ops token | `DELETE /workers/domains/{id}` succeeded |
+| Pages:Edit — attach a custom domain | login token `~/.hermes/cloudflare-oauth.json` | domains attached |
+| **Account API Tokens:Edit** — mint a scoped token | ops token | `POST /accounts/{acct}/tokens` returned a token with `success: true` |
+| **Zone.DNS:Edit** | minted `rarext-com-dns-cutover` | created, verified on read, then used for the move |
 
-So the earlier note that the ops token has "neither" was wrong: it has Workers.
-The only genuinely missing permission is DNS, and no login can be given more
-scope — an OAuth session may not mint an API token (`POST /user/tokens` returns
-`9109 Unauthorized`).
+Two credential findings worth keeping:
 
-Two more measured facts decide the order:
+- **`CLOUDFLARE_DNS_TOKEN` in `~/.hermes/.env` is scoped to the wrong zone.**
+  It authenticates (`9109 Unauthorized to access requested resource`, not
+  "invalid token") but lists only `saikougoods.com`; it cannot read or write
+  `rarext.com`. Do not reuse it for this.
+- **The ops token can mint account-owned tokens, and that broke the blocker.**
+  An OAuth *session* cannot (`POST /user/tokens` → `9109`), which is what made
+  the DNS permission look like it required a human. `POST
+  /accounts/{acct}/tokens` does work with the ops token: `DNS Write`
+  (`4755a26eedb94da69e1066d98aa820be`) with resource
+  `com.cloudflare.api.account.zone.1975c4d2ffb4ffdadd366e1a5285df90` produced
+  `rarext-com-dns-cutover` (id `084e99b6deed1180d12265a867c352b7`), stored as
+  `CLOUDFLARE_CUTOVER_TOKEN`. `/user/tokens/verify` reports `Invalid API Token`
+  for account-scoped tokens, so it is **not** a validity signal.
 
-- **Pages does not create the record for you.** Attaching `pages-probe.rarext.com`
-  left it `pending` with `"error_message": "CNAME record not set"` and DNS empty.
-  `pending` is the permanent state of an unattached hostname.
+The same two pre-cutover facts still hold, and are why the script does the steps
+in this order:
+
+- **Pages does not create the record for you.** Attaching a domain leaves it
+  `pending` with `"error_message": "CNAME record not set"` until the CNAME exists.
 - **The Worker release is one-way through the API.** `DELETE
-  /accounts/…/workers/domains/{id}` works with the ops token, but `POST` to the
-  same collection answers `10405 Method not allowed for this authentication
-  scheme`. Restoring the custom domain is a dashboard action.
+  /accounts/…/workers/domains/{id}` works, but `POST` to the same collection
+  answers `10405 Method not allowed for this authentication scheme`. Rolling back
+  to the Worker is a dashboard action (Workers & Pages → `rarext` → Settings →
+  Domains & Routes).
 
-Either of these finishes it. Both need exactly one thing that does not exist on
-this machine yet: **Zone.DNS:Edit**.
+**What the move cost — measured, and one earlier claim corrected.** The Worker
+`rarext` served more than HTML on `rarext.com`. After the cutover:
 
-**Path 1 — one dashboard permission, no clicking through the move**
+| Path | `rarext.co` (Worker, untouched) | `rarext.com` (Pages, now) |
+| --- | --- | --- |
+| `/` | 200, 40232 B | 200, showcase |
+| `/api` | 307 → `/developers` | 404 |
+| `/api/v1` | **404** (was already 404) | 404 |
+| `/llms.txt` | 200, 4639 B | 404 |
+| `/openapi.json` | 200, 7136 B | 404 |
+| `/mcp` | 200, MCP server banner | 404 |
+| `/robots.txt` | 200, 1546 B | 200 (the showcase's own) |
 
-Create an API token with a single permission, `Zone → DNS → Edit`, limited to the
-zone `rarext.com`, and put it in `~/.hermes/.env` as `CLOUDFLARE_DNS_TOKEN`. The
-script then uses the ops token for the Worker half and the login token for the
-Pages half:
+An earlier draft of this document said `/api/v1` "stops existing on `.com`". It
+was **already 404 on `.co`**; the surface that actually left `rarext.com` is
+`/llms.txt`, `/openapi.json`, `/mcp`, and the `/api → /developers` redirect.
+Those still answer on `rarext.co`. Restoring them on `.com` means adding them to
+`site/` (as static files or a Pages Function) — they are not being proxied from
+the Worker.
 
-```bash
-bash scripts/cutover-rarext-com.sh          # dry run: preflight + permission probe
-bash scripts/cutover-rarext-com.sh --apply  # release, record, attach, verify
-```
+Rolling back is the reverse of the script: re-attach the Worker custom domains in
+the dashboard, then point the two CNAMEs back. `rarext-com.pages.dev` keeps
+serving the showcase either way.
 
-**Path 2 — no token at all, four dashboard actions**
-
-1. Workers & Pages → **`rarext`** (Worker) → Settings → Domains & Routes →
-   remove `rarext.com` and `www.rarext.com`. **Leave `rarext.co` and
-   `www.rarext.co` alone.** `rarext.com` is unreachable from here until step 2.
-2. Workers & Pages → **`rarext-com`** (Pages) → Custom domains → add
-   `rarext.com`, then `www.rarext.com`. The dashboard creates the proxied CNAMEs
-   for you (the same shape `saikougoods.com` uses:
-   `CNAME @  -> saikougoods.pages.dev`, proxied).
-
-Either way the script verifies every route on the preview before touching
-anything, and curls the live host afterwards. `rarext.co` is never touched.
-
-Do it in this order, and do not pause between the two steps: while the hostname
-is released from the Worker and not yet recorded for Pages, it resolves to
-nothing. In the API path the gap is one round trip; in the dashboard path it is
-however long you take to click step 2.
-
-**What the move costs:** the Worker `rarext` answers `/api/v1`, `/llms.txt`, and
-the MCP surface on `rarext.com` today. Pages serves the showcase for every path,
-so those stop existing on `rarext.com` and keep working on `rarext.co`.
-
-Confirm when done:
+Confirm the live state at any time:
 
 ```bash
-dig +short CNAME rarext.com          # -> rarext-com.pages.dev.
+dig +short CNAME rarext.com                    # -> rarext-com.pages.dev.
 curl -s https://rarext.com/ | grep -o '<title>[^<]*</title>'
+SHOWCASE_URL=https://rarext.com/ npm run test:showcase
 ```
 
 ## Path A (reference) — the deploy itself
 
 `rarext.com` resolves to Cloudflare Pages project `rarext-com`
-(`rarext-com.pages.dev`), which is why `rarext.com/api/v1`, `/llms.txt`, and the
-MCP surface exist. Deploying `site/` to that project replaces those pages with the
-showcase — which is the intent, but note it **replaces** the current contents
-(keep a copy of anything you want to serve alongside it).
+(`rarext-com.pages.dev`). Pages serves the uploaded tree verbatim, so a deploy
+**replaces** whatever is there; anything to keep must live in `site/`. The
+previous `/llms.txt`, `/openapi.json`, and `/mcp` surfaces came from the Worker
+and were left on `rarext.co` rather than carried alongside the showcase.
 
 ```bash
 npx wrangler login                       # the credential step; only you can do this

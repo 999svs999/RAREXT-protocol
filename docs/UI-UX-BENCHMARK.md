@@ -93,9 +93,25 @@ The same page measured on the deployed host â€” Cloudflare Pages, brotli, CDN â€
 scores **100** as well (performance 100, accessibility 100, UX 100): TTFB 212 ms,
 LCP 448 ms, CLS 0.0006, **10 KB compressed over 4 requests, 0 third-party hosts**,
 0 contrast failures, no horizontal overflow. Local and live agree, so the row
-above is a conservative floor rather than a dev-server artefact. The deployment
-also fixed a real routing defect the local preview could not show: Pages serves
-`site/` verbatim, so the front door's `./mirror/*` links fell back to
+above is a conservative floor rather than a dev-server artefact.
+
+Since the cutover the page is measured on the hostname people actually use,
+`https://rarext.com/`, not only on `rarext-com.pages.dev`. Three consecutive runs
+show the edge warming and the score settling at the ceiling:
+
+| Run on `https://rarext.com/` | Overall | Perf | A11y | UX | TTFB | LCP | CLS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 (cold connection) | 99 | 98 | 100 | 100 | 466 ms | 808 ms | 0.0006 |
+| 2 | 100 | 99 | 100 | 100 | 283 ms | 656 ms | 0.0006 |
+| 3 (warm) | **100** | **100** | **100** | **100** | **205 ms** | **564 ms** | 0.0006 |
+
+The one point missing on the first hit is connection setup, not the page: bytes,
+request count, and CLS are identical across all three, and TTFB falls by more than
+half as the edge warms. The apex run is reproducible with
+`RAREXT_BENCH_LOCAL=https://rarext.com node scripts/benchmark-ui-ux.mjs --only rarext`.
+
+The deployment also fixed a real routing defect the local preview could not show:
+Pages serves `site/` verbatim, so the front door's `./mirror/*` links fell back to
 `index.html` with a 200. A `_redirects` rewrite maps `/mirror/*` onto
 `/registry/mirror/*`, `404.html` answers unknown paths honestly, and
 `test:showcase` fetches each linked page and checks its title, not just its

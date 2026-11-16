@@ -11,6 +11,37 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **The front door is live on `rarext.com`, and the blocker that stopped it was
+  a token scope, not a permission nobody had.** `rarext.com` and
+  `www.rarext.com` now serve the Pages showcase (7/7 routes, 44/44 browser
+  checks against the live apex, TLS `CN=rarext.com`, unknown paths 404);
+  `rarext.co` still serves the old Worker at 40232 B, unchanged. The permission
+  that looked human-only — `Zone.DNS:Edit` on `rarext.com` — was obtainable from
+  the ops token: `POST /accounts/{acct}/tokens` works there even though
+  `POST /user/tokens` on the OAuth session returns `9109`, which is what the
+  earlier notes mistook for "no API path exists". A `DNS Write` token scoped to
+  that one zone (`rarext-com-dns-cutover`) finished the move.
+  `CLOUDFLARE_DNS_TOKEN` in `~/.hermes/.env` is real but scoped to
+  **`saikougoods.com`**, so it cannot do this — flagged rather than silently
+  reused. Two defects in `scripts/cutover-rarext-com.sh` were found by running
+  it and fixed: a status poller that referenced an undefined `r` (`NameError`,
+  every tick), and its fix, a bare generator passed as a non-sole argument to
+  `next()` (`SyntaxError`). The script is now idempotent — a second `--apply`
+  re-asserts the records and finds `active,active`. Measured surface cost: the
+  Worker's `/llms.txt`, `/openapi.json`, `/mcp`, and `/api → /developers`
+  redirect left `rarext.com` and remain on `rarext.co`. **Correction:** an
+  earlier draft claimed `/api/v1` "stops existing" on `.com`; it was already
+  404 on `.co`, so that was never part of the surface being moved.
+
+- **Fixed: every linked mirror page cost a redirect round trip.** Pages answers
+  any `*.html` request with a `308` to the extensionless URL, even after a
+  `_redirects` rewrite — so the front door's three `/mirror/*.html` links were
+  `308 → 200`, and the cutover's own `curl -L` check hid it by reporting the
+  final status. `site/_redirects` now names the three targets explicitly and
+  rewrites straight to the extensionless asset, verified on a preview deployment
+  before production: the same links answer **200 with no redirect**, the page
+  titles are the three distinct pages, and unknown paths still 404.
+
 - **Measured against the state of the art, and honest about the answer.** New
   `docs/SOTA-COMPARISON.md` and `npm run bench:sota` put RAREXT's engine and
   llama.cpp on the **same 379 MB GGUF, same box, same greedy decode**. The result:

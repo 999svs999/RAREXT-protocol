@@ -45,12 +45,12 @@ welcome.
 - **web4** — [docs/WEB4.md](docs/WEB4.md): what the name means here, and the one primitive still missing.
 - **Audit and launch** — [docs/AUDIT.md](docs/AUDIT.md) is a re-runnable audit of the whole
   repository and its deployment: 1248/1248 tests, types and links clean, the deploy artifact
-  consistent and pinned, the live reference deployment byte-equal to the committed root — and the
-  one thing a script cannot do: `rarext.com` and `rarext.co` currently serve a different, live
-  site, so pointing the domain here needs its DNS. [docs/LAUNCH.md](docs/LAUNCH.md) is the runbook,
-  and the deploy carries a custom domain in one guarded command
-  (`RAREXT_LAUNCH_CONFIRM=1 npm run deploy:site -- --domain rarext.com`) that refuses to fire
-  without the DNS in place.
+  consistent and pinned, the live reference deployment byte-equal to the committed root.
+  [docs/LAUNCH.md](docs/LAUNCH.md) is the runbook, and it has been run: `rarext.com` and
+  `www.rarext.com` now serve the showcase from Pages (44/44 live checks, 404 on unknown paths),
+  while `rarext.co` still serves the old Worker untouched. The deploy carries a custom domain in
+  one guarded command (`RAREXT_LAUNCH_CONFIRM=1 npm run deploy:site -- --domain rarext.com`)
+  that refuses to fire without the DNS in place.
 - **Can it do everything other AI can?** — [docs/AI-CAPABILITY-AUDIT.md](docs/AI-CAPABILITY-AUDIT.md)
   is the measured answer, not the pitch: a real 0.5B container served from 64
   verified shards, 14/15 live capability probes, **0.50 tok/s** against llama.cpp's

@@ -283,8 +283,14 @@ done
 echo "--- waiting for pages to see the records ---"
 for i in $(seq 1 12); do
   sleep 5
+  # One status per hostname, in the order asked. Two bugs live here, both found
+  # by running it: the first version built its lookup map outside the
+  # comprehension and referenced a `r` that never existed (NameError, every
+  # poll), and the fix passed a generator to next() as a non-sole argument
+  # without its own parentheses (SyntaxError — Python only allows a bare
+  # generator there when it is the only argument).
   state=$(api GET "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/pages/projects/$PROJECT/domains" \
-    | jq "print(','.join(sorted({(r.get('name') or ''):(r.get('status') or '')}.get(h,'?') for h in ['$APE','$WWW'])))")
+    | jq "print(','.join(next(((r.get('status') or '?') for r in (d.get('result') or []) if r.get('name')==h), '?') for h in ['$APE','$WWW']))")
   echo "  t+$((i*5))s pages status: $state"
   case "$state" in
     active,active) break;;
