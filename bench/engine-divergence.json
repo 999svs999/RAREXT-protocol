@@ -77,13 +77,13 @@
         6722,
         315
       ],
-      "rarextText": " Paris\nThe",
+      "rarextText": " Paris. The",
       "llamaCppTokens": 6,
       "llamaCppText": " Paris. The",
       "llamaCppSecondText": " Paris. The",
       "llamaCppStable": true,
       "tokensAgree": true,
-      "textAgrees": false
+      "textAgrees": true
     },
     {
       "probe": "13 · user + assistant",
@@ -94,13 +94,13 @@
         198,
         785
       ],
-      "rarextText": "The capital of",
+      "rarextText": "Paris",
       "llamaCppTokens": 13,
       "llamaCppText": "Paris",
       "llamaCppSecondText": "Paris",
       "llamaCppStable": true,
       "tokensAgree": true,
-      "textAgrees": false
+      "textAgrees": true
     },
     {
       "probe": "30 · system + user + assistant",
@@ -111,13 +111,13 @@
         198,
         2610
       ],
-      "rarextText": "I'm sorry",
+      "rarextText": "The capital of",
       "llamaCppTokens": 30,
       "llamaCppText": "The capital of",
       "llamaCppSecondText": "The capital of",
       "llamaCppStable": true,
       "tokensAgree": true,
-      "textAgrees": false
+      "textAgrees": true
     },
     {
       "probe": "34 · full chat template",
@@ -128,19 +128,19 @@
         198,
         2610
       ],
-      "rarextText": "Hello! I",
+      "rarextText": "The capital of",
       "llamaCppTokens": 34,
       "llamaCppText": "The capital of",
       "llamaCppSecondText": "The capital of",
       "llamaCppStable": true,
       "tokensAgree": true,
-      "textAgrees": false
+      "textAgrees": true
     }
   ],
   "summary": {
     "probes": 7,
     "tokenizersAgree": 7,
-    "forwardPassAgrees": 2,
+    "forwardPassAgrees": 6,
     "llamaCppOrderSensitive": "0/7",
     "reversedPass": [
       {

@@ -151,7 +151,8 @@ def dequant(raw, t, n):
                 for i in range(32):
                     idx = half * 32 + i
                     is6 = 0 if i < 16 else 1
-                    ql0, ql1, qhv = ql[idx], ql[idx + 32], qh[idx]
+                    # Each half consumes 64 ql bytes and 32 qh bytes.
+                    ql0, ql1, qhv = ql[half * 64 + i], ql[half * 64 + i + 32], qh[idx]
                     q1 = ((ql0 & 15) | (((qhv >> 0) & 3) << 4)) - 32
                     q2 = ((ql1 & 15) | (((qhv >> 2) & 3) << 4)) - 32
                     q3 = ((ql0 >> 4) | (((qhv >> 4) & 3) << 4)) - 32
@@ -167,6 +168,11 @@ def dequant(raw, t, n):
 kv, tensors, data, data_start = parse_gguf(GGUF)
 rowspec = [("blk.0.attn_q.weight", 0, 3), ("blk.0.ffn_gate.weight", 0, 3),
            ("token_embd.weight", 100000, 2), ("blk.0.ffn_down.weight", 0, 2),
+           # This model keeps 12 of its ffn_down tensors in Q4_K, and the first
+           # version of this check sampled only Q5_0/Q8_0/Q6_K/F32 — so the one
+           # type with a hand-rolled 6-bit scale/min unpacker was never verified
+           # against an independent implementation. Sample every Q4_K tensor.
+           *[(name, 0, 2) for name, info in tensors.items() if TYPES.get(info["type"]) == "Q4_K"],
            ("blk.0.attn_norm.weight", 0, 1)]
 print(f'{"tensor":<24} {"type":<6} rows  max|engine-numpy|  exact')
 for name, first_row, count in rowspec:

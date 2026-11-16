@@ -11,6 +11,33 @@ break a client or invalidate stored data.
 
 ## [Unreleased]
 
+- **Fixed: a Q6_K dequantization stride bug corrupted every Q6_K tensor — and the
+  oracle meant to catch it shared the same misreading.** A Q6_K super-block holds
+  256 values as two halves; each half consumes **64 `ql` bytes and 32 `qh`
+  bytes**. The engine used one index (`half * 32 + i`) for both, so the second
+  half of every super-block re-read `ql[32..95]` instead of `ql[64..127]`. All
+  **12 Q6_K tensors** (`ffn_down` in layers 0, 1, 3, 6, 7, 8, 9, 10, 13, 16, 19,
+  21) were corrupted, in both the fused `dotRow` path and `dequantRow`.
+  `tools/oracle/dequant-check.py` implemented the same mis-index, and the NumPy
+  forward consumed the engine's dump, so all three agreed on the wrong bytes.
+  The arbiter was llama.cpp's **own** dequantizer — llama.cpp b12428's
+  `llama-quantize --allow-requantize … F32` — which differed by up to
+  **1.57e-01** on the Q6_K tensors while matching Q5_0/Q8_0/Q4_K/F32 at
+  `0.000e+00`. After the one-stride fix: **PPL 5.912 against llama.cpp's 5.940**
+  on the same 155 tokens (was 9.4560), the 13-token template answers **`"Paris"`**
+  like llama.cpp (was `"The"`), text agreement rises from **2/7 to 6/7** probes
+  with token ids still **7/7**, and `oracle:forward` returns 59604. A regression
+  test fails on the old code (`type 14[128] = -32 but expected -31`). Gates:
+  `tsc` clean, `npm run test:runtime` **181/181**, `claim:check` unchanged at 9.
+
+- **Corrected: the llama.cpp throughput gap is ~66–69×, not 20.3×.** The earlier
+  SOTA measurement (19.6 tok/s) was taken while other CPU-heavy probes were
+  running on the same four cores. Re-measured twice on an idle box, llama.cpp
+  sustains **63.2–65.9 tok/s** (15.2–15.8 ms/token) against RAREXT's stable
+  0.95–0.96 tok/s. The error was entirely on the arbiter's side; RAREXT's own
+  number did not move. `docs/SOTA-COMPARISON.md` now carries the corrected figure
+  and says where it came from.
+
 - **The front door is live on `rarext.com`, and the blocker that stopped it was
   a token scope, not a permission nobody had.** `rarext.com` and
   `www.rarext.com` now serve the Pages showcase (7/7 routes, 44/44 browser
@@ -48,7 +75,10 @@ break a client or invalidate stored data.
   RAREXT **wins the verifiability axes** — a per-response receipt naming the
   weights, engine, and tokens, against twelve response fields from llama.cpp none
   of which names the weights — and **loses throughput 20.3x** (0.96 tok/s against
-  19.6, prefill 4.2 s against 74 ms). The objective's headline claim, "better than
+  19.6, prefill 4.2 s against 74 ms). **Correction:** the 19.6 tok/s was measured
+  with other benchmarks running on the same cores; the idle-box figure is
+  63.2–65.9 tok/s, so the honest gap is **~66–69×**. The objective's headline
+  claim, "better than
   any top state-of-the-art model in any size", is documented as **unreachable on
   this hardware**: 4 cores, 8 GiB, no usable accelerator, and the only models
   present are 0.5B class. A runtime serves committed weights; it cannot build a
@@ -92,7 +122,10 @@ break a client or invalidate stored data.
   detail, since an implementation written by the same hand is not an independent
   interpretation. Settling it needs `llama-cli --verbose-prompt`, i.e. building
   llama.cpp; `brew install llama.cpp` did not finish in fifteen minutes on this
-  Intel host and was stopped.
+  Intel host and was stopped. **Resolved:** the suspicion was correct. The shared
+  misreading was the Q6_K `ql` stride; llama.cpp b12428 (prebuilt binary) supplied
+  the arbiter, and after the fix RAREXT matches llama.cpp on PPL (5.912 vs 5.940)
+  and on 6/7 probes. See the Q6_K entry above.
 
 - **Benchmarked against the top 10 AI brands, and topped them — measured.** The
   UI/UX harness now covers **13 brands over 21 targets**, adding the three that

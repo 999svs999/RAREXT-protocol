@@ -41,20 +41,34 @@ Measurements are best-of-three for RAREXT and warm requests for llama.cpp, on th
 prompt `The capital of France is`, greedy decoding, four tokens.
 
 ```
-RAREXT            " Paris. It"
+RAREXT            " Paris. It is"
   deterministic   true  (4 runs, identical token ids)
-  prefill         4171 ms
-  decode          1038.2 ms/token   0.96 tok/s
-  receipt         weights c5396e06af294bd1… engine a90e9b1e59c6c512… tokens 894f4bcb487aaf71…
-llama.cpp         "Paris."
+  prefill         4255 ms
+  decode          1054.6 ms/token   0.95 tok/s
+  receipt         weights c5396e06af294bd1… engine d077e9d894314a38… tokens 894f4bcb487aaf71…
+llama.cpp         "The capital of France"
   deterministic   true  (same prompt twice, temperature 0)
-  prefill         74 ms   (34 prompt tokens)
-  decode          51.1 ms/token   19.58 tok/s
+  prefill         22 ms   (34 prompt tokens)
+  decode          15.2 ms/token   65.92 tok/s
   response fields context, created_at, done, done_reason, eval_count, eval_duration,
-                  load_duration, model, prompt_eval_count, prompt_eval_duration,
-                  response, total_duration
-throughput        llama.cpp is 20.3x faster per token
+                  load_duration, model, prompt_eval_cached_count, prompt_eval_count,
+                  prompt_eval_duration, response, total_duration
+throughput        llama.cpp is 69.5x faster per token (65.9 against 0.95 tok/s)
 ```
+
+**Correction to an earlier number.** This document previously reported llama.cpp
+at **19.58 tok/s** and a 20.3× gap. That measurement was taken while other
+CPU-heavy probes were running on the same four cores. Re-measured on an idle
+box, twice, llama.cpp is **63.2 and 65.9 tok/s** (15.2–15.8 ms/token). The
+honest gap is **~66–69×**, not 20×. RAREXT's own number is stable (0.95–0.96
+tok/s), so the earlier understatement was entirely on the arbiter's side.
+
+The two `textA` strings above are **not** comparable as quality: RAREXT is handed
+the bare prompt, while ollama renders the model's chat template before answering.
+`bench:sota` therefore also runs the fair row — the model's own 34-token template,
+rendered identically for both — where the prompt token counts match (34/34) and
+the text matches (`"The capital of France"`). The model-level comparison that
+does not depend on prompt formatting is the PPL row below.
 
 ## What RAREXT wins, and what it loses
 
@@ -63,9 +77,10 @@ throughput        llama.cpp is 20.3x faster per token
 | Reproducible output on committed weights | yes, and the weights have a digest | deterministic at `temperature 0`, but nothing binds the answer to the bytes | **RAREXT** |
 | Per-response receipt (which weights, which engine, which tokens) | weights + engine + token digests on the response | none of the 12 response fields names the weights | **RAREXT** |
 | Runs with no vendor, no account, no network | yes | local here, but the same product hosted does not | **RAREXT** |
-| Decode throughput | 0.96 tok/s | 19.6 tok/s | llama.cpp by **20.3×** |
-| Prompt prefill | 4.2 s | 74 ms | llama.cpp by **56×** |
+| Decode throughput | 0.95 tok/s | 65.9 tok/s | llama.cpp by **69×** |
+| Prompt prefill | 4.3 s | 22 ms | llama.cpp by **193×** |
 | Model quality | the same 0.5B weights, therefore identical | identical | **tie** |
+| Measured text quality (PPL, same 155 tokens) | **5.912** | 5.940 | **tie** (within numeric noise) |
 | Model breadth vs frontier | far behind — 0.5B, no vision, no audio | frontier models are orders of magnitude larger | **not competitive** |
 
 The last row is the objective's honest answer. Two rows above it are what RAREXT
@@ -77,9 +92,9 @@ first against 13 AI brands on the UI/UX instrument — 100 to Gemini's 98, Copil
 a real axis, and it is a different axis from this one. A better door does not make
 a better model, and this document does not let the two blur together.
 
-## Two defects fixed on the way
+## Three defects fixed on the way
 
-Both were found by measuring against llama.cpp, not by reading the code.
+All three were found by measuring against llama.cpp, not by reading the code.
 
 ### 1. Every request re-parsed the container and rebuilt the tokenizer
 
@@ -115,101 +130,126 @@ tokens instead of id 151644:
 
 llama.cpp reports **34** for that prompt. Before the fix RAREXT was answering a
 *different question* from every other engine in the world, silently. After it,
-`scripts/probe-engine-divergence.mjs` reports the tokenizers agreeing on **7/7**
-probes.
+`scripts/probe-engine-divergence.mjs` reports the tokenizers agreeing **id for id
+on 7/7** probes — which is what makes the forward-pass comparison meaningful at
+all: two engines that tokenize differently are answering different questions.
 
-## The open question, stated precisely
+### 3. Every Q6_K tensor was dequantized with the wrong stride
 
-Getting this wrong twice is part of the record, so the record says so.
+Found last, and the largest of the three. It is described in full in
+[The output divergence, resolved](#the-output-divergence-resolved) below, because
+the search for it is the story of that section: twelve `ffn_down` tensors decoded
+from the wrong bytes, and a NumPy oracle that shared the same mis-index so it
+could not see it.
+
+## The output divergence, resolved
+
+This section replaces an earlier one that said the question was open. The record
+of the wrong answers stays, because the way they were wrong is the useful part.
 
 **First claim (withdrawn):** "the forward pass diverges from llama.cpp on 2/7
-probes, so the engine is not yet correct." Too strong. It attributed to the engine
-what was partly a property of the measuring instrument.
+probes, so the engine is not yet correct." Too strong, and it blamed the engine
+for what was partly the measuring instrument.
 
 **Second claim (also withdrawn):** "the forward pass does *not* diverge — it was
-only ollama's sampler." Also too strong. The sampler is real and is worth knowing,
-but fixing it does not make the disagreement go away.
+only ollama's sampler." Also too strong. The sampler is real, but fixing it did
+not make the disagreement go away.
 
-**What is actually true, and reproducible:**
+**Third claim (withdrawn as stated):** "RAREXT's dequantization is bit-exact
+against an independent implementation." True as written, and misleading. The
+"independent" implementation shared the engine's misreading, so the two agreed on
+the same wrong bytes. Bit-exactness against a shared interpretation says nothing
+about the model.
 
-1. **ollama's defaults are not greedy — on some versions.** `temperature: 0` is
-   not greediness on its own: a server may still apply `repeat_penalty: 1.1`,
-   which suppresses tokens already present in the prompt, and that is exactly what
-   turns an echoing completion into a fluent one. Measured on the **0.23.2**
-   command-line server against the 34-token template:
+### What the arbiter showed
 
-   | ollama sampler settings (0.23.2) | first tokens |
-   | --- | --- |
-   | defaults (`repeat_penalty` 1.1) | `"Paris."` |
-   | every sampler disabled | `"The capital of"` |
+llama.cpp **b12428** was obtained as a prebuilt macOS x64 binary — no build
+required — and used four ways:
 
-   **This does not reproduce on 0.40.14**, the version the desktop app runs: there,
-   defaults and samplers-off both return `"The capital of"`. So the sampler was a
-   version-specific hazard, not the explanation for the remaining disagreement —
-   recorded because it was reported here as the explanation and that was wrong.
-   Both scripts still disable every sampler explicitly, because a comparison that
-   does not is measuring the server's defaults whenever they happen to apply.
+| instrument | result |
+| --- | --- |
+| `llama-tokenize` | ids **identical** to RAREXT on every probe; tokenization eliminated as a cause |
+| `llama-server /completion` | `"Paris"` for the 13-token template, with `tokens_evaluated = 13` |
+| per-token logprobs | mean NLL **1.7818** over the same 155 tokens; RAREXT was **2.2466** |
+| `llama-quantize --allow-requantize … F32` | llama.cpp's **own dequantizer**, for every tensor |
 
-2. **RAREXT's dequantization is bit-exact against an independent implementation.**
-   `npm run oracle:dequant` reimplements Q4_0/Q5_0/Q8_0/Q4_K/Q6_K/F32 from the
-   ggml block layouts and compares row by row:
-   `max|engine − numpy| = 0.000000e+00` on every type this model uses.
+The last one localized it. Comparing llama.cpp's F32 output against the engine's
+dump, tensor by tensor:
 
-3. **RAREXT's forward pass matches a clean-room NumPy implementation** — its own
-   RMSNorm, RoPE, GQA, causal softmax and SwiGLU — on the first generated token of
-   a 13-, 30- and 34-token chat template (ids 785, 40, 9707). `npm run oracle:forward`.
+| tensor | type | before | after fix |
+| --- | --- | ---: | ---: |
+| `token_embd.weight` | Q8_0 | 0.000e+00 | 0.000e+00 |
+| `blk.0.attn_q.weight` | Q5_0 | 0.000e+00 | 0.000e+00 |
+| `blk.2.ffn_down.weight` | Q4_K | 0.000e+00 | 0.000e+00 |
+| `blk.0.ffn_down.weight` | **Q6_K** | **1.465e-01** | **0.000e+00** |
+| `blk.1.ffn_down.weight` | **Q6_K** | **1.572e-01** | **0.000e+00** |
 
-4. **The tokenizers agree on 7/7 probes**, and the control-token fix made that
-   possible: `<|im_start|>` is now the single id 151644 rather than six ordinary
-   tokens.
+### The defect
 
-5. **llama.cpp still disagrees on templated prompts, stably.** With samplers off,
-   asked twice in both orders, and re-confirmed against a second server started
-   with an empty cache, it returns `"Paris"` for the 13-token prompt and
-   `"The capital of"` for the 30- and 34-token ones, where RAREXT returns
-   `"The capital of"`, `"I'm sorry"`, `"Hello! I"`.
+A Q6_K super-block holds 256 values as two halves. Each half consumes **64 `ql`
+bytes and 32 `qh` bytes**. The engine used one index, `half * 32 + i`, for both —
+correct for `qh`, wrong for `ql`: the second half re-read `ql[32..95]` instead of
+`ql[64..127]`. All **12 Q6_K tensors** in the model (`ffn_down` in layers 0, 1, 3,
+6, 7, 8, 9, 10, 13, 16, 19, 21) were corrupted in the second half of every
+super-block. The fused `dotRow` path and the row `dequantRow` path had the same
+bug, so every consumer agreed with every other consumer.
 
-Versions matter, and both are recorded: the disagreement above is measured
-against **0.40.14**, with the same prompts re-run against a second server holding
-an empty cache, in both orders, and with every sampler disabled. An earlier pass
-of this work also used a **0.23.2** copy, whose sampler defaults produced the
-`"Paris."` in the table above; that path is why both scripts now disable samplers
-explicitly.
+Why the oracle missed it: `tools/oracle/dequant-check.py` implemented the same
+mis-index. It was independent code, not an independent interpretation. The fix is
+one stride (`half * 64 + i` for `ql`, `half * 32 + i` for `qh`), a regression test
+that fails on the old code (`type 14[128] = -32 but expected -31`), and the same
+correction in the oracle.
 
-**So the honest state is:** RAREXT is verified against an implementation written
-from the architecture and the ggml formats, and it is *not* verified against
-llama.cpp on templated prompts. `"Paris"` is the better answer, and that is a real
-reason to suspect that RAREXT and the NumPy oracle share a misreading of some
-Qwen2 detail — an independent *implementation* is not an independent
-*interpretation*, and the oracle was written by the same hand in the same session.
+### After the fix
 
-**What would settle it, and why it is not settled here.** The arbiter is
-llama.cpp's own prompt token ids and logits. Ollama's HTTP API exposes neither,
-and ollama 0.23.2 does not log per-request prompt tokens at any debug level
-(checked: a second server on a spare port with `OLLAMA_DEBUG=1` prints batch
-sizes, not `task.n_tokens`). The instrument that would answer it is
-`llama-cli --verbose-prompt`, which requires building llama.cpp:
-`brew install llama.cpp` did not finish in fifteen minutes on this Intel host and
-was stopped. That build is the next step, and it is the only thing standing
-between "verified against one clean-room implementation" and "verified against
-the reference everyone uses".
+Measured by `npm run measure:ppl` and written to `bench/quality-ppl.json`; the
+same 155 tokens, the same weights, the same box.
 
-**The lesson worth keeping:** both wrong claims came from trusting a convenient
-oracle — first a sampler, then an agreement between two implementations by one
-author. The fix in both cases was to write the arithmetic out where it could be
-read.
+| measurement | RAREXT | llama.cpp |
+| --- | ---: | ---: |
+| PPL, 155 tokens of the same passage | **5.912** | **5.940** |
+| mean NLL, same tokens | 1.7770 | 1.7818 |
+| 13-token template, greedy | **59604 `"Paris"`** | **59604 `"Paris"`** |
+| 30- and 34-token templates | 785 `"The"` | 785 `"The"` |
+| text agreement, 7 probes | **6/7** (was 2/7) | — |
+| token ids, 7 probes | **7/7** | — |
+
+The remaining disagreement is probe 5, a bare non-templated prompt, where both
+engines are splitting near-ties: llama.cpp's top is `" ______"` (−1.49) with
+`" Paris"` second (−1.75); RAREXT prefers `" Paris"` (−1.54). That is recorded
+rather than smoothed over. It is not a quality difference; it is two
+implementations splitting a 0.25-nat gap on an input the chat model was not
+trained to see raw.
+
+**The lesson, revised:** an independent implementation is not an independent
+*interpretation*. Agreement between two programs written by one author in one
+session is weak evidence, however clean the code is. The fix was to get an
+arbiter from a different lineage — llama.cpp's own dequantizer — and let it name
+the tensor.
 
 ## Reproduce
 
 ```sh
 npm run bench:sota                 # head-to-head vs llama.cpp, writes bench/sota-comparison.json
 npm run probe:divergence           # tokenizer + forward-pass agreement, writes bench/engine-divergence.json
-npm run bench:engine               # RAREXT alone, with its fingerprints
+npm run bench:engine               # RAREXT alone, with its fingerprints (needs a .rarext container)
+npm run measure:ppl -- <model.gguf> [llama-per-token.json]
+                                   # per-token NLL / PPL, writes bench/quality-ppl.json
 
-# the independent implementation (needs numpy; ~2 GB of scratch space)
+# the independent implementation (needs numpy; ~2 GB of scratch space).
+# On a host where only python3.11 carries numpy: PYTHON=python3.11 npm run …
 npm run oracle:dump -- <path-to.gguf>     # dump the engine's dequantized weights
 npm run oracle:dequant -- <path-to.gguf>  # reimplement the ggml formats and compare
 npm run oracle:forward -- 151644,872,198,785,6722,315,9625,374,151645,198,151644,77091,198
+```
+
+**The arbiter that found the Q6_K defect** is llama.cpp's own dequantizer, not
+ollama. With a prebuilt `llama-quantize` next to the model:
+
+```sh
+llama-quantize --allow-requantize <model.gguf> /tmp/model-f32.gguf F32
+# then compare /tmp/model-f32.gguf, tensor by tensor, against the oracle dump:
+# every type in this model now reports max|llama.cpp − RAREXT| = 0.000e+00.
 ```
 
 Requires `ollama` serving `qwen2.5:0.5b` on `127.0.0.1:11434` for the llama.cpp

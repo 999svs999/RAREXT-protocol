@@ -7372,6 +7372,19 @@ test("the GGUF engine dequantizes every quantization it advertises", () => {
     repeat(-32, 256),
   );
 
+  // Q6_K, second half only: each half consumes 64 ql bytes but 32 qh bytes.
+  // Reading ql[32..95] for the second half (one shared index) used to decode
+  // the wrong bytes. ql[64..127] = 0x21 gives nibbles 1 and 2, so the second
+  // half must be -31/-30; the broken stride produced -32/-31/-32/-30.
+  const q6ql = Buffer.alloc(128, 0);
+  q6ql.fill(0x21, 64, 128);
+  check(
+    14,
+    [256],
+    Buffer.concat([q6ql, Buffer.alloc(64, 0), Buffer.alloc(16, 1), half(H1)]),
+    [...repeat(-32, 128), ...repeat(-31, 64), ...repeat(-30, 64)],
+  );
+
   // Q8_K: float32 delta 1, int8 quants cycling -8..7 (bsums are not used to
   // dequantize). 292 = 4 (f32 d) + 256 (qs) + 32 (bsums).
   const q8k = Buffer.concat([

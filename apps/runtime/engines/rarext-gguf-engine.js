@@ -1695,11 +1695,15 @@
           var scBase = q6base + 192;
           for (var half = 0; half < 2; half += 1) {
             for (i = 0; i < 32; i += 1) {
-              var idx = half * 32 + i;
+              // Each half consumes 64 ql bytes and 32 qh bytes. One shared
+              // index made the second half re-read ql[32..95] instead of
+              // ql[64..127], which quietly corrupted every Q6_K tensor.
+              var qlIdx = half * 64 + i;
+              var qhIdx = half * 32 + i;
               var is6 = i < 16 ? 0 : 1;
-              var ql0 = view.getUint8(qlBase + idx);
-              var ql1 = view.getUint8(qlBase + idx + 32);
-              var qh = view.getUint8(qhBase + idx);
+              var ql0 = view.getUint8(qlBase + qlIdx);
+              var ql1 = view.getUint8(qlBase + qlIdx + 32);
+              var qh = view.getUint8(qhBase + qhIdx);
               var q1 = ((ql0 & 15) | (((qh >> 0) & 3) << 4)) - 32;
               var q2 = ((ql1 & 15) | (((qh >> 2) & 3) << 4)) - 32;
               var q3 = ((ql0 >> 4) | (((qh >> 4) & 3) << 4)) - 32;
@@ -2049,11 +2053,15 @@
           var scBase = q6base + 192;
           for (var half = 0; half < 2; half += 1) {
             for (i = 0; i < 32; i += 1) {
-              var idx = half * 32 + i;
+              // Each half consumes 64 ql bytes and 32 qh bytes. One shared
+              // index made the second half re-read ql[32..95] instead of
+              // ql[64..127], which quietly corrupted every Q6_K tensor.
+              var qlIdx = half * 64 + i;
+              var qhIdx = half * 32 + i;
               var is6 = i < 16 ? 0 : 1;
-              var ql0 = u8[qlBase + idx];
-              var ql1 = u8[qlBase + idx + 32];
-              var qh = u8[qhBase + idx];
+              var ql0 = u8[qlBase + qlIdx];
+              var ql1 = u8[qlBase + qlIdx + 32];
+              var qh = u8[qhBase + qhIdx];
               var q1 = ((ql0 & 15) | (((qh >> 0) & 3) << 4)) - 32;
               var q2 = ((ql1 & 15) | (((qh >> 2) & 3) << 4)) - 32;
               var q3 = ((ql0 >> 4) | (((qh >> 4) & 3) << 4)) - 32;

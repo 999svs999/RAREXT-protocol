@@ -24,9 +24,9 @@
       374
     ],
     "deterministic": true,
-    "prefillMs": 4184.002228999998,
-    "decodeMsPerToken": 1038.7623840000015,
-    "tokensPerSecond": 0.9626840703927517,
+    "prefillMs": 4255.210901999999,
+    "decodeMsPerToken": 1054.610087000001,
+    "tokensPerSecond": 0.9482177463754897,
     "tamper": {
       "tensor": "blk.0.ffn_down.weight",
       "flips": 8,
@@ -36,20 +36,20 @@
     },
     "receipt": {
       "weightsSha256": "c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
-      "engineSha256": "4fb578124d2147902d78194085dcc5d5f317c58c12257d8c0d51c757105dc357",
+      "engineSha256": "d077e9d894314a38ecbbf4a9e79f2a04ef5548893668aa5439c7a955eab78cb0",
       "tokensSha256": "894f4bcb487aaf711c3c58b1b40f76e92e2d8db5e9cabd2acf92c015c2d41b40"
     }
   },
   "llamaCpp": {
     "model": "qwen2.5:0.5b",
-    "textA": "Paris.",
+    "textA": "The capital of France",
     "deterministic": true,
-    "tokens": 3,
+    "tokens": 4,
     "promptTokens": 34,
-    "msPerToken": 51.068061,
-    "tokensPerSecond": 19.581710768301935,
-    "promptEvalMs": 73.50233,
-    "loadMs": 1925.446095,
+    "msPerToken": 15.16925,
+    "tokensPerSecond": 65.9228373189182,
+    "promptEvalMs": 22.321,
+    "loadMs": 5.372889,
     "responseFields": [
       "context",
       "created_at",
@@ -59,6 +59,7 @@
       "eval_duration",
       "load_duration",
       "model",
+      "prompt_eval_cached_count",
       "prompt_eval_count",
       "prompt_eval_duration",
       "response",
@@ -74,20 +75,20 @@
     },
     "promptTokensMatch": true,
     "text": {
-      "rarext": "Hello! I'm",
-      "llamaCpp": "Paris."
+      "rarext": "The capital of France",
+      "llamaCpp": "The capital of France"
     },
-    "sameWeightsSameText": false
+    "sameWeightsSameText": true
   },
   "throughput": {
     "rarext": {
-      "msPerToken": 1038.7623840000015,
-      "tokensPerSecond": 0.9626840703927517
+      "msPerToken": 1054.610087000001,
+      "tokensPerSecond": 0.9482177463754897
     },
     "llamaCpp": {
-      "msPerToken": 51.068061,
-      "tokensPerSecond": 19.581710768301935
+      "msPerToken": 15.16925,
+      "tokensPerSecond": 65.9228373189182
     },
-    "llamaCppFasterBy": 20.340744560479816
+    "llamaCppFasterBy": 69.52288920019124
   }
 }

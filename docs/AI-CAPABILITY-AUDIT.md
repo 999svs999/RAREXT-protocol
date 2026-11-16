@@ -147,7 +147,7 @@ seven true at the same time, and on this evidence it does.
 
 ## What the audit found and fixed
 
-An audit that only confirms is not an audit. Two real defects surfaced, and both
+An audit that only confirms is not an audit. Three real defects surfaced, and all
 were fixed with tests.
 
 ### 1. The "independent" forward pass was wrong on Qwen2
@@ -187,6 +187,26 @@ KV, with a test that asserts it survives conversion. The existing
 `/tmp/qwen05-q8.rarext` predates the fix, which is why the live tool-call probe
 ran on the fallback prompt; that is one reason the 0.5B missed the call, and it
 is stated rather than hidden.
+
+### 3. Every Q6_K tensor was dequantized with the wrong stride
+
+Q6_K super-blocks hold 256 values as two halves, each consuming **64 `ql` bytes
+and 32 `qh` bytes**. The engine used one index (`half * 32 + i`) for both, so the
+second half re-read `ql[32..95]` instead of `ql[64..127]`. The 12 Q6_K tensors
+(`ffn_down` in layers 0, 1, 3, 6, 7, 8, 9, 10, 13, 16, 19, 21) were corrupted,
+and both the fused `dotRow` and the row `dequantRow` carried the bug.
+
+What makes this an audit finding rather than a bug report: the NumPy oracle had
+the **same** mis-index and consumed the engine's dump, so it reported
+`0.000000e+00` and the "independent" verification was agreeing with itself. It
+was caught only by an arbiter from a different lineage — llama.cpp b12428's own
+`llama-quantize --allow-requantize … F32` — which differed by up to `1.57e-01` on
+Q6_K and by `0.000e+00` on Q5_0/Q8_0/Q4_K/F32. After the one-stride fix, PPL on
+the same 155 tokens fell from **9.4560 to 5.912**, against llama.cpp's **5.940**;
+the 13-token template answers `"Paris"` like llama.cpp instead of `"The"`; and
+text agreement went from **2/7 to 6/7**. The lesson is now enforced by a
+regression test that fails on the old code (`type 14[128] = -32 but expected
+-31`), and [SOTA-COMPARISON.md](SOTA-COMPARISON.md) records the full search.
 
 ### Still open (not defects, limits)
 

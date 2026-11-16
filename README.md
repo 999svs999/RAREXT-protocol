@@ -63,10 +63,11 @@ welcome.
 - **Is RAREXT better than the state of the art?** — [docs/SOTA-COMPARISON.md](docs/SOTA-COMPARISON.md)
   puts RAREXT's engine and llama.cpp on the same 379 MB GGUF, same box, same
   greedy decode. It wins the axes it can win — a per-response receipt naming the
-  weights, engine, and tokens — and loses throughput **20.3x** (0.96 against 19.6
-  tok/s). `npm run bench:sota` reproduces it; `npm run probe:divergence` reports
-  the forward-pass disagreement it uncovered, which is documented as an open
-  defect rather than hidden.
+  weights, engine, and tokens — and loses throughput **~66–69×** (0.95–0.96
+  against 63.2–65.9 tok/s). Output now matches too: **PPL 5.912 against 5.940**,
+  and the same greedy token on 6/7 probes, after a Q6_K dequantization bug was
+  found and fixed using llama.cpp's own dequantizer as the arbiter.
+  `npm run bench:sota` and `npm run probe:divergence` reproduce it.
 
 - **Does the front door work for people?** — [docs/UI-UX-BENCHMARK.md](docs/UI-UX-BENCHMARK.md)
   measures the AI apps people actually use (ChatGPT, Claude, Gemini, Perplexity,

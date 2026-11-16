@@ -1,0 +1,18 @@
+{
+  "kind": "rarext.quality-ppl.v1",
+  "passage": "Paris is the capital and largest city of France. It is situated on the river Seine, in the north of the country, at the heart of the Ile-de-France region. The city is a major European centre for finance, commerce, fashion, science and the arts. The Paris region had a gross domestic product of about one trillion dollars in recent years, which makes it one of the largest metropolitan economies in Europe. Paris is especially known for its museums and architectural landmarks. The Louvre is the most visited art museum in the world. The Eiffel Tower is a global icon of France and one of the most recognisable structures on Earth. The city hosts many international organisations and sporting events, and it is served by one of the busiest metro systems in Europe.",
+  "tokens": 156,
+  "scored": 155,
+  "rarext": {
+    "meanNll": 1.777,
+    "ppl": 5.912,
+    "engineSha256": "d077e9d894314a38ecbbf4a9e79f2a04ef5548893668aa5439c7a955eab78cb0"
+  },
+  "llamaCpp": {
+    "meanNll": 1.7818,
+    "ppl": 5.9404,
+    "method": "llama-server b12428 /completion per prefix with raw token ids, n_predict 1, n_probs, cache_prompt; logprob of the true next token",
+    "meanLogprobGap": 0.0048
+  },
+  "tokensMatch": true
+}
