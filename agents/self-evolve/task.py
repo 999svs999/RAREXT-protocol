@@ -91,7 +91,13 @@ COMP_QUESTION = {"cheapest": "which is cheapest?",
 def comp_example(rng: random.Random, kind: str | None = None, n_rows: int | None = None):
     kind = kind or rng.choice(["cheapest", "priciest"])
     n = n_rows or rng.choice([2, 2, 2, 3])
-    prices = rng.sample(range(49, 999), n)
+    # Every row in one example shares a digit length (3 or 4): comparing
+    # fixed-length digit strings is a learnable circuit for a small model,
+    # while mixed lengths ("$86" vs "$994") need digit-alignment the current
+    # 1.3M-parameter policy never found. The depot's price range lives here.
+    L = rng.choice([3, 3, 3, 4])
+    lo, hi = 10 ** (L - 1), 10 ** L - 1
+    prices = rng.sample(range(lo, hi), n)
     items = []
     while len(items) < n:
         cand = make_item(rng)

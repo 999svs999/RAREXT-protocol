@@ -181,6 +181,46 @@ def engine_verify(gguf_path: Path, prompts) -> float:
     return float(last[0].split("(")[1].split("%")[0]) / 100.0
 
 
+def dagger_step(model, opt, pairs):
+    """Corrective step (DAgger-style, with computed expert labels).
+
+    Roll out the model GREEDY on each prompt — the mode is what serving reads —
+    find the first token where its answer diverges from the computed gold, and
+    train the gold continuation from exactly that state. REINFORCE moves the
+    sampled policy; this moves the mode. Prompts the model already answers
+    correctly contribute nothing.
+    """
+    from model import batched_generate
+
+    if not pairs:
+        return 0, 0
+    prompts = [p for p, _ in pairs]
+    with torch.no_grad():
+        greedy = batched_generate(model, prompts, max_new=48, temperature=0.0)
+    fixes = []
+    for (prompt, gold), got in zip(pairs, greedy):
+        if task.exact_match(prompt, got):
+            continue
+        g_ids, gold_ids = agent_model.encode(prompt + got), agent_model.encode(prompt + gold)
+        share = 0
+        while share < len(g_ids) and share < len(gold_ids) and g_ids[share] == gold_ids[share]:
+            share += 1
+        if share >= len(gold_ids):
+            continue
+        # the model's own context up to the divergence, gold from there
+        fixes.append((g_ids[:share], gold_ids[share:]))
+    if not fixes:
+        return 0, 0
+    lp, _ = agent_model.answer_logprobs_ids(model, [a for a, _ in fixes], [b for _, b in fixes])
+    lens = torch.tensor([len(b) for _, b in fixes], dtype=torch.float)
+    loss = -(lp / lens.to(lp.device)).mean()
+    opt.zero_grad(set_to_none=True)
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    opt.step()
+    return float(loss.detach()), len(fixes)
+
+
 def mix_prompts(rng, n_total, gen_index=1):
     """Task mix: the new skills get most of the budget; deployed skills replay
     so evolution never trades away what is already live. The curriculum keeps
@@ -191,12 +231,12 @@ def mix_prompts(rng, n_total, gen_index=1):
     for _ in range(n_total):
         roll = rng.random()
         if roll < 0.4:
-            rows.append(comp_example(rng, "cheapest", n_rows=max_rows)[0])
+            rows.append(comp_example(rng, "cheapest", n_rows=max_rows))
         elif roll < 0.8:
-            rows.append(comp_example(rng, "priciest", n_rows=max_rows)[0])
+            rows.append(comp_example(rng, "priciest", n_rows=max_rows))
         else:
-            rows.append(s0_example(rng)[0])
-    return rows
+            rows.append(s0_example(rng))
+    return rows  # [(prompt, computed gold answer)]
 
 
 def main():
@@ -214,13 +254,17 @@ def main():
                     "nobody serves; staying near the mode makes best-of-k "
                     "imitation pull the mode itself.")
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--base", default=str(HERE / ".." / ".." / "models" / "live-host-lm" / "live-host-lm.pt"),
+                    help="starting checkpoint (gen0 of this loop run)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="ignore the ledger's promoted generations and start from --base")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed)
     GENS.mkdir(exist_ok=True)
 
-    gen0_path = HERE / ".." / ".." / "models" / "live-host-lm" / "live-host-lm.pt"
+    gen0_path = Path(args.base)
     model = agent_model.load_agent(str(gen0_path))
     model.cfg = dict(torch.load(gen0_path, map_location="cpu")["config"])
     model.train()
@@ -235,7 +279,7 @@ def main():
     promoted = None
     # Resume: the loop is relentless, which includes surviving restarts. The
     # last PROMOTED generation in the ledger is the parent of the next one.
-    if LEDGER.exists():
+    if LEDGER.exists() and not args.fresh:
         last = None
         for line in LEDGER.read_text().splitlines():
             if line.strip():
@@ -289,18 +333,19 @@ def main():
         set_lr(args.rl_lr)
         dry = 0
         for it in range(1, args.iters + 1):
-            prompts = mix_prompts(rng, args.batch, gen_index)
-            rows = agent_model.rollout(model, prompts, args.k, temperature=args.rollout_temp,
+            pairs = mix_prompts(rng, args.batch, gen_index)
+            rows = agent_model.rollout(model, [p for p, _ in pairs], args.k, temperature=args.rollout_temp,
                                        seed=args.seed * 1000 + gen_index * 10000 + it)
             scored = [(p, a, reward(p, a)) for p, a in rows]
             loss = train_batch(model, opt, scored)
+            d_loss, n_fix = dagger_step(model, opt, pairs)
             best_r = max(r for _, _, r in scored)
             dry = dry + 1 if best_r == 0.0 else 0
             if it % 10 == 0 or it == 1:
                 mean_r = sum(r for _, _, r in scored) / len(scored)
                 exact = sum(r == 1.0 for _, _, r in scored) / len(scored)
-                print(f"  iter {it:4d}  loss {loss:.4f}  mean reward {mean_r:.3f}  "
-                      f"exact {exact*100:.0f}%", flush=True)
+                print(f"  iter {it:4d}  loss {loss:.4f}  dagger {d_loss:.3f} ({n_fix} fixes)  "
+                      f"mean reward {mean_r:.3f}  exact {exact*100:.0f}%", flush=True)
             # self-healing: a policy with no successes has no gradient. Re-seed
             # it from the verified demonstrations instead of dying quietly.
             if dry >= 5 and seed_rows:

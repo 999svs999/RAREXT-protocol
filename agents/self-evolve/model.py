@@ -67,13 +67,19 @@ def batched_generate(model: TinyLM, prompts: list[str], max_new: int = 40,
 
 
 def answer_logprobs(model: TinyLM, prompts: list[str], answers: list[str]):
+    return answer_logprobs_ids(model, [encode(p) for p in prompts], [encode(a) for a in answers])
+
+
+def answer_logprobs_ids(model: TinyLM, prompt_ids: list[list[int]], answer_ids: list[list[int]]):
     """Sum of log-probs the policy puts on each answer given its prompt.
 
-    Returns (per-token logprobs tensor for the answer region, answer lengths).
-    This is the on-policy part of the REINFORCE update.
+    Takes raw byte-id lists (not strings): a corrective step's divergence point
+    can fall mid-UTF-8-character, and decoding there would corrupt the context.
+
+    Returns (per-sequence sums of answer-token logprobs, per-token logprobs).
     """
-    enc = [encode(p) + encode(a) for p, a in zip(prompts, answers)]
-    plens = [len(encode(p)) for p in prompts]
+    enc = [p + a for p, a in zip(prompt_ids, answer_ids)]
+    plens = [len(p) for p in prompt_ids]
     width = max(len(e) for e in enc)
     b = len(enc)
     ids = torch.full((b, width), EOS, dtype=torch.long)
