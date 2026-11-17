@@ -1,0 +1,24 @@
+{
+  "parameters": 1312512,
+  "checkpoint_step": 6000,
+  "held_out_same_distribution": 1.0,
+  "held_out_unseen_items": 1.0,
+  "held_out_generic_question": 1.0,
+  "samples_same": 120,
+  "samples_unseen": 12,
+  "samples_generic": 12,
+  "config": {
+    "steps": 6000,
+    "batch": 64,
+    "lr": 0.003,
+    "d": 128,
+    "layers": 6,
+    "heads": 4,
+    "ffn": 384,
+    "ctx": 192,
+    "seed": 7,
+    "out": "live-host-lm.gguf",
+    "checkpoint": "live-host-lm.pt",
+    "export_only": null
+  }
+}

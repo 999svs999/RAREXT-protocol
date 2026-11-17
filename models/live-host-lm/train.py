@@ -389,7 +389,9 @@ def main():
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
     model.load_state_dict(ckpt["state"])
-    print(f"\nexporting the best checkpoint (step {best_step}, exact {best*100:.0f}%)", flush=True)
+    # `best` is exact + generic on the eval slices (each in 0..1), so it reads
+    # 2.00 when both phrasings were perfect on every checkpoint so far.
+    print(f"\nexporting the best checkpoint (step {best_step}, eval score {best:.2f})", flush=True)
     scores = report(model, eval_same, held, held_generic)
     export(model, args, params, scores, (eval_same, held, held_generic), best_step)
     return 0

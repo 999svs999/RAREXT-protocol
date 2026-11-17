@@ -464,6 +464,46 @@ endpoint is a loopback address, and the ledger is local by design. For a remote
 deployment, the engine is the provider's; the runtime, ledger, and signing key
 can live in the cloud too, and the endpoint is the only thing that leaves it.
 
+## A model trained here, served here
+
+The runtime is not only a way to serve other people's checkpoints. RAREXT can
+author a model for a job, train it, and serve it through the same engine, with no
+new format and no new runtime. `models/live-host-lm/` is the worked example: a
+1,312,512-parameter byte-level transformer (6 layers, d=128, context 192, 257
+tokens = the 256 GPT-2 byte chars + `<|eos|>`), trained on exactly one task — read
+a price out of a `rows:` line and say it once — because the 0.5B general chat
+model serving that job answered prices with product descriptions, never emitted
+EOS, and took seconds per token.
+
+```bash
+cd models/live-host-lm
+python3.11 train.py --steps 6000 --layers 6        # train; checkpoints on every eval gain
+python3.11 train.py --export-only live-host-lm.pt  # weights -> GGUF, re-scored
+node engine_check.mjs <gguf> <prompts.json>        # the same weights through the engine
+```
+
+Held-out at the exported checkpoint (prices unseen; two of three sets also use
+item names unseen in training): **100.0%** exact match on 120 same-distribution
+samples, 12 unseen-name samples, and 12 generic-question samples — and the engine
+reproduces the trainer's answers token for token (12/12 on both prompt sets,
+`finish=stop`). Serving it cost the BAPECLUB live host a 13x-to-60x latency drop
+(8.5–29.7 s → 0.47–0.63 s per answer at the provider, 0.8–2.3 s through the
+deployed site) and, for the first time, an answer that stops itself.
+
+Two things worth keeping from the exercise:
+
+- **The GGUF the engine reads can be written from scratch.** `gguf.py` is ~120
+  lines: GGUF v3, float32 tensors, dims fastest-varying first (`dims[0] = cols`),
+  and — the part that produced a `RangeError` on the first attempt — the data
+  section must begin at the 32-byte boundary after the tensor-info table, because
+  the engine aligns `dataStart` to `general.alignment` from the file start and
+  reads every tensor offset relative to it.
+- **A tiny model + a precise prompt beats a big model + a vague one.** The
+  deployment sends the trained prompt shape verbatim (`rows:`/`q:`/`a: `), does
+  row selection in the caller, and refuses to call the model when there is no row
+  — the model cannot invent a price it was never given. The full contract is
+  documented on the BAPECLUB side (`docs/live-host-rarext-ai.md`).
+
 ## Privacy and safety
 
 - Publishing is **opt-in** (`--publish`). Without it, transcripts stay in the
