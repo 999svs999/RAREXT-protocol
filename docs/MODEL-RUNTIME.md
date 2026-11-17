@@ -504,6 +504,32 @@ Two things worth keeping from the exercise:
   — the model cannot invent a price it was never given. The full contract is
   documented on the BAPECLUB side (`docs/live-host-rarext-ai.md`).
 
+## The self-evolving agent
+
+`agents/self-evolve/` closes the loop: an agent that improves itself on
+RAREXT's own engine, indefinitely. Each generation samples rollouts from the
+current policy, scores them with computed checkers (never a judge model),
+updates with REINFORCE + self-imitation (+ DAgger corrections toward computed
+gold), evaluates held-out skills, and — only if every deployed skill holds and
+the engine faithfully reproduces the trainer's answers — atomically swaps the
+new GGUF into the serving path. Every generation, promoted or reverted, lands
+in `generations/generations.jsonl` with scores, digests and wall time. The
+loop resumes from the last promoted generation across restarts and runs with
+`--generations 0` until stopped.
+
+The first capability it added to the deployed host: price comparison over
+2-3 rows ("which is cheapest?" / "which is most expensive?"), served by the
+same engine at ~1 s per answer. What the ledger taught us along the way is
+recorded in `agents/self-evolve/README.md` — most usefully, that policy
+gradient alone could not build the comparison circuit in a 1.3M-byte model
+(the sampled policy improved; the greedy mode never moved), while a fresh
+supervised base with a comparison-friendly representation learned it in
+6000 steps — and the RL loop is what verifies, gates and ratchets such gains
+into the serving path. NVIDIA's free hosted Nemotron models
+(`integrate.api.nvidia.com`) sit in the loop as the teacher that proposes
+demonstrations for skills the policy cannot bootstrap alone; nothing enters
+training until the computed checker accepts it.
+
 ## Privacy and safety
 
 - Publishing is **opt-in** (`--publish`). Without it, transcripts stay in the

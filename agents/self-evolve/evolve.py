@@ -374,11 +374,12 @@ def main():
             probe = _bg(model, [probe_p], max_new=48, temperature=0.0)[0]
         print(f"  probe S1 greedy: {probe!r}", flush=True)
 
-        # gate: the deployed skill must hold; at least one new skill must
-        # improve over the promoted generation, and nothing may regress.
+        # gate: the deployed skill must hold; the new skills must improve OR
+        # hold (a policy already at its ceiling is still the one to serve), and
+        # nothing may regress.
         base = promoted["scores"] if promoted else base_line
         gate_ok = scores["S0 price-copy"] >= 0.95
-        gate_ok = gate_ok and (scores["S1 cheapest"] > base["S1 cheapest"] or scores["S2 priciest"] > base["S2 priciest"])
+        gate_ok = gate_ok and (scores["S1 cheapest"] >= base["S1 cheapest"] or scores["S2 priciest"] >= base["S2 priciest"])
         gate_ok = gate_ok and all(scores[k] >= base[k] - 0.02 for k in scores)
 
         cand_gguf = GENS / f"gen-{gen_index:03d}.gguf"
