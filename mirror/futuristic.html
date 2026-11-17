@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>09ffe2e7a9a14eb3adf58c0fe2fe1b7c29e51a16a693719f6146ad8bdd30f75a</div>
+        <div class="address"><b>rarext:futuristic@</b>74bf347f49cc96a3226b16672dbeac7a3a73a7bf4ff55d3557cc1398fa6b9834</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -62,10 +62,10 @@
       <section id="site">
     <article class="card site">
       <h3><a href="https://futuristiclive.pages.dev/" rel="noopener">FUTURISTIC — we film the tomorrows we want to visit</a></h3>
-      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 33316 bytes anchored · rev 57df64064332</p>
+      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 48452 bytes anchored · rev d537732f6f43</p>
       <div class="chips">
-        <span>/ · 9446b</span>
-        <span>/styles.css · 16342b</span>
+        <span>/ · 24534b</span>
+        <span>/styles.css · 16390b</span>
         <span>/app.js · 5462b</span>
         <span>/favicon.svg · 476b</span>
         <span>/og.svg · 1590b</span>
@@ -74,7 +74,7 @@
     </article>
       </section>
 
-      <h2>Published record — 19 runs</h2>
+      <h2>Published record — 20 runs</h2>
       <section id="gallery">
     <article class="card">
       <h3>FUTURISTIC 20260821T133842-3ea13d</h3>
@@ -285,11 +285,19 @@
         <a href="https://pub-92ddc04234bf4deeaca0423ff9e69bed.r2.dev/archive/20261115T042326-717486.mp4" rel="noopener">R2 ▸</a>
       </div>
     </article>
+    <article class="card">
+      <h3>FUTURISTIC 20261117T060803-cdca83</h3>
+      <p class="prompt">What chilling in the galaxy looks like</p>
+      <p class="meta">run 20261117T060803-cdca83 · agnes-video-v2.0 · 5.04s · 1 platform</p>
+      <div class="chips">
+        <a class="yt" href="https://youtu.be/AACBbFR6lq0" rel="noopener">YouTube ▸</a>
+      </div>
+    </article>
       </section>
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=09ffe2e7a9a14eb3adf58c0fe2fe1b7c29e51a16a693719f6146ad8bdd30f75a">run the pinned verifier</a> ·
+        <a href="./verify.html?root=74bf347f49cc96a3226b16672dbeac7a3a73a7bf4ff55d3557cc1398fa6b9834">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -303,7 +311,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · 09ffe2e7a9a1…";
+            status.textContent = "ROOT VERIFIED · 74bf347f49cc…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
