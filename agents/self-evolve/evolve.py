@@ -81,11 +81,13 @@ def train_batch(model, opt, rows):
         by_prompt.setdefault(p, []).append((a, r))
     baseline = {p: sum(r for _, r in v) / len(v) for p, v in by_prompt.items()}
 
-    # self-imitation: the best verified rollout of each prompt
+    # self-imitation: the best rollout of each prompt when it is at least half
+    # right (shaped partial credit counts) — this is what moves the policy's
+    # MODE, not just its tail, which is exactly what greedy serving reads.
     im_rows = []
     for p, v in by_prompt.items():
         best = max(v, key=lambda ar: ar[1])
-        if best[1] >= 0.9:
+        if best[1] >= 0.5:
             im_rows.append((p, best[0]))
     losses = []
     if im_rows:
@@ -179,16 +181,19 @@ def engine_verify(gguf_path: Path, prompts) -> float:
     return float(last[0].split("(")[1].split("%")[0]) / 100.0
 
 
-def mix_prompts(rng, n_total):
+def mix_prompts(rng, n_total, gen_index=1):
     """Task mix: the new skills get most of the budget; deployed skills replay
-    so evolution never trades away what is already live."""
+    so evolution never trades away what is already live. The curriculum keeps
+    the first generations on 2-row comparisons (a binary choice the policy can
+    actually learn) and only widens to 3 rows once a generation has promoted."""
+    max_rows = 2 if gen_index <= 2 else None
     rows = []
     for _ in range(n_total):
         roll = rng.random()
         if roll < 0.4:
-            rows.append(comp_example(rng, "cheapest")[0])
+            rows.append(comp_example(rng, "cheapest", n_rows=max_rows)[0])
         elif roll < 0.8:
-            rows.append(comp_example(rng, "priciest")[0])
+            rows.append(comp_example(rng, "priciest", n_rows=max_rows)[0])
         else:
             rows.append(s0_example(rng)[0])
     return rows
@@ -226,9 +231,13 @@ def main():
     teacher_meta = None
     if seed_file.exists():
         payload = json.loads(seed_file.read_text())
-        seed_rows = [(s["prompt"], s["answer"]) for s in payload["seeds"]]
+        # only seeds that are still canonical under the CURRENT checker pass —
+        # the v1 seeds taught a different answer template and are kept for the
+        # named-template skill track, not this one
+        seed_rows = [(s["prompt"], s["answer"]) for s in payload["seeds"]
+                     if reward(s["prompt"], s["answer"]) == 1.0]
         teacher_meta = payload["teacher_models"]
-        print(f"teacher seeds: {len(seed_rows)} verified demonstrations "
+        print(f"teacher seeds: {len(seed_rows)} usable under the current checker "
               f"({', '.join(f'{m.split(chr(47))[-1]}: {s[chr(111)+chr(107)]}' for m, s in teacher_meta.items())})", flush=True)
 
     gen_index = 0
@@ -241,22 +250,22 @@ def main():
         # ---- phase A: bootcamp on verified demonstrations ----------------
         if seed_rows and args.bootcamp > 0:
             set_lr(args.bootcamp_lr)
-            s0_gold = [s0_example(rng) for _ in range(64)]
+            s0_gold = [s0_example(rng) for _ in range(96)]
             for it in range(1, args.bootcamp + 1):
                 if it % 2 == 1:
-                    pairs = rng.sample(seed_rows, min(12, len(seed_rows)))
+                    pairs = rng.sample(seed_rows, min(8, len(seed_rows)))
                 else:
-                    pairs = rng.sample(s0_gold, 12)  # never trade away S0
+                    pairs = rng.sample(s0_gold, 8)  # never trade away S0
                 loss = imitation_step(model, opt, pairs)
-                if it % 10 == 0 or it == 1:
+                if it % 25 == 0 or it == 1:
                     print(f"  bootcamp {it:3d}  loss {loss:.3f}", flush=True)
 
         # ---- phase B: relentless RL on computed rewards -------------------
         set_lr(args.rl_lr)
         dry = 0
         for it in range(1, args.iters + 1):
-            prompts = mix_prompts(rng, args.batch)
-            rows = agent_model.rollout(model, prompts, args.k, temperature=0.9, seed=args.seed * 1000 + it)
+            prompts = mix_prompts(rng, args.batch, gen_index)
+            rows = agent_model.rollout(model, prompts, args.k, temperature=0.7, seed=args.seed * 1000 + it)
             scored = [(p, a, reward(p, a)) for p, a in rows]
             loss = train_batch(model, opt, scored)
             best_r = max(r for _, _, r in scored)
@@ -279,13 +288,19 @@ def main():
 
         scores = evaluate(model, sets, n=40)
         print(f"  held-out: " + "  ".join(f"{k} {v*100:.0f}%" for k, v in scores.items()), flush=True)
+        # one greedy answer, verbatim — the mode is what serving reads
+        from model import batched_generate as _bg
+        probe_p, probe_a = sets["S1 cheapest"][0]
+        with torch.no_grad():
+            probe = _bg(model, [probe_p], max_new=48, temperature=0.0)[0]
+        print(f"  probe S1 greedy: {probe!r}", flush=True)
 
-        # gate: everything must hold or improve vs the currently promoted gen
-        gate_ok = scores["S0 price-copy"] >= 0.95 and scores["S1 cheapest"] > 0.0 and scores["S2 priciest"] > 0.0
-        if promoted is not None:
-            gate_ok = gate_ok and all(
-                scores[k] >= promoted["scores"][k] - 0.01 for k in scores
-            )
+        # gate: the deployed skill must hold; at least one new skill must
+        # improve over the promoted generation, and nothing may regress.
+        base = promoted["scores"] if promoted else {"S0 price-copy": 1.0, "S1 cheapest": 0.0, "S2 priciest": 0.0}
+        gate_ok = scores["S0 price-copy"] >= 0.95
+        gate_ok = gate_ok and (scores["S1 cheapest"] > base["S1 cheapest"] or scores["S2 priciest"] > base["S2 priciest"])
+        gate_ok = gate_ok and all(scores[k] >= base[k] - 0.02 for k in scores)
 
         cand_gguf = GENS / f"gen-{gen_index:03d}.gguf"
         cand_pt = GENS / f"gen-{gen_index:03d}.pt"

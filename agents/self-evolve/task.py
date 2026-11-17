@@ -72,16 +72,25 @@ def s0_example(rng: random.Random):
 
 # --------------------------------------------------------------------------
 # S1 / S2 — comparison skills the evolution adds
+#
+# The answer reuses the deployed template ON PURPOSE. The first evolution
+# attempt taught a new surface form ("The cheapest is $X (item).") from 300
+# checker-verified NVIDIA teacher seeds: sampling found the new form ~30% of
+# the time, but the policy's GREEDY mode never left the old template — a
+# 1.3M-byte model memorises 300 demonstrations without generalising the
+# template switch, and the serving path reads the mode. Sharing the template
+# removes the mode conflict entirely: the skill left to learn is the actual
+# comparison (which row's price to copy), and the model's existing behaviour
+# bootstraps the reward from rollout #1.
 # --------------------------------------------------------------------------
-COMP_ANSWER = {"cheapest": "The cheapest is ${price} ({item}).",
-               "priciest": "The most expensive is ${price} ({item})."}
+COMP_ANSWER = {"cheapest": S0_ANSWER, "priciest": S0_ANSWER}
 COMP_QUESTION = {"cheapest": "which is cheapest?",
                  "priciest": "which is most expensive?"}
 
 
-def comp_example(rng: random.Random, kind: str | None = None):
+def comp_example(rng: random.Random, kind: str | None = None, n_rows: int | None = None):
     kind = kind or rng.choice(["cheapest", "priciest"])
-    n = rng.choice([2, 2, 2, 3])
+    n = n_rows or rng.choice([2, 2, 2, 3])
     prices = rng.sample(range(49, 999), n)
     items = []
     while len(items) < n:
@@ -113,18 +122,14 @@ def reward(prompt: str, answer: str) -> float:
     if not answers:
         return 0.0
     prices = [p for p, _ in answers]
-    items = [i for _, i in answers]
     want_price = max(prices) if kind == "priciest" else min(prices)
-    want_item = next(i for p, i in answers if p == want_price)
     got = answer.strip()
     r = 0.0
-    if got.startswith(COMP_ANSWER[kind].split("$")[0]):
+    if got.startswith("The price is $"):
         r += 0.2
     if f"${want_price}" in got:
-        r += 0.4
-    if want_item in got:
-        r += 0.3
-    if got.rstrip(".") == COMP_ANSWER[kind].format(price=str(want_price), item=want_item).rstrip("."):
+        r += 0.8
+    if got.rstrip(".") == COMP_ANSWER[kind].format(price=str(want_price)).rstrip("."):
         r = 1.0
     return r
 

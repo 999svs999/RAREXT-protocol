@@ -1,18 +1,22 @@
 {
  "teacher_models": {
   "nvidia/nemotron-3-ultra-550b-a55b": {
-   "ok": 82,
+   "ok": 219,
+   "fail": 2
+  },
+  "nvidia/nemotron-3.5-lightning-30b-a3b": {
+   "ok": 113,
    "fail": 0
   }
  },
- "accepted": 80,
+ "accepted": 300,
  "seeds": [
   {
    "skill": "cheapest",
    "prompt": "rows: -vest head|$73\n-bape|$288\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $73 (vest head).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1699,
+   "label_ms": 2208,
    "label_tokens": 105
   },
   {
@@ -20,23 +24,23 @@
    "prompt": "rows: -RED|$542\n-BIG MINI|$772\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $542 (RED).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2193,
-   "label_tokens": 116
+   "label_ms": 3508,
+   "label_tokens": 107
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -ii box quilted mini|$673\n-SOCKS|$289\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $289 (SOCKS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3387,
-   "label_tokens": 124
+   "label_ms": 4426,
+   "label_tokens": 120
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -BOX #2 BIG HEAD|$782\n-PANTS NAVY|$828\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $782 (BOX #2 BIG HEAD).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2998,
+   "label_ms": 2249,
    "label_tokens": 133
   },
   {
@@ -44,7 +48,7 @@
    "prompt": "rows: -NAVY VEST|$664\n-COLLEGE|$573\n-high white|$754\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $573 (COLLEGE).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4449,
+   "label_ms": 4066,
    "label_tokens": 131
   },
   {
@@ -52,47 +56,47 @@
    "prompt": "rows: -red gift|$313\n-gift camo ii|$768\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $313 (red gift).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3156,
-   "label_tokens": 97
+   "label_ms": 1494,
+   "label_tokens": 118
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -red milo|$549\n-VEST NAVY|$412\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $412 (VEST NAVY).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 9325,
-   "label_tokens": 87
+   "label_ms": 1628,
+   "label_tokens": 125
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -CAP DOWN|$137\n-white white|$530\n-BABY SHORTS APE STORE|$624\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $137 (CAP DOWN).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2392,
-   "label_tokens": 139
+   "label_ms": 3446,
+   "label_tokens": 263
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -#2 CAP|$900\n-HEAD STA LOW|$795\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $795 (HEAD STA LOW).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1916,
-   "label_tokens": 119
+   "label_ms": 2251,
+   "label_tokens": 83
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -WHITE II COLLEGE NAVY HIGH|$434\n-#2 crew|$909\n-red vest|$733\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $434 (WHITE II COLLEGE NAVY HIGH).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2737,
-   "label_tokens": 158
+   "label_ms": 9143,
+   "label_tokens": 248
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -LOW HOODIE RED|$671\n-BOX NAVY BIG|$754\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $671 (LOW HOODIE RED).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1598,
+   "label_ms": 2055,
    "label_tokens": 131
   },
   {
@@ -100,15 +104,15 @@
    "prompt": "rows: -TIGER|$381\n-camo jacket|$311\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $311 (camo jacket).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2519,
-   "label_tokens": 116
+   "label_ms": 1683,
+   "label_tokens": 115
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -STORE MILO BABY|$138\n-hoodie high down|$169\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $138 (STORE MILO BABY).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2912,
+   "label_ms": 4660,
    "label_tokens": 132
   },
   {
@@ -116,15 +120,15 @@
    "prompt": "rows: -pants head|$556\n-HEAD MINI BLACK|$322\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $322 (HEAD MINI BLACK).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3664,
-   "label_tokens": 219
+   "label_ms": 3749,
+   "label_tokens": 144
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -grey jacket|$982\n-baby college|$290\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $290 (baby college).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2216,
+   "label_ms": 2402,
    "label_tokens": 118
   },
   {
@@ -132,15 +136,15 @@
    "prompt": "rows: -HEAD BAPE HIGH NAVY|$233\n-TEE|$331\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $233 (HEAD BAPE HIGH NAVY).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4666,
-   "label_tokens": 134
+   "label_ms": 2631,
+   "label_tokens": 143
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -mega hoodie #2|$990\n-PANTS MINI|$632\n-#2 SHORTS JACKET MEGA|$552\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $552 (#2 SHORTS JACKET MEGA).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1553,
+   "label_ms": 2052,
    "label_tokens": 160
   },
   {
@@ -148,15 +152,15 @@
    "prompt": "rows: -BOX STA|$189\n-vest mega|$986\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $189 (BOX STA).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1372,
-   "label_tokens": 122
+   "label_ms": 4222,
+   "label_tokens": 195
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -jacket cap|$547\n-BAPE BOX WHITE|$159\n-MILO SHORTS PANTS|$852\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $159 (BAPE BOX WHITE).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2267,
+   "label_ms": 2367,
    "label_tokens": 145
   },
   {
@@ -164,7 +168,7 @@
    "prompt": "rows: -VEST SHORTS SHORTS|$309\n-NAVY SHORTS TEE|$884\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $309 (VEST SHORTS SHORTS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2138,
+   "label_ms": 4635,
    "label_tokens": 142
   },
   {
@@ -172,47 +176,47 @@
    "prompt": "rows: -PANTS RED BABY #2|$548\n-milo white black milo|$616\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $548 (PANTS RED BABY #2).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2228,
-   "label_tokens": 162
+   "label_ms": 4394,
+   "label_tokens": 129
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -II LOW LOW STORE|$562\n-gift|$505\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $505 (gift).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2382,
-   "label_tokens": 109
+   "label_ms": 2564,
+   "label_tokens": 114
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -STORE TEE #1|$272\n-BOX CREW MILO GIFT|$429\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $272 (STORE TEE #1).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 5852,
-   "label_tokens": 137
+   "label_ms": 2382,
+   "label_tokens": 146
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -classic pants big tee|$312\n-red city|$805\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $312 (classic pants big tee).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4613,
-   "label_tokens": 131
+   "label_ms": 2985,
+   "label_tokens": 121
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -SOCKS HOODIE PANTS SHARK|$925\n-MINI BIG SHORTS|$104\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $104 (MINI BIG SHORTS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4998,
-   "label_tokens": 157
+   "label_ms": 2915,
+   "label_tokens": 137
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -APE RED SOCKS|$111\n-VEST MEGA|$794\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $111 (APE RED SOCKS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2911,
+   "label_ms": 1335,
    "label_tokens": 135
   },
   {
@@ -220,47 +224,47 @@
    "prompt": "rows: -SOCKS MINI|$954\n-big milo cap white|$196\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $196 (big milo cap white).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1532,
-   "label_tokens": 125
+   "label_ms": 1939,
+   "label_tokens": 129
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -HOODIE HEAD #2 HIGH|$140\n-TEE QUILTED TIGER BABY|$995\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $140 (HOODIE HEAD #2 HIGH).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2396,
-   "label_tokens": 140
+   "label_ms": 4712,
+   "label_tokens": 102
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -tiger store ape white|$216\n-BLACK APE JACKET LOW|$86\n-STA HEAD|$259\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $86 (BLACK APE JACKET LOW).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 6308,
-   "label_tokens": 345
+   "label_ms": 4520,
+   "label_tokens": 147
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -CAMO NAVY|$513\n-cap vest quilted|$289\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $289 (cap vest quilted).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2265,
-   "label_tokens": 91
+   "label_ms": 2774,
+   "label_tokens": 127
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -BABY VEST #2 MINI GIFT|$283\n-bape black|$63\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $63 (bape black).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1683,
-   "label_tokens": 122
+   "label_ms": 3044,
+   "label_tokens": 120
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -WHITE PANTS SOCKS|$618\n-BIG SHORTS|$933\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $618 (WHITE PANTS SOCKS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1996,
+   "label_ms": 2520,
    "label_tokens": 138
   },
   {
@@ -268,15 +272,15 @@
    "prompt": "rows: -JACKET CLASSIC|$113\n-MILO SOCKS|$443\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $113 (JACKET CLASSIC).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2301,
-   "label_tokens": 125
+   "label_ms": 2561,
+   "label_tokens": 131
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -milo big mega|$859\n-DOWN|$205\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $205 (DOWN).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2343,
+   "label_ms": 9593,
    "label_tokens": 114
   },
   {
@@ -284,7 +288,7 @@
    "prompt": "rows: -classic head mini|$893\n-shorts mega|$188\n-STA #1 SHARK JACKET TIGER|$184\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $184 (STA #1 SHARK JACKET TIGER).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2544,
+   "label_ms": 6071,
    "label_tokens": 166
   },
   {
@@ -292,15 +296,15 @@
    "prompt": "rows: -shark baby red store|$983\n-COLLEGE BAPE CREW|$97\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $97 (COLLEGE BAPE CREW).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 9325,
-   "label_tokens": 643
+   "label_ms": 6271,
+   "label_tokens": 420
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -RED BLACK BIG|$102\n-CAP|$879\n-CITY BABY|$892\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $102 (RED BLACK BIG).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2142,
+   "label_ms": 2421,
    "label_tokens": 134
   },
   {
@@ -308,7 +312,7 @@
    "prompt": "rows: -classic jacket crew|$768\n-shorts red down white|$893\n-big head|$126\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $126 (big head).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1731,
+   "label_ms": 4589,
    "label_tokens": 128
   },
   {
@@ -316,336 +320,2096 @@
    "prompt": "rows: -HEAD PANTS CAP|$220\n-BIG QUILTED|$737\n-college mega milo|$62\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $62 (college mega milo).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4204,
-   "label_tokens": 185
+   "label_ms": 2512,
+   "label_tokens": 173
   },
   {
    "skill": "cheapest",
    "prompt": "rows: -navy ape low milo #2|$327\n-VEST STORE|$406\nq: which is cheapest?\na: ",
    "answer": "The cheapest is $327 (navy ape low milo #2).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1236,
+   "label_ms": 2236,
    "label_tokens": 106
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -GREY|$157\n-GIFT|$486\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $486 (GIFT).",
+   "skill": "cheapest",
+   "prompt": "rows: -GREY|$157\n-GIFT|$486\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $157 (GREY).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2648,
-   "label_tokens": 114
+   "label_ms": 5697,
+   "label_tokens": 112
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -shark|$321\n-shorts crew city|$570\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $570 (shorts crew city).",
+   "skill": "cheapest",
+   "prompt": "rows: -shark|$321\n-shorts crew city|$570\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $321 (shark).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1903,
-   "label_tokens": 117
+   "label_ms": 2376,
+   "label_tokens": 125
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -DOWN CAMO VEST|$77\n-BOX #1 CAP|$981\n-VEST MINI|$226\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $981 (BOX #1 CAP).",
+   "skill": "cheapest",
+   "prompt": "rows: -DOWN CAMO VEST|$77\n-BOX #1 CAP|$981\n-VEST MINI|$226\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $77 (DOWN CAMO VEST).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4471,
-   "label_tokens": 137
+   "label_ms": 2615,
+   "label_tokens": 135
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -milo big box milo|$537\n-quilted red classic|$872\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $872 (quilted red classic).",
+   "skill": "cheapest",
+   "prompt": "rows: -milo big box milo|$537\n-quilted red classic|$872\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $537 (milo big box milo).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1768,
-   "label_tokens": 134
+   "label_ms": 11182,
+   "label_tokens": 133
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -socks red camo|$130\n-crew city head|$460\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $460 (crew city head).",
+   "skill": "cheapest",
+   "prompt": "rows: -socks red camo|$130\n-crew city head|$460\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $130 (socks red camo).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1997,
+   "label_ms": 2533,
+   "label_tokens": 106
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -socks pants|$464\n-DOWN|$343\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $343 (DOWN).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2133,
+   "label_tokens": 112
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -vest high|$490\n-college milo|$123\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $123 (college milo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2891,
    "label_tokens": 80
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -socks pants|$464\n-DOWN|$343\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $464 (socks pants).",
+   "skill": "cheapest",
+   "prompt": "rows: -BIG STA SOCKS|$185\n-TEE|$780\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $185 (BIG STA SOCKS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2462,
-   "label_tokens": 110
+   "label_ms": 4138,
+   "label_tokens": 134
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -vest high|$490\n-college milo|$123\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $490 (vest high).",
+   "skill": "cheapest",
+   "prompt": "rows: -hoodie #1 box|$331\n-GIFT RED|$705\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $331 (hoodie #1 box).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1533,
-   "label_tokens": 75
+   "label_ms": 2381,
+   "label_tokens": 125
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -BIG STA SOCKS|$185\n-TEE|$780\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $780 (TEE).",
+   "skill": "cheapest",
+   "prompt": "rows: -classic black|$181\n-QUILTED CAMO NAVY|$877\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $181 (classic black).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2752,
-   "label_tokens": 120
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -classic black|$181\n-QUILTED CAMO NAVY|$877\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $877 (QUILTED CAMO NAVY).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2559,
-   "label_tokens": 102
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -MILO GREY HIGH|$923\n-tee|$532\n-sta city camo|$687\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $923 (MILO GREY HIGH).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1798,
-   "label_tokens": 138
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -milo|$591\n-#1 gift|$602\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $602 (#1 gift).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1687,
-   "label_tokens": 76
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -tee hoodie sta|$880\n-tiger city low|$437\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $880 (tee hoodie sta).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1438,
+   "label_ms": 2235,
    "label_tokens": 104
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -COLLEGE HOODIE|$312\n-NAVY CITY|$910\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $910 (NAVY CITY).",
+   "skill": "cheapest",
+   "prompt": "rows: -MILO GREY HIGH|$923\n-tee|$532\n-sta city camo|$687\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $532 (tee).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3582,
-   "label_tokens": 90
+   "label_ms": 2714,
+   "label_tokens": 126
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -socks store #1 bape|$324\n-STA CLASSIC BOX|$235\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $324 (socks store #1 bape).",
+   "skill": "cheapest",
+   "prompt": "rows: -milo|$591\n-#1 gift|$602\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $591 (milo).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2862,
-   "label_tokens": 98
+   "label_ms": 5058,
+   "label_tokens": 111
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -MILO QUILTED HEAD|$464\n-hoodie mega|$549\n-CREW|$545\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $549 (hoodie mega).",
+   "skill": "cheapest",
+   "prompt": "rows: -tee hoodie sta|$880\n-tiger city low|$437\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $437 (tiger city low).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2264,
-   "label_tokens": 258
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -navy tee red tee|$415\n-PANTS TEE|$461\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $461 (PANTS TEE).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2880,
+   "label_ms": 2639,
    "label_tokens": 121
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -PANTS WHITE|$976\n-CAP SHARK|$673\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $976 (PANTS WHITE).",
+   "skill": "cheapest",
+   "prompt": "rows: -COLLEGE HOODIE|$312\n-NAVY CITY|$910\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $312 (COLLEGE HOODIE).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1162,
-   "label_tokens": 85
+   "label_ms": 2045,
+   "label_tokens": 135
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -white classic tee camo|$740\n-tiger shark pants hoodie|$556\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $740 (white classic tee camo).",
+   "skill": "cheapest",
+   "prompt": "rows: -socks store #1 bape|$324\n-STA CLASSIC BOX|$235\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $235 (STA CLASSIC BOX).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2066,
-   "label_tokens": 92
+   "label_ms": 6635,
+   "label_tokens": 359
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -MILO|$506\n-BOX DOWN SHARK HIGH|$841\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $841 (BOX DOWN SHARK HIGH).",
+   "skill": "cheapest",
+   "prompt": "rows: -MILO QUILTED HEAD|$464\n-hoodie mega|$549\n-CREW|$545\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $464 (MILO QUILTED HEAD).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1679,
-   "label_tokens": 90
+   "label_ms": 2169,
+   "label_tokens": 146
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -JACKET STA BIG|$341\n-MILO NAVY|$447\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $447 (MILO NAVY).",
+   "skill": "cheapest",
+   "prompt": "rows: -navy tee red tee|$415\n-PANTS TEE|$461\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $415 (navy tee red tee).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1668,
-   "label_tokens": 92
+   "label_ms": 5440,
+   "label_tokens": 222
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -MEGA JACKET DOWN BABY|$622\n-CLASSIC HIGH SOCKS|$471\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $622 (MEGA JACKET DOWN BABY).",
+   "skill": "cheapest",
+   "prompt": "rows: -PANTS WHITE|$976\n-CAP SHARK|$673\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $673 (CAP SHARK).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4705,
+   "label_ms": 2609,
+   "label_tokens": 118
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -white classic tee camo|$740\n-tiger shark pants hoodie|$556\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $556 (tiger shark pants hoodie).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1977,
+   "label_tokens": 133
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MILO|$506\n-BOX DOWN SHARK HIGH|$841\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $506 (MILO).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1655,
+   "label_tokens": 77
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -JACKET STA BIG|$341\n-MILO NAVY|$447\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $341 (JACKET STA BIG).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3664,
+   "label_tokens": 135
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MEGA JACKET DOWN BABY|$622\n-CLASSIC HIGH SOCKS|$471\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $471 (CLASSIC HIGH SOCKS).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3942,
+   "label_tokens": 102
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -tee mini|$472\n-city low|$506\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $472 (tee mini).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3063,
+   "label_tokens": 74
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -shorts jacket red|$640\n-HOODIE CLASSIC BAPE|$427\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $427 (HOODIE CLASSIC BAPE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1677,
+   "label_tokens": 138
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -GIFT BOX CITY HIGH|$869\n-CAMO TIGER|$149\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $149 (CAMO TIGER).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1805,
+   "label_tokens": 132
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -JACKET HIGH SHARK|$275\n-TEE GIFT NAVY|$485\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $275 (JACKET HIGH SHARK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3221,
+   "label_tokens": 98
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -CAMO CITY|$855\n-CAMO COLLEGE HOODIE|$482\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $482 (CAMO COLLEGE HOODIE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2457,
+   "label_tokens": 138
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -black white milo|$835\n-HOODIE JACKET APE|$455\n-GREY NAVY HOODIE BABY|$701\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $455 (HOODIE JACKET APE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4598,
+   "label_tokens": 160
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -cap cap shorts navy|$126\n-JACKET PANTS BIG|$629\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $126 (cap cap shorts navy).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2724,
+   "label_tokens": 142
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -APE MINI|$833\n-jacket shorts|$427\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $427 (jacket shorts).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1992,
+   "label_tokens": 111
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -gift hoodie|$717\n-tiger #1|$680\n-bape sta sta|$289\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $289 (bape sta sta).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1831,
+   "label_tokens": 134
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -college milo|$338\n-milo box college down|$900\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $338 (college milo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3660,
+   "label_tokens": 86
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MINI SHARK CAMO|$761\n-BOX #2 BIG|$510\n-CAP BOX BABY|$351\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $351 (CAP BOX BABY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2906,
+   "label_tokens": 142
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -mega box|$164\n-tiger tee|$915\n-QUILTED|$605\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $164 (mega box).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2230,
+   "label_tokens": 180
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#1 head|$503\n-gift sta down|$53\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $53 (gift sta down).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1800,
+   "label_tokens": 117
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#2 cap down navy|$754\n-BLACK BLACK|$774\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $754 (#2 cap down navy).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1702,
+   "label_tokens": 126
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -tee socks|$883\n-CREW QUILTED|$680\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $680 (CREW QUILTED).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2685,
+   "label_tokens": 132
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -BLACK MEGA|$528\n-BLACK CLASSIC JACKET|$889\n-black down|$196\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $196 (black down).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3423,
+   "label_tokens": 171
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -shorts mega tee|$118\n-HEAD TEE|$350\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $118 (shorts mega tee).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2535,
+   "label_tokens": 102
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -big baby camo head|$207\n-COLLEGE #2|$686\n-shark city|$230\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $207 (big baby camo head).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2584,
+   "label_tokens": 139
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -SHORTS|$743\n-quilted|$615\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $615 (quilted).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2395,
+   "label_tokens": 173
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -VEST|$269\n-shark|$246\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $246 (shark).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1523,
    "label_tokens": 110
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -tee mini|$472\n-city low|$506\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $506 (city low).",
+   "skill": "cheapest",
+   "prompt": "rows: -II CAP|$632\n-BLACK PANTS|$348\n-COLLEGE CLASSIC|$99\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $99 (COLLEGE CLASSIC).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1849,
+   "label_ms": 5390,
+   "label_tokens": 133
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -GREY|$103\n-CLASSIC QUILTED MILO|$593\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $103 (GREY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3014,
+   "label_tokens": 119
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -city bape sta milo|$141\n-CITY SHARK|$864\n-BAPE HIGH II RED SHORTS|$617\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $141 (city bape sta milo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3453,
+   "label_tokens": 153
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -hoodie classic white|$169\n-city black low classic|$901\n-HIGH STA PANTS|$900\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $169 (hoodie classic white).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 9722,
+   "label_tokens": 376
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -LOW GIFT|$146\n-store|$662\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $146 (LOW GIFT).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2359,
+   "label_tokens": 113
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -RED STORE|$292\n-down mega|$830\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $292 (RED STORE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2529,
    "label_tokens": 114
   },
   {
-   "skill": "priciest",
-   "prompt": "rows: -shorts jacket red|$640\n-HOODIE CLASSIC BAPE|$427\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $640 (shorts jacket red).",
+   "skill": "cheapest",
+   "prompt": "rows: -MILO QUILTED|$334\n-STA CREW MINI|$166\n-hoodie college|$712\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $166 (STA CREW MINI).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2228,
+   "label_ms": 10166,
+   "label_tokens": 145
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -baby|$575\n-NAVY BOX DOWN BLACK|$856\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $575 (baby).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1358,
+   "label_tokens": 79
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -NAVY HEAD|$543\n-box tee|$724\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $543 (NAVY HEAD).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2184,
+   "label_tokens": 124
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -quilted|$955\n-tiger black milo|$370\n-COLLEGE CITY RED VEST|$321\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $321 (COLLEGE CITY RED VEST).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2020,
+   "label_tokens": 151
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MILO MILO|$799\n-milo tiger white quilted|$76\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $76 (milo tiger white quilted).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3144,
+   "label_tokens": 299
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -grey tiger|$897\n-LOW #2|$379\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $379 (LOW #2).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2018,
+   "label_tokens": 120
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -gift tee|$652\n-pants|$809\n-SHORTS CAP CAP BIG|$311\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $311 (SHORTS CAP CAP BIG).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3887,
+   "label_tokens": 140
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -baby box|$846\n-city|$530\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $530 (city).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2819,
+   "label_tokens": 69
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -college sta #1 big|$895\n-CAMO SHARK|$172\n-cap white milo|$988\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $172 (CAMO SHARK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2252,
+   "label_tokens": 137
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -BABY|$657\n-QUILTED HEAD|$491\n-socks black|$805\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $491 (QUILTED HEAD).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3329,
+   "label_tokens": 196
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -head sta high|$932\n-HOODIE MINI STA|$564\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $564 (HOODIE MINI STA).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2545,
+   "label_tokens": 117
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -white camo tee|$768\n-BOX HIGH|$353\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $353 (BOX HIGH).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2760,
+   "label_tokens": 78
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -cap mega ii cap|$892\n-college camo|$221\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $221 (college camo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2938,
+   "label_tokens": 124
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -LOW|$576\n-low quilted big|$312\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $312 (low quilted big).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 12367,
+   "label_tokens": 187
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -APE #2|$52\n-#2 tee|$239\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $52 (APE #2).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2001,
+   "label_tokens": 114
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -HIGH BOX|$679\n-mini camo|$534\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $534 (mini camo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3933,
+   "label_tokens": 120
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -navy city|$412\n-vest down box shorts|$603\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $412 (navy city).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1040,
+   "label_tokens": 80
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#1 socks|$132\n-STORE TIGER|$996\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $132 (#1 socks).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4545,
+   "label_tokens": 157
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -LOW DOWN BLACK|$444\n-WHITE DOWN WHITE BLACK|$580\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $444 (LOW DOWN BLACK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2571,
+   "label_tokens": 123
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -VEST BIG MINI|$691\n-CLASSIC GREY HIGH|$738\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $691 (VEST BIG MINI).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3725,
+   "label_tokens": 131
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -mega mini big|$712\n-sta black low bape|$867\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $712 (mega mini big).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2569,
+   "label_tokens": 83
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -white|$266\n-CREW BAPE CREW CAMO|$919\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $266 (white).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2292,
+   "label_tokens": 114
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -crew milo crew cap|$584\n-cap ii ape|$630\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $584 (crew milo crew cap).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3132,
+   "label_tokens": 138
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#2 WHITE|$178\n-ii hoodie head|$985\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $178 (#2 WHITE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4239,
+   "label_tokens": 186
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -VEST #1 BLACK VEST|$65\n-white pants|$781\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $65 (VEST #1 BLACK VEST).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4844,
+   "label_tokens": 434
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -GREY GREY|$773\n-low|$973\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $773 (GREY GREY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1743,
+   "label_tokens": 116
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -APE APE VEST|$92\n-STORE SHARK STA|$765\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $92 (APE APE VEST).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2189,
+   "label_tokens": 127
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -store down milo|$913\n-low high white red|$156\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $156 (low high white red).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3207,
+   "label_tokens": 126
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -APE BOX|$64\n-#1 BIG|$766\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $64 (APE BOX).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2757,
+   "label_tokens": 118
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -GREY HEAD RED|$548\n-white grey grey|$602\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $548 (GREY HEAD RED).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3905,
+   "label_tokens": 88
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MILO BOX II|$737\n-PANTS GREY|$578\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $578 (PANTS GREY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2321,
+   "label_tokens": 125
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -COLLEGE PANTS|$391\n-APE BOX CLASSIC MEGA|$491\n-VEST GREY CAMO|$319\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $319 (VEST GREY CAMO).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2679,
+   "label_tokens": 150
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -city pants|$469\n-SOCKS LOW II|$578\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $469 (city pants).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2444,
+   "label_tokens": 77
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -white|$372\n-HEAD CAP|$115\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $115 (HEAD CAP).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3009,
+   "label_tokens": 115
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -quilted black tiger|$269\n-mega|$630\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $269 (quilted black tiger).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3263,
+   "label_tokens": 123
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -HEAD TEE CAMO|$907\n-HEAD CLASSIC|$691\n-JACKET GIFT MEGA|$99\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $99 (JACKET GIFT MEGA).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1656,
+   "label_tokens": 148
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -mega mega|$691\n-hoodie|$125\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $125 (hoodie).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1741,
+   "label_tokens": 112
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -mega white shorts|$650\n-JACKET MINI|$906\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $650 (mega white shorts).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3891,
+   "label_tokens": 169
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -BOX SHARK|$208\n-BAPE RED DOWN|$439\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $208 (BOX SHARK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2546,
+   "label_tokens": 128
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -STORE #1 GIFT HEAD|$754\n-NAVY|$813\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $754 (STORE #1 GIFT HEAD).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2034,
+   "label_tokens": 131
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -COLLEGE COLLEGE|$288\n-HEAD HIGH CAMO|$314\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $288 (COLLEGE COLLEGE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 6666,
+   "label_tokens": 134
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -head|$468\n-CITY STA COLLEGE|$352\n-VEST GIFT|$419\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $352 (CITY STA COLLEGE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4968,
+   "label_tokens": 144
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -store city|$660\n-BAPE PANTS MINI|$562\n-#1 CITY|$435\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $435 (#1 CITY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2335,
+   "label_tokens": 174
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -store red store|$667\n-TIGER CREW COLLEGE CLASSIC|$64\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $64 (TIGER CREW COLLEGE CLASSIC).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 11425,
+   "label_tokens": 390
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#1 STORE GIFT RED|$511\n-jacket white black|$484\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $484 (jacket white black).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3086,
+   "label_tokens": 125
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -high white|$195\n-BLACK|$844\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $195 (high white).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1923,
+   "label_tokens": 124
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -BLACK SHORTS SOCKS|$329\n-low city quilted shark|$770\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $329 (BLACK SHORTS SOCKS).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1848,
+   "label_tokens": 104
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MILO|$426\n-box shark navy ape|$196\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $196 (box shark navy ape).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2453,
+   "label_tokens": 118
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -LOW BABY|$643\n-CITY BIG|$638\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $638 (CITY BIG).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2273,
+   "label_tokens": 118
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -pants socks mini|$564\n-ape vest down|$50\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $50 (ape vest down).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2289,
+   "label_tokens": 114
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -#1 tee low|$677\n-cap shark red|$932\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $677 (#1 tee low).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2897,
+   "label_tokens": 132
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -shark low high gift|$845\n-HEAD CITY HOODIE|$684\n-BIG BIG #1|$920\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $684 (HEAD CITY HOODIE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2390,
+   "label_tokens": 168
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -RED SOCKS CLASSIC MILO|$780\n-CREW BLACK MILO|$82\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $82 (CREW BLACK MILO).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1348,
+   "label_tokens": 127
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -JACKET QUILTED|$254\n-QUILTED COLLEGE|$413\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $254 (JACKET QUILTED).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2794,
+   "label_tokens": 101
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -box tee hoodie navy|$92\n-cap mini|$297\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $92 (box tee hoodie navy).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1563,
+   "label_tokens": 117
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -CREW BAPE MILO|$762\n-BLACK BAPE|$325\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $325 (BLACK BAPE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2212,
+   "label_tokens": 133
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -MILO HIGH HIGH|$921\n-socks box sta|$287\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $287 (socks box sta).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 10466,
+   "label_tokens": 474
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -WHITE CAP|$779\n-TEE CAMO BOX NAVY|$478\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $478 (TEE CAMO BOX NAVY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4042,
+   "label_tokens": 137
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -APE CLASSIC VEST #1 BLACK|$516\n-vest baby mini|$511\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $511 (vest baby mini).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1491,
+   "label_tokens": 88
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -GIFT MILO|$522\n-down sta low hoodie|$347\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $347 (down sta low hoodie).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 12373,
+   "label_tokens": 319
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -DOWN HOODIE JACKET GREY|$79\n-camo white city|$708\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $79 (DOWN HOODIE JACKET GREY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2058,
+   "label_tokens": 102
+  },
+  {
+   "skill": "cheapest",
+   "prompt": "rows: -quilted|$203\n-NAVY|$998\n-STA BABY SHORTS|$859\nq: which is cheapest?\na: ",
+   "answer": "The cheapest is $203 (quilted).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3340,
+   "label_tokens": 135
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -grey bape store shark|$198\n-SHORTS JACKET LOW APE|$296\n-VEST|$540\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $540 (VEST).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1866,
+   "label_tokens": 140
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -APE COLLEGE|$525\n-COLLEGE #1 BABY BAPE|$592\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $592 (COLLEGE #1 BABY BAPE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2586,
+   "label_tokens": 115
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -NAVY #2 HEAD|$710\n-store vest|$260\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $710 (NAVY #2 HEAD).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3123,
+   "label_tokens": 92
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -milo ape head mini|$873\n-TIGER JACKET|$505\n-red cap quilted tiger|$238\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $873 (milo ape head mini).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3181,
+   "label_tokens": 124
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -BOX HOODIE|$976\n-VEST #2 NAVY MILO WHITE|$658\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $976 (BOX HOODIE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1816,
+   "label_tokens": 96
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -quilted|$332\n-camo bape sta|$207\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $332 (quilted).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1304,
+   "label_tokens": 119
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -QUILTED II|$746\n-quilted bape pants college|$969\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $969 (quilted bape pants college).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 7080,
+   "label_tokens": 276
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -RED RED APE|$453\n-DOWN CREW|$595\n-MILO MILO|$829\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $829 (MILO MILO).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3585,
+   "label_tokens": 135
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHARK CLASSIC CAP BIG|$459\n-HIGH DOWN QUILTED|$405\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $459 (SHARK CLASSIC CAP BIG).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2375,
+   "label_tokens": 96
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -vest shorts store black|$422\n-CREW|$417\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $422 (vest shorts store black).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1409,
+   "label_tokens": 105
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -ape mega|$915\n-MILO NAVY COLLEGE|$977\n-JACKET SOCKS MINI DOWN|$115\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $977 (MILO NAVY COLLEGE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2018,
+   "label_tokens": 155
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -APE SHARK WHITE|$643\n-JACKET SHORTS BLACK|$469\n-CLASSIC CITY HOODIE|$496\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $643 (APE SHARK WHITE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4765,
+   "label_tokens": 151
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -city classic head baby|$285\n-milo classic|$643\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $643 (milo classic).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2873,
+   "label_tokens": 124
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -black classic mega|$259\n-CITY SHARK|$827\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $827 (CITY SHARK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1578,
    "label_tokens": 89
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -GIFT BOX CITY HIGH|$869\n-CAMO TIGER|$149\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $869 (GIFT BOX CITY HIGH).",
+   "prompt": "rows: -mini milo high cap|$418\n-SHORTS PANTS|$780\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $780 (SHORTS PANTS).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1308,
+   "label_ms": 2666,
+   "label_tokens": 91
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHORTS II TEE|$609\n-cap high vest|$374\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $609 (SHORTS II TEE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2547,
+   "label_tokens": 133
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -STORE DOWN MILO #1|$435\n-big|$208\n-JACKET BOX|$402\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $435 (STORE DOWN MILO #1).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 18001,
+   "label_tokens": 146
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -baby|$465\n-white mini city hoodie|$244\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $465 (baby).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1767,
+   "label_tokens": 113
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -QUILTED LOW|$503\n-BLACK STA STA|$913\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $913 (BLACK STA STA).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2585,
+   "label_tokens": 93
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHORTS CREW|$581\n-MILO MEGA GREY BLACK|$330\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $581 (SHORTS CREW).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4722,
    "label_tokens": 95
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -JACKET HIGH SHARK|$275\n-TEE GIFT NAVY|$485\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $485 (TEE GIFT NAVY).",
+   "prompt": "rows: -CREW GREY|$369\n-red high ape hoodie|$736\n-VEST BAPE CAMO HIGH|$575\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $736 (red high ape hoodie).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4632,
-   "label_tokens": 100
+   "label_ms": 5246,
+   "label_tokens": 199
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -CAMO CITY|$855\n-CAMO COLLEGE HOODIE|$482\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $855 (CAMO CITY).",
+   "prompt": "rows: -hoodie camo|$699\n-socks|$855\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $855 (socks).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3929,
-   "label_tokens": 90
+   "label_ms": 2259,
+   "label_tokens": 74
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -black white milo|$835\n-HOODIE JACKET APE|$455\n-GREY NAVY HOODIE BABY|$701\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $835 (black white milo).",
+   "prompt": "rows: -VEST STA CLASSIC|$713\n-VEST JACKET|$49\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $713 (VEST STA CLASSIC).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2223,
-   "label_tokens": 148
+   "label_ms": 1693,
+   "label_tokens": 92
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -cap cap shorts navy|$126\n-JACKET PANTS BIG|$629\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $629 (JACKET PANTS BIG).",
+   "prompt": "rows: -#1 BAPE MILO|$502\n-CLASSIC STORE|$791\n-BLACK|$896\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $896 (BLACK).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3209,
-   "label_tokens": 98
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -APE MINI|$833\n-jacket shorts|$427\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $833 (APE MINI).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2058,
-   "label_tokens": 82
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -gift hoodie|$717\n-tiger #1|$680\n-bape sta sta|$289\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $717 (gift hoodie).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1370,
-   "label_tokens": 114
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -college milo|$338\n-milo box college down|$900\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $900 (milo box college down).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2508,
-   "label_tokens": 89
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -MINI SHARK CAMO|$761\n-BOX #2 BIG|$510\n-CAP BOX BABY|$351\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $761 (MINI SHARK CAMO).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2820,
-   "label_tokens": 125
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -mega box|$164\n-tiger tee|$915\n-QUILTED|$605\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $915 (tiger tee).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 4530,
-   "label_tokens": 166
-  },
-  {
-   "skill": "priciest",
-   "prompt": "rows: -#1 head|$503\n-gift sta down|$53\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $503 (#1 head).",
-   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2616,
+   "label_ms": 3436,
    "label_tokens": 131
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -#2 cap down navy|$754\n-BLACK BLACK|$774\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $774 (BLACK BLACK).",
+   "prompt": "rows: -TIGER CAP CAMO|$963\n-tiger|$572\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $963 (TIGER CAP CAMO).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1526,
+   "label_ms": 2460,
+   "label_tokens": 91
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -STORE TIGER|$302\n-socks hoodie tee #2|$873\n-navy classic red|$751\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $873 (socks hoodie tee #2).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3389,
+   "label_tokens": 163
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -BOX|$223\n-BOX MEGA|$171\n-CAMO CREW|$150\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $223 (BOX).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2926,
+   "label_tokens": 106
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -QUILTED STORE|$880\n-MILO BABY PANTS WHITE|$446\n-down city gift city|$436\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $880 (QUILTED STORE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2030,
+   "label_tokens": 127
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MINI MILO BABY|$220\n-HIGH GIFT NAVY|$151\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $220 (MINI MILO BABY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2129,
+   "label_tokens": 100
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -red cap camo|$674\n-HIGH|$64\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $674 (red cap camo).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 5210,
+   "label_tokens": 187
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -black camo crew|$184\n-CREW MINI BLACK|$950\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $950 (CREW MINI BLACK).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2729,
+   "label_tokens": 94
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -white head|$570\n-CAMO DOWN APE STA|$641\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $641 (CAMO DOWN APE STA).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2228,
+   "label_tokens": 96
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -big city sta pants|$236\n-red|$985\n-quilted pants mega white|$675\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $985 (red).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3198,
+   "label_tokens": 127
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -quilted mega high cap|$612\n-HEAD HOODIE|$376\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $612 (quilted mega high cap).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2404,
+   "label_tokens": 134
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -vest|$826\n-gift|$289\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $826 (vest).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2168,
+   "label_tokens": 95
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -COLLEGE QUILTED|$939\n-vest hoodie|$532\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $939 (COLLEGE QUILTED).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1886,
+   "label_tokens": 146
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -shark black bape head|$317\n-classic head high city|$203\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $317 (shark black bape head).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2843,
+   "label_tokens": 93
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -city city shark|$474\n-SOCKS GIFT BOX|$729\n-SOCKS COLLEGE SHARK|$333\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $729 (SOCKS GIFT BOX).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4338,
+   "label_tokens": 151
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MILO TEE SHORTS|$893\n-HIGH GIFT|$464\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $893 (MILO TEE SHORTS).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1647,
+   "label_tokens": 140
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -DOWN CAP LOW BIG|$755\n-HOODIE MINI|$265\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $755 (DOWN CAP LOW BIG).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2514,
    "label_tokens": 87
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -tee socks|$883\n-CREW QUILTED|$680\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $883 (tee socks).",
+   "prompt": "rows: -tee|$985\n-JACKET SHORTS|$52\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $985 (tee).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3538,
-   "label_tokens": 78
+   "label_ms": 1084,
+   "label_tokens": 74
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -BLACK MEGA|$528\n-BLACK CLASSIC JACKET|$889\n-black down|$196\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $889 (BLACK CLASSIC JACKET).",
+   "prompt": "rows: -MINI GREY JACKET|$400\n-mini|$183\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $400 (MINI GREY JACKET).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2193,
-   "label_tokens": 197
+   "label_ms": 2780,
+   "label_tokens": 95
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -shorts mega tee|$118\n-HEAD TEE|$350\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $350 (HEAD TEE).",
+   "prompt": "rows: -socks|$324\n-down vest cap high|$394\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $394 (down vest cap high).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 1549,
+   "label_ms": 7388,
    "label_tokens": 81
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -big baby camo head|$207\n-COLLEGE #2|$686\n-shark city|$230\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $686 (COLLEGE #2).",
+   "prompt": "rows: -milo mega crew|$474\n-white box gift big|$496\n-shark camo|$448\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $496 (white box gift big).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 2187,
-   "label_tokens": 139
+   "label_ms": 3386,
+   "label_tokens": 136
   },
   {
    "skill": "priciest",
-   "prompt": "rows: -SHORTS|$743\n-quilted|$615\nq: which is most expensive?\na: ",
-   "answer": "The most expensive is $743 (SHORTS).",
+   "prompt": "rows: -MILO LOW GREY #2|$677\n-big|$766\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $766 (big).",
    "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
-   "label_ms": 3827,
-   "label_tokens": 173
+   "label_ms": 1209,
+   "label_tokens": 79
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -red pants|$865\n-gift sta|$523\n-II PANTS|$374\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $865 (red pants).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4117,
+   "label_tokens": 141
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -pants tiger mega college|$681\n-shorts mega high|$171\n-#1 MEGA|$858\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $858 (#1 MEGA).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2437,
+   "label_tokens": 137
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -COLLEGE TEE|$953\n-down quilted vest|$819\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $953 (COLLEGE TEE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1677,
+   "label_tokens": 89
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -shark hoodie baby|$91\n-GIFT|$573\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $573 (GIFT).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2382,
+   "label_tokens": 119
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -mega quilted classic|$431\n-quilted black|$274\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $431 (mega quilted classic).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1768,
+   "label_tokens": 109
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MILO|$490\n-VEST JACKET APE|$594\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $594 (VEST JACKET APE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2148,
+   "label_tokens": 96
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -ii store gift white high|$733\n-baby red head|$707\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $733 (ii store gift white high).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4981,
+   "label_tokens": 227
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -red|$139\n-WHITE|$189\n-bape box|$837\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $837 (bape box).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2545,
+   "label_tokens": 162
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -mega navy ii low|$976\n-gift quilted pants|$363\n-milo head|$531\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $976 (mega navy ii low).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 3475,
+   "label_tokens": 137
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TIGER CAMO TEE|$659\n-MINI MINI BIG HEAD|$858\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $858 (MINI MINI BIG HEAD).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1094,
+   "label_tokens": 97
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHORTS|$746\n-CAP QUILTED COLLEGE CREW|$777\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $777 (CAP QUILTED COLLEGE CREW).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 1851,
+   "label_tokens": 109
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -PANTS CLASSIC|$276\n-#2 STORE CAMO JACKET|$909\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $909 (#2 STORE CAMO JACKET).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2885,
+   "label_tokens": 105
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -vest camo|$161\n-vest gift quilted|$963\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $963 (vest gift quilted).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 4143,
+   "label_tokens": 129
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -BLACK|$708\n-MEGA TEE|$935\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $935 (MEGA TEE).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2405,
+   "label_tokens": 84
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -DOWN STORE NAVY|$998\n-HOODIE CREW|$381\n-shorts bape|$744\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $998 (DOWN STORE NAVY).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2516,
+   "label_tokens": 184
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -tee mega gift|$900\n-TIGER BABY|$231\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $900 (tee mega gift).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2520,
+   "label_tokens": 135
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -high crew hoodie ii|$497\n-CLASSIC BAPE BOX|$82\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $497 (high crew hoodie ii).",
+   "teacher": "nvidia/nemotron-3-ultra-550b-a55b",
+   "label_ms": 2527,
+   "label_tokens": 92
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -CITY DOWN|$143\n-APE|$901\n-LOW WHITE TEE|$130\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $901 (APE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2395,
+   "label_tokens": 408
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -RED CLASSIC NAVY|$851\n-MEGA HEAD HEAD|$412\n-gift pants classic|$129\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $851 (RED CLASSIC NAVY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2923,
+   "label_tokens": 422
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -grey white|$298\n-tee store|$390\n-sta classic|$747\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $747 (sta classic).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2482,
+   "label_tokens": 371
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -big|$152\n-cap high|$167\n-navy|$746\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $746 (navy).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1910,
+   "label_tokens": 371
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -classic hoodie shorts|$868\n-white box high jacket|$305\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $868 (classic hoodie shorts).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2784,
+   "label_tokens": 385
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TIGER RED CITY|$286\n-city classic|$645\n-BIG CITY CAP VEST|$454\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $645 (city classic).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 5384,
+   "label_tokens": 569
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SOCKS LOW|$106\n-CAP VEST HIGH HIGH|$835\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $835 (CAP VEST HIGH HIGH).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3407,
+   "label_tokens": 559
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -baby head baby college|$314\n-cap gift|$987\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $987 (cap gift).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3836,
+   "label_tokens": 649
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -vest gift|$420\n-CAP CITY II CLASSIC|$418\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $420 (vest gift).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3519,
+   "label_tokens": 617
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -JACKET GIFT BAPE|$741\n-jacket shark milo|$607\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $741 (JACKET GIFT BAPE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 5271,
+   "label_tokens": 696
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -HIGH BAPE|$728\n-TEE HOODIE|$782\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $782 (TEE HOODIE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2483,
+   "label_tokens": 380
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -CLASSIC II|$826\n-SHARK CITY TEE|$512\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $826 (CLASSIC II).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2913,
+   "label_tokens": 375
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -STA|$562\n-NAVY GIFT|$907\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $907 (NAVY GIFT).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1650,
+   "label_tokens": 298
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -tiger #1 bape classic|$914\n-bape vest shark camo|$380\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $914 (tiger #1 bape classic).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2395,
+   "label_tokens": 406
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -RED MEGA PANTS NAVY|$752\n-GREY MEGA|$217\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $752 (RED MEGA PANTS NAVY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1929,
+   "label_tokens": 319
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -COLLEGE|$114\n-black baby shorts|$363\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $363 (black baby shorts).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2307,
+   "label_tokens": 324
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -black pants baby|$447\n-black high tiger high|$685\n-down tiger|$970\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $970 (down tiger).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3416,
+   "label_tokens": 616
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -mega low|$667\n-BAPE TEE|$335\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $667 (mega low).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2382,
+   "label_tokens": 382
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -gift down shark shorts|$565\n-STA TIGER|$184\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $565 (gift down shark shorts).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3421,
+   "label_tokens": 702
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MILO BAPE HEAD|$537\n-APE BLACK JACKET|$368\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $537 (MILO BAPE HEAD).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2248,
+   "label_tokens": 378
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -red|$132\n-grey camo baby|$68\n-RED SHORTS|$456\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $456 (RED SHORTS).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2988,
+   "label_tokens": 381
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -PANTS DOWN APE|$628\n-LOW NAVY HOODIE|$411\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $628 (PANTS DOWN APE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1880,
+   "label_tokens": 371
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -college head|$115\n-milo baby quilted crew|$145\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $145 (milo baby quilted crew).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 6072,
+   "label_tokens": 760
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -classic sta cap high|$769\n-quilted bape baby|$731\n-classic sta|$898\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $898 (classic sta).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2541,
+   "label_tokens": 511
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -down jacket|$933\n-MEGA CAP VEST CAMO|$456\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $933 (down jacket).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2622,
+   "label_tokens": 362
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -CREW BLACK|$292\n-BIG BABY RED|$437\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $437 (BIG BABY RED).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2374,
+   "label_tokens": 380
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -college|$295\n-PANTS QUILTED|$242\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $295 (college).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3154,
+   "label_tokens": 499
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -BAPE|$766\n-SHORTS LOW|$977\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $977 (SHORTS LOW).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1991,
+   "label_tokens": 350
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -navy college|$447\n-navy|$518\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $518 (navy).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1867,
+   "label_tokens": 337
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -HIGH GREY QUILTED|$432\n-MINI TIGER QUILTED|$629\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $629 (MINI TIGER QUILTED).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2261,
+   "label_tokens": 414
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MILO CAP|$80\n-NAVY #1 MILO WHITE|$683\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $683 (NAVY #1 MILO WHITE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2396,
+   "label_tokens": 357
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -mega navy|$488\n-classic red|$217\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $488 (mega navy).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2618,
+   "label_tokens": 355
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TIGER BLACK|$893\n-II CAP BOX|$599\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $893 (TIGER BLACK).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2742,
+   "label_tokens": 543
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -bape college|$927\n-store down mini|$137\n-HEAD BOX|$898\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $927 (bape college).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2326,
+   "label_tokens": 336
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -HEAD HOODIE TIGER LOW|$687\n-BOX CAMO MEGA #2|$165\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $687 (HEAD HOODIE TIGER LOW).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2046,
+   "label_tokens": 379
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -pants head classic|$377\n-DOWN APE|$727\n-tee city mini shorts|$724\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $727 (DOWN APE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1975,
+   "label_tokens": 370
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -CLASSIC|$470\n-CAP SHARK #1|$319\n-socks white|$602\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $602 (socks white).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3628,
+   "label_tokens": 652
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -hoodie navy sta|$667\n-COLLEGE CREW|$476\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $667 (hoodie navy sta).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 5036,
+   "label_tokens": 629
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -VEST RED STA|$445\n-tiger black|$469\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $469 (tiger black).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3553,
+   "label_tokens": 724
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -camo #1 vest store|$385\n-MINI STORE MEGA CLASSIC II|$659\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $659 (MINI STORE MEGA CLASSIC II).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2731,
+   "label_tokens": 539
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -DOWN CAP STORE|$649\n-bape ape|$984\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $984 (bape ape).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4509,
+   "label_tokens": 392
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -GREY TEE|$606\n-SHARK|$600\n-hoodie big vest|$191\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $606 (GREY TEE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2239,
+   "label_tokens": 425
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHARK|$620\n-tiger gift|$290\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $620 (SHARK).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2062,
+   "label_tokens": 338
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MEGA HIGH DOWN SOCKS|$925\n-SHORTS GIFT CREW|$972\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $972 (SHORTS GIFT CREW).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1901,
+   "label_tokens": 402
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -low box baby box|$227\n-college|$262\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $262 (college).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2336,
+   "label_tokens": 334
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SOCKS|$130\n-baby ape vest|$372\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $372 (baby ape vest).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4092,
+   "label_tokens": 377
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -box grey|$741\n-MEGA LOW SOCKS CAP|$543\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $741 (box grey).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1987,
+   "label_tokens": 370
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHORTS STORE|$762\n-MINI|$966\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $966 (MINI).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2283,
+   "label_tokens": 416
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -BIG GIFT|$285\n-STA SOCKS|$317\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $317 (STA SOCKS).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 7731,
+   "label_tokens": 726
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -college quilted college|$332\n-HIGH CAMO BABY|$754\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $754 (HIGH CAMO BABY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1976,
+   "label_tokens": 394
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -milo|$85\n-TIGER NAVY|$899\n-BIG|$391\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $899 (TIGER NAVY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3327,
+   "label_tokens": 512
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -gift|$588\n-CAP|$675\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $675 (CAP).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2338,
+   "label_tokens": 356
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -ii grey jacket big|$529\n-NAVY QUILTED|$646\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $646 (NAVY QUILTED).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3019,
+   "label_tokens": 537
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SOCKS MEGA WHITE|$399\n-HEAD|$661\n-HIGH|$844\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $844 (HIGH).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1728,
+   "label_tokens": 347
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SOCKS WHITE|$164\n-#2 head down low|$276\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $276 (#2 head down low).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3294,
+   "label_tokens": 595
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -ape bape|$630\n-gift sta vest|$149\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $630 (ape bape).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2962,
+   "label_tokens": 378
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -camo box vest head|$200\n-BAPE|$494\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $494 (BAPE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3464,
+   "label_tokens": 573
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -low quilted red tiger|$482\n-TEE BIG MINI|$275\n-#1 HIGH DOWN WHITE|$318\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $482 (low quilted red tiger).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2070,
+   "label_tokens": 358
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -STORE QUILTED|$94\n-DOWN WHITE|$210\n-RED GIFT|$571\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $571 (RED GIFT).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2368,
+   "label_tokens": 410
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -mega crew tee|$433\n-black baby|$800\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $800 (black baby).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2046,
+   "label_tokens": 369
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -gift camo bape|$903\n-RED RED SHARK RED|$622\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $903 (gift camo bape).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2827,
+   "label_tokens": 412
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -NAVY GREY|$912\n-down hoodie|$547\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $912 (NAVY GREY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2506,
+   "label_tokens": 461
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -SHARK HIGH|$399\n-SHARK DOWN QUILTED DOWN|$434\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $434 (SHARK DOWN QUILTED DOWN).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1913,
+   "label_tokens": 364
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -college #2 hoodie city|$80\n-MEGA STORE|$396\n-tiger head ii store|$531\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $531 (tiger head ii store).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1972,
+   "label_tokens": 433
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -STORE APE #2 MEGA|$683\n-bape #1 vest down|$792\n-CAMO STA NAVY|$277\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $792 (bape #1 vest down).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4272,
+   "label_tokens": 856
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TIGER|$761\n-city|$779\n-vest|$135\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $779 (city).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4022,
+   "label_tokens": 684
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -HIGH|$754\n-VEST HEAD TEE|$581\n-BAPE TIGER TEE|$188\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $754 (HIGH).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1897,
+   "label_tokens": 364
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -RED MEGA STA|$174\n-VEST APE|$475\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $475 (VEST APE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2124,
+   "label_tokens": 396
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TEE CAMO|$896\n-navy tee cap white|$426\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $896 (TEE CAMO).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2147,
+   "label_tokens": 436
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -shark black socks|$395\n-SHARK STA TIGER II|$195\n-BOX DOWN TIGER|$239\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $395 (shark black socks).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3100,
+   "label_tokens": 598
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -store|$63\n-NAVY TEE GREY|$937\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $937 (NAVY TEE GREY).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3162,
+   "label_tokens": 651
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -jacket mini head|$670\n-white baby box|$457\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $670 (jacket mini head).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3282,
+   "label_tokens": 581
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -sta|$560\n-SOCKS SHORTS|$198\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $560 (sta).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4037,
+   "label_tokens": 745
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -PANTS TIGER|$128\n-jacket|$567\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $567 (jacket).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2060,
+   "label_tokens": 361
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -CAMO|$673\n-CLASSIC RED STA MILO|$271\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $673 (CAMO).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3233,
+   "label_tokens": 428
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -GREY BAPE MILO|$927\n-white down college crew|$962\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $962 (white down college crew).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1837,
+   "label_tokens": 361
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -#2 black|$546\n-big|$55\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $546 (#2 black).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3386,
+   "label_tokens": 503
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -TEE|$800\n-PANTS|$881\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $881 (PANTS).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1698,
+   "label_tokens": 319
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MINI SOCKS SOCKS|$734\n-college ii sta|$844\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $844 (college ii sta).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 5420,
+   "label_tokens": 866
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -sta tee black|$262\n-socks bape|$453\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $453 (socks bape).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2189,
+   "label_tokens": 387
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -vest|$316\n-TIGER MILO|$342\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $342 (TIGER MILO).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 4737,
+   "label_tokens": 315
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -QUILTED GREY|$57\n-down red cap|$674\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $674 (down red cap).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2249,
+   "label_tokens": 430
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -MEGA PANTS|$811\n-pants jacket box|$190\n-down store head gift|$599\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $811 (MEGA PANTS).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2145,
+   "label_tokens": 355
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -PANTS BIG MILO WHITE|$69\n-vest #2 store|$946\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $946 (vest #2 store).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2190,
+   "label_tokens": 362
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -city college tiger|$215\n-box tee|$579\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $579 (box tee).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 2538,
+   "label_tokens": 403
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -box white crew|$52\n-COLLEGE BLACK SOCKS|$362\n-STORE MINI SHARK HOODIE|$950\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $950 (STORE MINI SHARK HOODIE).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 1834,
+   "label_tokens": 394
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -HOODIE BLACK BAPE|$302\n-MILO LOW APE STORE|$97\n-BAPE CLASSIC|$790\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $790 (BAPE CLASSIC).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3680,
+   "label_tokens": 649
+  },
+  {
+   "skill": "priciest",
+   "prompt": "rows: -jacket milo ape big|$595\n-crew store #2|$507\nq: which is most expensive?\na: ",
+   "answer": "The most expensive is $595 (jacket milo ape big).",
+   "teacher": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "label_ms": 3380,
+   "label_tokens": 660
   }
  ]
 }
