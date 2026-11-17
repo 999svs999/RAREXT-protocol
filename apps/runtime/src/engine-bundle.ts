@@ -312,6 +312,17 @@ export interface NativeEngine {
       pinnedTokens?: number[];
       /** A compiled byte-level language: tokens that leave it are refused. */
       grammarDfa?: { accept: number[]; table: number[] };
+      /**
+       * Identity of the model bytes, so a worker runtime keeps the weights
+       * resident instead of cloning them across the thread boundary per request.
+       */
+      modelKey?: string;
+      /**
+       * Observational per-token callback: called after a token is chosen for
+       * this run. It cannot change the run — the tokens, logprobs and trace are
+       * identical with or without it. Used to put bytes on the wire mid-decode.
+       */
+      onToken?: (at: number, tokenId: number, prefix: string) => void;
     },
   ): {
     text: string;
@@ -565,16 +576,36 @@ const { parentPort, workerData } = require("node:worker_threads");
 const vm = require("node:vm");
 const module = { exports: {} };
 const sandbox = { module, exports: module.exports, TextEncoder, TextDecoder, console, Math, JSON };
-vm.runInNewContext(workerData.code, sandbox, { timeout: 10000, filename: "rarext-native-engine.js" });
+vm.runInNewContext(workerData.code, sandbox, { timeout: 10000, filename: "rarext-engine.js" });
 const run = module.exports.run;
 if (typeof run !== "function") {
   parentPort.postMessage({ ok: false, error: "the engine artifact exports no run(model, input)" });
 } else {
+  // One worker holds the model across requests: a 400 MB weights buffer is
+  // cloned once, not once per question. A new modelKey replaces it.
+  let heldModel;
+  let heldKey;
   parentPort.on("message", async (message) => {
+    const id = message && message.id;
     try {
-      parentPort.postMessage({ ok: true, result: await run(message.model, message.input) });
+      if (message && message.model !== undefined) {
+        heldModel = message.model;
+        heldKey = message.modelKey;
+      }
+      const input = Object.assign({}, message && message.input);
+      // A function cannot cross a thread boundary; the worker replaces it with
+      // a port write, so the main thread can put each token on the wire while
+      // this thread is still decoding. The token sequence is unaffected.
+      if (input.streamTokens === true) {
+        delete input.streamTokens;
+        input.onToken = function (at, tokenId, prefix) {
+          parentPort.postMessage({ id: id, type: "token", at: at, tokenId: tokenId, prefix: prefix });
+        };
+      }
+      const result = await run(heldModel, input);
+      parentPort.postMessage({ id: id, ok: true, result: result });
     } catch (error) {
-      parentPort.postMessage({ ok: false, error: String((error && error.message) || error) });
+      parentPort.postMessage({ id: id, ok: false, error: String((error && error.message) || error) });
     }
   });
   parentPort.postMessage({ ok: true, ready: true });
@@ -585,53 +616,144 @@ if (typeof run !== "function") {
  * Run a non-RAREXT native (JS) engine on a worker thread, isolated in a vm.
  * `run` resolves asynchronously (the provider awaits the result), so it is cast
  * to the synchronous interface the other runtimes expose.
+ *
+ * The worker is kept alive between runs. That matters twice: the model is
+ * cloned across the thread boundary only when its `modelKey` changes, and an
+ * `onToken` callback in `input` turns the decode into a live stream — the main
+ * thread stays free to write each token while the worker is still thinking.
  */
 export function loadWorkerEngine(source: Uint8Array): NativeEngine {
   const code = new TextDecoder().decode(source);
+  let worker: Worker | null = null;
+  let booting: Promise<Worker> | null = null;
+  let heldModelKey: string | null = null;
+  let nextId = 1;
+  let queue: Promise<unknown> = Promise.resolve();
+
+  function reset(): void {
+    worker = null;
+    booting = null;
+    heldModelKey = null;
+  }
+
+  function boot(): Promise<Worker> {
+    if (worker !== null && booting !== null) return booting;
+    const created = new Worker(WORKER_ENGINE_BOOTSTRAP, {
+      eval: true,
+      workerData: { code },
+      // The model lives on this thread as an external ArrayBuffer; V8's old-gen
+      // limit does not cover it, but leave headroom for the JS side of a run.
+      resourceLimits: { maxOldGenerationSizeMb: 4096, maxYoungGenerationSizeMb: 64 },
+    });
+    worker = created;
+    booting = new Promise<void>((resolve, reject) => {
+      const onMessage = (message: unknown): void => {
+        const reply = message as { ready?: boolean; ok?: boolean; error?: string };
+        if (reply.ready === true) {
+          created.off("message", onMessage);
+          resolve();
+        } else if (reply.ok === false) {
+          created.off("message", onMessage);
+          reject(new Error(reply.error ?? "the engine worker failed to load"));
+        }
+      };
+      created.on("message", onMessage);
+      created.once("error", (error) => {
+        reset();
+        reject(error);
+      });
+      created.once("exit", () => {
+        reset();
+        reject(new Error("the engine worker exited before it was ready"));
+      });
+    }).then(() => created);
+    return booting;
+  }
+
   return {
     run(
       model: unknown,
       input: { prompt: string; steps: number; seed?: number | null; temperature?: number },
     ) {
-      return new Promise((resolve, reject) => {
-        const worker = new Worker(WORKER_ENGINE_BOOTSTRAP, {
-          eval: true,
-          workerData: { code },
-          resourceLimits: { maxOldGenerationSizeMb: 512, maxYoungGenerationSizeMb: 64 },
+      const asRecord = input as unknown as Record<string, unknown>;
+      const onToken =
+        typeof asRecord.onToken === "function"
+          ? (asRecord.onToken as (at: number, tokenId: number, prefix: string) => void)
+          : undefined;
+      const modelKey = typeof asRecord.modelKey === "string" ? asRecord.modelKey : undefined;
+      const rest: Record<string, unknown> = { ...asRecord };
+      delete rest.onToken;
+      delete rest.modelKey;
+      if (onToken !== undefined) rest.streamTokens = true;
+
+      const job = async (): Promise<unknown> => {
+        const target = await boot();
+        const id = nextId;
+        nextId += 1;
+        const sendModel = modelKey === undefined || modelKey !== heldModelKey;
+        if (sendModel && modelKey !== undefined) heldModelKey = modelKey;
+        return await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error("the native engine worker timed out"));
+          }, 600_000);
+          const cleanup = (): void => {
+            clearTimeout(timer);
+            target.off("message", onMessage);
+            target.off("error", onError);
+            target.off("exit", onExit);
+          };
+          const onMessage = (message: unknown): void => {
+            const reply = message as {
+              id?: number;
+              type?: string;
+              at?: number;
+              tokenId?: number;
+              prefix?: string;
+              ok?: boolean;
+              error?: string;
+              result?: unknown;
+            };
+            if (reply.id !== id) return;
+            if (reply.type === "token") {
+              if (onToken !== undefined && typeof reply.prefix === "string") {
+                onToken(reply.at ?? 0, reply.tokenId ?? 0, reply.prefix);
+              }
+              return;
+            }
+            cleanup();
+            if (reply.ok === true) resolve(reply.result);
+            else reject(new Error(reply.error ?? "the native engine worker failed"));
+          };
+          const onError = (error: Error): void => {
+            cleanup();
+            reject(new Error(`the native engine worker failed: ${error.message}`));
+          };
+          const onExit = (): void => {
+            cleanup();
+            reject(new Error("the native engine worker exited before answering"));
+          };
+          target.on("message", onMessage);
+          target.on("error", onError);
+          target.on("exit", onExit);
+          target.postMessage({
+            id,
+            ...(sendModel ? { model } : {}),
+            ...(modelKey === undefined ? {} : { modelKey }),
+            input: rest,
+          });
         });
-        let settled = false;
-        const finish = (fn: () => void): void => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          void worker.terminate();
-          fn();
-        };
-        const timer = setTimeout(
-          () => finish(() => reject(new Error("the native engine worker timed out"))),
-          600_000,
-        );
-        worker.on("error", (error) =>
-          finish(() => reject(new Error(`the native engine worker failed: ${error.message}`))),
-        );
-        worker.on("exit", () =>
-          finish(() => reject(new Error("the native engine worker exited before answering"))),
-        );
-        worker.on("message", (message: unknown) => {
-          const reply = message as { ok?: boolean; ready?: boolean; error?: string; result?: unknown };
-          if (reply.ready === true) {
-            worker.postMessage({ model, input });
-            return;
-          }
-          if (reply.ok === true) {
-            finish(() =>
-              resolve(reply.result as { text: string; seed: number; steps: number; tokens: number[] }),
-            );
-          } else {
-            finish(() => reject(new Error(reply.error ?? "the native engine worker failed")));
-          }
-        });
-      });
+      };
+
+      // One decode at a time per worker: the engine has a single model resident
+      // and no shared mutable state to protect, and this keeps token events from
+      // two runs interleaving on the port.
+      const result = queue.then(job, job);
+      queue = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result as never;
     },
   } as unknown as NativeEngine;
 }

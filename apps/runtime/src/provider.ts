@@ -1565,7 +1565,9 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     if (loadedEngine === null) {
       throw new Error("the RAREXT GGUF class needs --engine-bundle so the engine is a committed artifact");
     }
-    if (streamedReader !== null) {
+    // A worker runtime needs a structured-cloneable model: a reader function
+    // cannot cross a thread boundary, so the verified bytes are handed over.
+    if (streamedReader !== null && engineBundle?.runtime !== ENGINE_ARTIFACT_RUNTIME_WORKER) {
       // Bounded memory: the engine reads the header and every tensor row through
       // the reader instead of indexing a resident buffer.
       gguf = {
@@ -1725,6 +1727,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
   async function complete(
     body: Record<string, unknown>,
     shape: "chat" | "completions" = "chat",
+    onToken?: (index: number, tokenId: number, prefix: string) => void,
   ): Promise<{
     text: string;
     seed: number | null;
@@ -1875,6 +1878,13 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         topLogprobs: decoding.topLogprobs,
         ...(pinned === undefined ? {} : { pinnedTokens: pinned }),
         ...(grammarDfa === null ? {} : { grammarDfa }),
+        // The model's identity, so a worker runtime can keep the weights resident
+        // instead of cloning them across the thread boundary on every request.
+        modelKey: options.bundle.digest,
+        // Only when the caller is writing deltas as they arrive AND no stop
+        // sequence can retract already-sent text: a stop cut would leave the
+        // stream showing characters the final answer does not contain.
+        ...(onToken === undefined || decoding.stop.length > 0 ? {} : { onToken }),
       });
       if (
         result === null ||
@@ -2272,15 +2282,94 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         }
 
         const n = requestedChoices(body);
+        const created = Math.floor(Date.now() / 1000);
+        // A live stream only where it is exact: one choice, no tools to parse out
+        // of the text, no logprobs to align. Everything else keeps the buffered
+        // path, so streaming can never change what the answer says.
+        const liveStream =
+          body.stream === true &&
+          n === 1 &&
+          body.logprobs !== true &&
+          (!Array.isArray(body.tools) || body.tools.length === 0);
+        let streamedPrefix = "";
+        const writeChunk = (chunk: unknown): void => {
+          response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        };
+        if (liveStream) {
+          response.writeHead(200, {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache",
+            connection: "keep-alive",
+          });
+          writeChunk({
+            id: "chatcmpl-stream",
+            object: "chat.completion.chunk",
+            created,
+            model: modelId,
+            choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
+          });
+        }
         const results: Array<Awaited<ReturnType<typeof complete>>> = [];
-        for (let index = 0; index < n; index += 1) {
-          results.push(await complete(choiceBody(body, index, n)));
+        try {
+          for (let index = 0; index < n; index += 1) {
+            const onToken =
+              liveStream && index === 0
+                ? (_at: number, _tokenId: number, prefix: string): void => {
+                    if (!prefix.startsWith(streamedPrefix)) return;
+                    const delta = prefix.slice(streamedPrefix.length);
+                    streamedPrefix = prefix;
+                    if (delta === "") return;
+                    writeChunk({
+                      id: "chatcmpl-stream",
+                      object: "chat.completion.chunk",
+                      created,
+                      model: modelId,
+                      choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
+                    });
+                  }
+                : undefined;
+            results.push(await complete(choiceBody(body, index, n), "chat", onToken));
+          }
+        } catch (streamError) {
+          if (!liveStream) throw streamError;
+          // Headers are already out; the only honest thing left is an error event
+          // followed by the terminator, so the client does not hang.
+          writeChunk({
+            error: {
+              message: streamError instanceof Error ? streamError.message : String(streamError),
+              type: "engine_error",
+            },
+          });
+          response.end("data: [DONE]\n\n");
+          return;
         }
         const result = results[0]!;
-        const created = Math.floor(Date.now() / 1000);
         const usage = fixedUsage(promptTokenCount(body), results);
         const tools = parseTools(body.tools);
         const toolChoice = parseToolChoice(body.tool_choice);
+
+        if (liveStream) {
+          writeChunk({
+            id: "chatcmpl-final",
+            object: "chat.completion.chunk",
+            created,
+            model: modelId,
+            choices: [{ index: 0, delta: {}, finish_reason: result.finishReason }],
+            ...decodeTrace(result.trace),
+          });
+          if (wantsStreamUsage(body)) {
+            writeChunk({
+              id: "chatcmpl-usage",
+              object: "chat.completion.chunk",
+              created,
+              model: modelId,
+              choices: [],
+              usage,
+            });
+          }
+          response.end("data: [DONE]\n\n");
+          return;
+        }
 
         if (body.stream === true) {
           const chunks: unknown[] = [];

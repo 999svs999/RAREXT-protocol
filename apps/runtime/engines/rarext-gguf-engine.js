@@ -3372,10 +3372,26 @@
     var logprobEntries = [];
     var pinnedIndex = 0;
 
+    // Streaming is observational: the callback sees a token that has already
+    // been chosen for this run, so the tokens, logprobs and trace are identical
+    // to a buffered run of the same prompt and seed. It exists so a provider can
+    // put bytes on the wire while the engine is still thinking, instead of
+    // holding the whole answer (and hitting a proxy's response timeout).
+    var onToken = typeof input.onToken === "function" ? input.onToken : null;
+
     function record(tokenId, scored) {
       generated.push(tokenId);
       if (tokenId >= 0 && tokenId < emittedCounts.length) emittedCounts[tokenId] += 1;
       if (decoding.logprobs && scored !== null && scored !== undefined) logprobEntries.push(scored);
+      if (onToken !== null) {
+        try {
+          onToken(generated.length - 1, tokenId, tokenizer.decode(generated));
+        } catch (callbackError) {
+          // A broken consumer must not corrupt the run's result: stop calling
+          // it and let the engine finish so the trace still describes the text.
+          onToken = null;
+        }
+      }
     }
 
     // Score a chosen token only when the caller asked for logprobs, so the
