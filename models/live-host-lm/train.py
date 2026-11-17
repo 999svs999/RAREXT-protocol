@@ -203,7 +203,7 @@ class Block(nn.Module):
         self.up = nn.Linear(d, ffn, bias=False)
         self.down = nn.Linear(ffn, d, bias=False)
 
-    def forward(self, x, cos, sin):
+    def forward(self, x, cos, sin, pad_mask=None):
         b, t, d = x.shape
         h = self.attn_norm(x)
         q = self.q(h).view(b, t, self.n_head, self.head_dim).transpose(1, 2)
@@ -214,6 +214,16 @@ class Block(nn.Module):
         att = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
         mask = torch.triu(torch.ones(t, t, dtype=torch.bool), diagonal=1)
         att = att.masked_fill(mask, float("-inf"))
+        # Optional key-padding mask (True at PAD positions): lets batched
+        # rollouts left-pad prompts of different lengths. RoPE scores depend
+        # only on position *differences*, so hiding the pad keys makes each
+        # real row's logits identical to generation without padding. A pad
+        # query is allowed to see ITSELF: its causal row would otherwise be
+        # empty, and softmax over an empty row is NaN — which autograd then
+        # spreads through the backward pass.
+        if pad_mask is not None:
+            eye = torch.eye(t, dtype=torch.bool, device=x.device)[None, None]
+            att = att.masked_fill(pad_mask[:, None, None, :] & ~eye, float("-inf"))
         att = F.softmax(att, dim=-1)
         out = (att @ v).transpose(1, 2).reshape(b, t, d)
         x = x + self.o(out)
@@ -245,12 +255,12 @@ class TinyLM(nn.Module):
         elif isinstance(m, nn.Embedding):
             nn.init.normal_(m.weight, mean=0.0, std=0.02)
 
-    def forward(self, ids, targets=None):
+    def forward(self, ids, targets=None, pad_mask=None):
         b, t = ids.shape
         x = self.emb(ids)
         cos, sin = self.cos[:t], self.sin[:t]
         for block in self.blocks:
-            x = block(x, cos, sin)
+            x = block(x, cos, sin, pad_mask)
         x = self.norm(x)
         logits = x @ self.emb.weight.t()  # tied embeddings, like the export
         if targets is None:
