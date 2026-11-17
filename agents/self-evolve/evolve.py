@@ -208,6 +208,11 @@ def main():
     ap.add_argument("--batch", type=int, default=16, help="prompts per rollout batch")
     ap.add_argument("--rl-lr", type=float, default=1e-4)
     ap.add_argument("--bootcamp-lr", type=float, default=3e-4)
+    ap.add_argument("--rollout-temp", type=float, default=0.35,
+                    help="sampling temperature for rollouts. Serving is greedy, "
+                    "so RL that samples far from the mode optimises a policy "
+                    "nobody serves; staying near the mode makes best-of-k "
+                    "imitation pull the mode itself.")
     ap.add_argument("--seed", type=int, default=11)
     args = ap.parse_args()
 
@@ -226,6 +231,28 @@ def main():
         for g in opt.param_groups:
             g["lr"] = lr
 
+    gen_index = 0
+    promoted = None
+    # Resume: the loop is relentless, which includes surviving restarts. The
+    # last PROMOTED generation in the ledger is the parent of the next one.
+    if LEDGER.exists():
+        last = None
+        for line in LEDGER.read_text().splitlines():
+            if line.strip():
+                r = json.loads(line)
+                if r.get("promoted"):
+                    last = r
+        if last:
+            parent_pt = Path(last["gguf"]).with_suffix(".pt")
+            if parent_pt.exists():
+                ck = torch.load(parent_pt, map_location="cpu")
+                model.load_state_dict(ck["state"])
+                promoted = last
+                gen_index = last["generation"]
+                print(f"resuming from promoted generation {gen_index} "
+                      f"({last['gguf_digest'][:24]}…, scores "
+                      f"{ {k: round(v,2) for k, v in last['scores'].items()} })", flush=True)
+
     seed_file = HERE / "teacher-seeds.json"
     seed_rows = []
     teacher_meta = None
@@ -240,8 +267,6 @@ def main():
         print(f"teacher seeds: {len(seed_rows)} usable under the current checker "
               f"({', '.join(f'{m.split(chr(47))[-1]}: {s[chr(111)+chr(107)]}' for m, s in teacher_meta.items())})", flush=True)
 
-    gen_index = 0
-    promoted = None
     while args.generations == 0 or gen_index < args.generations:
         t0 = time.time()
         gen_index += 1
@@ -265,7 +290,8 @@ def main():
         dry = 0
         for it in range(1, args.iters + 1):
             prompts = mix_prompts(rng, args.batch, gen_index)
-            rows = agent_model.rollout(model, prompts, args.k, temperature=0.7, seed=args.seed * 1000 + it)
+            rows = agent_model.rollout(model, prompts, args.k, temperature=args.rollout_temp,
+                                       seed=args.seed * 1000 + gen_index * 10000 + it)
             scored = [(p, a, reward(p, a)) for p, a in rows]
             loss = train_batch(model, opt, scored)
             best_r = max(r for _, _, r in scored)
