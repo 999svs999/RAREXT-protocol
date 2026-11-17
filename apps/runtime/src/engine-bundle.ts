@@ -751,6 +751,11 @@ export function loadWorkerEngine(source: Uint8Array): NativeEngine {
       resourceLimits: { maxOldGenerationSizeMb: 4096, maxYoungGenerationSizeMb: 64 },
     });
     worker = created;
+    // A worker normally keeps the process alive. This one is a cache of the
+    // loaded model, not work in flight: a provider is kept alive by its server,
+    // and a short-lived script (a test, a CLI one-shot) must still be able to
+    // exit once its run is done.
+    created.unref();
     booting = new Promise<void>((resolve, reject) => {
       const onMessage = (message: unknown): void => {
         const reply = message as { ready?: boolean; ok?: boolean; error?: string };
