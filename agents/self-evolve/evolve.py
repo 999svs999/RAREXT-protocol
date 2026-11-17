@@ -310,10 +310,20 @@ def main():
         export_gguf(model, cand_gguf, ctx=model.cfg["ctx"])
         model.train()
 
-        engine_score = engine_verify(cand_gguf, [
+        # Engine gate = FAITHFULNESS, not quality: the engine must reproduce the
+        # trainer's own greedy answers on the same prompts (quality is already
+        # gated by the held-out scores above). Comparing the engine to ground
+        # truth here would conflate the two and hold a mid-learning candidate
+        # to a bar its teacher hasn't reached yet.
+        verify_prompts = [
             *(sets["S0 price-copy"][:4]), *(sets["S1 cheapest"][:4]), *(sets["S2 priciest"][:4]),
-        ])
-        print(f"  engine verification: {engine_score*100:.0f}% on 12 prompts", flush=True)
+        ]
+        from model import batched_generate as _bg2
+        model.eval()
+        with torch.no_grad():
+            torch_answers = _bg2(model, [p for p, _ in verify_prompts], max_new=48, temperature=0.0)
+        engine_score = engine_verify(cand_gguf, list(zip([p for p, _ in verify_prompts], torch_answers)))
+        print(f"  engine faithfulness: {engine_score*100:.0f}% of the trainer's greedy answers reproduced", flush=True)
         gate_ok = gate_ok and engine_score >= 0.95
 
         record = {
