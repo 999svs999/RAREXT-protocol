@@ -315,6 +315,14 @@ def main():
         t0 = time.time()
         gen_index += 1
         print(f"\n=== generation {gen_index} ===", flush=True)
+        if promoted is None:
+            # the initial baseline is what --base can actually do, so the very
+            # first gate already holds it to "no regression"
+            base_scores = evaluate(model, sets, n=40)
+            base_line = {"S0 price-copy": base_scores["S0 price-copy"],
+                         "S1 cheapest": base_scores["S1 cheapest"],
+                         "S2 priciest": base_scores["S2 priciest"]}
+            print(f"  base held-out: " + "  ".join(f"{k} {v*100:.0f}%" for k, v in base_scores.items()), flush=True)
 
         # ---- phase A: bootcamp on verified demonstrations ----------------
         if seed_rows and args.bootcamp > 0:
@@ -368,7 +376,7 @@ def main():
 
         # gate: the deployed skill must hold; at least one new skill must
         # improve over the promoted generation, and nothing may regress.
-        base = promoted["scores"] if promoted else {"S0 price-copy": 1.0, "S1 cheapest": 0.0, "S2 priciest": 0.0}
+        base = promoted["scores"] if promoted else base_line
         gate_ok = scores["S0 price-copy"] >= 0.95
         gate_ok = gate_ok and (scores["S1 cheapest"] > base["S1 cheapest"] or scores["S2 priciest"] > base["S2 priciest"])
         gate_ok = gate_ok and all(scores[k] >= base[k] - 0.02 for k in scores)
