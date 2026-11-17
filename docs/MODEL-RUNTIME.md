@@ -333,7 +333,13 @@ Routes:
 - `POST /v1/chat/completions` — OpenAI, including per-token streaming (one SSE
   chunk per generated token from the engine's prefix decode, a single final chunk
   with the real `finish_reason`, and per-chunk logprobs when requested; SSE is
-  teed to the client and recorded);
+  teed to the client and recorded). Streaming is **live from the decode loop**:
+  the engine calls an observational `onToken` after each token is chosen, and a
+  worker-runtime engine runs the decode off the HTTP thread, so a chunk reaches
+  the socket while the next token is still being computed. Before that, the whole
+  answer was buffered and an engine slower than a proxy's response timeout could
+  not answer at all. The callback cannot change the run: tokens, logprobs and the
+  decode-trace digest are identical with and without it;
 - `POST /v1/messages` — Anthropic Messages, translated to the OpenAI surface;
   `stream: true` is served as the Anthropic event sequence
   (`message_start`/`content_block_start`/one `content_block_delta` per engine
@@ -474,6 +480,45 @@ can live in the cloud too, and the endpoint is the only thing that leaves it.
 - Exact transcripts prove integrity and provenance of the record. They do not
   prove the model is correct, safe, or unbiased. Replay proves reproducibility
   only under the same weights and deterministic settings.
+
+## Host accelerators, and what they do not change
+
+The engine artifact is pure JavaScript: a provider needs nothing but Node to run
+it. Two optional host capabilities make it faster, and neither is required.
+
+**A dense weight cache.** The first time the run touches a quantized matrix
+(attention, FFN, and the output projection) the engine unpacks it to Float32 once
+and keeps it, because every token reads the same weights. A budget bounds the
+cache (`hostDenseBudgetBytes`, or `RAREXT_DENSE_BUDGET_MB` on the provider;
+1.6 GB by default). Past the budget — or if the host cannot allocate — the engine
+falls back to the fused unpack-and-dot path, which works in bounded memory, so a
+small host degrades in speed and never in correctness.
+
+**A vectorized matvec.** If the sandbox is given a `hostMatvec(A, rows, cols, x, y)`
+function, the engine routes its dense products through it. The reference build is
+`native/matvec.c`, ~60 lines of N-API over `cblas_sgemv`; it is loaded
+automatically when `native/matvec.node` exists, or from `RAREXT_MATVEC_ADDON`.
+Without it every product takes the JavaScript loop. A worker runtime loads the
+addon in its own thread — a function cannot cross a thread boundary — and a
+failed load is not an error, only a host without the accelerator.
+
+Measured on one x86_64 host (8 cores, 8.6 GB), 0.5B parameter Qwen2 in GGUF, same
+prompt, greedy decode:
+
+| engine path | 32 tokens | 16 tokens |
+| --- | --- | --- |
+| fused quantized, scalar JS | 64.3 s | 44.7 s |
+| + dense weight cache | 56.3 s | — |
+| + host matvec (BLAS) | — | 13.3 s |
+| + dense cache covering the output projection | **8.5 s** | — |
+
+The token ids are identical in every column — 16 tokens compared one by one
+between the JS-only and BLAS engines, and the decode-trace digest
+(`047794f99dde4963fa694d1d`) is the same across the 32-token runs. BLAS sums a
+row in a different order, so intermediate logits differ in the last few digits
+(~1e-3 relative); the argmax did not move. That is a real statement about this
+model and this sampler, not a guarantee for every model: a provider that needs
+bit-exact accumulation across hosts leaves the addon unbuilt.
 
 ## Limits in this version
 

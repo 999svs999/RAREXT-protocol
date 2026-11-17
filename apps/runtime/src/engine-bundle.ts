@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { Worker } from "node:worker_threads";
 
@@ -571,11 +574,109 @@ export function loadWasmEngine(source: Uint8Array): NativeEngine {
  * `require`, no `process`, no filesystem and no network — so a foreign native
  * engine program runs isolated, without a container.
  */
+/** A host-provided dense matrix-vector kernel: `y = A·x`, row-major Float32. */
+export type HostMatvec = (
+  a: Float32Array,
+  rows: number,
+  cols: number,
+  x: Float32Array,
+  y: Float32Array,
+) => void;
+
+/**
+ * An OPTIONAL accelerator for the engine's dense matvec.
+ *
+ * The engine artifact is pure JavaScript and must run on a bare provider: this
+ * addon is a capability the *host* may offer, never a requirement. When it is
+ * present the engine hands its already-dequantized Float32 matrices to the
+ * platform BLAS (Accelerate on macOS), which uses the CPU's vector units
+ * instead of one scalar multiply-add at a time. When it is absent — or fails to
+ * load, or rejects a buffer — the engine takes the identical scalar path.
+ *
+ * Set `RAREXT_MATVEC_ADDON` to point at a different build; by default the
+ * in-repo `native/matvec.node` is used when it exists.
+ */
+const NATIVE_MATVEC_PATH: string | null = (() => {
+  if (typeof process === "undefined") return null;
+  const configured = process.env.RAREXT_MATVEC_ADDON;
+  if (configured !== undefined && configured !== "") return configured;
+  try {
+    const bundled = fileURLToPath(new URL("../../../native/matvec.node", import.meta.url));
+    return existsSync(bundled) ? bundled : null;
+  } catch {
+    return null;
+  }
+})();
+
+function loadHostMatvec(path: string | null): HostMatvec | null {
+  if (path === null) return null;
+  try {
+    const addon = createRequire(import.meta.url)(path) as { matvec?: unknown };
+    return typeof addon.matvec === "function" ? (addon.matvec as HostMatvec) : null;
+  } catch {
+    // A missing or unloadable addon is not an error: it is a host without the
+    // accelerator, and the engine has its own portable path.
+    return null;
+  }
+}
+
+const HOST_MATVEC = loadHostMatvec(NATIVE_MATVEC_PATH);
+
+/**
+ * A provider's own cap on the engine's Float32 weight copies, in bytes. The
+ * engine copies a matrix once and reuses it for every token, so the cache is a
+ * speed/memory trade the host — which knows its own RAM — should size.
+ */
+const HOST_DENSE_BUDGET_BYTES: number | null = (() => {
+  if (typeof process === "undefined") return null;
+  const mb = Number(process.env.RAREXT_DENSE_BUDGET_MB);
+  return Number.isFinite(mb) && mb > 0 ? Math.floor(mb * 1000 * 1000) : null;
+})();
+
+/** The host knobs the sandboxed engine may read, when this host sets them. */
+const HOST_ENGINE_GLOBALS: Record<string, unknown> = {
+  ...(HOST_MATVEC === null ? {} : { hostMatvec: HOST_MATVEC }),
+  ...(HOST_DENSE_BUDGET_BYTES === null ? {} : { hostDenseBudgetBytes: HOST_DENSE_BUDGET_BYTES }),
+};
+
+/**
+ * The same knobs for a worker. A function cannot cross a thread boundary, so the
+ * worker loads the addon itself from `addonPath` and only values are passed here.
+ */
+const WORKER_HOST_GLOBALS: Record<string, unknown> = {
+  ...(HOST_DENSE_BUDGET_BYTES === null ? {} : { hostDenseBudgetBytes: HOST_DENSE_BUDGET_BYTES }),
+};
+
+/** The addon a worker should load for itself, or null when the host has none. */
+export const HOST_MATVEC_ADDON_PATH: string | null =
+  HOST_MATVEC === null ? null : NATIVE_MATVEC_PATH;
+
 const WORKER_ENGINE_BOOTSTRAP = `
 const { parentPort, workerData } = require("node:worker_threads");
 const vm = require("node:vm");
 const module = { exports: {} };
-const sandbox = { module, exports: module.exports, TextEncoder, TextDecoder, console, Math, JSON };
+// The host accelerator, if this host has one. Loaded in the worker's own realm
+// and injected into the sandbox; a failure just means the engine's own JS path.
+let hostMatvec = null;
+if (typeof workerData.addonPath === "string" && workerData.addonPath !== "") {
+  try {
+    const addon = require(workerData.addonPath);
+    if (typeof addon.matvec === "function") hostMatvec = addon.matvec;
+  } catch (addonError) {
+    hostMatvec = null;
+  }
+}
+const sandbox = {
+  module,
+  exports: module.exports,
+  TextEncoder,
+  TextDecoder,
+  console,
+  Math,
+  JSON,
+  ...(hostMatvec === null ? {} : { hostMatvec: hostMatvec }),
+  ...(workerData.hostGlobals || {}),
+};
 vm.runInNewContext(workerData.code, sandbox, { timeout: 10000, filename: "rarext-engine.js" });
 const run = module.exports.run;
 if (typeof run !== "function") {
@@ -640,7 +741,11 @@ export function loadWorkerEngine(source: Uint8Array): NativeEngine {
     if (worker !== null && booting !== null) return booting;
     const created = new Worker(WORKER_ENGINE_BOOTSTRAP, {
       eval: true,
-      workerData: { code },
+      workerData: {
+        code,
+        addonPath: HOST_MATVEC_ADDON_PATH,
+        hostGlobals: WORKER_HOST_GLOBALS,
+      },
       // The model lives on this thread as an external ArrayBuffer; V8's old-gen
       // limit does not cover it, but leave headroom for the JS side of a run.
       resourceLimits: { maxOldGenerationSizeMb: 4096, maxYoungGenerationSizeMb: 64 },
@@ -773,6 +878,7 @@ export function loadEngine(
     console,
     Math,
     JSON,
+    ...HOST_ENGINE_GLOBALS,
   };
   try {
     const code = new TextDecoder().decode(source);

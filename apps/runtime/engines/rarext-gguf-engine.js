@@ -2643,9 +2643,103 @@
     return 0.5 * x * (1 + Math.tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)));
   }
 
+  /**
+   * An OPTIONAL host accelerator, injected into the sandbox as `hostMatvec` by
+   * a provider that has one. The engine artifact stays pure JS: absent, this is
+   * null and every product takes the scalar path below. Present, it must be a
+   * matrix-vector product over a row-major Float32 matrix — the same arithmetic
+   * in the same order of operations per row, vectorized.
+   */
+  var HOST_MATVEC = typeof hostMatvec === "function" ? hostMatvec : null;
+
   /** y = W x, one quantized row at a time. */
+  // How much a single loaded model may hold as Float32 weight copies. The
+  // matrices are read-only, so one copy serves every token; the cap keeps a
+  // large model on the fused quantized path instead of exhausting the host.
+  // A provider may size it for its own machine by injecting
+  // `hostDenseBudgetBytes` into the sandbox.
+  var DENSE_WEIGHT_BUDGET_BYTES =
+    typeof hostDenseBudgetBytes === "number" && hostDenseBudgetBytes > 0
+      ? hostDenseBudgetBytes
+      : 1600 * 1000 * 1000;
+
+  /**
+   * The tensor as Float32, unpacked once. Returns null when the tensor is
+   * already float, or when caching it would exceed the model's budget — in
+   * which case the caller keeps the fused dequant+dot path.
+   */
+  function denseTensor(model, tensor) {
+    var cache = model.denseCache;
+    if (cache === undefined) {
+      cache = { bytes: 0, tensors: {} };
+      model.denseCache = cache;
+    }
+    var hit = cache.tensors[tensor.name];
+    if (hit !== undefined) return hit === null ? null : hit;
+    if (tensor.type === TYPE_F32) return null;
+    if (cache.exhausted === true) return null;
+    var needed = tensor.rows * tensor.cols * 4;
+    if (cache.bytes + needed > DENSE_WEIGHT_BUDGET_BYTES) {
+      // Every later matrix is at least as large, and the budget only shrinks,
+      // so remember the decision instead of re-checking it per call.
+      cache.tensors[tensor.name] = null;
+      return null;
+    }
+    var values;
+    try {
+      values = new Float32Array(tensor.rows * tensor.cols);
+    } catch (allocationError) {
+      // The host could not give us memory. That is a statement about the host,
+      // not the model: stop copying and finish on the fused quantized path,
+      // which always works in bounded memory.
+      cache.exhausted = true;
+      return null;
+    }
+    var scratch = new Float32Array(tensor.cols);
+    for (var row = 0; row < tensor.rows; row += 1) {
+      dequantRow(model, tensor, row, scratch);
+      values.set(scratch, row * tensor.cols);
+    }
+    cache.tensors[tensor.name] = values;
+    cache.bytes += needed;
+    return values;
+  }
+
   function matmul(model, tensor, x, y) {
-    for (var row = 0; row < tensor.rows; row += 1) y[row] = dotRow(model, tensor, row, x);
+    var dense = tensor === undefined ? null : denseTensor(model, tensor);
+    if (dense === null) {
+      for (var row = 0; row < tensor.rows; row += 1) y[row] = dotRow(model, tensor, row, x);
+      return y;
+    }
+    // A host may offer a vectorized kernel for exactly this shape. It is a pure
+    // function of (weights, activations) — the same product, computed with the
+    // CPU's vector units instead of one scalar multiply-add at a time. If it
+    // refuses these buffers, drop it for the rest of the run and finish here.
+    if (HOST_MATVEC !== null) {
+      try {
+        HOST_MATVEC(dense, tensor.rows, tensor.cols, x, y);
+        return y;
+      } catch (hostError) {
+        HOST_MATVEC = null;
+      }
+    }
+    var cols = tensor.cols;
+    for (var r = 0; r < tensor.rows; r += 1) {
+      var base = r * cols;
+      var s0 = 0;
+      var s1 = 0;
+      var s2 = 0;
+      var s3 = 0;
+      var i = 0;
+      for (; i + 3 < cols; i += 4) {
+        s0 += dense[base + i] * x[i];
+        s1 += dense[base + i + 1] * x[i + 1];
+        s2 += dense[base + i + 2] * x[i + 2];
+        s3 += dense[base + i + 3] * x[i + 3];
+      }
+      for (; i < cols; i += 1) s0 += dense[base + i] * x[i];
+      y[r] = s0 + s1 + s2 + s3;
+    }
     return y;
   }
 
@@ -2978,7 +3072,12 @@
       if (typeof bos === "number" && promptIds[0] !== bos) promptIds[0] = bos;
     }
 
-    var steps = Math.max(1, Math.min(Number(input.steps) || 16, 256));
+    // The step budget is the caller's. The only bound the engine imposes is the
+    // model's real one — the context window, applied next. An engine-level token
+    // cap (this used to be 256) is not a safety property, it is a policy the
+    // caller already states in `max_tokens`; transport timeouts belong to the
+    // provider that owns the socket.
+    var steps = Math.max(1, Number(input.steps) || 16);
     // The first generated token comes out of the last prompt position; every
     // later one costs a position. Bound the run so prompt + generation can
     // never exceed the declared context.
@@ -3335,7 +3434,11 @@
       } else {
         rmsNorm(norm, x, normWeight(gguf, outputNorm, nEmbd), eps);
       }
-      for (var row = 0; row < output.rows; row += 1) logits[row] = dotRow(gguf, output, row, norm);
+      // The output projection is a full-vocabulary matvec on EVERY token — the
+      // single largest product in the run. It goes through the same path as the
+      // attention and FFN matrices: unpacked once, then the host's vector kernel
+      // when the host offers one.
+      matmul(gguf, output, norm, logits);
       if (isPhi2) addBias(logits, biasOrNull(gguf, "output.bias", output.rows));
       return logits;
     }
