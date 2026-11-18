@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-18T16:46:07.795Z",
+  "generatedAt": "2026-11-18T19:37:03.130Z",
   "blobs": [
     {
       "hash": "28afc922d062acc0660650cadd407234b57ebd4562b7d3d72f0beb8a0339a253",
@@ -11,7 +11,7 @@
       "ai": {
         "app": "ai-generative",
         "representation": "generative",
-        "publicationId": "06950f00-67c4-4ce4-860a-313d1328562d",
+        "publicationId": "616b725b-d00d-4044-a60d-6570c3dac3b9",
         "challengeId": "gen-starter",
         "title": "Replay of the committed starter model (32 steps)",
         "raster": "cb9a5c2defbe4d7c720aa181e911f0d723a6e28c25d63f8583a3d8ba4242688c",
@@ -27,7 +27,7 @@
       "ai": {
         "app": "ai-bounded",
         "representation": "bounded",
-        "publicationId": "93e80c2a-32dd-49d7-91fd-04026ac44f33",
+        "publicationId": "6e403411-c005-44ce-b74b-428b5a27ae11",
         "challengeId": "bounded-starter",
         "title": "Bounded reconstruction of the committed reference (maxAbsError 2)",
         "raster": "f332682247d1fcf783264b6cc8830b84ed656bd9dff8be4cc0767645cbbb2767",
