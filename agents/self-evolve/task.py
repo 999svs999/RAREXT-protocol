@@ -88,16 +88,26 @@ COMP_QUESTION = {"cheapest": "which is cheapest?",
                  "priciest": "which is most expensive?"}
 
 
-def comp_example(rng: random.Random, kind: str | None = None, n_rows: int | None = None):
+def comp_example(rng: random.Random, kind: str | None = None, n_rows: int | None = None,  # noqa: C901
+                 mixed: bool | None = None):
     kind = kind or rng.choice(["cheapest", "priciest"])
     n = n_rows or rng.choice([2, 2, 2, 3])
-    # Every row in one example shares a digit length (3 or 4): comparing
-    # fixed-length digit strings is a learnable circuit for a small model,
-    # while mixed lengths ("$86" vs "$994") need digit-alignment the current
-    # 1.3M-parameter policy never found. The depot's price range lives here.
-    L = rng.choice([3, 3, 3, 4])
-    lo, hi = 10 ** (L - 1), 10 ** L - 1
-    prices = rng.sample(range(lo, hi), n)
+    # Digit lengths: same length per example is the learnable base case
+    # (min/max = fixed-length lexicographic compare). Mixed lengths ("$86" vs
+    # "$994") need digit-alignment — taught as a curriculum step, evaluated
+    # separately (the S1m/S2m sets) so a mixed-length regression cannot hide.
+    if mixed is None:
+        mixed = rng.random() < 0.3
+    if mixed:
+        prices = [rng.choice([rng.randrange(100, 999), rng.randrange(1000, 9999)]) for _ in range(n)]
+        seen = set()
+        while len(set(prices)) < n:
+            prices[rng.randrange(n)] = rng.choice(
+                [rng.randrange(100, 999), rng.randrange(1000, 9999)])
+            seen.add(1)
+    else:
+        L = rng.choice([3, 3, 3, 4])
+        prices = rng.sample(range(10 ** (L - 1), 10 ** L - 1), n)
     items = []
     while len(items) < n:
         cand = make_item(rng)
@@ -113,6 +123,45 @@ def comp_example(rng: random.Random, kind: str | None = None, n_rows: int | None
 
 
 # --------------------------------------------------------------------------
+# S3 — the honest refusal (the host says what it is, instead of inventing an
+# answer to a question it cannot understand)
+# --------------------------------------------------------------------------
+NON_PRICE_QUESTIONS = [
+    "when does the drop start?",
+    "do you ship to japan?",
+    "what sizes does it come in?",
+    "is this authentic?",
+    "can i return it?",
+    "who made this?",
+    "when is the next restock?",
+    "do you trade?",
+    "is this new or used?",
+    "what's your return policy?",
+    "where do you ship from?",
+    "can i pay with bank transfer?",
+]
+REFUSAL = "I only deal in prices here — ask me about a piece on the shelf."
+
+PRICE_INTENT = [
+    "how much", "price", "cost", "cheapest", "most expensive", "priciest",
+    "what does it go for", "goes for",
+]
+
+
+def is_price_intent(question: str) -> bool:
+    q = question.lower()
+    return any(w in q for w in PRICE_INTENT)
+
+
+def s3_example(rng: random.Random):
+    item = make_item(rng)
+    price = make_price(rng)
+    question = rng.choice(NON_PRICE_QUESTIONS)
+    prompt = f"rows: -{item}|${price}\nq: {question}\na: "
+    return prompt, REFUSAL
+
+
+# --------------------------------------------------------------------------
 # rewards — computed, deterministic
 # --------------------------------------------------------------------------
 def reward(prompt: str, answer: str) -> float:
@@ -122,6 +171,9 @@ def reward(prompt: str, answer: str) -> float:
         kind, answers = "priciest", _parse_comp(prompt)
     elif "which is cheapest?" in prompt:
         kind, answers = "cheapest", _parse_comp(prompt)
+    elif not is_price_intent(prompt):
+        # a question the host cannot answer must get the refusal, never a price
+        return 1.0 if answer.strip() == REFUSAL else 0.0
     else:
         return 1.0 if answer == _canon_s0(prompt, answer) else 0.0
 
@@ -171,20 +223,33 @@ def exact_match(prompt: str, answer: str) -> bool:
 # --------------------------------------------------------------------------
 def eval_sets(seed: int = 4242):
     rng = random.Random(seed)
-    s0 = [s0_example(rng) for _ in range(120)]
-    s1 = [comp_example(rng, "cheapest") for _ in range(48)]
-    s2 = [comp_example(rng, "priciest") for _ in range(48)]
-    return {"S0 price-copy": s0, "S1 cheapest": s1, "S2 priciest": s2}
+    s0 = [s0_example(rng) for _ in range(80)]
+    s1 = [comp_example(rng, "cheapest", mixed=False) for _ in range(32)]
+    s2 = [comp_example(rng, "priciest", mixed=False) for _ in range(32)]
+    s1m = [comp_example(rng, "cheapest", mixed=True) for _ in range(24)]
+    s2m = [comp_example(rng, "priciest", mixed=True) for _ in range(24)]
+    s3 = [s3_example(rng) for _ in range(40)]
+    return {
+        "S0 price-copy": s0,
+        "S1 cheapest": s1,
+        "S2 priciest": s2,
+        "S1m cheapest-mixed": s1m,
+        "S2m priciest-mixed": s2m,
+        "S3 refusal": s3,
+    }
 
 
 if __name__ == "__main__":
     rng = random.Random(1)
-    for fn in (s0_example, comp_example):
+    for fn in (s0_example, comp_example, s3_example):
         p, a = fn(rng)
         print(repr(p))
         print("  ->", repr(a), "| reward", reward(p, a))
     # the reward must reject a wrong comparison
     p, right = comp_example(random.Random(2), "cheapest")
-    wrong_rows = p.splitlines()
     print("wrong answer reward:", reward(p, "The cheapest is $999 (NOT AN ITEM)."))
     print("right answer reward:", reward(p, right))
+    # a price answered to a non-price question must score zero
+    p3, want3 = s3_example(random.Random(4))
+    print("price to non-price:", reward(p3, "The price is $199 delivered."))
+    print("refusal to non-price:", reward(p3, want3))

@@ -413,7 +413,14 @@ def main():
             "teacher": {m: s for m, s in (teacher_meta or {}).items()} or None,
             "wall_s": round(time.time() - t0), "promoted": gate_ok,
         }
-        if gate_ok:
+        better = promoted is None or (
+            scores["S1 cheapest"] + scores["S2 priciest"],
+            scores["S0 price-copy"],
+        ) >= (
+            promoted["scores"]["S1 cheapest"] + promoted["scores"]["S2 priciest"],
+            promoted["scores"]["S0 price-copy"],
+        )
+        if gate_ok and better:
             # atomic swap into the serving path
             tmp = SERVED_GGUF.with_suffix(".gguf.new")
             tmp.write_bytes(cand_gguf.read_bytes())
