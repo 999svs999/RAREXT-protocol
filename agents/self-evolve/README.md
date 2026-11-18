@@ -82,6 +82,14 @@ still scores a price answered to a non-price question 0.0, so if a future
 base ever learns the refusal, the loop can prove it — and until then the
 system is honest by construction.
 
+The last measured edge — 3-row wide mixed-length comparison (~80-83% held-out,
+failures are digit-splices like `$899` between `$89` and `$999`) — is handled
+the same way: the focused eval sets (`S1t`/`S2t`) keep the loop pressing the
+model, while the deployment validates every `$N` in the answer against the
+supplied rows and falls back to the computed comparative answer on a violation.
+The edge accuracy is the model's to improve; correctness is the system's to
+guarantee.
+
 ## Files
 
 ```

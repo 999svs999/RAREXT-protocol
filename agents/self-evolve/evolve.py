@@ -42,7 +42,7 @@ import torch
 
 import model as agent_model
 import task
-from task import comp_example, eval_sets, exact_match, reward, s0_example
+from task import _comp3_mixed, comp_example, eval_sets, exact_match, reward, s0_example
 
 HERE = Path(__file__).resolve().parent
 GENS = HERE / "generations"
@@ -226,14 +226,16 @@ def mix_prompts(rng, n_total, gen_index=1):
     so evolution never trades away what is already live. The curriculum keeps
     the first generations on 2-row comparisons (a binary choice the policy can
     actually learn) and only widens to 3 rows once a generation has promoted."""
-    max_rows = 2 if gen_index <= 2 else None
     rows = []
     for _ in range(n_total):
         roll = rng.random()
-        if roll < 0.4:
-            rows.append(comp_example(rng, "cheapest", n_rows=max_rows))
-        elif roll < 0.8:
-            rows.append(comp_example(rng, "priciest", n_rows=max_rows))
+        if roll < 0.25:
+            rows.append(comp_example(rng, "cheapest", mixed=rng.random() < 0.5))
+        elif roll < 0.5:
+            rows.append(comp_example(rng, "priciest", mixed=rng.random() < 0.5))
+        elif roll < 0.75:
+            # the measured weak edge: 3 rows, mixed digit lengths, wide ranges
+            rows.append(_comp3_mixed(rng, rng.choice(["cheapest", "priciest"])))
         else:
             rows.append(s0_example(rng))
     return rows  # [(prompt, computed gold answer)]
@@ -310,6 +312,35 @@ def main():
         teacher_meta = payload["teacher_models"]
         print(f"teacher seeds: {len(seed_rows)} usable under the current checker "
               f"({', '.join(f'{m.split(chr(47))[-1]}: {s[chr(111)+chr(107)]}' for m, s in teacher_meta.items())})", flush=True)
+
+    # A fresh loop from a materially better base promotes the BASE first: the
+    # incumbent it replaces can be many points behind on the new skills, and
+    # the first RL generation should not have to re-earn that gap in one pass.
+    if args.fresh:
+        model.eval()
+        b_scores = evaluate(model, sets, n=40)
+        b_gguf = GENS / "gen-000.gguf"
+        b_pt = GENS / "gen-000.pt"
+        torch.save({"config": model.cfg, "state": model.state_dict(), "scores": b_scores,
+                    "parent": None}, b_pt)
+        export_gguf(model, b_gguf, ctx=model.cfg["ctx"])
+        model.train()
+        b_verify_prompts = [p for set_ in sets.values() for p, _ in set_[:2]]
+        with torch.no_grad():
+            b_torch_answers = agent_model.batched_generate(model, b_verify_prompts, max_new=48, temperature=0.0)
+        b_verify = engine_verify(b_gguf, list(zip(b_verify_prompts, b_torch_answers)))
+        b_ok = b_verify >= 0.95
+        b_rec = {"generation": 0, "scores": b_scores, "engine_exact": b_verify,
+                 "gguf": str(b_gguf), "gguf_digest": sha256_file(b_gguf),
+                 "teacher": None, "wall_s": 0, "promoted": b_ok}
+        if b_ok:
+            tmp = SERVED_GGUF.with_suffix(".gguf.new")
+            tmp.write_bytes(b_gguf.read_bytes())
+            tmp.replace(SERVED_GGUF)
+            promoted = b_rec
+            print(f"base promoted as generation 0 ({b_rec['gguf_digest'][:24]}…, engine {b_verify*100:.0f}%)", flush=True)
+        with open(LEDGER, "a") as fh:
+            fh.write(json.dumps(b_rec) + "\n")
 
     while args.generations == 0 or gen_index < args.generations:
         t0 = time.time()

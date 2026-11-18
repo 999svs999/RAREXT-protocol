@@ -229,14 +229,41 @@ def eval_sets(seed: int = 4242):
     s1m = [comp_example(rng, "cheapest", mixed=True) for _ in range(24)]
     s2m = [comp_example(rng, "priciest", mixed=True) for _ in range(24)]
     s3 = [s3_example(rng) for _ in range(40)]
+    # the hard edge: 3 rows, mixed digit lengths, 1-4 digit spread — the shape
+    # that produced digit-splice misses ($899 between $89 and $999)
+    s1t = [_comp3_mixed(rng, "cheapest") for _ in range(24)]
+    s2t = [_comp3_mixed(rng, "priciest") for _ in range(24)]
     return {
         "S0 price-copy": s0,
         "S1 cheapest": s1,
         "S2 priciest": s2,
         "S1m cheapest-mixed": s1m,
         "S2m priciest-mixed": s2m,
+        "S1t cheapest-3row-mixed": s1t,
+        "S2t priciest-3row-mixed": s2t,
         "S3 refusal": s3,
     }
+
+
+def _comp3_mixed(rng, kind):
+    """3 rows, mixed digit lengths, deliberately wide ranges."""
+    n = 3
+    prices = [rng.choice([rng.randrange(10, 99), rng.randrange(100, 999), rng.randrange(1000, 9999)])
+              for _ in range(n)]
+    while len(set(prices)) < n:
+        prices[rng.randrange(n)] = rng.choice(
+            [rng.randrange(10, 99), rng.randrange(100, 999), rng.randrange(1000, 9999)])
+    items = []
+    while len(items) < n:
+        cand = make_item(rng)
+        if cand not in items:
+            items.append(cand)
+    rows = "".join(
+        ("rows: " if i == 0 else "") + f"-{it}|${pr}\n" for i, (it, pr) in enumerate(zip(items, prices))
+    )
+    prompt = f"{rows}q: {COMP_QUESTION[kind]}\na: "
+    target = max(zip(prices, items)) if kind == "priciest" else min(zip(prices, items))
+    return prompt, COMP_ANSWER[kind].format(price=str(target[0]), item=target[1])
 
 
 if __name__ == "__main__":
