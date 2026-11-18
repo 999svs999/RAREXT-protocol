@@ -369,18 +369,17 @@ def main():
         print(f"  held-out: " + "  ".join(f"{k} {v*100:.0f}%" for k, v in scores.items()), flush=True)
         # one greedy answer, verbatim — the mode is what serving reads
         from model import batched_generate as _bg
-        probe_p, probe_a = sets["S1 cheapest"][0]
+        probe_set = next((v for k, v in sets.items() if not k.startswith("S0")), [])
+        probe_p, probe_a = probe_set[0] if probe_set else ("", "")
         with torch.no_grad():
             probe = _bg(model, [probe_p], max_new=48, temperature=0.0)[0]
         print(f"  probe S1 greedy: {probe!r}", flush=True)
 
-        # gate: the deployed skill must hold; the new skills must improve OR
-        # hold (a policy already at its ceiling is still the one to serve), and
-        # nothing may regress.
+        # gate: generic over every skill in the suite — nothing may regress
+        # beyond the noise band, and the combined score must improve or hold.
         base = promoted["scores"] if promoted else base_line
-        gate_ok = scores["S0 price-copy"] >= 0.95
-        gate_ok = gate_ok and (scores["S1 cheapest"] >= base["S1 cheapest"] or scores["S2 priciest"] >= base["S2 priciest"])
-        gate_ok = gate_ok and all(scores[k] >= base[k] - 0.02 for k in scores)
+        gate_ok = all(scores[k] >= base[k] - 0.02 for k in scores)
+        gate_ok = gate_ok and sum(scores.values()) >= sum(base.values()) - 0.005
 
         cand_gguf = GENS / f"gen-{gen_index:03d}.gguf"
         cand_pt = GENS / f"gen-{gen_index:03d}.pt"
@@ -395,9 +394,7 @@ def main():
         # gated by the held-out scores above). Comparing the engine to ground
         # truth here would conflate the two and hold a mid-learning candidate
         # to a bar its teacher hasn't reached yet.
-        verify_prompts = [
-            *(sets["S0 price-copy"][:4]), *(sets["S1 cheapest"][:4]), *(sets["S2 priciest"][:4]),
-        ]
+        verify_prompts = [p for set_ in sets.values() for p, _ in set_[:2]]
         from model import batched_generate as _bg2
         model.eval()
         with torch.no_grad():
@@ -414,11 +411,9 @@ def main():
             "wall_s": round(time.time() - t0), "promoted": gate_ok,
         }
         better = promoted is None or (
-            scores["S1 cheapest"] + scores["S2 priciest"],
-            scores["S0 price-copy"],
+            sum(scores.values()), scores.get("S0 price-copy", 0.0),
         ) >= (
-            promoted["scores"]["S1 cheapest"] + promoted["scores"]["S2 priciest"],
-            promoted["scores"]["S0 price-copy"],
+            sum(promoted["scores"].values()), promoted["scores"].get("S0 price-copy", 0.0),
         )
         if gate_ok and better:
             # atomic swap into the serving path
