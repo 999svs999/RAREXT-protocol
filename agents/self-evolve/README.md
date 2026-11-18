@@ -70,6 +70,18 @@ relentless RL loop polishes, hardens, verifies through the real engine, and
 ratchets the serving path forward — refusing anything that would trade a
 deployed skill for a new one.
 
+The same lesson decided where the honest refusal lives. Training the model to
+say "I only deal in prices here" for non-price questions went 2500 steps at
+0% exact: the refusal competes with the price template for the FIRST answer
+token, and the price mode — fed by every copy skill — never yields it. (The
+S1/S2 branch, cheapest vs priciest, is learned because it diverges at the
+copied digit, deep in the answer, where the question-attention circuit
+already exists.) The refusal moved to the caller: the route classifies price
+intent deterministically and answers without a forward pass. The checker
+still scores a price answered to a non-price question 0.0, so if a future
+base ever learns the refusal, the loop can prove it — and until then the
+system is honest by construction.
+
 ## Files
 
 ```

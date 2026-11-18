@@ -319,9 +319,7 @@ def main():
             # the initial baseline is what --base can actually do, so the very
             # first gate already holds it to "no regression"
             base_scores = evaluate(model, sets, n=40)
-            base_line = {"S0 price-copy": base_scores["S0 price-copy"],
-                         "S1 cheapest": base_scores["S1 cheapest"],
-                         "S2 priciest": base_scores["S2 priciest"]}
+            base_line = dict(base_scores)
             print(f"  base held-out: " + "  ".join(f"{k} {v*100:.0f}%" for k, v in base_scores.items()), flush=True)
 
         # ---- phase A: bootcamp on verified demonstrations ----------------
@@ -398,8 +396,8 @@ def main():
         from model import batched_generate as _bg2
         model.eval()
         with torch.no_grad():
-            torch_answers = _bg2(model, [p for p, _ in verify_prompts], max_new=48, temperature=0.0)
-        engine_score = engine_verify(cand_gguf, list(zip([p for p, _ in verify_prompts], torch_answers)))
+            torch_answers = _bg2(model, verify_prompts, max_new=48, temperature=0.0)
+        engine_score = engine_verify(cand_gguf, list(zip(verify_prompts, torch_answers)))
         print(f"  engine faithfulness: {engine_score*100:.0f}% of the trainer's greedy answers reproduced", flush=True)
         gate_ok = gate_ok and engine_score >= 0.95
 
