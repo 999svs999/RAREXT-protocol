@@ -267,20 +267,11 @@ def main():
     GENS.mkdir(exist_ok=True)
 
     gen0_path = Path(args.base)
-    model = agent_model.load_agent(str(gen0_path))
-    model.cfg = dict(torch.load(gen0_path, map_location="cpu")["config"])
-    model.train()
-    opt = torch.optim.AdamW(model.parameters(), lr=args.rl_lr, betas=(0.9, 0.95), weight_decay=0.01)
-    sets = eval_sets()
-
-    def set_lr(lr):
-        for g in opt.param_groups:
-            g["lr"] = lr
-
-    gen_index = 0
+    # Resume first: the promoted checkpoint defines the ARCHITECTURE, so it must
+    # be found before the model is built (a newer base has a different shape).
+    promoted_ckpt = None
     promoted = None
-    # Resume: the loop is relentless, which includes surviving restarts. The
-    # last PROMOTED generation in the ledger is the parent of the next one.
+    gen_index = 0
     if LEDGER.exists() and not args.fresh:
         last = None
         for line in LEDGER.read_text().splitlines():
@@ -289,15 +280,26 @@ def main():
                 if r.get("promoted"):
                     last = r
         if last:
-            parent_pt = Path(last["gguf"]).with_suffix(".pt")
-            if parent_pt.exists():
-                ck = torch.load(parent_pt, map_location="cpu")
-                model.load_state_dict(ck["state"])
+            cand = Path(last["gguf"]).with_suffix(".pt")
+            if cand.exists():
+                promoted_ckpt = cand
                 promoted = last
                 gen_index = last["generation"]
-                print(f"resuming from promoted generation {gen_index} "
-                      f"({last['gguf_digest'][:24]}…, scores "
-                      f"{ {k: round(v,2) for k, v in last['scores'].items()} })", flush=True)
+    load_from = promoted_ckpt or gen0_path
+    model = agent_model.load_agent(str(load_from))
+    model.cfg = dict(torch.load(load_from, map_location="cpu")["config"])
+    model.train()
+    opt = torch.optim.AdamW(model.parameters(), lr=args.rl_lr, betas=(0.9, 0.95), weight_decay=0.01)
+    sets = eval_sets()
+
+    def set_lr(lr):
+        for g in opt.param_groups:
+            g["lr"] = lr
+
+    if promoted is not None:
+        print(f"resuming from promoted generation {gen_index} "
+              f"({promoted['gguf_digest'][:24]}…, scores "
+              f"{ {k: round(v,2) for k, v in promoted['scores'].items()} })", flush=True)
 
     seed_file = HERE / "teacher-seeds.json"
     seed_rows = []
