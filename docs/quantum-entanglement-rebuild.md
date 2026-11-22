@@ -155,6 +155,65 @@ seed 4242:
 twin of the same tiny model (A = W, B = I, so the decodes must be bit-identical)
 and asserts token-identical output, placeholder shapes, and factor detection.
 
+## Measured: serving the rebuild on RAREXT web4
+
+web4 placement is the part that makes this "run on the RAREXT cloud": the
+weights **and** the engine become content-addressed RAREXT blobs, a provider
+fetches and verifies every shard before it loads anything, and the caller holds
+no model file. `tools/entangle/web4_serve.py` runs exactly that against the
+factored artifact and measures it:
+
+```bash
+python3 tools/entangle/web4_serve.py            # resident provider
+python3 tools/entangle/web4_serve.py --stream   # rows read on demand
+```
+
+Measured (resident mode, 280 held-out prompts, source model deleted and the
+repo copy renamed away before the provider started):
+
+| what | measured |
+|---|---|
+| weights on RAREXT | 4,673,760 bytes in **9 content-addressed shards**, digest `sha256:da1a69cb…` |
+| engine on RAREXT | `rarext-gguf-engine@1`, 1 shard, digest `sha256:de705020…` |
+| provider fetch/verify | 9/9 shards verified against the committed digest, engine loaded from its shard |
+| answers | **276/280 exact (98.6%)** — S0 80/80, S1 32/32, S2 32/32, S2m 24/24, **S3 40/40**, S1m 23/24, S1t 22/24, S2t 23/24 |
+| speed | 479 ms/answer, **14.3 ms/token** (9,359 tokens) |
+| provider RSS at ready | 112.9–126.7 MB across recorded runs — and the **no-model registry control peaks at 109–113 MB** (a bare `node` is ≈31 MB), so the model-specific footprint is the 4.67 MB of weights plus a few MB of engine state; the process is dominated by the JS runtime itself. Peak RSS during 280 sustained answers (246–252 MB) is GC headroom, not model size |
+| caller's state | no `.gguf`, no `.safetensors`, no weights of any kind |
+
+The 96-token request cap (vs the 48-token evaluation cap used elsewhere) lets
+the S3 refusal run to completion, so the refusal scores **40/40 through the
+web4 path** — the 0% S3 number in earlier tables is the evaluation harness's
+token cap, not a property of the model. The four misses are the same
+one-sample deficits parity measured; nothing regressed through serving.
+
+With `RAREXT_STREAM_WEIGHTS=1` the provider writes the verified bytes to its
+state dir (`weights-<digest>.gguf`, 4,673,760 bytes) and reads rows on demand —
+the bounded-memory path for models larger than RAM. Correctness holds there too
+(40/40 on a subset), at 188 ms/token: for a 4.67 MB model, resident loading is
+strictly better, and streaming exists for the day a rebuilt model outgrows RAM.
+
+The full placement demo passes end to end with this model — weights and engine
+sharded into RAREXT, two providers, deployment commit, decode trace,
+deterministic replay with an independent witness, mirror failover, tamper
+refusal, engine pin:
+
+```bash
+RAREXT_WEB4_GGUF=tools/entangle/entangled-factored.gguf \
+RAREXT_WEB4_MODEL=rarext-entangled-chi48 \
+RAREXT_WEB4_OWN_ENGINE=default \
+node scripts/demo-web4-model.mjs        # 34/34 phases passed
+```
+
+Resource statement, against "current AI models that need huge compute": the
+served artifact is 4.67 MB (the 0.5B-class GGUF documented in
+`docs/MODEL-RUNTIME.md` is 397,821,319 bytes — 85× larger), inference is pure
+CPU JavaScript with no GPU, no native addon, no container, and the serving
+process's model-specific memory is ≈17 MB. That is the honest scale of "super
+low resources" here: a specialist host rebuilt at bond dimension 48, not a
+frontier model. It answers its trained task family (price lookup, comparison,
+refusal) and nothing else.
+
 ## Verdict
 
 - **The rebuild is real.** RAREXT AI's function can be reconstructed from a
@@ -164,6 +223,12 @@ and asserts token-identical output, placeholder shapes, and factor detection.
 - **The saving is real when the engine reads the factors**: 54.7% of the bytes,
   31% faster per prompt, 280/280 identical answers through RAREXT's own engine,
   with a regression test that holds the path token-identical.
+- **It runs on RAREXT web4 with no other AI in the path**: weights (4.67 MB,
+  9 shards) and engine (1 shard) are RAREXT blobs; a provider with the source
+  file deleted serves 276/280 held-out prompts at 14.3–14.4 ms/token, with the
+  model contributing ~5 MB to a process whose baseline (Node runtime) is
+  ≈110 MB; the 34-phase placement demo passes end to end
+  (`scripts/demo-web4-model.mjs`, receipt `.ai-proof/web4-model/receipt.json`).
 - **It is not promoted to serving.** The evolution gate's rule is 0.02 on two
   seeds, and one sample in a 24-sample set is 0.042, so the gate refuses plain
   truncation and refinement alike. Serving a smaller model that the gate has

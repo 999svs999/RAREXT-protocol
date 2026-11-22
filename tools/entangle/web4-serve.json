@@ -2,9 +2,9 @@
  "mode": "resident",
  "model_file": "tools/entangle/entangled-factored.gguf",
  "model_bytes": 4673760,
- "registry": "http://127.0.0.1:51241",
+ "registry": "http://127.0.0.1:54378",
  "bundle": {
-  "manifestHash": "d7f49a40915a85b2d56e58e5c894ef98278ade037b4ebf615cc2a132661f9934",
+  "manifestHash": "6d3b08c40daca0497f2b36e34c5912a71d5b9f643fbac212fa2dcd18bdb0664b",
   "weightsDigest": "sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
   "shards": 9,
   "totalBytes": 4673760,
@@ -25,7 +25,7 @@
     "engineVersion": "1",
     "runtime": "rarext.gguf-engine.node-cjs.v1",
     "artifactDigest": "sha256:de7050207f78134e346ad8f5dd9f6264065338853b452265572c9fd592986a5b",
-    "manifestHash": "11c04e970eeed3f177385cb29e0d17124705957d21747ab85ca8222c139cfefc"
+    "manifestHash": "e156a73fd7ae182fbdbdaf2427de5a192dead51e50a59bc88cb648395b10e059"
    }
   }
  },
@@ -34,10 +34,10 @@
   "bytes": 0
  },
  "source_deleted": true,
- "repo_artifact_hidden": true,
- "provider": "http://127.0.0.1:51247",
+ "repo_artifact_digest": "da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+ "provider": "http://127.0.0.1:54387",
  "provider_log": [
-  "[provider] fetching 9 shard(s) / 4673760 bytes for rarext-entangled-chi48 from http://127.0.0.1:51241",
+  "[provider] fetching 9 shard(s) / 4673760 bytes for rarext-entangled-chi48 from http://127.0.0.1:54378",
   "[provider]   shard 1/9 524288 bytes",
   "[provider]   shard 2/9 524288 bytes",
   "[provider]   shard 3/9 524288 bytes",
@@ -50,20 +50,20 @@
   "[provider] verified 4673760 bytes against sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
   "[provider] fetched the engine this bundle commits: rarext-gguf-engine@1 (sha256:de7050207f7\u2026)",
   "[provider] loaded engine rarext-gguf-engine@1 (sha256:de7050207f7\u2026) from 1 RAREXT shard(s)",
-  "rarext provider serving rarext-entangled-chi48 on http://127.0.0.1:51247",
-  "  bundle      1df8d45a67877baa6ee1bb8b715d13fbb91cb0d672ada1f85841f1ff05c0edcc",
+  "rarext provider serving rarext-entangled-chi48 on http://127.0.0.1:54387",
+  "  bundle      82b388037e037154aa5b8dd84d2a944dee8ee53e3c4d372c71c607424167ac22",
   "  weights     sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
-  "  shards      9 verified from http://127.0.0.1:51241",
+  "  shards      9 verified from http://127.0.0.1:54378",
   "  execution   engine",
-  "  card        3909498187517251841590fbb5f5b206fc2b381cdf787ddab08230cca79ae193",
-  "  openai      POST http://127.0.0.1:51247/v1/chat/completions",
-  "  card        GET  http://127.0.0.1:51247/v1/provider-card"
+  "  card        f28ade743a152e38b021aebb7c256e0baaa9631358aba5c0e08febff8b73641d",
+  "  openai      POST http://127.0.0.1:54387/v1/chat/completions",
+  "  card        GET  http://127.0.0.1:54387/v1/provider-card"
  ],
- "provider_rss_at_ready_bytes": 126656512,
- "registry_rss_bytes": 109051904,
+ "provider_rss_at_ready_bytes": 112934912,
+ "registry_rss_bytes": 109965312,
  "health": {
   "ok": true,
-  "bundle": "1df8d45a67877baa6ee1bb8b715d13fbb91cb0d672ada1f85841f1ff05c0edcc",
+  "bundle": "82b388037e037154aa5b8dd84d2a944dee8ee53e3c4d372c71c607424167ac22",
   "weightsDigest": "sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
   "execution": "engine",
   "engine": {
@@ -79,7 +79,7 @@
    {
     "id": "rarext-entangled-chi48",
     "object": "model",
-    "created": 1795332209,
+    "created": 1795334520,
     "owned_by": "rarext-provider",
     "digest": "da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
     "capabilities": {
@@ -136,10 +136,10 @@
     "n": 40
    }
   },
-  "wall_s": 134.07782411575317,
-  "ms_per_answer": 478.8493718419756,
+  "wall_s": 134.47930788993835,
+  "ms_per_answer": 480.28324246406555,
   "tokens": 9359,
-  "ms_per_token": 14.326084423095756,
+  "ms_per_token": 14.368982571849381,
   "engine_residentBytes": [],
   "misses": [
    {
@@ -169,10 +169,10 @@
   ]
  },
  "process": {
-  "provider_peak_rss_bytes": 251789312,
-  "provider_rss_after_warmup_bytes": 117346304,
-  "provider_rss_at_ready_bytes": 126656512,
-  "registry_peak_rss_bytes": 109060096,
+  "provider_peak_rss_bytes": 246214656,
+  "provider_rss_after_warmup_bytes": 121974784,
+  "provider_rss_at_ready_bytes": 112934912,
+  "registry_peak_rss_bytes": 109985792,
   "model_bytes": 4673760
  },
  "provider_state_files": [

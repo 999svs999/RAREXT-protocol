@@ -21,6 +21,10 @@ $PY tools/entangle/parity.py --chi 48            # 5 seeds, export, engine check
 $PY tools/entangle/factor_export.py --chi 48     # dense + MPO GGUF from one state
 $PY tools/entangle/compare_answers.py            # 280 prompts, both artifacts
 $PY tools/entangle/verify_engine_skills.py tools/entangle/entangled-factored.gguf
+$PY tools/entangle/web4_serve.py                  # serve from RAREXT web4, measure it
+RAREXT_WEB4_GGUF=tools/entangle/entangled-factored.gguf \
+RAREXT_WEB4_MODEL=rarext-entangled-chi48 \
+RAREXT_WEB4_OWN_ENGINE=default node scripts/demo-web4-model.mjs   # 34/34
 ```
 
 `parity.py` takes ~15 min on 8 CPU cores; `compare_answers.py` ~5 min.
@@ -36,11 +40,14 @@ $PY tools/entangle/verify_engine_skills.py tools/entangle/entangled-factored.ggu
 | factored GGUF | 4,673,760 B vs 8,537,568 B (54.7%) |
 | decode | 442 ms vs 644 ms per answer; 16 vs 24 ms/token |
 | answers through `rarext-gguf-engine.js` | identical 280/280 |
+| web4 serving (`web4_serve.py`) | 9 shards + engine shard fetched & verified; 276/280 exact, 14.3 ms/token, ≈17 MB model-specific RSS over the no-model control |
+| web4 placement demo | 34/34 phases (`demo-web4-model.mjs`, receipt `.ai-proof/web4-model/receipt.json`) |
 
 The rebuilt, factored artifact is `entangled-factored.gguf`; its trainable
 weights are `refined-chi48.pt`. The engine serves it with no new format: a
 `X.a` / `X.b` tensor pair replaces `X.weight`, and the dense path is unchanged
 when no pair is present (`apps/runtime/test/web4.test.ts` holds both).
+`web4-serve.json` / `web4-serve-stream.json` are the recorded web4 runs.
 
 It is **not** promoted to serving: the evolution gate's 0.02 tolerance is
 finer than one sample in a 24-sample set (0.042), so the gate refuses it. The

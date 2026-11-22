@@ -20,6 +20,7 @@ Run:  python3 tools/entangle/web4_serve.py [--stream] [--max-tokens 96]
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -45,6 +46,14 @@ MODEL_ID = "rarext-entangled-chi48"
 def get(url, timeout=30):
     with urllib.request.urlopen(url, timeout=timeout) as r:
         return json.loads(r.read().decode())
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h
 
 
 def post(url, body, timeout=300):
@@ -166,12 +175,12 @@ def main():
         result["registry_blobs"] = {"count": len(listed),
                                     "bytes": sum(int(r.get("bytes", 0)) for r in listed)}
 
-        # ── 3. no local model: delete the file, move the repo copy away ──────
+        # ── 3. no local model for the provider: delete the copy it was ───────
+        # bundled from. (The repo artifact is never touched: the provider was
+        # never given its path, and a serving run must not desync the repo.)
         source.unlink()
-        hidden = HERE / "entangled-factored.gguf.served-away"
-        MODEL.rename(hidden)
         result["source_deleted"] = not source.exists()
-        result["repo_artifact_hidden"] = not MODEL.exists()
+        result["repo_artifact_digest"] = sha256(MODEL).hexdigest()
 
         # ── 4. provider fetches, verifies, and serves ────────────────────────
         penv = {**os.environ}
@@ -269,7 +278,7 @@ def main():
             "provider_rss_after_warmup_bytes": baseline * 1024,
             "provider_rss_at_ready_bytes": result.get("provider_rss_at_ready_bytes"),
             "registry_peak_rss_bytes": peak_api["rss"] * 1024,
-            "model_bytes": MODEL.with_suffix(".gguf.served-away").stat().st_size,
+            "model_bytes": MODEL.stat().st_size,
         }
         # what the provider actually kept on disk
         kept = []
@@ -290,8 +299,8 @@ def main():
         print(f"engine        {engine_bundle['name']}@{engine_bundle['engineVersion']} "
               f"({engine_bundle['runtime']}), {len(engine_bundle['shards'])} shards, "
               f"{engine_bundle['artifactDigest'][:22]}…")
-        print(f"source        deleted={result['source_deleted']} "
-              f"repo copy hidden={result['repo_artifact_hidden']}")
+        print(f"source        bundled copy deleted={result['source_deleted']} "
+              f"(provider never had any other path to the weights)")
         print(f"provider      {url}  health={health.get('bundle', '')[:16]}…")
         print(f"answers       {ok}/{len(rows)} exact ({100*ok/len(rows):.1f}%)  "
               f"{wall/len(rows)*1000:.0f} ms/answer  "
@@ -309,9 +318,6 @@ def main():
                 print(f"  {m['skill']}: got {m['got']!r} want {m['want']!r} ({m['finish']})")
         print(f"wrote {out_path.relative_to(REPO)}")
     finally:
-        hidden = HERE / "entangled-factored.gguf.served-away"
-        if hidden.exists():
-            hidden.rename(MODEL)
         for proc in (provider, api):
             if proc is not None and proc.poll() is None:
                 proc.terminate()
