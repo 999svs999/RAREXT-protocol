@@ -45,7 +45,7 @@
 q: which is cheapest?
 a: </textarea>
         <button id="ask">Answer</button>
-        <button id="selftest">Run the 8-prompt skill self-test</button>
+        <button id="selftest">Run the 14-prompt skill self-test</button>
         <div id="answer" class="answer"></div>
         <div id="selftest-out"></div>
 
@@ -109,12 +109,13 @@ a: </textarea>
           document.getElementById("selftest").addEventListener("click", () => {
             const rows = skillSelfTest(loaded.engine, loaded.model);
             const passed = rows.filter((r) => r.ok).length;
+            const skills = [...new Set(rows.map((r) => r.skill))];
             selftestOut.innerHTML =
-              `<p><strong>${passed}/${rows.length} exact</strong> — the deployed skill (price lookup), ` +
-              `decoded in this tab against computed gold answers.</p>` +
-              `<table><tr><th>want</th><th>got</th><th></th></tr>` +
+              `<p><strong>${passed}/${rows.length} exact</strong> across ${skills.length} skills ` +
+              `— price lookup AND multi-row comparison reasoning, decoded in this tab against computed gold.</p>` +
+              `<table><tr><th>skill</th><th>want</th><th>got</th><th></th></tr>` +
               rows.map((r) =>
-                `<tr><td>${r.want.replace(/</g, "&lt;")}</td><td>${r.got.replace(/</g, "&lt;")}</td>` +
+                `<tr><td>${r.skill}</td><td>${r.want.replace(/</g, "&lt;")}</td><td>${r.got.replace(/</g, "&lt;")}</td>` +
                 `<td class="${r.ok ? "ok-tag" : "miss-tag"}">${r.ok ? "ok" : "MISS"}</td></tr>`,
               ).join("") + `</table>`;
           });
