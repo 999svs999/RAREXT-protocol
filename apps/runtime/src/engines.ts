@@ -681,6 +681,15 @@ export function translateOpenAiResponse(
     usage: {
       input_tokens: numberOrNull(usage.prompt_tokens) ?? 0,
       output_tokens: numberOrNull(usage.completion_tokens) ?? 0,
+      // Prompt-cache accounting, mapped from the OpenAI-shaped field: how many
+      // input tokens the upstream served from its KV prompt cache. 0 when the
+      // upstream reports none — the field is always present on a translated
+      // message, matching the Anthropic wire.
+      cache_read_input_tokens:
+        isRecord(usage.prompt_tokens_details) &&
+        typeof usage.prompt_tokens_details.cached_tokens === "number"
+          ? usage.prompt_tokens_details.cached_tokens
+          : 0,
     },
   };
 }

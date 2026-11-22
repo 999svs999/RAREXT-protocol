@@ -1513,6 +1513,54 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
    * provider's own `x-rarext-receipt` (and bundle/seed headers, when present)
    * are passed through so a caller can still verify who produced them.
    */
+  /**
+   * The batch surface is a pure proxy, not a run: a batch is N requests the
+   * PROVIDER processes (each with the engine's own accounting), so the gateway
+   * does not pretend to have witnessed each one. It forwards the bytes —
+   * upload, create, status, output — and relays the upstream's status and
+   * content-type verbatim, for any upstream that implements the shape.
+   */
+  const BATCH_PATH = /^\/v1\/(files|batches)(\/[A-Za-z0-9._-]+)?(\/output)?$/;
+  async function handleBatch(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (nativeCloud) {
+      sendJson(response, 501, {
+        error:
+          "this deployment is a RAREXT-native cloud model (rarext-cloud): the native wire has no " +
+          "batch operation yet, so it is not offered rather than guessed at",
+      });
+      return;
+    }
+    let body: Buffer | undefined;
+    if (request.method === "POST") {
+      // A batch input file can be large; the provider's own limit applies there.
+      body = Buffer.from(await readBody(request, 64 * 1024 * 1024));
+    }
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(`${deployment.engine.endpoint}${url.pathname}`, {
+        method: request.method,
+        headers: {
+          ...(body === undefined ? {} : { "content-type": request.headers["content-type"] ?? "application/json" }),
+          accept: "application/json, application/jsonl, text/plain",
+          ...upstreamHeaders,
+        },
+        ...(body === undefined ? {} : { body }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      sendJson(response, 502, {
+        error: `upstream ${deployment.engine.name} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      return;
+    }
+    const text = await upstream.text();
+    response.writeHead(upstream.status, {
+      "content-type": upstream.headers.get("content-type") ?? "application/json",
+    });
+    response.end(text);
+  }
+
   async function handleEmbeddings(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const raw = await readBody(request);
     let payload: Record<string, unknown>;
@@ -2280,6 +2328,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         path === "/v1/chat/completions" ||
         path === "/v1/messages" ||
         path === "/v1/embeddings" ||
+        BATCH_PATH.test(path) ||
         path.startsWith("/v1/rarext/");
       if (protectedPath && !authorized(request)) {
         sendJson(
@@ -2428,6 +2477,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
       if (request.method === "POST" && path === "/v1/embeddings") {
         await handleEmbeddings(request, response);
+        return;
+      }
+
+      if (BATCH_PATH.test(path) && (request.method === "GET" || request.method === "POST")) {
+        await handleBatch(request, response);
         return;
       }
 

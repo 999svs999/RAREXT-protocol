@@ -1,0 +1,89 @@
+{
+ "digest": "2d60a3fd0af2ec161175315ffe5df585adedc9644904c8529748d428515e31d2",
+ "body": {
+  "kind": "rarext.model-run.v1",
+  "deployment": {
+   "id": "models-gemini-3-flash-preview-openai-compatible",
+   "digest": "3a261bd966e492151ea112de4bba21d4b34f2a39ca6069321eb64573d4db381e"
+  },
+  "model": {
+   "id": "models/gemini-3-flash-preview",
+   "weightsDigest": null
+  },
+  "engine": {
+   "name": "openai-compatible",
+   "version": null
+  },
+  "provider": {
+   "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+   "responseDigest": "67debd0ab6a8fa64683e9eea1b000ef20fe28660bac12da7a8b77cb123c57200",
+   "operator": null,
+   "machine": null,
+   "measurement": null
+  },
+  "api": "openai",
+  "request": {
+   "body": {
+    "model": "models/gemini-3-flash-preview",
+    "messages": [
+     {
+      "role": "user",
+      "content": "Name the capital of France in one word."
+     }
+    ],
+    "max_tokens": 1024,
+    "temperature": 0
+   },
+   "digest": "1763b6c493f8f59ed354cb98ac57ded284fef351208be76e9873e2b82663aa30",
+   "bytes": 156
+  },
+  "response": {
+   "body": {
+    "choices": [
+     {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+       "content": "Paris",
+       "extra_content": {
+        "google": {
+         "thought_signature": "Ev0CCvoCAWkUfRNbA7+qU9uZ9sZ7PRI8tHT8Efj3TzPYvRAQRuhB4Hi98Ol3stfJqt7WK+dc52TH+rC12/l/zmytnXqLnZEiJZkI0IJCAy8yJJrIHZtyOouwwc5a5SEYuztwzMX19hUiMs6D4TI6ECaJ7CLRcTy7Q7z+xywJZ8MJ66jp08xWciWZpQ/OIrfE6TGwmAMX0hGJy2ECp6AGzcsSGNdwOZEVKS3V6uU9r98vVgPIHvN+pJSWI6xHFufQ/n6yJOpOojUZiio30ZDwajxtBkK5BXIoEbLO0/DiiJ7WxO4roOSt5NkkxWZKbWY7Y5pFCxAWcEjyD37LdNKJJPjzKcLqoBG0Z+yrQPKVi+VtYilkx5e9xJiX9wtj5p82kQeFE/7UimhTtQkDyEfT3u08cN5FC9OrVGq5bkHFJQmXqR1xzZWGeNo/u54yaiGbhsQVIvixPK4asJwiv1so2etF5x/JzVHzK0ZDdpiMF0qlmBABDt1bJXJJH2lEuL9k"
+        }
+       },
+       "role": "assistant"
+      }
+     }
+    ],
+    "created": 1795355776,
+    "id": "f_QCa--EG9S50-kP4v-o2A0",
+    "model": "models/gemini-3-flash-preview",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 1,
+     "prompt_tokens": 10,
+     "total_tokens": 72
+    }
+   },
+   "digest": "bbfd74edfa9b2623b9b2b140c75816a27de90be0f6679d74ba876bd19567a980",
+   "bytes": 849,
+   "text": "Paris",
+   "textDigest": "5dd272b4f316b776a7b8e3d0894b37e1e42be3d5d3b204b8a5836cc50597a6b1"
+  },
+  "sampling": {
+   "temperature": 0,
+   "topP": null,
+   "seed": null,
+   "maxTokens": 1024,
+   "stream": false
+  },
+  "usage": {
+   "promptTokens": 10,
+   "completionTokens": 1,
+   "totalTokens": 72
+  },
+  "startedAt": "2026-11-22T13:56:30.218Z",
+  "completedAt": "2026-11-22T13:56:31.658Z",
+  "previous": "44d38f594ddf3d208ba96a63b5c815f322efccf596b788829f6320c7029589a1",
+  "replay": null
+ }
+}

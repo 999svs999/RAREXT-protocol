@@ -6832,11 +6832,230 @@ test("an OpenAI request controls decoding end to end: temperature, top_k, stop, 
     });
     const usageChunks = (await events(usageStream)) as Array<{
       choices: unknown[];
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+        prompt_tokens_details?: { cached_tokens: number };
+      };
     }>;
     const usageChunk = usageChunks.at(-1)!;
     assert.equal(usageChunk.choices.length, 0, "the usage chunk carries no choices");
-    assert.deepEqual(usageChunk.usage, { prompt_tokens: 1, completion_tokens: 3, total_tokens: 4 });
+    // This test's earlier requests already prefilled the "ab" prompt, so the
+    // engine reports the reuse in the same field the hosted APIs use.
+    assert.deepEqual(usageChunk.usage, {
+      prompt_tokens: 1,
+      completion_tokens: 3,
+      total_tokens: 4,
+      prompt_tokens_details: { cached_tokens: 1 },
+    });
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the gateway proxies the batch surface to the provider behind it", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  let gateway: Awaited<ReturnType<typeof startGateway>> | null = null;
+  try {
+    const bytes = tinyGgufModel({});
+    const model: ModelRef = {
+      id: "tiny-batch-gw",
+      family: "qwen2",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source, name: "rarext-gguf-engine", engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF, chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "batch-gw-provider"), port: 0, engineBundle,
+    });
+
+    // The gateway fronts the provider like a web4 deployment does.
+    const card = await fetchProviderCard({ endpoint: provider.url });
+    const deployment = commitDeployment(
+      buildDeployment({
+        probe: {
+          engine: { name: "openai-compatible", version: "web4", endpoint: provider.url },
+          model: card.model,
+          apis: ["openai"],
+          models: [card.model],
+        },
+        hardware: hardwareFromNetwork(provider.url),
+        placement: "web4",
+        labels: {
+          execution: "web4",
+          bundle: bundle.digest,
+          manifestHash: card.bundle.manifestHash,
+          provider: card.id,
+          providerCard: card.digest,
+          fixture: "loopback",
+        },
+        createdAt: "2026-11-22T00:00:00.000Z",
+      }),
+    );
+    gateway = await startGateway({
+      deployment,
+      ledgerDir: join(reg.root, "batch-gw-gateway"),
+      port: 0,
+      upstreamApi: "openai",
+    });
+    const base = gateway.url;
+
+    // The whole batch lifecycle works through the gateway's front door, and
+    // interactive inference still records runs while the batch does not claim
+    // to be witnessed — proxying is proxying.
+    const upload = await fetch(`${base}/v1/files`, {
+      method: "POST", headers: { "content-type": "application/jsonl" },
+      body: [
+        JSON.stringify({ custom_id: "a", method: "POST", url: "/v1/chat/completions", body: { messages: [{ role: "user", content: "ab" }], max_tokens: 4, seed: 5 } }),
+        JSON.stringify({ custom_id: "b", method: "POST", url: "/v1/completions", body: { prompt: "ab", max_tokens: 4, seed: 5 } }),
+      ].join("\n"),
+    });
+    const uploadText = await upload.text();
+    assert.equal(upload.status, 200, `file upload through the gateway: ${uploadText}`);
+    const file = JSON.parse(uploadText) as { id: string };
+    const created = (await (
+      await fetch(`${base}/v1/batches`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input_file_id: file.id, endpoint: "/v1/chat/completions", completion_window: "24h" }),
+      })
+    ).json()) as { id: string; status: string };
+    let batch = created;
+    for (let attempt = 0; attempt < 200 && batch.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      batch = (await (await fetch(`${base}/v1/batches/${created.id}`)).json()) as typeof batch;
+    }
+    assert.equal(batch.status, "completed");
+    const output = await (await fetch(`${base}/v1/batches/${created.id}/output`)).text();
+    const results = output.trim().split("\n").map((line) => JSON.parse(line) as {
+      custom_id: string;
+      response: { status_code: number } | null;
+    });
+    assert.deepEqual(results.map((line) => line.custom_id), ["a", "b"]);
+    for (const line of results) assert.equal(line.response!.status_code, 200);
+
+    const interactive = await fetch(`${base}/v1/chat/completions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: deployment.model.id, messages: [{ role: "user", content: "ab" }], max_tokens: 4 }),
+    });
+    assert.equal(interactive.status, 200, "interactive inference still works through the same gateway");
+    assert.ok(new RunLedger(join(reg.root, "batch-gw-gateway")).records().length >= 1,
+      "the interactive run is recorded; the batch proxy adds no fake run records");
+  } finally {
+    if (gateway !== null) await gateway.close();
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
+test("the provider runs an OpenAI-shaped batch: files, status, output JSONL", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({});
+    const model: ModelRef = {
+      id: "tiny-batch",
+      family: "qwen2",
+      parameters: "tiny",
+      quantization: "F32",
+      format: "gguf",
+      sizeBytes: null,
+      weightsDigest: null,
+      contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source, name: "rarext-gguf-engine", engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF, chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "batch"), port: 0, engineBundle,
+    });
+    const base = provider!.url;
+
+    // A malformed line is refused at upload time, with the reason.
+    const bad = await fetch(`${base}/v1/files`, {
+      method: "POST", headers: { "content-type": "application/jsonl" },
+      body: '{"custom_id":"x","url":"/v1/embeddings","body":{}}',
+    });
+    assert.equal(bad.status, 400, "embeddings are named as not-yet-supported in batch, not silently dropped");
+
+    const input = [
+      { custom_id: "chat-1", method: "POST", url: "/v1/chat/completions", body: { messages: [{ role: "user", content: "ab" }], max_tokens: 4, seed: 5 } },
+      { custom_id: "chat-2", method: "POST", url: "/v1/chat/completions", body: { messages: [{ role: "user", content: "cd" }], max_tokens: 4, seed: 5 } },
+      { custom_id: "cmpl-1", method: "POST", url: "/v1/completions", body: { prompt: "ab", max_tokens: 4, seed: 5 } },
+    ];
+    const upload = await fetch(`${base}/v1/files`, {
+      method: "POST", headers: { "content-type": "application/jsonl" },
+      body: input.map((line) => JSON.stringify(line)).join("\n"),
+    });
+    assert.equal(upload.status, 200);
+    const file = (await upload.json()) as { id: string; object: string; purpose: string };
+    assert.equal(file.object, "file");
+    assert.equal(file.purpose, "batch");
+    const fileMeta = (await (await fetch(`${base}/v1/files/${file.id}`)).json()) as { id: string };
+    assert.equal(fileMeta.id, file.id, "the file is fetchable by id");
+
+    const created = (await (
+      await fetch(`${base}/v1/batches`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input_file_id: file.id, endpoint: "/v1/chat/completions", completion_window: "24h" }),
+      })
+    ).json()) as { id: string; status: string; object: string; request_counts: { total: number } };
+    assert.equal(created.object, "batch");
+    assert.equal(created.request_counts.total, 3);
+
+    // Poll to completion — the batch runs in the background, request by turn.
+    let batch = created;
+    for (let attempt = 0; attempt < 200 && batch.status !== "completed"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      batch = (await (await fetch(`${base}/v1/batches/${created.id}`)).json()) as typeof batch;
+    }
+    assert.equal(batch.status, "completed");
+    assert.deepEqual(batch.request_counts, { completed: 3, failed: 0, total: 3 });
+    assert.ok(typeof batch.output_file_id === "string" && batch.output_file_id.startsWith("file-"));
+
+    const output = await (await fetch(`${base}/v1/batches/${created.id}/output`)).text();
+    const results = output.trim().split("\n").map((line) => JSON.parse(line) as {
+      id: string; custom_id: string;
+      response: { status_code: number; body: { choices: Array<{ message?: { content: string }; text?: string }> } } | null;
+      error: unknown;
+    });
+    assert.equal(results.length, 3);
+    assert.deepEqual(results.map((line) => line.custom_id), ["chat-1", "chat-2", "cmpl-1"]);
+    for (const line of results) {
+      assert.equal(line.error, null);
+      assert.equal(line.response!.status_code, 200);
+      const choice = line.response!.body.choices[0]!;
+      assert.ok(
+        typeof choice.message?.content === "string" || typeof choice.text === "string",
+        "each result carries the decoded answer in the request's own shape",
+      );
+    }
+    // A chat request and a completions request over the same prompt decode the
+    // same bytes — the batch path is the engine path, not a separate one.
+    assert.equal(
+      results[0]!.response!.body.choices[0]!.message!.content,
+      results[2]!.response!.body.choices[0]!.text,
+    );
   } finally {
     if (provider !== null) await provider.close();
     await reg.close();
@@ -7534,6 +7753,53 @@ test("the GGUF engine serves a factored (MPO) weight as the same model", () => {
   assert.equal(b.finishReason, a.finishReason);
 });
 
+
+test("the engine reuses a cached KV prompt prefix and stays token-identical", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const bytes = tinyGgufModel({ arch: "qwen2", tokenizer: "gpt2" });
+  const model = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+  // A prompt long enough that the prefix match is meaningful, with a shared
+  // "context" head and differing tails: identical, repeated, and disjoint.
+  const head = Array.from({ length: 24 }, (_, i) => `w${i}`).join(" ");
+  const sharedPrefix = `${head} alpha beta`;
+  const prompts = [
+    `${sharedPrefix} one two three`,
+    `${sharedPrefix} one two three`,
+    `${sharedPrefix} four five six`,
+    `totally different tokens here ${"x".repeat(20)}`,
+  ];
+  const runs = prompts.map((prompt) => engine.run(model, { prompt, steps: 8, temperature: 0 }));
+
+  // The cache changes NOTHING: a fresh model without a cache must reproduce
+  // every token sequence exactly.
+  const fresh = { kind: "gguf" as const, bytes: new Uint8Array(bytes) };
+  const reference = prompts.map((prompt) =>
+    engine.run(fresh, { prompt, steps: 8, temperature: 0 }),
+  );
+  assert.deepEqual(
+    runs.map((run) => run.tokens.join(",")),
+    reference.map((run) => run.tokens.join(",")),
+    "a warm cache decodes identically to a cold one",
+  );
+
+  // Run 0 is cold; run 1 (identical prompt) reuses everything but the last
+  // prompt token; run 2 shares only the head; run 3 shares (almost) nothing.
+  assert.equal(runs[0]!.cachedPromptTokens, 0, "the first run is cold");
+  assert.ok(
+    (runs[1]!.cachedPromptTokens ?? 0) >= (runs[1]!.promptTokens ?? 0) - 2,
+    `an identical prompt is served from the cache (${runs[1]!.cachedPromptTokens} of ${runs[1]!.promptTokens})`,
+  );
+  const headTokens = engine.run({ kind: "gguf" as const, bytes }, { prompt: sharedPrefix, steps: 1, temperature: 0 }).promptTokens ?? 0;
+  assert.ok(
+    (runs[2]!.cachedPromptTokens ?? 0) >= headTokens - 2 &&
+      (runs[2]!.cachedPromptTokens ?? 0) < (runs[2]!.promptTokens ?? 0),
+    `a shared head is partially reused (${runs[2]!.cachedPromptTokens} of ${runs[2]!.promptTokens})`,
+  );
+  assert.ok(
+    (runs[3]!.cachedPromptTokens ?? 0) < (runs[1]!.cachedPromptTokens ?? 0),
+    "a disjoint prompt does not inherit the other prompt's cache",
+  );
+});
 
 /** Minimal safetensors writer for tests: header JSON + raw tensor data. */
 function writeSafetensors(

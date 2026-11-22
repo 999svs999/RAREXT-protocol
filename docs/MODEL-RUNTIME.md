@@ -530,6 +530,49 @@ into the serving path. NVIDIA's free hosted Nemotron models
 demonstrations for skills the policy cannot bootstrap alone; nothing enters
 training until the computed checker accepts it.
 
+## Batch API
+
+The provider speaks the OpenAI batch shape for its own model. `POST /v1/files`
+takes a JSONL of `{custom_id, method, url, body}` lines (validated at upload:
+`url` must be `/v1/chat/completions` or `/v1/completions`; anything else is
+named in the refusal, never silently dropped). `POST /v1/batches` starts the
+queue — one request per event-loop turn, so health and status stay responsive —
+and `GET /v1/batches/{id}` / `GET /v1/batches/{id}/output` expose the progress
+counts and the results JSONL in the OpenAI result shape. Batch requests run the
+same engine path as interactive ones, so a cached prompt prefix is shared with
+them and a per-request failure becomes that line's `error`, not a batch abort.
+Files and batch state persist under the provider's state dir and rehydrate
+after a restart; a batch that was mid-flight when a process died is reported as
+absent rather than claimed complete. The gateway proxies the whole surface to
+the provider behind it — a pure proxy that adds no run records, so interactive
+and batch work share one base URL. Tests:
+`apps/runtime/test/web4.test.ts` — "the provider runs an OpenAI-shaped batch"
+and "the gateway proxies the batch surface to the provider behind it".
+
+## Prompt cache
+
+The engine reuses work across requests on the same model. Each run's KV state
+is kept as a bounded prefix store (LRU, 192 MiB per model, pure prefill only —
+a run with pinned tokens or a grammar never reads or writes it), and a later
+run whose token prompt shares a prefix resumes from that prefix's KV instead of
+recomputing it. The KV at a position is immutable once written, so cached
+positions are shared between runs; only the outer arrays are per-run.
+
+Correctness is held by a test that decodes a sequence of shared-prefix,
+repeated, and disjoint prompts with the cache on and with a cache-disabled
+engine, and requires token-identical output
+(`apps/runtime/test/web4.test.ts` — "reuses a cached KV prompt prefix and stays
+token-identical"). Measured through the web4 provider on Qwen2.5-0.5B-Instruct:
+a second question over a shared 233-token prefix answered in 7.9 s vs 94.9 s
+cold (12.1×), same answers, and usage carries
+`prompt_tokens_details.cached_tokens` (the Anthropic surface maps it to
+`cache_read_input_tokens`).
+
+Limits, stated: automatic only — `cache_control` fields are accepted and
+ignored on RAREXT's own engine, unlike Anthropic's user-controlled breakpoints;
+the cache lives in the serving process, so a restart starts cold; and a cache
+entry larger than 96 MiB is skipped rather than stored.
+
 ## Factored (MPO) weights
 
 A linear map can be stored as two small ones. The engine reads a GGUF that

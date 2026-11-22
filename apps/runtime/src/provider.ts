@@ -240,6 +240,70 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
   response.end(body);
 }
 
+/** The endpoints a batch request line may target. Embeddings are not here yet:
+ * the provider's embedding handler is route code, not a callable, so a batch
+ * of embeddings would need its own runner — named rather than faked. */
+const BATCH_ENDPOINTS = new Set(["/v1/chat/completions", "/v1/completions"]);
+
+interface BatchFileRecord {
+  id: string;
+  filename: string;
+  purpose: string;
+  bytes: number;
+  lines: number;
+  path: string;
+  createdAt: number;
+}
+
+interface BatchRecord {
+  id: string;
+  endpoint: string;
+  completionWindow: string;
+  status: "in_progress" | "completed" | "failed";
+  inputFileId: string;
+  outputFileId: string | null;
+  createdAt: number;
+  counts: { total: number; completed: number; failed: number };
+  results: string[];
+}
+
+/** One JSONL line of a batch input file, validated at upload time. */
+function parseBatchLine(line: string): { customId: string; url: string; body: Record<string, unknown> } | null {
+  if (line.trim() === "") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.custom_id !== "string" || record.custom_id === "") return null;
+  if (typeof record.url !== "string" || !BATCH_ENDPOINTS.has(record.url)) return null;
+  if (record.method !== undefined && record.method !== "POST") return null;
+  if (typeof record.body !== "object" || record.body === null) return null;
+  return { customId: record.custom_id, url: record.url, body: record.body as Record<string, unknown> };
+}
+
+function batchPublic(batch: BatchRecord): Record<string, unknown> {
+  const created = Math.floor(batch.createdAt / 1000);
+  return {
+    id: batch.id,
+    object: "batch",
+    endpoint: batch.endpoint,
+    errors: null,
+    input_file_id: batch.inputFileId,
+    completion_window: batch.completionWindow,
+    status: batch.status,
+    output_file_id: batch.outputFileId,
+    error_file_id: null,
+    created_at: created,
+    expires_at: created + 24 * 3600,
+    request_counts: { completed: batch.counts.completed, failed: batch.counts.failed, total: batch.counts.total },
+    metadata: {},
+  };
+}
+
 function sendSse(response: ServerResponse, chunks: unknown[]): void {
   response.writeHead(200, {
     "content-type": "text/event-stream",
@@ -1929,6 +1993,11 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           stopped.stopped || (result as { finishReason?: string }).finishReason === "stop"
             ? "stop"
             : "length",
+        // Prompt-cache accounting: how much of the prefill the engine skipped
+        // because a previous run left a matching KV prefix.
+        ...(typeof cachedPromptTokens === "number" && cachedPromptTokens > 0
+          ? { cachedPromptTokens }
+          : {}),
         ...(logprobs === undefined ? {} : { logprobs }),
         ...(deltas === undefined ? {} : { deltas }),
       };
@@ -2096,6 +2165,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
                 response_format: true,
                 logprobs: true,
                 grammar: true,
+                batch: true,
                 multimodal: false,
                 multimodal_note:
                   "image and audio parts are refused with code unsupported_content_part: no vision or audio " +
@@ -2105,6 +2175,249 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
             },
           ],
         });
+        return;
+      }
+
+      // ── Batch API (OpenAI shape): a JSONL file of requests, processed
+      // asynchronously with the SAME engine path as interactive calls, and a
+      // status/output surface a client can poll. Files and batch state persist
+      // under the provider's state dir; a restart rehydrates from disk.
+      const batchDir = join(options.stateDir, "batches");
+      const batchFiles = new Map<string, BatchFileRecord>();
+      const batches = new Map<string, BatchRecord>();
+      const loadBatchFile = (id: string): BatchFileRecord | null => {
+        const known = batchFiles.get(id);
+        if (known !== undefined) return known;
+        try {
+          const meta = JSON.parse(readFileSync(join(batchDir, `${id}.meta.json`), "utf8")) as BatchFileRecord;
+          if (!existsSync(meta.path)) return null;
+          batchFiles.set(id, meta);
+          return meta;
+        } catch {
+          return null;
+        }
+      };
+      const loadBatch = (id: string): BatchRecord | null => {
+        const known = batches.get(id);
+        if (known !== undefined) return known;
+        try {
+          const record = JSON.parse(readFileSync(join(batchDir, `${id}.json`), "utf8")) as BatchRecord;
+          if (record.status === "in_progress") return null; // a dead run: not resumable, not claimable
+          batches.set(id, record);
+          return record;
+        } catch {
+          return null;
+        }
+      };
+      const processBatch = (batch: BatchRecord, file: BatchFileRecord): void => {
+        // One request per event-loop turn, so /health and status polls keep
+        // answering while a large batch grinds through the engine.
+        const lines = readFileSync(file.path, "utf8").split("\n").filter((line) => line.trim() !== "");
+        let index = 0;
+        const step = (): void => {
+          if (index >= lines.length) {
+            batch.status = "completed";
+            const outputId = `file-${sha256Hex(batch.results.join("\n")).slice(0, 24)}`;
+            const outputPath = join(batchDir, `${outputId}.jsonl`);
+            writeFileSync(outputPath, batch.results.join("\n") + "\n");
+            writeFileSync(
+              join(batchDir, `${outputId}.meta.json`),
+              JSON.stringify({
+                id: outputId, filename: "batch-output.jsonl", purpose: "batch_output",
+                bytes: Buffer.byteLength(batch.results.join("\n")), lines: batch.results.length,
+                path: outputPath, createdAt: Date.now(),
+              } satisfies BatchFileRecord),
+            );
+            batch.outputFileId = outputId;
+            writeFileSync(join(batchDir, `${batch.id}.json`), JSON.stringify(batch));
+            return;
+          }
+          const parsed = parseBatchLine(lines[index]!);
+          const rank = `batch_req_${index + 1}`;
+          if (parsed === null) {
+            batch.counts.failed += 1;
+            batch.results.push(JSON.stringify({
+              id: rank,
+              custom_id: JSON.parse(lines[index]!)?.custom_id ?? `line-${index + 1}`,
+              response: null,
+              error: { code: "invalid_request", message: "the input line is not a valid batch request" },
+            }));
+          } else {
+            const shape = parsed.url === "/v1/completions" ? "completions" : "chat";
+            const body = { ...parsed.body, model: parsed.body.model ?? options.bundle.model.id };
+            complete(body, shape)
+              .then((result) => {
+                batch.counts.completed += 1;
+                batch.results.push(JSON.stringify({
+                  id: rank,
+                  custom_id: parsed.customId,
+                  response: {
+                    status_code: 200,
+                    request_id: batch.id,
+                    body: shape === "chat"
+                      ? {
+                          id: `batchcmpl-${index + 1}`, object: "chat.completion",
+                          created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
+                          choices: [{
+                            index: 0,
+                            message: { role: "assistant", content: result.text },
+                            finish_reason: result.finishReason,
+                          }],
+                          usage: {
+                            prompt_tokens: 0,
+                            completion_tokens: result.steps,
+                            total_tokens: result.steps,
+                            ...(result.cachedPromptTokens !== undefined
+                              ? { prompt_tokens_details: { cached_tokens: result.cachedPromptTokens } }
+                              : {}),
+                          },
+                        }
+                      : {
+                          id: `batchcmpl-${index + 1}`, object: "text_completion",
+                          created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
+                          choices: [{ index: 0, text: result.text, finish_reason: result.finishReason }],
+                          usage: { prompt_tokens: 0, completion_tokens: result.steps, total_tokens: result.steps },
+                        },
+                  },
+                  error: null,
+                }));
+              })
+              .catch((error: unknown) => {
+                batch.counts.failed += 1;
+                batch.results.push(JSON.stringify({
+                  id: rank,
+                  custom_id: parsed.customId,
+                  response: null,
+                  error: {
+                    code: "engine_error",
+                    message: error instanceof Error ? error.message : String(error),
+                  },
+                }));
+              })
+              .finally(() => {
+                writeFileSync(join(batchDir, `${batch.id}.json`), JSON.stringify(batch));
+                index += 1;
+                setImmediate(step);
+              });
+            return;
+          }
+          index += 1;
+          setImmediate(step);
+        };
+        setImmediate(step);
+      };
+
+      if (request.method === "POST" && url.pathname === "/v1/files") {
+        const raw = await readBody(request, 64 * 1024 * 1024);
+        const lines = raw.split("\n").filter((line) => line.trim() !== "");
+        if (lines.length === 0) {
+          sendJson(response, 400, { error: "a batch input file must hold at least one request line" });
+          return;
+        }
+        for (const line of lines) {
+          if (parseBatchLine(line) === null) {
+            sendJson(response, 400, {
+              error: "each line must be {\"custom_id\", \"url\" (/v1/chat/completions or /v1/completions), \"body\"}",
+            });
+            return;
+          }
+        }
+        mkdirSync(batchDir, { recursive: true });
+        const id = `file-${sha256Hex(raw).slice(0, 24)}`;
+        const path = join(batchDir, `${id}.jsonl`);
+        writeFileSync(path, raw);
+        const record: BatchFileRecord = {
+          id,
+          filename: "batch-input.jsonl",
+          purpose: "batch",
+          bytes: Buffer.byteLength(raw),
+          lines: lines.length,
+          path,
+          createdAt: Date.now(),
+        };
+        writeFileSync(join(batchDir, `${id}.meta.json`), JSON.stringify(record));
+        batchFiles.set(id, record);
+        sendJson(response, 200, {
+          id, object: "file", bytes: record.bytes, created_at: Math.floor(record.createdAt / 1000),
+          filename: record.filename, purpose: record.purpose,
+        });
+        return;
+      }
+
+      const fileMatch = url.pathname.match(/^\/v1\/files\/(file-[0-9a-f]+)$/);
+      if (request.method === "GET" && fileMatch !== null) {
+        const record = loadBatchFile(fileMatch[1]!);
+        if (record === null) {
+          sendJson(response, 404, { error: "no such file" });
+          return;
+        }
+        sendJson(response, 200, {
+          id: record.id, object: "file", bytes: record.bytes,
+          created_at: Math.floor(record.createdAt / 1000),
+          filename: record.filename, purpose: record.purpose,
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/batches") {
+        const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
+        const inputFileId = typeof body.input_file_id === "string" ? body.input_file_id : null;
+        const endpoint = typeof body.endpoint === "string" ? body.endpoint : null;
+        const window = typeof body.completion_window === "string" ? body.completion_window : "24h";
+        if (inputFileId === null || endpoint === null || !BATCH_ENDPOINTS.has(endpoint)) {
+          sendJson(response, 400, {
+            error: `input_file_id and endpoint (${[...BATCH_ENDPOINTS].join(" | ")}) are required`,
+          });
+          return;
+        }
+        const file = loadBatchFile(inputFileId);
+        if (file === null) {
+          sendJson(response, 404, { error: `no such file: ${inputFileId}` });
+          return;
+        }
+        mkdirSync(batchDir, { recursive: true });
+        const batch: BatchRecord = {
+          id: `batch_${sha256Hex(`${inputFileId}:${endpoint}:${Date.now()}`).slice(0, 24)}`,
+          endpoint,
+          completionWindow: window === "24h" ? "24h" : "24h",
+          status: "in_progress",
+          inputFileId,
+          outputFileId: null,
+          createdAt: Date.now(),
+          counts: { total: file.lines, completed: 0, failed: 0 },
+          results: [],
+        };
+        batches.set(batch.id, batch);
+        writeFileSync(join(batchDir, `${batch.id}.json`), JSON.stringify(batch));
+        sendJson(response, 200, batchPublic(batch));
+        processBatch(batch, file);
+        return;
+      }
+
+      const batchMatch = url.pathname.match(/^\/v1\/batches\/(batch_[0-9a-f]+)(\/output)?$/);
+      if (batchMatch !== null) {
+        const batch = batches.get(batchMatch[1]!) ?? loadBatch(batchMatch[1]!);
+        if (batch === undefined || batch === null) {
+          sendJson(response, 404, { error: "no such batch" });
+          return;
+        }
+        if (batchMatch[2] === "/output") {
+          if (batch.status !== "completed" || batch.outputFileId === null) {
+            sendJson(response, 409, { error: `batch is ${batch.status}; output is written when it completes` });
+            return;
+          }
+          const output = readFileSync(join(batchDir, `${batch.outputFileId}.jsonl`), "utf8");
+          response.writeHead(200, { "content-type": "application/jsonl" });
+          response.end(output);
+          return;
+        }
+        sendJson(response, 200, batchPublic(batch));
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/batches") {
+        const listed = [...batches.values()].map(batchPublic);
+        sendJson(response, 200, { object: "list", data: listed });
         return;
       }
 
@@ -2531,12 +2844,17 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         const created = Math.floor(Date.now() / 1000);
         const promptTokens = promptTokenCount(body);
         const completionTokens = results.reduce((total, choice) => total + choice.steps, 0);
+        const cachedTokens = results.reduce(
+          (total, choice) => total + (choice.cachedPromptTokens ?? 0),
+          0,
+        );
         // The legacy completions endpoint reports total as the completion count
         // (its historical shape here), for one choice or many.
         const usage = {
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,
           total_tokens: completionTokens,
+          ...(cachedTokens > 0 ? { prompt_tokens_details: { cached_tokens: cachedTokens } } : {}),
         };
         if (body.stream === true) {
           const chunks: unknown[] = [];

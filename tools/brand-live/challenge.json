@@ -1,0 +1,16 @@
+{
+ "id": "model-run-3a261bd966e49215",
+ "app": "ai-model-run",
+ "title": "Model runs on models/gemini-3-flash-preview",
+ "description": "Exact transcripts from deployment models-gemini-3-flash-preview-openai-compatible (openai-compatible serving models/gemini-3-flash-preview). The challenge commits the deployment digest and the model's weight digest; the verifier recomputes every transcript digest.",
+ "version": 1,
+ "spec": {
+  "deploymentDigest": "3a261bd966e492151ea112de4bba21d4b34f2a39ca6069321eb64573d4db381e",
+  "modelId": "models/gemini-3-flash-preview",
+  "weightsDigest": null,
+  "engine": "openai-compatible"
+ },
+ "semanticsId": "ai-model-run/model-run-3a261bd966e49215",
+ "semanticsVersion": 1,
+ "createdAt": "2026-11-22T13:54:52.807Z"
+}

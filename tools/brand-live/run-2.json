@@ -1,0 +1,100 @@
+{
+ "digest": "be9a9bd334a132b3454c479d32763881329e8d68227318bbef704e041649c948",
+ "body": {
+  "kind": "rarext.model-run.v1",
+  "deployment": {
+   "id": "models-gemini-3-flash-preview-openai-compatible",
+   "digest": "3a261bd966e492151ea112de4bba21d4b34f2a39ca6069321eb64573d4db381e"
+  },
+  "model": {
+   "id": "models/gemini-3-flash-preview",
+   "weightsDigest": null
+  },
+  "engine": {
+   "name": "openai-compatible",
+   "version": null
+  },
+  "provider": {
+   "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+   "responseDigest": "61855ba226bd9aa4cc62af685eb0b7a56be8a4ecb527d23dc68a895f0abaa9b8",
+   "operator": null,
+   "machine": null,
+   "measurement": null
+  },
+  "api": "openai",
+  "request": {
+   "body": {
+    "model": "models/gemini-3-flash-preview",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "What color is this square? Answer in one word."
+       },
+       {
+        "type": "image_url",
+        "image_url": {
+         "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAK0lEQVR4nO3OoQEAAAwCIE/38+0MC4FO0t6UgICAgICAgICAgICAgIDAOvCbk/xqEjm2wgAAAABJRU5ErkJggg=="
+        }
+       }
+      ]
+     }
+    ],
+    "max_tokens": 1024,
+    "temperature": 0
+   },
+   "digest": "29fecd52552642ac0120d98fd590b1cb89343ef9ba2ff95f2821e8b1526ec349",
+   "bytes": 390
+  },
+  "response": {
+   "body": {
+    "choices": [
+     {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+       "content": "Teal",
+       "extra_content": {
+        "google": {
+         "thought_signature": "Eo4FCosFAWkUfRM6DkU00xRoDfMWppBg7y1HFyrFTUubWauel68j7EeRYZuoc7aBtHDa+NcFPdRwSzqpYRK337fApYvgh+8t8jAeW9oF7vUHvivMYUJDX/Y2vBn1AbIsH2Y0yFaAZF8Jh0+S+fN5ZpnaCtoLMCugHxmK5modfH/HMbvzYs00VsfocKBhVF0nf+DSVznNzMMc9JQkIL4DfQytOeqvQx9aaQkwDvQX2rWP58nKvQmmaguDxxykQ/vNa7vpLfpdedKymQZaZE6NPxaFKmacIQjC+aB+y0oq2lypTvlZWimuozvCyv2Ks4Du0ZNcroQFGDLWCG25rOl/0+UZNRaF6YBYPp1cTqsymCS4mMt3iVFBvECsQIay+Vd4uibdK9VByNcCbP7gEN0cQMYB5pof3HkRMeAH/c+8T6oZSdhlrY35JcxBqlWbl4IUvXqOOs84c/ZZH9KIQYQBT/cEIUI3w+2T4qGG3RJKJrX7InggU7w22yQ5ukr49phIk9frv5fgq7JhACHWsu2Q1ZYEdgCs9EXRTLZ8nTkZYnKszZmSDKhnd9POu34a6U258QbjHWQwD2zCT2lg0brryhejXomZe+M6nEbmsV8/pTNTJQD0GKXsM0oSUNicpEnow94Py0/Q7ynE/Zsr+iYePn1OKopjlFYWCGbDEFj+9ih32JUtwvSyxkq0uDLvQvFIIo+HoXV0n4c5AUskNMGIrQqQNrhJazJ8iHUx6KZI9BlxKL4jTKa3Zt4rdaAsW0vazKAIaXCnojDl9WgHvILHu8ISHOD3f4Z6nLFvMLp1CqNIdNFKBXVF7L1zcvEzjiXZ5Yf6jdzwzrC7h4xCzdL05YMT/G+dItUR+HjIc4mso0gK"
+        }
+       },
+       "role": "assistant"
+      }
+     }
+    ],
+    "created": 1795355835,
+    "id": "ufQCa4vZB8DZ9tMPgda-mQs",
+    "model": "models/gemini-3-flash-preview",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 2,
+     "prompt_tokens": 1101,
+     "total_tokens": 1232
+    }
+   },
+   "digest": "9d8a946856f2386f6aaf99a10cd21be4138fa3ff00a51473723396e6282e6648",
+   "bytes": 1216,
+   "text": "Teal",
+   "textDigest": "fa15a5c1d61010553974997a19c7baef52cedd7f7ba0042d9cdf03aec5105c3d"
+  },
+  "sampling": {
+   "temperature": 0,
+   "topP": null,
+   "seed": null,
+   "maxTokens": 1024,
+   "stream": false
+  },
+  "usage": {
+   "promptTokens": 1101,
+   "completionTokens": 2,
+   "totalTokens": 1232
+  },
+  "startedAt": "2026-11-22T13:57:27.721Z",
+  "completedAt": "2026-11-22T13:57:30.681Z",
+  "previous": "2d60a3fd0af2ec161175315ffe5df585adedc9644904c8529748d428515e31d2",
+  "replay": null
+ }
+}

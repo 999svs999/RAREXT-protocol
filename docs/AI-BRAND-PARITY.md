@@ -70,6 +70,8 @@ suite (190/190) and named here so it is checkable:
 | Signed receipts, quorum, tamper refusal | **yes** | `demo:web4-model` 34/34; not offered by any brand API |
 | Vision/audio input on native models | **no — refused by name** | HTTP 400 `unsupported_content_part` (no vision/audio tower in the engine); measured by the audit |
 | Vision input on forwarded models | **yes, on both wire shapes, gated by the committed card** | OpenAI surface: parts forward verbatim (`gateway.test.ts` — "a forwarded deployment passes multimodal parts through"); Anthropic surface: `image` blocks map to the OpenAI `image_url` shape **when the deployment's labels declare `input.modalities=text,image`**, and are refused by name otherwise (`gateway.test.ts` — "a card that declares image input…"); `document`/`audio` stay refused everywhere |
+| Prompt caching | **yes — real KV-prefix reuse, measured** | the engine stores bounded KV prefixes per model and resumes prefill from a matching prefix (`rarext-gguf-engine.js`; LRU, 192 MiB budget, pure-prefill runs only — no pinned/grammar). A cache-disabled engine decodes **token-identically** to a cached one (`web4.test.ts` — "reuses a cached KV prompt prefix and stays token-identical"). Measured through the web4 provider: on Qwen2.5-0.5B-Instruct a second question over a shared 233-token prefix answered in **7.9 s vs 94.9 s cold (12.1×)** with identical answers; usage reports `prompt_tokens_details.cached_tokens` (OpenAI shape) and the Anthropic surface maps it to `cache_read_input_tokens`. Limits stated: automatic only (no user-controlled breakpoints — `cache_control` fields are accepted and ignored on RAREXT's own engine), per-process (cold after a provider restart), bounded |
+| Batch API | **yes — OpenAI shape, provider + gateway** | `POST /v1/files` accepts a validated JSONL of requests (`custom_id` + `url` ∈ {`/v1/chat/completions`, `/v1/completions`} + `body`; embeddings in batch are named as not yet supported, not silently dropped); `POST /v1/batches` runs the queue one request per event-loop turn so `/health` and status polls keep answering; `GET /v1/batches/{id}` carries `request_counts` and `output_file_id`; `GET /v1/batches/{id}/output` serves the results JSONL in the OpenAI result shape. The gateway proxies the whole surface to the provider behind it (`gateway.ts` — a pure proxy that adds no run records, so a client uses one base URL for interactive and batch work). State persists under the provider's state dir and rehydrates after a restart (output verified byte-identical). Tests: `web4.test.ts` — "the provider runs an OpenAI-shaped batch" and "the gateway proxies the batch surface to the provider behind it" (a real provider behind a real gateway). Limits: chat and completions only, and batch requests run the same engine path as interactive ones — same result body, no separate fast lane |
 
 ## 2. Reaching each brand's models
 
@@ -114,8 +116,6 @@ Stated plainly, with the honest reason:
 | --- | --- | --- |
 | Image / video / speech **generation** | no such tower in RAREXT's engine; the runtime refuses what it cannot do rather than faking it | forward to a generation endpoint; the gateway records the run |
 | Audio/document **input** | no mapping and no upstream contract for them yet — refused by name on every surface, even on a vision card | — |
-| Batch API (24-hour jobs) | not built; runs are synchronous with receipts | run N requests through the gateway (quorum/receipts still apply) |
-| Prompt caching | the engine re-reads committed rows; KV/prefix caching is not implemented | — |
 | Server-side web search / code interpreter | not built | caller-side tools over the tool-calling surface |
 | Realtime voice API | no audio path | — |
 | `/v1/fine_tuning/jobs`-style API | RAREXT *trains its own models* (native path, self-evolution, the entanglement rebuild) but does not expose a hosted fine-tuning API; a trained artifact becomes a new content-addressed model | train offline, commit, serve |
@@ -123,10 +123,12 @@ Stated plainly, with the honest reason:
 ## 4. Verdict
 
 - **The API contract the top 10 are written against: covered** — 14/15 live
-  probes, both wire shapes, tools, structured output, logprobs, embeddings —
-  and image input forwarded on both wire shapes when the committed card
-  declares it (`deploy --label input.modalities=text,image`; the claim lives in
-  the signed manifest, not in a serve-time flag).
+  probes, both wire shapes, tools, structured output, logprobs, embeddings,
+  prompt caching (12.1× on a repeated 233-token prefix, token-identical
+  output), and an OpenAI-shaped batch API (provider + gateway proxy) — plus
+  image input forwarded on both wire shapes when the committed card declares it
+  (`deploy --label input.modalities=text,image`; the claim lives in the signed
+  manifest, not in a serve-time flag).
 - **Access to all ten brands' models: covered** — natively for the open-weight
   families (llama, mistral, mixtral, gemma, phi, qwen2 containers), verified
   forwarding for the closed ones.

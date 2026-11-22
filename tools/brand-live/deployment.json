@@ -1,0 +1,41 @@
+{
+ "kind": "rarext.model-deployment.v1",
+ "id": "models-gemini-3-flash-preview-openai-compatible",
+ "engine": {
+  "name": "openai-compatible",
+  "version": null,
+  "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "digest": null
+ },
+ "model": {
+  "id": "models/gemini-3-flash-preview",
+  "family": "google",
+  "parameters": null,
+  "quantization": null,
+  "format": null,
+  "sizeBytes": null,
+  "weightsDigest": null,
+  "contextLength": null
+ },
+ "hardware": {
+  "backend": "cloud",
+  "device": "generativelanguage.googleapis.com",
+  "memoryBytes": null,
+  "os": "remote",
+  "arch": "remote"
+ },
+ "placement": "remote",
+ "apis": [
+  "openai",
+  "anthropic"
+ ],
+ "createdAt": "2026-11-22T13:54:52.807Z",
+ "labels": {
+  "execution": "cloud",
+  "upstreamApi": "openai",
+  "upstreamAuth": "bearer",
+  "input.modalities": "text,image"
+ },
+ "notes": "Remote deployment: inference runs at https://generativelanguage.googleapis.com/v1beta/openai. No weights are stored or executed on this host.",
+ "digest": "3a261bd966e492151ea112de4bba21d4b34f2a39ca6069321eb64573d4db381e"
+}
