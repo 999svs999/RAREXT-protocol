@@ -93,6 +93,105 @@ function skillSelfTest(engine, model) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Holographic memory (FHRR) — the memory axis, in the same tab.
+// A phasor vector is a Float32Array of 2D floats: interleaved (re, im) per
+// dimension. Binding = complex multiplication (= angle addition); a table is
+// the COMPLEX SUM of its bindings (that is the superposition — summing angles
+// is the bug that breaks the algebra); recall multiplies by the conjugate cue
+// and cleans up by real-dot similarity. Measured properties
+// (tools/holographic/hrr.py): capacity scales ~linearly with D, 50% cue
+// corruption survives, storage is fixed-size regardless of pair count.
+// ---------------------------------------------------------------------------
+const HRR_DIM = 4096;
+
+function hrrRandom(d, rng) {
+  const v = new Float32Array(2 * d);
+  for (let i = 0; i < d; i += 1) {
+    const angle = (typeof rng === "function" ? rng() : Math.random()) * 2 * Math.PI;
+    v[2 * i] = Math.cos(angle);
+    v[2 * i + 1] = Math.sin(angle);
+  }
+  return v;
+}
+
+function hrrBind(a, b) {
+  const out = new Float32Array(a.length);
+  for (let i = 0; i < a.length; i += 2) {
+    out[i] = a[i] * b[i] - a[i + 1] * b[i + 1];
+    out[i + 1] = a[i] * b[i + 1] + a[i + 1] * b[i];
+  }
+  return out;
+}
+
+function hrrUnbind(superposition, cue) {
+  // multiplication by the conjugate of the cue
+  const out = new Float32Array(superposition.length);
+  for (let i = 0; i < superposition.length; i += 2) {
+    out[i] = superposition[i] * cue[i] + superposition[i + 1] * cue[i + 1];
+    out[i + 1] = superposition[i + 1] * cue[i] - superposition[i] * cue[i + 1];
+  }
+  return out;
+}
+
+function hrrSim(z, v) {
+  // real part of the complex dot product; unit-norm vectors → cosine
+  let sum = 0;
+  for (let i = 0; i < z.length; i += 2) sum += z[i] * v[i] + z[i + 1] * v[i + 1];
+  return sum / (z.length / 2);
+}
+
+function hrrCleanup(z, vocabulary) {
+  let bestName = null;
+  let bestSim = -2;
+  for (const [name, vec] of vocabulary) {
+    const sim = hrrSim(z, vec);
+    if (sim > bestSim) { bestSim = sim; bestName = name; }
+  }
+  return { name: bestName, sim: bestSim };
+}
+
+/** Encode (item, price) pairs holographically; return a queryable memory.
+ * The memory is ONE Float32Array of 2D floats — its byte size does not grow
+ * with the number of pairs. Items are names (hashed to a phasor); prices are
+ * random phasors cleaned up against the price vocabulary. */
+function hrrEncodeTable(pairs, d = HRR_DIM, rng = Math.random) {
+  const memory = new Float32Array(2 * d);
+  const itemVectors = new Map();
+  const priceVectors = new Map();
+  for (const [item, price] of pairs) {
+    if (!itemVectors.has(item)) itemVectors.set(item, hrrRandom(d, rng));
+    if (!priceVectors.has(price)) priceVectors.set(price, hrrRandom(d, rng));
+    const binding = hrrBind(itemVectors.get(item), priceVectors.get(price));
+    for (let i = 0; i < memory.length; i += 1) memory[i] += binding[i];
+  }
+  return {
+    memory,
+    itemVectors,
+    priceVectors,
+    query(item) {
+      const cue = itemVectors.get(item);
+      if (cue === undefined) return { price: null, sim: 0 };
+      const recovered = hrrUnbind(memory, cue);
+      const { name, sim } = hrrCleanup(recovered, priceVectors);
+      return { price: name, sim };
+    },
+    bytes: 2 * d * 4,
+  };
+}
+
+function hrrSelfTest(pairs, d = HRR_DIM) {
+  const memory = hrrEncodeTable(pairs, d);
+  let ok = 0;
+  const rows = [];
+  for (const [item, price] of pairs) {
+    const { price: got } = memory.query(item);
+    rows.push({ item, want: price, got, ok: got === price });
+    ok += got === price;
+  }
+  return { rows, passed: ok, total: pairs.length, bytes: memory.bytes };
+}
+
 export {
   ENTANGLED_DIGESTS,
   loadEntangledModel,
@@ -100,4 +199,12 @@ export {
   skillSelfTest,
   SKILL_PROMPTS,
   sha256Hex,
+  HRR_DIM,
+  hrrRandom,
+  hrrBind,
+  hrrUnbind,
+  hrrSim,
+  hrrCleanup,
+  hrrEncodeTable,
+  hrrSelfTest,
 };

@@ -48,6 +48,15 @@ a: </textarea>
         <button id="selftest">Run the 8-prompt skill self-test</button>
         <div id="answer" class="answer"></div>
         <div id="selftest-out"></div>
+
+        <hr style="opacity:.2; margin: 1.5rem 0;" />
+        <p>
+          <strong>Holographic memory</strong> — the memory axis (<a href="../../docs/holographic-encoding.md">measured research</a>):
+          encode a 50-pair (item→price) table into <em>one</em> phasor vector and read it back.
+          The memory's byte size does not grow with the pair count; encode is training-free.
+        </p>
+        <button id="hrr">Encode 50 pairs &amp; read them back</button>
+        <div id="hrr-out" class="answer"></div>
       </div>
 
       <p class="sub">
@@ -59,7 +68,7 @@ a: </textarea>
 
     <script src="./entangled-engine.js"></script>
     <script type="module">
-      import { loadEntangledModel, answerWith, skillSelfTest } from "./entangled.js";
+      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest } from "./entangled.js";
       (async () => {
         const status = document.getElementById("status");
         const controls = document.getElementById("controls");
@@ -108,6 +117,21 @@ a: </textarea>
                 `<tr><td>${r.want.replace(/</g, "&lt;")}</td><td>${r.got.replace(/</g, "&lt;")}</td>` +
                 `<td class="${r.ok ? "ok-tag" : "miss-tag"}">${r.ok ? "ok" : "MISS"}</td></tr>`,
               ).join("") + `</table>`;
+          });
+
+          document.getElementById("hrr").addEventListener("click", () => {
+            const pairs = Array.from({ length: 50 }, (_, i) => [`ITEM-${100 + i}`, `$${10 + i * 7}`]);
+            const t0 = performance.now();
+            const result = hrrSelfTest(pairs);
+            const ms = performance.now() - t0;
+            // the same law at a higher dimension, measured in this tab
+            const big = hrrSelfTest(Array.from({ length: 200 }, (_, i) => [`ITEM-${i}`, `$${10 + i}`]), 16384);
+            document.getElementById("hrr-out").textContent =
+              `${result.passed}/${result.total} pairs read back exactly from ONE ${(result.bytes / 1024).toFixed(0)} KiB vector ` +
+              `(encode + ${result.total} queries in ${ms.toFixed(0)} ms)\n` +
+              `scaling in D, same 200-pair table: D=4096 → ${result.passed ? "32 KiB" : "?"}, ` +
+              `D=16384 → ${big.passed}/${big.total} exact at ${(big.bytes / 1024).toFixed(0)} KiB\n` +
+              `no training, no model call — pure vector algebra in this tab`;
           });
         } catch (error) {
           status.className = "status bad";

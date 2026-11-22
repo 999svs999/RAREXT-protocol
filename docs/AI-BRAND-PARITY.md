@@ -1,7 +1,9 @@
 # Can RAREXT AI do what the top 10 AI brands do?
 
-Date: 2026-11-22. Companion to [AI-CAPABILITY-AUDIT.md](AI-CAPABILITY-AUDIT.md),
-which measures the capability surface probe by probe. This page maps that
+Date: 2026-11-22. Companion to [AI-CAPABILITY-AUDIT.md](AI-CAPABILITY-AUDIT.md)
+and [holographic-encoding.md](holographic-encoding.md) (the measured
+memory-axis research: capacity scaling in the holographic dimension D).
+This page maps that
 surface onto the brands people actually mean. The top-10 list below is the
 2026 consensus across published rankings (OpenAI, Anthropic, Google DeepMind,
 Microsoft, NVIDIA, Amazon, Meta, xAI, DeepSeek, Mistral); the *capabilities*

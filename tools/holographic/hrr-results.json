@@ -1,0 +1,280 @@
+{
+ "binding": [
+  {
+   "d": 64,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999955296517
+  },
+  {
+   "d": 128,
+   "accuracy": 1.0,
+   "mean_similarity": 0.999999994635582
+  },
+  {
+   "d": 256,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999967217446
+  },
+  {
+   "d": 512,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999955296517
+  },
+  {
+   "d": 1024,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999952316284
+  },
+  {
+   "d": 2048,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999964237213
+  },
+  {
+   "d": 4096,
+   "accuracy": 1.0,
+   "mean_similarity": 0.9999999952316284
+  }
+ ],
+ "capacity": [
+  {
+   "d": 256,
+   "k": 1,
+   "queries": 40,
+   "accuracy": 1.0
+  },
+  {
+   "d": 256,
+   "k": 5,
+   "queries": 200,
+   "accuracy": 1.0
+  },
+  {
+   "d": 256,
+   "k": 10,
+   "queries": 400,
+   "accuracy": 1.0
+  },
+  {
+   "d": 256,
+   "k": 25,
+   "queries": 800,
+   "accuracy": 0.8925
+  },
+  {
+   "d": 256,
+   "k": 50,
+   "queries": 800,
+   "accuracy": 0.49
+  },
+  {
+   "d": 256,
+   "k": 100,
+   "queries": 800,
+   "accuracy": 0.135
+  },
+  {
+   "d": 256,
+   "k": 200,
+   "queries": 800,
+   "accuracy": 0.05375
+  },
+  {
+   "d": 1024,
+   "k": 1,
+   "queries": 40,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "k": 5,
+   "queries": 200,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "k": 10,
+   "queries": 400,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "k": 25,
+   "queries": 800,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "k": 50,
+   "queries": 800,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "k": 100,
+   "queries": 800,
+   "accuracy": 0.88375
+  },
+  {
+   "d": 1024,
+   "k": 200,
+   "queries": 800,
+   "accuracy": 0.48875
+  },
+  {
+   "d": 4096,
+   "k": 1,
+   "queries": 40,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 5,
+   "queries": 200,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 10,
+   "queries": 400,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 25,
+   "queries": 800,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 50,
+   "queries": 800,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 100,
+   "queries": 800,
+   "accuracy": 1.0
+  },
+  {
+   "d": 4096,
+   "k": 200,
+   "queries": 800,
+   "accuracy": 1.0
+  }
+ ],
+ "noise": [
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.0,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.05,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.1,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.2,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.3,
+   "accuracy": 1.0
+  },
+  {
+   "d": 1024,
+   "corrupt_fraction": 0.5,
+   "accuracy": 1.0
+  }
+ ],
+ "compositional": {
+  "d": 2048,
+  "k": 25,
+  "queries": 1000,
+  "atomic_accuracy": 1.0,
+  "compositional_accuracy": 0.693
+ },
+ "price_task": [
+  {
+   "d": 1024,
+   "pairs": 10,
+   "queries": 300,
+   "accuracy": 0.7533333333333333,
+   "memory_bytes": 16384,
+   "bytes_per_pair": 1638.4
+  },
+  {
+   "d": 1024,
+   "pairs": 50,
+   "queries": 600,
+   "accuracy": 0.6316666666666667,
+   "memory_bytes": 16384,
+   "bytes_per_pair": 327.68
+  },
+  {
+   "d": 1024,
+   "pairs": 200,
+   "queries": 800,
+   "accuracy": 0.22125,
+   "memory_bytes": 16384,
+   "bytes_per_pair": 81.92
+  },
+  {
+   "d": 4096,
+   "pairs": 10,
+   "queries": 300,
+   "accuracy": 0.8033333333333333,
+   "memory_bytes": 65536,
+   "bytes_per_pair": 6553.6
+  },
+  {
+   "d": 4096,
+   "pairs": 50,
+   "queries": 600,
+   "accuracy": 0.6316666666666667,
+   "memory_bytes": 65536,
+   "bytes_per_pair": 1310.72
+  },
+  {
+   "d": 4096,
+   "pairs": 200,
+   "queries": 800,
+   "accuracy": 0.495,
+   "memory_bytes": 65536,
+   "bytes_per_pair": 327.68
+  },
+  {
+   "d": 16384,
+   "pairs": 10,
+   "queries": 300,
+   "accuracy": 0.77,
+   "memory_bytes": 262144,
+   "bytes_per_pair": 26214.4
+  },
+  {
+   "d": 16384,
+   "pairs": 50,
+   "queries": 600,
+   "accuracy": 0.605,
+   "memory_bytes": 262144,
+   "bytes_per_pair": 5242.88
+  },
+  {
+   "d": 16384,
+   "pairs": 200,
+   "queries": 800,
+   "accuracy": 0.4975,
+   "memory_bytes": 262144,
+   "bytes_per_pair": 1310.72
+  }
+ ]
+}
