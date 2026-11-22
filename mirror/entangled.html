@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAREXT entangled AI — runs in this page</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .entangled { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; font-family: inherit; }
+      .entangled h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+      .entangled .sub { opacity: .75; margin-bottom: 1.5rem; }
+      .entangled .status { font-family: ui-monospace, monospace; font-size: .85rem; padding: .75rem 1rem;
+        border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 8px; white-space: pre-wrap; }
+      .entangled .status.ok { border-color: #2e7d32; }
+      .entangled .status.bad { border-color: #c62828; }
+      .entangled textarea { width: 100%; min-height: 5rem; font-family: ui-monospace, monospace; font-size: .9rem;
+        padding: .6rem; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+        background: transparent; color: inherit; }
+      .entangled button { margin: .5rem .5rem .5rem 0; padding: .5rem 1rem; border-radius: 8px; cursor: pointer; }
+      .entangled .answer { font-family: ui-monospace, monospace; white-space: pre-wrap; padding: .75rem 1rem;
+        border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent); margin: .5rem 0; }
+      .entangled table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+      .entangled td, .entangled th { border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+        text-align: left; padding: .3rem .4rem; font-family: ui-monospace, monospace; }
+      .entangled .ok-tag { color: #2e7d32; } .entangled .miss-tag { color: #c62828; }
+      .entangled .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <main class="entangled">
+      <h1>RAREXT entangled AI</h1>
+      <p class="sub">
+        A language model rebuilt from its <strong>entanglement spectrum</strong> (bond dimension
+        χ=48 — an MPO-factored transformer, 4,673,760 bytes) running <strong>entirely in this
+        tab</strong>: RAREXT's own engine, RAREXT's own weights, no server, no third-party API.
+        Both artifacts are digest-verified below before a single weight is read.
+      </p>
+
+      <div id="status" class="status">loading the engine and the weights…</div>
+
+      <div id="controls" class="hidden">
+        <label for="prompt"><strong>Prompt</strong> — the host's task is prices: a <code>rows:</code> block and a question.</label>
+        <textarea id="prompt">rows: -BIG TEE|$89
+-RED HAT|$35
+q: which is cheapest?
+a: </textarea>
+        <button id="ask">Answer</button>
+        <button id="selftest">Run the 8-prompt skill self-test</button>
+        <div id="answer" class="answer"></div>
+        <div id="selftest-out"></div>
+      </div>
+
+      <p class="sub">
+        <a href="./ai.html">← the deterministic proof model</a> ·
+        <a href="../index.html">registry</a> ·
+        <a href="../../docs/quantum-entanglement-rebuild.md">how this rebuild was made</a>
+      </p>
+    </main>
+
+    <script src="./entangled-engine.js"></script>
+    <script type="module">
+      import { loadEntangledModel, answerWith, skillSelfTest } from "./entangled.js";
+      (async () => {
+        const status = document.getElementById("status");
+        const controls = document.getElementById("controls");
+        const answerBox = document.getElementById("answer");
+        const selftestOut = document.getElementById("selftest-out");
+        try {
+          const [engineSource, weightsBytes] = await Promise.all([
+            fetch("./entangled-engine.js").then((r) => {
+              if (!r.ok) throw new Error(`engine script: HTTP ${r.status}`);
+              return r.text();
+            }),
+            fetch("./rarext-entangled-chi48.gguf").then(async (r) => {
+              if (!r.ok) throw new Error(`weights: HTTP ${r.status}`);
+              return new Uint8Array(await r.arrayBuffer());
+            }),
+          ]);
+          status.textContent = "verifying digests…";
+          const loaded = await loadEntangledModel({ engineSource, weightsBytes });
+          status.className = "status ok";
+          status.textContent =
+            "verified and running\n" +
+            `engine  sha256:${loaded.digests.engine.slice(0, 32)}…\n` +
+            `weights sha256:${loaded.digests.weights.slice(0, 32)}…\n` +
+            `model   ${loaded.parsed.kv["general.name"]} · arch ${loaded.parsed.kv["general.architecture"]} · ` +
+            `${loaded.factors} MPO factor pairs · 4,673,760 bytes (54.7% of the dense host)`;
+          controls.classList.remove("hidden");
+
+          const ask = () => {
+            const prompt = document.getElementById("prompt").value;
+            const run = answerWith(loaded.engine, loaded.model, prompt, 64);
+            answerBox.textContent =
+              JSON.stringify(run.text) + "\n" +
+              `${run.tokens} tokens · ${run.ms.toFixed(0)} ms · ${(run.ms / Math.max(run.tokens, 1)).toFixed(1)} ms/token · ` +
+              `finish=${run.finishReason}` + (run.cached > 0 ? ` · ${run.cached} prompt tokens from the KV cache` : "");
+          };
+          document.getElementById("ask").addEventListener("click", ask);
+
+          document.getElementById("selftest").addEventListener("click", () => {
+            const rows = skillSelfTest(loaded.engine, loaded.model);
+            const passed = rows.filter((r) => r.ok).length;
+            selftestOut.innerHTML =
+              `<p><strong>${passed}/${rows.length} exact</strong> — the deployed skill (price lookup), ` +
+              `decoded in this tab against computed gold answers.</p>` +
+              `<table><tr><th>want</th><th>got</th><th></th></tr>` +
+              rows.map((r) =>
+                `<tr><td>${r.want.replace(/</g, "&lt;")}</td><td>${r.got.replace(/</g, "&lt;")}</td>` +
+                `<td class="${r.ok ? "ok-tag" : "miss-tag"}">${r.ok ? "ok" : "MISS"}</td></tr>`,
+              ).join("") + `</table>`;
+          });
+        } catch (error) {
+          status.className = "status bad";
+          status.textContent = `REFUSED: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      })();
+    </script>
+  </body>
+</html>
