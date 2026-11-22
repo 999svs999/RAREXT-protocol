@@ -1,0 +1,31 @@
+{
+ "new_skill_accuracy": 0.0,
+ "new_gate": ">=0.90",
+ "new_gate_pass": false,
+ "old_before": {
+  "S0 price-copy": 1.0,
+  "S1 cheapest": 1.0,
+  "S2 priciest": 1.0,
+  "S1m cheapest-mixed": 0.9583333333333334,
+  "S2m priciest-mixed": 1.0,
+  "S1t cheapest-3row-mixed": 0.9166666666666666,
+  "S2t priciest-3row-mixed": 0.9583333333333334,
+  "S3 refusal": 0.0
+ },
+ "old_after": {
+  "S0 price-copy": 1.0,
+  "S1 cheapest": 1.0,
+  "S2 priciest": 1.0,
+  "S1m cheapest-mixed": 1.0,
+  "S2m priciest-mixed": 1.0,
+  "S1t cheapest-3row-mixed": 1.0,
+  "S2t priciest-3row-mixed": 0.9583333333333334,
+  "S3 refusal": 0.0
+ },
+ "worst_regression": 0.0,
+ "old_gate": "<=0.042",
+ "old_gate_pass": true,
+ "gates_ok": false,
+ "steps": 900,
+ "chi": 48
+}
