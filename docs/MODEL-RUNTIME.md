@@ -534,13 +534,16 @@ training until the computed checker accepts it.
 
 The provider speaks the OpenAI batch shape for its own model. `POST /v1/files`
 takes a JSONL of `{custom_id, method, url, body}` lines (validated at upload:
-`url` must be `/v1/chat/completions` or `/v1/completions`; anything else is
-named in the refusal, never silently dropped). `POST /v1/batches` starts the
-queue — one request per event-loop turn, so health and status stay responsive —
-and `GET /v1/batches/{id}` / `GET /v1/batches/{id}/output` expose the progress
-counts and the results JSONL in the OpenAI result shape. Batch requests run the
-same engine path as interactive ones, so a cached prompt prefix is shared with
-them and a per-request failure becomes that line's `error`, not a batch abort.
+`url` must be `/v1/chat/completions`, `/v1/completions` or `/v1/embeddings`;
+anything else is named in the refusal, never silently dropped). `POST
+/v1/batches` starts the queue — one request per event-loop turn, so health and
+status stay responsive — and `GET /v1/batches/{id}` / `GET
+/v1/batches/{id}/output` expose the progress counts and the results JSONL in
+the OpenAI result shape. Embeddings run through the same `embedFor()` the
+interactive route uses, so a batch line and a direct call cannot drift. Batch
+requests run the same engine path as interactive ones, so a cached prompt
+prefix is shared with them and a per-request failure becomes that line's
+`error`, not a batch abort.
 Files and batch state persist under the provider's state dir and rehydrate
 after a restart; a batch that was mid-flight when a process died is reported as
 absent rather than claimed complete. The gateway proxies the whole surface to

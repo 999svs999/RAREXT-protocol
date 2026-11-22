@@ -171,6 +171,10 @@ const { futuristicGalleryPage } = await import(join(root, "scripts/futuristic-pa
 const mirrorFiles = [
   "ai.html",
   "ai.js",
+  "entangled.html",
+  "entangled.js",
+  "entangled-engine.js",
+  "rarext-entangled-chi48.gguf",
   "app.js",
   "blobs.json",
   "favicon.svg",
@@ -188,6 +192,10 @@ mkdirSync(mirrorTarget, { recursive: true });
 const owners = {
   "ai.html": join(root, "apps/web/public", "ai.html"),
   "ai.js": join(root, "apps/web/public", "ai.js"),
+  "entangled.html": join(root, "apps/web/public", "entangled.html"),
+  "entangled.js": join(root, "apps/web/public", "entangled.js"),
+  "entangled-engine.js": join(root, "apps/web/public", "entangled-engine.js"),
+  "rarext-entangled-chi48.gguf": join(root, "apps/web/public", "rarext-entangled-chi48.gguf"),
   "gallery.html": join(root, "apps/web/public", "gallery.html"),
   "index.html": join(root, "apps/web/public", "index.html"),
   "renditions.js": join(root, "apps/web/public", "renditions.js"),

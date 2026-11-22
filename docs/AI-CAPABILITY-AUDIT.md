@@ -117,7 +117,7 @@ value rather than calling it a pass on semantics.
 | Tool calls | **yes** (2026-11-22 re-run) | `get_weather({"city":"Paris"})` parsed and returned live; the 2026-11-15 "gap" was the earlier container's behaviour |
 | Embeddings | **yes**, same weights | 2 × 896-dim vectors from the committed container |
 | Vision / audio | **no**, refused by name | HTTP 400 `unsupported_content_part` |
-| Image / speech / video generation | **no** | no such route or tower |
+| Image / speech / video generation | **image: forwarded, live** (2026-11-22 — the gateway proxies the images API to a cloud upstream; a generated PNG came back through it and was verified by the hub's vision model, `tools/brand-live/`). **video: proxy route shipped** (`/v1/videos` forwards verbatim; the live hub requires an undocumented `mode` field, recorded). Speech: no tower, refused by name on RAREXT's own engine | provider 501 `unsupported_operation`; gateway proxy |
 | Long context | **declared 32,768**, not performance-tested | this host would take hours to prefill 32k; truncation is covered on a small container |
 | Model classes | **1G shipped**; 6/7/8G `shipped: false` | `packages/core/src/generations.ts`; host has 8 GiB |
 | Fine-tuning | **no** | no trainer path |

@@ -185,6 +185,10 @@ for (const rendition of media) {
 const mirrorFiles = [
   "ai.html",
   "ai.js",
+  "entangled.html",
+  "entangled.js",
+  "entangled-engine.js",
+  "rarext-entangled-chi48.gguf",
   "app.js",
   "blobs.json",
   "favicon.svg",
@@ -208,6 +212,10 @@ mkdirSync(mirrorTarget, { recursive: true });
 const owners = {
   "ai.html": join(root, "apps/web/public", "ai.html"),
   "ai.js": join(root, "apps/web/public", "ai.js"),
+  "entangled.html": join(root, "apps/web/public", "entangled.html"),
+  "entangled.js": join(root, "apps/web/public", "entangled.js"),
+  "entangled-engine.js": join(root, "apps/web/public", "entangled-engine.js"),
+  "rarext-entangled-chi48.gguf": join(root, "apps/web/public", "rarext-entangled-chi48.gguf"),
   "gallery.html": join(root, "apps/web/public", "gallery.html"),
   "renditions.js": join(root, "apps/web/public", "renditions.js"),
   // Hand-authored, and its home is the web tree: it was staged four cycles behind, so the

@@ -6855,6 +6855,42 @@ test("an OpenAI request controls decoding end to end: temperature, top_k, stop, 
   }
 });
 
+test("a weight-backed provider names its image-generation refusal instead of a bare 404", async () => {
+  const reg = await registry();
+  let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
+  try {
+    const bytes = tinyGgufModel({});
+    const model: ModelRef = {
+      id: "tiny-images", family: "qwen2", parameters: "tiny", quantization: "F32",
+      format: "gguf", sizeBytes: null, weightsDigest: null, contextLength: 64,
+    };
+    const execution: ExecutionRef = { kind: "engine", engine: "rarext", engineModel: null };
+    const { bundle, chunks } = buildModelBundle({ bytes, model, execution, chunkBytes: 1024 });
+    await uploadBundle({ registry: reg.base, bundle, chunks });
+    const source = readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url));
+    const { bundle: engineBundle, chunks: engineChunks } = buildEngineBundle({
+      source, name: "rarext-gguf-engine", engineVersion: "1",
+      runtime: ENGINE_ARTIFACT_RUNTIME_GGUF, chunkBytes: 4096,
+    });
+    await uploadEngineBundle({ registry: reg.base, bundle: engineBundle, chunks: engineChunks });
+    provider = await startProvider({
+      bundle, registry: reg.base, stateDir: join(reg.root, "images"), port: 0, engineBundle,
+    });
+    const response = await fetch(`${provider.url}/v1/images/generations`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "a teal square" }),
+    });
+    assert.equal(response.status, 501);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    assert.equal(body.error.code, "unsupported_operation");
+    assert.match(body.error.message, /no image tower/);
+    assert.match(body.error.message, /cloud deployment/);
+  } finally {
+    if (provider !== null) await provider.close();
+    await reg.close();
+  }
+});
+
 test("the gateway proxies the batch surface to the provider behind it", async () => {
   const reg = await registry();
   let provider: Awaited<ReturnType<typeof startProvider>> | null = null;
@@ -6994,14 +7030,15 @@ test("the provider runs an OpenAI-shaped batch: files, status, output JSONL", as
     // A malformed line is refused at upload time, with the reason.
     const bad = await fetch(`${base}/v1/files`, {
       method: "POST", headers: { "content-type": "application/jsonl" },
-      body: '{"custom_id":"x","url":"/v1/embeddings","body":{}}',
+      body: '{"custom_id":"x","url":"/v1/fine_tuning/jobs","body":{}}',
     });
-    assert.equal(bad.status, 400, "embeddings are named as not-yet-supported in batch, not silently dropped");
+    assert.equal(bad.status, 400, "an endpoint outside the batch set is named in the refusal, not dropped");
 
     const input = [
       { custom_id: "chat-1", method: "POST", url: "/v1/chat/completions", body: { messages: [{ role: "user", content: "ab" }], max_tokens: 4, seed: 5 } },
       { custom_id: "chat-2", method: "POST", url: "/v1/chat/completions", body: { messages: [{ role: "user", content: "cd" }], max_tokens: 4, seed: 5 } },
       { custom_id: "cmpl-1", method: "POST", url: "/v1/completions", body: { prompt: "ab", max_tokens: 4, seed: 5 } },
+      { custom_id: "embed-1", method: "POST", url: "/v1/embeddings", body: { input: "ab" } },
     ];
     const upload = await fetch(`${base}/v1/files`, {
       method: "POST", headers: { "content-type": "application/jsonl" },
@@ -7021,7 +7058,7 @@ test("the provider runs an OpenAI-shaped batch: files, status, output JSONL", as
       })
     ).json()) as { id: string; status: string; object: string; request_counts: { total: number } };
     assert.equal(created.object, "batch");
-    assert.equal(created.request_counts.total, 3);
+    assert.equal(created.request_counts.total, 4);
 
     // Poll to completion — the batch runs in the background, request by turn.
     let batch = created;
@@ -7030,31 +7067,50 @@ test("the provider runs an OpenAI-shaped batch: files, status, output JSONL", as
       batch = (await (await fetch(`${base}/v1/batches/${created.id}`)).json()) as typeof batch;
     }
     assert.equal(batch.status, "completed");
-    assert.deepEqual(batch.request_counts, { completed: 3, failed: 0, total: 3 });
+    assert.deepEqual(batch.request_counts, { completed: 4, failed: 0, total: 4 });
     assert.ok(typeof batch.output_file_id === "string" && batch.output_file_id.startsWith("file-"));
 
     const output = await (await fetch(`${base}/v1/batches/${created.id}/output`)).text();
     const results = output.trim().split("\n").map((line) => JSON.parse(line) as {
       id: string; custom_id: string;
-      response: { status_code: number; body: { choices: Array<{ message?: { content: string }; text?: string }> } } | null;
+      response: {
+        status_code: number;
+        body: {
+          choices?: Array<{ message?: { content: string }; text?: string }>;
+          data?: Array<{ object: string; embedding: number[] }>;
+          usage?: { prompt_tokens: number };
+        };
+      } | null;
       error: unknown;
     });
-    assert.equal(results.length, 3);
-    assert.deepEqual(results.map((line) => line.custom_id), ["chat-1", "chat-2", "cmpl-1"]);
-    for (const line of results) {
+    assert.equal(results.length, 4);
+    assert.deepEqual(results.map((line) => line.custom_id), ["chat-1", "chat-2", "cmpl-1", "embed-1"]);
+    for (const line of results.slice(0, 3)) {
       assert.equal(line.error, null);
       assert.equal(line.response!.status_code, 200);
-      const choice = line.response!.body.choices[0]!;
+      const choice = line.response!.body.choices![0]!;
       assert.ok(
         typeof choice.message?.content === "string" || typeof choice.text === "string",
         "each result carries the decoded answer in the request's own shape",
       );
     }
+    // The embeddings line runs the SAME embedFor() the interactive route runs:
+    // a real vector from the committed weights, with usage, in the list shape.
+    const embedLine = results[3]!;
+    assert.equal(embedLine.error, null);
+    const embedding = embedLine.response!.body.data![0]!;
+    assert.equal(embedding.object, "embedding");
+    assert.ok(embedding.embedding.length > 0, "a real vector came back");
+    assert.ok(
+      embedding.embedding.every((value) => typeof value === "number" && Number.isFinite(value)),
+      "the vector is numeric",
+    );
+    assert.ok((embedLine.response!.body.usage?.prompt_tokens ?? 0) > 0, "usage counts the input");
     // A chat request and a completions request over the same prompt decode the
     // same bytes — the batch path is the engine path, not a separate one.
     assert.equal(
-      results[0]!.response!.body.choices[0]!.message!.content,
-      results[2]!.response!.body.choices[0]!.text,
+      results[0]!.response!.body.choices![0]!.message!.content,
+      results[2]!.response!.body.choices![0]!.text,
     );
   } finally {
     if (provider !== null) await provider.close();

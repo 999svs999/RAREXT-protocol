@@ -54,6 +54,30 @@ function startMockEngine() {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/v1/images/generations") {
+      let raw = "";
+      for await (const chunk of request) raw += chunk;
+      seen.push(JSON.parse(raw || "{}"));
+      const body = JSON.parse(raw || "{}");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          created: 1795359553,
+          data: [{ url: `https://upstream.example/generated/${body.prompt?.length ?? 0}.png` }],
+        }),
+      );
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/videos") {
+      let raw = "";
+      for await (const chunk of request) raw += chunk;
+      seen.push(JSON.parse(raw || "{}"));
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ id: "video-job-1", status: "queued", forwarded: true }));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
       let raw = "";
       for await (const chunk of request) raw += chunk;
@@ -747,6 +771,41 @@ test("Anthropic parallel tool use is off for a named tool or when asked", async 
       1,
       "exactly one block closed",
     );
+  } finally {
+    await teardown(context);
+  }
+});
+
+test("the gateway forwards image generation to a cloud upstream and relays its response", async () => {
+  // RAREXT's own engine has no image tower — generation is an UPSTREAM
+  // capability. The gateway forwards the prompt verbatim and relays the
+  // upstream's body (URLs or b64) and status, adding nothing and hiding
+  // nothing. A weight-backed provider names its refusal instead.
+  const context = await setup();
+  try {
+    const response = await fetch(`${context.gateway.url}/v1/images/generations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "test-model", prompt: "a teal square on white", n: 1 }),
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { data: Array<{ url: string }> };
+    assert.match(body.data[0]!.url, /generated\/2\d*\.png/, "the upstream's generated URL is relayed");
+
+    const seen = (context.engine as unknown as { seen: Array<Record<string, unknown>> }).seen;
+    const forwarded = seen.at(-1)!;
+    assert.equal(forwarded.prompt, "a teal square on white", "the prompt reaches the upstream verbatim");
+
+    // Video generation forwards through the same generalized proxy: the body
+    // is the upstream's contract (mode, duration, …), not RAREXT's to invent.
+    const video = await fetch(`${context.gateway.url}/v1/videos`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "test-model", mode: "t2v", prompt: "a square becomes a circle" }),
+    });
+    assert.equal(video.status, 200);
+    assert.equal(((await video.json()) as { forwarded: boolean }).forwarded, true);
+    assert.equal(seen.at(-1)!.mode, "t2v", "the upstream's own fields pass through untouched");
   } finally {
     await teardown(context);
   }

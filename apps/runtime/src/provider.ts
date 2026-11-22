@@ -240,10 +240,10 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
   response.end(body);
 }
 
-/** The endpoints a batch request line may target. Embeddings are not here yet:
- * the provider's embedding handler is route code, not a callable, so a batch
- * of embeddings would need its own runner — named rather than faked. */
-const BATCH_ENDPOINTS = new Set(["/v1/chat/completions", "/v1/completions"]);
+/** The endpoints a batch request line may target. Each has a callable runner
+ * (complete() for the two text shapes, embedFor() for embeddings), so a batch
+ * line and an interactive request take the same code path. */
+const BATCH_ENDPOINTS = new Set(["/v1/chat/completions", "/v1/completions", "/v1/embeddings"]);
 
 interface BatchFileRecord {
   id: string;
@@ -2067,6 +2067,91 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
     };
   }
 
+  /**
+   * The embeddings operation as a CALLABLE, shared by the interactive route
+   * and the batch runner — one implementation, not two that can drift. Throws
+   * on any input the engine cannot embed; the caller shapes the refusal.
+   * `rawVectors` keeps the numbers (batch results are read by machines, and a
+   * base64 round-trip in a JSONL file helps nobody).
+   */
+  function embedFor(
+    body: Record<string, unknown>,
+    rawVectors: boolean,
+  ): Record<string, unknown> {
+    if (loadedEngine === null || typeof loadedEngine.embed !== "function") {
+      throw new Error("this deployment's engine exposes no embedding matrix");
+    }
+    // The engine reads the token embedding matrix from the same verified
+    // bytes it serves completions from; there is no second model.
+    const embeddingModel = gguf ?? wasmModel ?? native;
+    if (embeddingModel === null) {
+      throw new Error("no native model is loaded for embeddings");
+    }
+    // OpenAI accepts a string, an array of strings, a token-id array, an
+    // array of token-id arrays, and an array of token counts.
+    const raw = body.input;
+    const inputs: Array<{ text?: string; ids?: number[] }> = [];
+    const asIds = (value: unknown): number[] | null =>
+      Array.isArray(value) && value.length > 0 && value.every((id) => Number.isSafeInteger(id))
+        ? (value as number[])
+        : null;
+    const inputError = "input must be a string, an array of strings, or token id arrays";
+    if (typeof raw === "string") {
+      inputs.push({ text: raw });
+    } else if (Array.isArray(raw)) {
+      const single = asIds(raw);
+      if (single !== null) {
+        inputs.push({ ids: single });
+      } else {
+        for (const entry of raw) {
+          if (typeof entry === "string") {
+            inputs.push({ text: entry });
+          } else {
+            const ids = asIds(entry);
+            if (ids === null) throw new Error(inputError);
+            inputs.push({ ids });
+          }
+        }
+      }
+    } else {
+      throw new Error(inputError);
+    }
+    if (inputs.length === 0) throw new Error("input must not be empty");
+
+    let promptTokens = 0;
+    const vectors: number[][] = [];
+    for (const entry of inputs) {
+      const result = loadedEngine.embed.call(loadedEngine, embeddingModel, entry);
+      if (
+        result === null ||
+        typeof result !== "object" ||
+        !Array.isArray(result.embedding) ||
+        !result.embedding.every((value) => typeof value === "number" && Number.isFinite(value))
+      ) {
+        throw new Error("the engine returned a malformed embedding");
+      }
+      vectors.push(result.embedding);
+      promptTokens += Number.isSafeInteger(result.tokens) ? result.tokens : 0;
+    }
+
+    const encodeBase64 = (vector: number[]): string =>
+      Buffer.from(Float32Array.from(vector).buffer).toString("base64");
+    const asBase64 = rawVectors ? false : body.encoding_format === "base64";
+    return {
+      object: "list",
+      data: vectors.map((vector, index) => ({
+        object: "embedding",
+        index,
+        embedding: asBase64 ? encodeBase64(vector) : vector.map((value) => value),
+      })),
+      model: options.bundle.model.id,
+      usage: { prompt_tokens: promptTokens, total_tokens: promptTokens },
+      // The vectors are recomputable: same committed bytes, same input,
+      // same numbers. The trace digest binds the response to the model.
+      rarext_bundle: options.bundle.digest,
+    };
+  }
+
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -2245,43 +2330,70 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
           } else {
             const shape = parsed.url === "/v1/completions" ? "completions" : "chat";
             const body = { ...parsed.body, model: parsed.body.model ?? options.bundle.model.id };
-            complete(body, shape)
-              .then((result) => {
-                batch.counts.completed += 1;
-                batch.results.push(JSON.stringify({
-                  id: rank,
-                  custom_id: parsed.customId,
-                  response: {
-                    status_code: 200,
-                    request_id: batch.id,
-                    body: shape === "chat"
-                      ? {
-                          id: `batchcmpl-${index + 1}`, object: "chat.completion",
-                          created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
-                          choices: [{
-                            index: 0,
-                            message: { role: "assistant", content: result.text },
-                            finish_reason: result.finishReason,
-                          }],
-                          usage: {
-                            prompt_tokens: 0,
-                            completion_tokens: result.steps,
-                            total_tokens: result.steps,
-                            ...(result.cachedPromptTokens !== undefined
-                              ? { prompt_tokens_details: { cached_tokens: result.cachedPromptTokens } }
-                              : {}),
-                          },
-                        }
-                      : {
-                          id: `batchcmpl-${index + 1}`, object: "text_completion",
-                          created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
-                          choices: [{ index: 0, text: result.text, finish_reason: result.finishReason }],
-                          usage: { prompt_tokens: 0, completion_tokens: result.steps, total_tokens: result.steps },
+            // Each runner produces a promise that pushes ONE success line; the
+            // shared catch/finally turns a rejection into that line's error and
+            // always advances the queue, so one bad request cannot stall a batch.
+            const run: Promise<void> =
+              parsed.url === "/v1/embeddings"
+                ? Promise.resolve().then(() => {
+                    const payload = embedFor(body, true) as {
+                      data: Array<{ embedding: number[] }>;
+                      usage: { prompt_tokens: number };
+                    };
+                    batch.counts.completed += 1;
+                    batch.results.push(JSON.stringify({
+                      id: rank,
+                      custom_id: parsed.customId,
+                      response: {
+                        status_code: 200,
+                        request_id: batch.id,
+                        body: {
+                          object: "list",
+                          data: payload.data,
+                          model: options.bundle.model.id,
+                          usage: payload.usage,
                         },
-                  },
-                  error: null,
-                }));
-              })
+                      },
+                      error: null,
+                    }));
+                  })
+                : complete(body, shape).then((result) => {
+                    batch.counts.completed += 1;
+                    batch.results.push(JSON.stringify({
+                      id: rank,
+                      custom_id: parsed.customId,
+                      response: {
+                        status_code: 200,
+                        request_id: batch.id,
+                        body: shape === "chat"
+                          ? {
+                              id: `batchcmpl-${index + 1}`, object: "chat.completion",
+                              created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
+                              choices: [{
+                                index: 0,
+                                message: { role: "assistant", content: result.text },
+                                finish_reason: result.finishReason,
+                              }],
+                              usage: {
+                                prompt_tokens: 0,
+                                completion_tokens: result.steps,
+                                total_tokens: result.steps,
+                                ...(result.cachedPromptTokens !== undefined
+                                  ? { prompt_tokens_details: { cached_tokens: result.cachedPromptTokens } }
+                                  : {}),
+                              },
+                            }
+                          : {
+                              id: `batchcmpl-${index + 1}`, object: "text_completion",
+                              created: Math.floor(Date.now() / 1000), model: options.bundle.model.id,
+                              choices: [{ index: 0, text: result.text, finish_reason: result.finishReason }],
+                              usage: { prompt_tokens: 0, completion_tokens: result.steps, total_tokens: result.steps },
+                            },
+                      },
+                      error: null,
+                    }));
+                  });
+            run
               .catch((error: unknown) => {
                 batch.counts.failed += 1;
                 batch.results.push(JSON.stringify({
@@ -2317,7 +2429,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         for (const line of lines) {
           if (parseBatchLine(line) === null) {
             sendJson(response, 400, {
-              error: "each line must be {\"custom_id\", \"url\" (/v1/chat/completions or /v1/completions), \"body\"}",
+              error: "each line must be {\"custom_id\", \"url\" (/v1/chat/completions, /v1/completions or /v1/embeddings), \"body\"}",
             });
             return;
           }
@@ -2421,104 +2533,35 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/images/generations") {
+        // Named, not a silent 404: this provider serves committed WEIGHTS, and
+        // those weights carry no image tower. Image generation exists on the
+        // gateway only when the deployment's upstream is a cloud engine that
+        // implements the images API.
+        sendJson(response, 501, {
+          error: {
+            message:
+              "image generation is not implemented in this runtime: the committed weights carry no " +
+              "image tower, so this provider cannot generate images. Route a cloud deployment " +
+              "(openai-compatible upstream) through the gateway for the images API.",
+            type: "invalid_request_error",
+            code: "unsupported_operation",
+          },
+        });
+        return;
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/embeddings") {
         const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
-        const modelId = options.bundle.model.id;
-
-        if (loadedEngine === null || typeof loadedEngine.embed !== "function") {
-          sendJson(response, 400, {
-            error: "this deployment's engine exposes no embedding matrix",
-          });
-          return;
-        }
-        // The engine reads the token embedding matrix from the same verified
-        // bytes it serves completions from; there is no second model.
-        const embeddingModel = gguf ?? wasmModel ?? native;
-        if (embeddingModel === null) {
-          sendJson(response, 400, { error: "no native model is loaded for embeddings" });
-          return;
-        }
-
-        // OpenAI accepts a string, an array of strings, a token-id array, an
-        // array of token-id arrays, and an array of token counts.
-        const raw = body.input;
-        const inputs: Array<{ text?: string; ids?: number[] }> = [];
-        const asIds = (value: unknown): number[] | null =>
-          Array.isArray(value) && value.length > 0 && value.every((id) => Number.isSafeInteger(id))
-            ? (value as number[])
-            : null;
-        if (typeof raw === "string") {
-          inputs.push({ text: raw });
-        } else if (Array.isArray(raw)) {
-          const single = asIds(raw);
-          if (single !== null) {
-            inputs.push({ ids: single });
-          } else {
-            for (const entry of raw) {
-              if (typeof entry === "string") {
-                inputs.push({ text: entry });
-              } else {
-                const ids = asIds(entry);
-                if (ids === null) {
-                  sendJson(response, 400, {
-                    error: "input must be a string, an array of strings, or token id arrays",
-                  });
-                  return;
-                }
-                inputs.push({ ids });
-              }
-            }
-          }
-        } else {
-          sendJson(response, 400, {
-            error: "input must be a string, an array of strings, or token id arrays",
-          });
-          return;
-        }
-        if (inputs.length === 0) {
-          sendJson(response, 400, { error: "input must not be empty" });
-          return;
-        }
-
-        let promptTokens = 0;
-        const vectors: number[][] = [];
+        let payload: Record<string, unknown>;
         try {
-          for (const entry of inputs) {
-            const result = loadedEngine.embed.call(loadedEngine, embeddingModel, entry);
-            if (
-              result === null ||
-              typeof result !== "object" ||
-              !Array.isArray(result.embedding) ||
-              !result.embedding.every((value) => typeof value === "number" && Number.isFinite(value))
-            ) {
-              throw new Error("the engine returned a malformed embedding");
-            }
-            vectors.push(result.embedding);
-            promptTokens += Number.isSafeInteger(result.tokens) ? result.tokens : 0;
-          }
+          payload = embedFor(body, false);
         } catch (error) {
           sendJson(response, 400, {
             error: error instanceof Error ? error.message : "embedding failed",
           });
           return;
         }
-
-        const encodeBase64 = (vector: number[]): string =>
-          Buffer.from(Float32Array.from(vector).buffer).toString("base64");
-        const asBase64 = body.encoding_format === "base64";
-        const payload = {
-          object: "list",
-          data: vectors.map((vector, index) => ({
-            object: "embedding",
-            index,
-            embedding: asBase64 ? encodeBase64(vector) : vector.map((value) => value),
-          })),
-          model: modelId,
-          usage: { prompt_tokens: promptTokens, total_tokens: promptTokens },
-          // The vectors are recomputable: same committed bytes, same input,
-          // same numbers. The trace digest binds the response to the model.
-          rarext_bundle: options.bundle.digest,
-        };
         response.setHeader("x-rarext-receipt", receiptHeader(body, payload));
         sendJson(response, 200, payload);
         return;

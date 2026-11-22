@@ -1521,6 +1521,58 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
    * content-type verbatim, for any upstream that implements the shape.
    */
   const BATCH_PATH = /^\/v1\/(files|batches)(\/[A-Za-z0-9._-]+)?(\/output)?$/;
+  /**
+   * Image generation is the same kind of surface: RAREXT's own engine has no
+   * image tower, but a cloud upstream can. The gateway forwards the prompt and
+   * relays the upstream's response (URLs or b64) verbatim — generation
+   * happening upstream is stated here, not hidden. Video generation follows
+   * the same shape (`/v1/videos`); its request fields (a `mode`, duration,
+   * aspect…) are upstream-specific contracts, so the gateway forwards the body
+   * untouched and the upstream is the arbiter of what it means.
+   */
+  const GENERATION_PATH = /^\/v1\/(images\/generations|videos)$/;
+  async function handleImages(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (nativeCloud) {
+      sendJson(response, 501, {
+        error:
+          "this deployment is a RAREXT-native cloud model (rarext-cloud): the native wire has no " +
+          "image/video-generation operation yet, so it is not offered rather than guessed at",
+      });
+      return;
+    }
+    let body: Buffer;
+    try {
+      body = Buffer.from(await readBody(request));
+    } catch (error) {
+      sendJson(response, 400, { error: error instanceof Error ? error.message : "invalid body" });
+      return;
+    }
+    let upstream: Response;
+    try {
+      upstream = await fetchImpl(`${deployment.engine.endpoint}${url.pathname}`, {
+        method: "POST",
+        headers: {
+          "content-type": request.headers["content-type"] ?? "application/json",
+          accept: "application/json",
+          ...upstreamHeaders,
+        },
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      sendJson(response, 502, {
+        error: `upstream ${deployment.engine.name} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      return;
+    }
+    const text = await upstream.text();
+    response.writeHead(upstream.status, {
+      "content-type": upstream.headers.get("content-type") ?? "application/json",
+    });
+    response.end(text);
+  }
+
   async function handleBatch(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     if (nativeCloud) {
@@ -2329,6 +2381,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         path === "/v1/messages" ||
         path === "/v1/embeddings" ||
         BATCH_PATH.test(path) ||
+        GENERATION_PATH.test(path) ||
         path.startsWith("/v1/rarext/");
       if (protectedPath && !authorized(request)) {
         sendJson(
@@ -2482,6 +2535,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
       if (BATCH_PATH.test(path) && (request.method === "GET" || request.method === "POST")) {
         await handleBatch(request, response);
+        return;
+      }
+
+      if (GENERATION_PATH.test(path) && request.method === "POST") {
+        await handleImages(request, response);
         return;
       }
 

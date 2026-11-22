@@ -1,0 +1,40 @@
+{
+ "kind": "rarext.model-deployment.v1",
+ "id": "agnes-image-2-5-flash-openai-compatible",
+ "engine": {
+  "name": "openai-compatible",
+  "version": null,
+  "endpoint": "https://apihub.agnes-ai.com",
+  "digest": null
+ },
+ "model": {
+  "id": "agnes-image-2.5-flash",
+  "family": "custom",
+  "parameters": null,
+  "quantization": null,
+  "format": null,
+  "sizeBytes": null,
+  "weightsDigest": null,
+  "contextLength": null
+ },
+ "hardware": {
+  "backend": "cloud",
+  "device": "apihub.agnes-ai.com",
+  "memoryBytes": null,
+  "os": "remote",
+  "arch": "remote"
+ },
+ "placement": "remote",
+ "apis": [
+  "openai",
+  "anthropic"
+ ],
+ "createdAt": "2026-11-22T15:07:05.280Z",
+ "labels": {
+  "execution": "cloud",
+  "upstreamApi": "openai",
+  "upstreamAuth": "bearer"
+ },
+ "notes": "Remote deployment: inference runs at https://apihub.agnes-ai.com. No weights are stored or executed on this host.",
+ "digest": "b0e44616ed0d2231f90a55f5cfa041951bcbc932fcd603e05f9123a4022a9d31"
+}
