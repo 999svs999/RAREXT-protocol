@@ -224,6 +224,17 @@ node apps/runtime/src/cli.ts serve \
   without repeating `--upstream-api` or `--upstream-auth`. Only the auth mode is
   recorded; the key still comes from the environment. An explicit flag still
   wins if an operator needs to override it.
+- `--label <k=v>` (repeatable) commits any other manifest label. The one the
+  protocol reads today is `input.modalities`: `--label input.modalities=text,image`
+  declares that the upstream can read images. The derived cloud card
+  (`cloudModelFromDeployment`) inherits it into `capabilities.input_modalities`,
+  and the gateway then FORWARDS image parts — on the OpenAI surface verbatim,
+  on the Anthropic surface mapped from `image` blocks to the OpenAI
+  `image_url` shape — instead of refusing them. Weight-backed deployments
+  (RAREXT's own engine) ignore the label for this purpose: their provider
+  refuses image parts by name, and the gateway's refusal matches. The claim
+  lives in the signed manifest, so a reader can check what a deployment
+  declared, not what an operator typed at serve time.
 - Before binding, `serve` recomputes the manifest with the same verifier used
   for published cards. A stale digest, a remote manifest with local memory, or
   a remote manifest pointing at loopback without the `fixture: "loopback"` label

@@ -634,16 +634,28 @@ function promptTokenCount(body: Record<string, unknown>): number {
   return lastUserText(body).split(/\s+/).filter(Boolean).length;
 }
 
-/** Aggregate usage across choices, in the OpenAI chat shape. */
+/** Aggregate usage across choices, in the OpenAI chat shape. When the engine
+ * served part of the prompt from its KV prompt cache, the usage carries the
+ * same `prompt_tokens_details.cached_tokens` accounting the hosted APIs use. */
 function fixedUsage(
   promptTokens: number,
-  results: Array<{ steps: number }>,
-): { prompt_tokens: number; completion_tokens: number; total_tokens: number } {
+  results: Array<{ steps: number; cachedPromptTokens?: number }>,
+): {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: { cached_tokens: number };
+} {
   const completionTokens = results.reduce((total, choice) => total + choice.steps, 0);
+  const cachedTokens = results.reduce(
+    (total, choice) => total + (choice.cachedPromptTokens ?? 0),
+    0,
+  );
   return {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     total_tokens: promptTokens + completionTokens,
+    ...(cachedTokens > 0 ? { prompt_tokens_details: { cached_tokens: cachedTokens } } : {}),
   };
 }
 
@@ -1899,6 +1911,7 @@ export async function startProvider(options: ProviderOptions): Promise<Provider>
       }
       const stopped = applyStop(result.text, decoding.stop);
       const logprobs = engineLogprobs(result, loadedEngine, gguf ?? wasmModel);
+      const cachedPromptTokens = (result as { cachedPromptTokens?: number }).cachedPromptTokens;
       const deltas =
         body.stream === true
           ? tokenDeltas(

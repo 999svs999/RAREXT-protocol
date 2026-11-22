@@ -15,6 +15,9 @@ import { runSpecFromChallenge } from "../src/verifier.ts";
 import type { DeploymentCommitment } from "../src/types.ts";
 
 function startMockEngine() {
+  // Every parsed chat body the mock receives, newest last — so a test can
+  // assert what the gateway actually FORWARDED, not just what came back.
+  const seen: Array<Record<string, unknown>> = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
@@ -55,6 +58,7 @@ function startMockEngine() {
       let raw = "";
       for await (const chunk of request) raw += chunk;
       const body = JSON.parse(raw || "{}");
+      seen.push(body);
       const last = [...(body.messages ?? [])].reverse().find((message: { role: string }) => message.role === "user");
       const text = `echo: ${String(last?.content ?? "")}`;
       const tools = Array.isArray(body.tools) ? body.tools : [];
@@ -172,10 +176,12 @@ function startMockEngine() {
     response.end(JSON.stringify({ error: "not found" }));
   });
 
+  // Expose what the mock received, for tests that assert on forwarded bytes.
+  Object.assign(server, { seen });
   return server;
 }
 
-async function setup() {
+async function setup(labels?: Record<string, string>) {
   const engine = startMockEngine();
   await new Promise<void>((resolve) => engine.listen(0, "127.0.0.1", resolve));
   const enginePort = (engine.address() as { port: number }).port;
@@ -187,6 +193,7 @@ async function setup() {
       probe,
       hardware: hardwareFromHost("cpu", "test host"),
       createdAt: "2026-11-06T00:00:00.000Z",
+      ...(labels === undefined ? {} : { labels }),
     }),
   );
 
@@ -739,6 +746,120 @@ test("Anthropic parallel tool use is off for a named tool or when asked", async 
       events.filter((event) => event.name === "content_block_stop").length,
       1,
       "exactly one block closed",
+    );
+  } finally {
+    await teardown(context);
+  }
+});
+
+test("a forwarded deployment passes multimodal parts through to the upstream", async () => {
+  const context = await setup();
+  try {
+    // The refusal-by-name on the native provider is correct there (no vision
+    // tower). A REMOTE deployment is a capability question for the upstream:
+    // the gateway forwards the request body verbatim and records it, so an
+    // image part reaches a vision-capable upstream instead of being invented
+    // or dropped here.
+    const response = await fetch(`${context.gateway.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "test-model",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "what is in this picture?" },
+              { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+            ],
+          },
+        ],
+        temperature: 0,
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    const seen = (context.engine as unknown as { seen: Array<Record<string, unknown>> }).seen;
+    const forwarded = seen.at(-1)!;
+    const content = (forwarded.messages as Array<{ content: unknown }>)[0]!.content;
+    assert.ok(Array.isArray(content), "the part array reached the upstream unmodified");
+    assert.equal((content as Array<{ type: string }>)[1]!.type, "image_url");
+
+    // The exact multimodal request is what the signed transcript binds.
+    await waitForRecords(context.dir, 1);
+    const record = new RunLedger(context.dir).latest();
+    const sent = ((record?.body.request.body as { messages?: Array<{ content: unknown }> })
+      ?.messages ?? [])[0]?.content;
+    assert.ok(Array.isArray(sent), "the run's transcript carries the part array");
+    assert.equal((sent as Array<{ type: string }>)[1]!.type, "image_url");
+  } finally {
+    await teardown(context);
+  }
+});
+
+test("a card that declares image input accepts image blocks on the Anthropic surface", async () => {
+  // The deployment's committed labels declare what its upstream accepts; the
+  // gateway forwards the image (mapped to the OpenAI shape) instead of
+  // refusing it, while document/audio blocks are still refused by name and a
+  // text-only request translates exactly as before.
+  const context = await setup({ "input.modalities": "text,image" });
+  try {
+    const call = (content: unknown) =>
+      fetch(`${context.gateway.url}/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "test-model",
+          max_tokens: 32,
+          messages: [{ role: "user", content }],
+        }),
+      });
+
+    // capabilities now reflect the committed card, not a constant.
+    const deployment = (await (await fetch(`${context.gateway.url}/v1/deployment`)).json()) as {
+      capabilities?: Record<string, unknown>;
+    };
+    assert.equal(deployment.capabilities?.multimodal, true);
+
+    // A base64 image block maps to an OpenAI image_url data URL.
+    const base64 = await call([
+      { type: "text", text: "what is in this picture?" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+    ]);
+    assert.equal(base64.status, 200);
+
+    // A URL image block passes its URL through.
+    const byUrl = await call([
+      { type: "text", text: "and this one?" },
+      { type: "image", source: { type: "url", url: "https://example.com/x.png" } },
+    ]);
+    assert.equal(byUrl.status, 200);
+
+    const seen = (context.engine as unknown as { seen: Array<Record<string, unknown>> }).seen;
+    const [first, second] = seen.slice(-2);
+    const firstParts = (first!.messages as Array<{ content: Array<{ type: string }> }>)[0]!
+      .content as Array<{ type: string; image_url?: { url: string } }>;
+    assert.equal(firstParts[1]!.type, "image_url");
+    assert.equal(firstParts[1]!.image_url!.url, "data:image/png;base64,AAAA");
+    const secondParts = (second!.messages as Array<{ content: Array<{ type: string }> }>)[0]!
+      .content as Array<{ type: string; image_url?: { url: string } }>;
+    assert.equal(secondParts[1]!.image_url!.url, "https://example.com/x.png");
+
+    // The signed transcript binds the multimodal request.
+    await waitForRecords(context.dir, 2);
+    const record = new RunLedger(context.dir).latest();
+    const sent = ((record?.body.request.body as { messages?: Array<{ content: unknown }> })
+      ?.messages ?? [])[0]?.content;
+    assert.ok(Array.isArray(sent), "the run's transcript carries the part array");
+
+    // document and audio are still refused by name even on a vision card.
+    const document = await call([
+      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "AAAA" } },
+    ]);
+    assert.equal(document.status, 400);
+    assert.match(
+      ((await document.json()) as { error: { message: string } }).error.message,
+      /document/,
     );
   } finally {
     await teardown(context);

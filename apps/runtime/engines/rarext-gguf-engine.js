@@ -3317,6 +3317,25 @@
       cacheK.push([]);
       cacheV.push([]);
     }
+    // PROMPT-PREFIX REUSE: a run whose token prompt shares a prefix with a
+    // cached run starts from that prefix's KV instead of recomputing it —
+    // the same automatic prompt caching the hosted APIs do. The KV at a
+    // position is append-only and immutable once written, so cached position
+    // arrays can be SHARED between runs; only the outer arrays are per-run.
+    // Reuse is only sound when the prefill is pure (no pinned tokens, no
+    // grammar — both interleave with the prefill loop) and the RoPE factor
+    // set matches (LongRoPE selection depends on the total length), so the
+    // match runs below, after `ropeFactorSet` is chosen.
+    var cachedPromptTokens = 0;
+    var promptCacheStore = null;
+    if (pinned === null && grammar === null) {
+      var store = model.promptCache;
+      if (store === undefined) {
+        store = { entries: [], bytes: 0 };
+        model.promptCache = store;
+      }
+      promptCacheStore = store;
+    }
 
     // Dequantized norm rows are cached; declared here because the LongRoPE
     // factors below are dequantized through the same helper.
@@ -3340,7 +3359,33 @@
         : dequantNorm(gguf, ropeFactorTensor, nRot / 2);
     var ropeFactorSet = selectRopeFactorSet(gguf, arch, promptIds.length + steps);
 
-    var position = 0;
+    // Longest cached prefix match (never the FULL prompt: the last prompt
+    // token must still be forwarded once, because the cached entry stores KV,
+    // not the logits that token produced).
+    if (promptCacheStore !== null && promptCacheStore.entries.length > 0) {
+      var bestEntry = null;
+      var bestShared = 0;
+      for (var ce = promptCacheStore.entries.length - 1; ce >= 0; ce -= 1) {
+        var entry = promptCacheStore.entries[ce];
+        if (entry.ropeFactorSet !== ropeFactorSet) continue;
+        var shared = 0;
+        var limit = Math.min(entry.tokens.length, promptIds.length - 1);
+        while (shared < limit && entry.tokens[shared] === promptIds[shared]) shared += 1;
+        if (shared > bestShared) {
+          bestShared = shared;
+          bestEntry = entry;
+        }
+      }
+      if (bestEntry !== null && bestShared > 0) {
+        for (var rl = 0; rl < nLayer; rl += 1) {
+          cacheK[rl] = bestEntry.cacheK[rl].slice(0, bestShared);
+          cacheV[rl] = bestEntry.cacheV[rl].slice(0, bestShared);
+        }
+        cachedPromptTokens = bestShared;
+        bestEntry.at = Date.now();
+      }
+    }
+
     var generated = [];
 
     function forward(tokenId) {
@@ -3603,7 +3648,11 @@
       return cut;
     }
 
-    for (var i = 0; i < promptIds.length; i += 1) {
+    // Prefill resumes at the reused prefix: positions 0..cachedPromptTokens-1
+    // are already in the cache (shared with the entry), so both the loop start
+    // and the RoPE position begin there.
+    var position = cachedPromptTokens;
+    for (var i = position; i < promptIds.length; i += 1) {
       // The last prompt token produces the first generated token; earlier ones
       // only fill the cache.
       var stepLogits = forward(promptIds[i]);
@@ -3678,6 +3727,36 @@
       }
     }
 
+    // Store this run's KV as a reusable prefix. The position arrays are shared
+    // read-only with future runs; the entry's byte cost is bounded and LRU
+    // evicted, so a busy provider cannot accumulate unbounded KV.
+    if (promptCacheStore !== null && promptIds.length > 1) {
+      var entryTokens = promptIds.concat(generated);
+      var entryBytes = nLayer * cacheK[0].length * kvDim * 2 * 4;
+      var budget = 192 * 1024 * 1024;
+      var perEntry = 96 * 1024 * 1024;
+      if (entryBytes <= perEntry) {
+        while (promptCacheStore.entries.length > 0 &&
+               promptCacheStore.bytes + entryBytes > budget) {
+          var oldest = 0;
+          for (var oe = 1; oe < promptCacheStore.entries.length; oe += 1) {
+            if (promptCacheStore.entries[oe].at < promptCacheStore.entries[oldest].at) oldest = oe;
+          }
+          promptCacheStore.bytes -= promptCacheStore.entries[oldest].bytes;
+          promptCacheStore.entries.splice(oldest, 1);
+        }
+        promptCacheStore.entries.push({
+          tokens: entryTokens,
+          cacheK: cacheK,
+          cacheV: cacheV,
+          ropeFactorSet: ropeFactorSet,
+          bytes: entryBytes,
+          at: Date.now(),
+        });
+        promptCacheStore.bytes += entryBytes;
+      }
+    }
+
     return {
       text: text,
       seed: seed,
@@ -3690,6 +3769,10 @@
       contextLength: contextLimit,
       promptTokens: promptIds.length,
       promptTruncated: promptTruncated,
+      // How many prompt tokens were served from the prompt cache rather than
+      // prefetched this run (0 on a cold cache). Reported so usage can carry
+      // the same cached-token accounting the hosted APIs expose.
+      cachedPromptTokens: cachedPromptTokens,
       // The exact prompt ids that were evaluated, so an auditor can see what
       // the model was actually conditioned on after truncation.
       promptIds: promptIds,

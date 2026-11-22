@@ -197,6 +197,10 @@ Common options:
   --determinism <class> deploy: "deterministic-replay" — require an independent witness whose trace matches
   --witness <url>       serve: an independent provider for the determinism witness (repeatable)
   --independence <k>    "machine": require the quorum over distinct provider machines
+  --label <k=v>         deploy: a committed manifest label (repeatable), e.g.
+                        --label input.modalities=text,image declares what the
+                        upstream accepts — the derived cloud card and the
+                        gateway's multimodal handling inherit it
   --manifest-hash <hex> fetch the bundle manifest by content address
   --verify-shards       download and hash every shard at deploy time
   --allow-loopback      permit --remote/--web4 against 127.0.0.1 (test fixtures only)
@@ -1604,6 +1608,18 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
   }
   const generationSpec = flag(values, "generation");
   const generation = generationSpec === undefined ? undefined : parseGenerationSpec(generationSpec);
+  // `--label k=v` (repeatable) commits operator-declared manifest labels. The
+  // ones the protocol reads (`input.modalities`, `upstreamProtocol`, quorum
+  // setup, …) are validated where they are consumed; a malformed pair is a
+  // deploy-time error, not a silent half-label.
+  const operatorLabels: Record<string, string> = {};
+  for (const pair of flags(values, "label")) {
+    const eq = pair.indexOf("=");
+    if (eq <= 0 || eq === pair.length - 1) {
+      throw new Error(`--label must be k=v, got "${pair}"`);
+    }
+    operatorLabels[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+  }
   const manifest = commitDeployment(
     buildDeployment({
       probe,
@@ -1617,12 +1633,15 @@ async function commandDeploy(values: Record<string, unknown>): Promise<number> {
               execution: "cloud",
               upstreamApi: upstream.api,
               upstreamAuth: upstream.auth,
+              ...operatorLabels,
               ...(isLoopbackEndpoint(endpoint) ? { fixture: "loopback" } : {}),
             },
             notes:
               `Remote deployment: inference runs at ${endpoint}. No weights are stored or executed on this host.`,
           }
-        : {}),
+        : Object.keys(operatorLabels).length > 0
+          ? { labels: operatorLabels }
+          : {}),
     }),
   );
 
@@ -2467,6 +2486,7 @@ async function main(): Promise<number> {
       format: { type: "string" },
       "context-length": { type: "string" },
       "allow-loopback": { type: "boolean" },
+      label: { type: "string", multiple: true },
       "upstream-api": { type: "string" },
       "upstream-auth": { type: "string" },
       "upstream-key-env": { type: "string" },

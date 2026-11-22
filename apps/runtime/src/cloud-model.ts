@@ -290,6 +290,23 @@ export function cloudProtocolFor(engine: EngineName, labels?: Record<string, str
 }
 
 /**
+ * The input modalities a deployment DECLARES, from its committed labels
+ * (`input.modalities=text,image`), defaulting to the text floor. This is a
+ * claim about the UPSTREAM a deployment fronts — a vision-capable cloud model
+ * behind the gateway — not about RAREXT's own engine, which is why callers
+ * must still gate it on the upstream kind.
+ */
+export function inputModalitiesFor(labels?: Record<string, string>): Modality[] {
+  const raw = labels?.["input.modalities"];
+  if (typeof raw !== "string") return ["text"];
+  const parsed = raw
+    .split(",")
+    .map((word) => word.trim().toLowerCase())
+    .filter((word) => word.length > 0);
+  return parsed.length === 0 ? ["text"] : parsed;
+}
+
+/**
  * Describe a committed deployment as a cloud model card. This is how an
  * existing signed manifest becomes a capability-declared model: the engine
  * endpoint, model id, and placement are reused, and the capabilities are what
@@ -317,12 +334,24 @@ export function cloudModelFromDeployment(
           logprobs: true,
         }
       : {};
+  // The deployment's committed labels are the card's modality claim: an
+  // operator fronting a vision-capable upstream declares it in the manifest,
+  // so the card (and every surface reading it) inherits the claim from the
+  // signed bytes rather than from a serve-time flag.
+  const declared = inputModalitiesFor(deployment.labels);
+  const inherited: Partial<CloudCapabilities> =
+    declared.length > 1 || declared[0] !== "text" ? { input_modalities: declared } : {};
   return buildCloudModelCard({
     id: deployment.model.id,
     provider: options.providerHandle ?? deployment.hardware.device ?? "unknown",
     protocol,
     endpoint: deployment.engine.endpoint,
-    capabilities: { ...base, ...(options.capabilities ?? {}), context_length: deployment.model.contextLength },
+    capabilities: {
+      ...inherited,
+      ...base,
+      ...(options.capabilities ?? {}),
+      context_length: deployment.model.contextLength,
+    },
     operator: { handle: options.providerHandle ?? null, measurement: options.measurement ?? null },
     createdAt: options.createdAt ?? deployment.createdAt,
   });

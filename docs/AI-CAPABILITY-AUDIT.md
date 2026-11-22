@@ -114,7 +114,7 @@ value rather than calling it a pass on semantics.
 | Stop sequences | **yes** | `finish=stop`, stop text not returned (`" Paris"`) |
 | Logprobs | **yes** | 6 scored tokens = 6 trace tokens; negatives; alternatives |
 | JSON-schema output | **yes** (shape) | `{"name":":","age":36}` valid against the schema |
-| Tool calls | **protocol yes**, model **weak** | runtime parses calls; the 0.5B emitted prose on the live prompt |
+| Tool calls | **yes** (2026-11-22 re-run) | `get_weather({"city":"Paris"})` parsed and returned live; the 2026-11-15 "gap" was the earlier container's behaviour |
 | Embeddings | **yes**, same weights | 2 × 896-dim vectors from the committed container |
 | Vision / audio | **no**, refused by name | HTTP 400 `unsupported_content_part` |
 | Image / speech / video generation | **no** | no such route or tower |
@@ -155,6 +155,14 @@ cross-check, not the only test; where the two disagree, the live probe wins.
 
 RAREXT is not trying to win the first two rows. It is trying to make the last
 seven true at the same time, and on this evidence it does.
+
+**Re-run 2026-11-22** with an official instruct container
+(Qwen2.5-0.5B-Instruct Q8_0, `sha256:ca59ca7f…`): **14/15 probes, 0 critical
+failures**, and the tool-call probe now passes end to end
+(`get_weather({"city":"Paris"})`) — the earlier "gap" was the previous
+container's behaviour, which is exactly the runtime/model distinction this
+audit exists to keep sharp. A brand-by-brand reading of the same evidence is in
+[AI-BRAND-PARITY.md](AI-BRAND-PARITY.md).
 
 ## What the audit found and fixed
 

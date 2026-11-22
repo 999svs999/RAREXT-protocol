@@ -28,7 +28,12 @@ import type { CreditRecordFields } from "../../../packages/core/src/index.ts";
 import { RuntimePublisher } from "./publisher.ts";
 import { canonicalDigest, sha256Hex } from "./digest.ts";
 import { createRunBody, TranscriptTooLargeError, validDecodeTrace } from "./transcript.ts";
-import { cloudModelFromDeployment, cloudProtocolFor, type CloudProtocol } from "./cloud-model.ts";
+import {
+  cloudModelFromDeployment,
+  cloudProtocolFor,
+  inputModalitiesFor,
+  type CloudProtocol,
+} from "./cloud-model.ts";
 import {
   assembleNativeStream,
   nativeCloudUrl,
@@ -212,6 +217,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     options.upstreamApi ??
     (cloudProtocol === "anthropic" ? "anthropic" : "openai");
   const nativeCloud = cloudProtocol === "rarext-cloud";
+  // What the deployment's committed labels say its upstream accepts. RAREXT's
+  // own engine has no vision tower, so an image part is only ever FORWARDED —
+  // to an openai/anthropic-protocol upstream the card declares image input
+  // for; a rarext (or rarext-cloud) upstream is refused by name at this
+  // surface exactly as the provider refuses it at its own.
+  const cloudUpstream =
+    deployment.engine.name === "openai-compatible" || deployment.engine.name === "anthropic";
+  const imageInput =
+    inputModalitiesFor(deployment.labels).includes("image") &&
+    cloudUpstream &&
+    (cloudProtocol === "openai" || cloudProtocol === "anthropic");
   const upstreamHeaders = options.upstreamHeaders ?? {};
   const gatewayToken = options.gatewayToken ?? null;
   const upstreams =
@@ -1955,7 +1971,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const unsupportedBlock =
       unsupportedContentPart(payload.messages) ??
       (fromSystem === null ? null : { part: fromSystem.part, where: "system" });
-    if (unsupportedBlock !== null) {
+    // An image block is forwarded, not refused, when the deployment's committed
+    // card declares image input AND the upstream is a cloud protocol that can
+    // read one; everything else (document, audio, …) is refused by name, and a
+    // weight-backed deployment refuses images too.
+    if (unsupportedBlock !== null && !(imageInput && unsupportedBlock.part === "image")) {
       sendJson(response, 400, {
         type: "error",
         error: {
@@ -1987,7 +2007,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const nativeAnthropic = upstreamApi === "anthropic";
     const upstreamBody = nativeAnthropic
       ? { ...payload, model: deployment.model.id, stream: false }
-      : { ...translateAnthropicRequest(payload, deployment.model.id) };
+      : { ...translateAnthropicRequest(payload, deployment.model.id, { imageInput }) };
 
     const model = resolveModel(upstreamBody);
     if (model === null) {
@@ -2286,10 +2306,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
               tool_use_blocks: !nativeCloud,
               parallel_tool_use: true,
               embeddings: upstreamApi !== "anthropic" && !nativeCloud,
-              multimodal: false,
-              multimodal_note:
-                "image and audio parts are refused with an invalid_request_error: no vision or audio tower " +
-                "is implemented in this runtime, and the committed weights carry none",
+              multimodal: imageInput,
+              multimodal_note: imageInput
+                ? "image parts are FORWARDED to the deployment's upstream (the committed card declares image " +
+                  "input); RAREXT's own engine has no vision tower, so a weight-backed deployment refuses them"
+                : "image and audio parts are refused with an invalid_request_error: no vision or audio tower " +
+                  "is implemented in this runtime, and the committed weights carry none",
               // The model as a capability contract, not a file. Discoverable
               // here so a client never has to assume an architecture.
               protocol: cloudProtocol,

@@ -480,22 +480,83 @@ function textFromContent(content: unknown): string {
     .join("");
 }
 
+/**
+ * Anthropic content blocks -> OpenAI content parts, for a deployment whose card
+ * declares image input. Text passes as `{type:"text"}`; an `image` block maps
+ * to the OpenAI `image_url` shape (base64 source becomes a data URL, a URL
+ * source passes through). A string content stays a string, so a plain text
+ * request translates exactly as before. Anything RAREXT cannot map —
+ * `document`, `audio`, untyped blocks — is refused BY NAME by the caller's
+ * `unsupportedContentPart` check before this runs; an unrecognised part here is
+ * dropped into the text fold only if it carries no data, which cannot happen
+ * for the types the check rejects.
+ */
+function anthropicContentToOpenAi(content: unknown): string | Array<Record<string, unknown>> {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const parts: Array<Record<string, unknown>> = [];
+  for (const part of content) {
+    if (typeof part === "string") {
+      parts.push({ type: "text", text: part });
+      continue;
+    }
+    if (!isRecord(part)) continue;
+    const type = typeof part.type === "string" ? part.type : "";
+    if (type === "text" && typeof part.text === "string") {
+      parts.push({ type: "text", text: part.text });
+      continue;
+    }
+    if (type === "image" && isRecord(part.source)) {
+      const source = part.source;
+      if (source.type === "url" && typeof source.url === "string") {
+        parts.push({ type: "image_url", image_url: { url: source.url } });
+        continue;
+      }
+      if (
+        source.type === "base64" &&
+        typeof source.media_type === "string" &&
+        typeof source.data === "string"
+      ) {
+        parts.push({
+          type: "image_url",
+          image_url: { url: `data:${source.media_type};base64,${source.data}` },
+        });
+        continue;
+      }
+    }
+    // Tool blocks were translated above the content fold; anything else here
+    // has already been refused by name — keep it out of the text silently.
+    const text = textFromContent([part]);
+    if (text.length > 0) parts.push({ type: "text", text });
+  }
+  return parts;
+}
+
 /** Anthropic Messages request -> OpenAI Chat Completions request. */
 export function translateAnthropicRequest(
   body: Record<string, unknown>,
   fallbackModel: string,
+  options: { imageInput?: boolean } = {},
 ): Record<string, unknown> {
   // Refuse a multimodal request here too, so no caller can translate one into a
-  // text-only prompt and answer it as if the image had been read.
+  // text-only prompt and answer it as if the image had been read. EXCEPTION: a
+  // deployment whose committed card declares image input is fronting an
+  // upstream that CAN read images — for that case `image` blocks are mapped to
+  // the OpenAI shape and passed through (everything else is still refused, and
+  // a weight-backed deployment never gets the exception).
   const fromSystem = Array.isArray(body.system)
     ? unsupportedContentPart([{ role: "system", content: body.system }])
     : null;
   const part =
     unsupportedContentPart(body.messages) ??
     (fromSystem === null ? null : { part: fromSystem.part, where: "system" });
-  if (part !== null) throw new Error(unsupportedContentMessage(part));
+  if (part !== null) {
+    if (!(options.imageInput === true && part.part === "image")) {
+      throw new Error(unsupportedContentMessage(part));
+    }
+  }
 
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = [];
 
   if (typeof body.system === "string" && body.system.length > 0) {
     messages.push({ role: "system", content: body.system });
@@ -506,7 +567,12 @@ export function translateAnthropicRequest(
 
   for (const message of Array.isArray(body.messages) ? body.messages : []) {
     if (!isRecord(message) || typeof message.role !== "string") continue;
-    messages.push({ role: message.role, content: textFromContent(message.content) });
+    messages.push({
+      role: message.role,
+      content: options.imageInput === true
+        ? anthropicContentToOpenAi(message.content)
+        : textFromContent(message.content),
+    });
   }
 
   const translated: Record<string, unknown> = {

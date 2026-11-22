@@ -1,12 +1,12 @@
 {
   "kind": "rarext.ai-capability-audit.v1",
-  "createdAt": "2026-11-22T09:42:36.006Z",
+  "createdAt": "2026-11-22T10:01:34.698Z",
   "model": {
-    "path": "/Users/r/rarext-protocol/tools/entangle/entangled-factored.gguf",
+    "path": "/tmp/qwen25-05b-instruct-q8.gguf",
     "arch": "qwen2",
-    "bytes": 4673760,
-    "contextLength": 192,
-    "weightsDigest": "sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779"
+    "bytes": 675710816,
+    "contextLength": 32768,
+    "weightsDigest": "sha256:ca59ca7f13d0e15a8cfa77bd17e65d24f6844b554a7b6c12e07a5f89ff76844e"
   },
   "engine": {
     "digest": "sha256:de7050207f78134e346ad8f5dd9f6264065338853b452265572c9fd592986a5b",
@@ -17,7 +17,7 @@
     "arch": "x64",
     "memoryBytes": 8589934592
   },
-  "passed": 6,
+  "passed": 14,
   "total": 15,
   "results": [
     {
@@ -30,64 +30,64 @@
     {
       "id": "completion",
       "label": "text completion · factual prompt",
-      "ok": false,
-      "detail": "\"helived.\"",
+      "ok": true,
+      "detail": "\" Paris. It is the largest city in\"",
       "critical": true
     },
     {
       "id": "streaming",
       "label": "SSE stream · one chunk per decoded token",
-      "ok": false,
-      "detail": "0 chunks vs 0 trace tokens · concat equal · finish=stop",
+      "ok": true,
+      "detail": "24 chunks vs 24 trace tokens · concat equal · finish=length",
       "critical": true
     },
     {
       "id": "determinism",
       "label": "seeded sample replays byte-for-byte",
-      "ok": false,
+      "ok": true,
       "detail": "same seed, identical text",
       "critical": true
     },
     {
       "id": "sampling",
       "label": "temperature/top-k/top-p/penalties applied",
-      "ok": false,
-      "detail": "different seed, same text (possible but suspicious)",
+      "ok": true,
+      "detail": "different seed, different text",
       "critical": false
     },
     {
       "id": "stop",
       "label": "stop sequence ends the run",
       "ok": true,
-      "detail": "finish=stop · \"helived\"",
+      "detail": "finish=stop · \" Paris\"",
       "critical": true
     },
     {
       "id": "logprobs",
       "label": "per-token logprobs + alternatives",
-      "ok": false,
-      "detail": "0 scored tokens vs 0 trace tokens · first=n/a",
+      "ok": true,
+      "detail": "6 scored tokens vs 6 trace tokens · first=-2.416",
       "critical": true
     },
     {
       "id": "structured",
       "label": "JSON-schema constrained output",
-      "ok": false,
-      "detail": "not JSON: \"{\\\"name\\\":\\\"e on only deashe $636 delived.\"",
+      "ok": true,
+      "detail": "{\"name\":\":\",\"age\":36}",
       "critical": true
     },
     {
       "id": "tools",
       "label": "tool call (name + JSON arguments)",
-      "ok": false,
-      "detail": "no call; model said \"\"",
+      "ok": true,
+      "detail": "get_weather({\"city\":\"Paris\"})",
       "critical": false
     },
     {
       "id": "embeddings",
       "label": "embeddings from the same weights",
       "ok": true,
-      "detail": "2 vectors · 128 dims",
+      "detail": "2 vectors · 896 dims",
       "critical": true
     },
     {
@@ -101,14 +101,14 @@
       "id": "context",
       "label": "declared context window is served",
       "ok": true,
-      "detail": "declared 192 · prompt_tokens 96",
+      "detail": "declared 32768 · prompt_tokens 96",
       "critical": true
     },
     {
       "id": "throughput",
       "label": "engine throughput on this host",
-      "ok": false,
-      "detail": "0.00 tok/s · Infinity ms/token · 0 tokens",
+      "ok": true,
+      "detail": "0.68 tok/s · 1472 ms/token · 8 tokens",
       "critical": false
     },
     {
@@ -122,7 +122,7 @@
       "id": "receipt",
       "label": "health names bundle + engine fingerprint",
       "ok": true,
-      "detail": "bundle 8e9aa4865acb7034e1… · engine 314380d6f86ecd1218…",
+      "detail": "bundle 7a5040e04030ab6cd1… · engine 314380d6f86ecd1218…",
       "critical": true
     }
   ]
