@@ -1,0 +1,192 @@
+{
+ "checkpoint": "/Users/r/rarext-protocol/agents/self-evolve/generations/gen-000.pt",
+ "original": {
+  "S0 price-copy": 1.0,
+  "S1 cheapest": 1.0,
+  "S2 priciest": 1.0,
+  "S1m cheapest-mixed": 0.9583333333333334,
+  "S2m priciest-mixed": 1.0,
+  "S1t cheapest-3row-mixed": 0.9583333333333334,
+  "S2t priciest-3row-mixed": 0.9583333333333334,
+  "S3 refusal": 0.0
+ },
+ "results": [
+  {
+   "label": "\u03c7=8",
+   "chi": 8,
+   "energy": null,
+   "params": 193672,
+   "frob": 0.7386643351822075,
+   "kl": 3.7678369491151926,
+   "scores": {
+    "S0 price-copy": 0.0,
+    "S1 cheapest": 0.0,
+    "S2 priciest": 0.0,
+    "S1m cheapest-mixed": 0.0,
+    "S2m priciest-mixed": 0.0,
+    "S1t cheapest-3row-mixed": 0.0,
+    "S2t priciest-3row-mixed": 0.0,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.0,
+   "min": 0.0,
+   "wall_s": 104.1
+  },
+  {
+   "label": "\u03c7=16",
+   "chi": 16,
+   "energy": null,
+   "params": 385168,
+   "frob": 0.8651179381454239,
+   "kl": 2.674120290574127,
+   "scores": {
+    "S0 price-copy": 0.0,
+    "S1 cheapest": 0.0,
+    "S2 priciest": 0.0,
+    "S1m cheapest-mixed": 0.0,
+    "S2m priciest-mixed": 0.0,
+    "S1t cheapest-3row-mixed": 0.0,
+    "S2t priciest-3row-mixed": 0.0,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.0,
+   "min": 0.0,
+   "wall_s": 103.7
+  },
+  {
+   "label": "\u03c7=24",
+   "chi": 24,
+   "energy": null,
+   "params": 576664,
+   "frob": 0.920362771463556,
+   "kl": 1.6065521266109886,
+   "scores": {
+    "S0 price-copy": 0.0,
+    "S1 cheapest": 0.0,
+    "S2 priciest": 0.03125,
+    "S1m cheapest-mixed": 0.0,
+    "S2m priciest-mixed": 0.041666666666666664,
+    "S1t cheapest-3row-mixed": 0.0,
+    "S2t priciest-3row-mixed": 0.16666666666666666,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.029947916666666664,
+   "min": 0.0,
+   "wall_s": 88.8
+  },
+  {
+   "label": "\u03c7=32",
+   "chi": 32,
+   "energy": null,
+   "params": 768160,
+   "frob": 0.9480894466901043,
+   "kl": 0.5092737936298383,
+   "scores": {
+    "S0 price-copy": 0.825,
+    "S1 cheapest": 0.8125,
+    "S2 priciest": 0.84375,
+    "S1m cheapest-mixed": 0.7083333333333334,
+    "S2m priciest-mixed": 0.7916666666666666,
+    "S1t cheapest-3row-mixed": 0.7916666666666666,
+    "S2t priciest-3row-mixed": 0.75,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.6903645833333334,
+   "min": 0.0,
+   "wall_s": 55.3
+  },
+  {
+   "label": "\u03c7=48",
+   "chi": 48,
+   "energy": null,
+   "params": 1151152,
+   "frob": 0.9730509464816269,
+   "kl": 0.030008885409104118,
+   "scores": {
+    "S0 price-copy": 1.0,
+    "S1 cheapest": 1.0,
+    "S2 priciest": 1.0,
+    "S1m cheapest-mixed": 0.9583333333333334,
+    "S2m priciest-mixed": 1.0,
+    "S1t cheapest-3row-mixed": 0.9583333333333334,
+    "S2t priciest-3row-mixed": 0.9166666666666666,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.8541666666666667,
+   "min": 0.0,
+   "wall_s": 56.1
+  },
+  {
+   "label": "\u03c7=64",
+   "chi": 64,
+   "energy": null,
+   "params": 1534144,
+   "frob": 0.984394349490287,
+   "kl": 0.004863917042580921,
+   "scores": {
+    "S0 price-copy": 1.0,
+    "S1 cheapest": 1.0,
+    "S2 priciest": 1.0,
+    "S1m cheapest-mixed": 0.9583333333333334,
+    "S2m priciest-mixed": 1.0,
+    "S1t cheapest-3row-mixed": 0.9583333333333334,
+    "S2t priciest-3row-mixed": 0.9166666666666666,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.8541666666666667,
+   "min": 0.0,
+   "wall_s": 55.3
+  },
+  {
+   "label": "energy 99.0%",
+   "chi": null,
+   "energy": 0.99,
+   "params": 1942174,
+   "frob": 0.9902178724449334,
+   "kl": 0.32831304337883893,
+   "scores": {
+    "S0 price-copy": 0.825,
+    "S1 cheapest": 0.75,
+    "S2 priciest": 0.65625,
+    "S1m cheapest-mixed": 0.5416666666666666,
+    "S2m priciest-mixed": 0.625,
+    "S1t cheapest-3row-mixed": 0.7916666666666666,
+    "S2t priciest-3row-mixed": 0.5833333333333334,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.5966145833333333,
+   "min": 0.0,
+   "wall_s": 58.8
+  },
+  {
+   "label": "energy 99.9%",
+   "chi": null,
+   "energy": 0.999,
+   "params": 2613818,
+   "frob": 0.9990632800321809,
+   "kl": 0.00493051655235504,
+   "scores": {
+    "S0 price-copy": 1.0,
+    "S1 cheapest": 1.0,
+    "S2 priciest": 1.0,
+    "S1m cheapest-mixed": 0.9583333333333334,
+    "S2m priciest-mixed": 1.0,
+    "S1t cheapest-3row-mixed": 0.9583333333333334,
+    "S2t priciest-3row-mixed": 0.9583333333333334,
+    "S3 refusal": 0.0
+   },
+   "mean": 0.859375,
+   "min": 0.0,
+   "wall_s": 56.9
+  }
+ ],
+ "accepted": [
+  "energy 99.9%"
+ ],
+ "best": {
+  "label": "energy 99.9%",
+  "gguf": "/Users/r/rarext-protocol/tools/entangle/entangled-e999.gguf",
+  "engine_exact": 1.0,
+  "bytes": 8537568
+ }
+}
