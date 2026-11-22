@@ -57,6 +57,15 @@ a: </textarea>
         </p>
         <button id="hrr">Encode 50 pairs &amp; read them back</button>
         <div id="hrr-out" class="answer"></div>
+
+        <p>
+          <strong>Difference questions</strong> — the combined system: the trained model failed
+          its own gate on learned subtraction, so the exact arithmetic lives in the holographic
+          memory (one binding per pair, learned <em>instantly</em>, no gradient step) while the
+          model keeps the language and comparison skills.
+        </p>
+        <button id="diff">Encode 40 difference pairs &amp; read them back</button>
+        <div id="diff-out" class="answer"></div>
       </div>
 
       <p class="sub">
@@ -68,7 +77,7 @@ a: </textarea>
 
     <script src="./entangled-engine.js"></script>
     <script type="module">
-      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest } from "./entangled.js";
+      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest, hrrDifferenceSelfTest } from "./entangled.js";
       (async () => {
         const status = document.getElementById("status");
         const controls = document.getElementById("controls");
@@ -133,6 +142,18 @@ a: </textarea>
               `scaling in D, same 200-pair table: D=4096 → ${result.passed ? "32 KiB" : "?"}, ` +
               `D=16384 → ${big.passed}/${big.total} exact at ${(big.bytes / 1024).toFixed(0)} KiB\n` +
               `no training, no model call — pure vector algebra in this tab`;
+          });
+
+          document.getElementById("diff").addEventListener("click", () => {
+            const result = hrrDifferenceSelfTest();
+            const misses = result.rows.filter((r) => !r.ok);
+            document.getElementById("diff-out").textContent =
+              `${result.passed}/${result.total} difference pairs read back exactly from ONE ` +
+              `${(result.bytes / 1024).toFixed(0)} KiB vector\n` +
+              `sample answer: "${result.rows[0].a} costs ${result.rows[0].diff} than ${result.rows[0].b}."\n` +
+              `instant acquisition: a pair learned AFTER encoding read back ` +
+              `${result.fresh.ok ? "exactly" : "WRONG"} (${JSON.stringify(result.fresh.got)}) — one binding, no gradient step\n` +
+              (misses.length ? `${misses.length} misses` : `every pair exact — the arithmetic is lookup-exact by construction`);
           });
         } catch (error) {
           status.className = "status bad";

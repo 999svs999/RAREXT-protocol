@@ -200,6 +200,104 @@ function hrrSelfTest(pairs, d = HRR_DIM) {
   return { rows, passed: ok, total: pairs.length, bytes: memory.bytes };
 }
 
+// ---------------------------------------------------------------------------
+// Holographic DIFFERENCE memory — the arithmetic axis as exact lookup, so the
+// combined system (trained model = language + comparison; holographic memory =
+// exact numbers) answers questions the trained model alone failed its gate on.
+// The cue for an ORDERED pair is the binding of the two item vectors; the
+// value is the difference. New pairs are learned by one binding — no gradient
+// step, no retraining — which is the holographic answer to skill acquisition.
+// ---------------------------------------------------------------------------
+function hrrHashVector(name, d) {
+  // deterministic phasor from a name: hash bytes → phases, stable per name
+  let h1 = 0x9e3779b9, h2 = 0x85ebca6b;
+  for (let i = 0; i < name.length; i += 1) {
+    h1 = (h1 ^ name.charCodeAt(i)) * 0x85ebca6b; h1 >>>= 0;
+    h2 = (h2 ^ name.charCodeAt(name.length - 1 - i)) * 0xc2b2ae35; h2 >>>= 0;
+  }
+  const v = new Float32Array(2 * d);
+  let a = h1 >>> 0, b = h2 >>> 0;
+  for (let i = 0; i < d; i += 1) {
+    // xorshift-ish mixing so consecutive dimensions decorrelate
+    a ^= a << 13; a >>>= 0; a ^= a >> 17; a ^= a << 5; a >>>= 0;
+    b ^= b << 7; b >>>= 0; b ^= b >> 9; b ^= b << 3; b >>>= 0;
+    const angle = ((a ^ (b * 2654435769)) >>> 0) / 4294967296 * 2 * Math.PI;
+    v[2 * i] = Math.cos(angle);
+    v[2 * i + 1] = Math.sin(angle);
+  }
+  return v;
+}
+
+/** Encode ordered (a, b) → difference associations. `learn(a, b, diff)` adds
+ * one pair with a single binding — instant acquisition, no training. */
+function hrrEncodeDifferences(d, valueVocabulary) {
+  const memory = new Float32Array(2 * d);
+  const itemVectors = new Map();
+  const valueVectors = new Map();
+  const vecFor = (name) => {
+    if (!itemVectors.has(name)) itemVectors.set(name, hrrHashVector(name, d));
+    return itemVectors.get(name);
+  };
+  const valueVec = (value) => {
+    if (!valueVectors.has(value)) valueVectors.set(value, hrrRandom(d));
+    return valueVectors.get(value);
+  };
+  for (const v of valueVocabulary) valueVec(v);
+  const learned = [];
+  const addToMemory = (binding) => {
+    for (let i = 0; i < memory.length; i += 1) memory[i] += binding[i];
+  };
+  return {
+    d,
+    learned,
+    learn(a, b, diff) {
+      const cue = hrrBind(vecFor(a), vecFor(b));
+      addToMemory(hrrBind(cue, valueVec(diff)));
+      learned.push({ a, b, diff });
+      return this;
+    },
+    query(a, b) {
+      const va = itemVectors.get(a);
+      const vb = itemVectors.get(b);
+      if (va === undefined || vb === undefined) return { diff: null, sim: 0 };
+      const cue = hrrBind(va, vb);
+      const recovered = hrrUnbind(memory, cue);
+      const { name, sim } = hrrCleanup(recovered, valueVectors);
+      return { diff: name, sim };
+    },
+    bytes: 2 * d * 4,
+  };
+}
+
+function hrrDifferenceSelfTest(d = HRR_DIM) {
+  // 40 pairs with computed differences, encoded, then every pair queried —
+  // plus one brand-new pair learned AFTER encoding (instant acquisition).
+  const rows = [];
+  const rng = (() => { let s = 987654321; return () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
+  const diffValues = Array.from({ length: 200 }, (_, i) => `$${10 + i * 5} more`);
+  const mem = hrrEncodeDifferences(d, diffValues);
+  const encodePairs = [];
+  for (let i = 0; i < 40; i += 1) {
+    const a = `ITEM-${100 + i}`;
+    const b = `ITEM-${200 + i}`;
+    const diff = `$${10 + ((i * 13) % 190)} more`;
+    mem.learn(a, b, diff);
+    encodePairs.push({ a, b, diff });
+  }
+  for (const { a, b, diff } of encodePairs) {
+    const { diff: got } = mem.query(a, b);
+    rows.push({ a, b, want: diff, got, ok: got === diff });
+  }
+  const passed = rows.filter((r) => r.ok).length;
+  // instant acquisition: a pair the memory never saw, learned now, then asked
+  mem.learn("NOVA TEE", "OLD CAP", "$123 more");
+  const fresh = mem.query("NOVA TEE", "OLD CAP");
+  return {
+    rows, passed, total: rows.length, bytes: mem.bytes,
+    fresh: { want: "$123 more", got: fresh.diff, ok: fresh.diff === "$123 more" },
+  };
+}
+
 export {
   ENTANGLED_DIGESTS,
   loadEntangledModel,
@@ -215,4 +313,7 @@ export {
   hrrCleanup,
   hrrEncodeTable,
   hrrSelfTest,
+  hrrHashVector,
+  hrrEncodeDifferences,
+  hrrDifferenceSelfTest,
 };
