@@ -1,0 +1,54 @@
+{
+ "chi": 48,
+ "steps": 320,
+ "seeds": [
+  4242,
+  777,
+  1234,
+  2024,
+  31337
+ ],
+ "counts": {
+  "S0 price-copy": {
+   "dense": 400,
+   "rebuild": 400,
+   "n": 400
+  },
+  "S1 cheapest": {
+   "dense": 159,
+   "rebuild": 159,
+   "n": 160
+  },
+  "S2 priciest": {
+   "dense": 160,
+   "rebuild": 159,
+   "n": 160
+  },
+  "S1m cheapest-mixed": {
+   "dense": 115,
+   "rebuild": 114,
+   "n": 120
+  },
+  "S2m priciest-mixed": {
+   "dense": 117,
+   "rebuild": 117,
+   "n": 120
+  },
+  "S1t cheapest-3row-mixed": {
+   "dense": 109,
+   "rebuild": 109,
+   "n": 120
+  },
+  "S2t priciest-3row-mixed": {
+   "dense": 116,
+   "rebuild": 116,
+   "n": 120
+  },
+  "S3 refusal": {
+   "dense": 0,
+   "rebuild": 0,
+   "n": 200
+  }
+ },
+ "engine_exact": 1.0
+}

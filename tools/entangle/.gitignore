@@ -1,0 +1,6 @@
+# scratch inputs written by the verification scripts
+_*.json
+# superseded / regenerable exports; the deliverable is entangled-factored.gguf
+entangled-dense.gguf
+entangled-e999.gguf
+entangled-parity-*.gguf

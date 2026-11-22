@@ -1284,6 +1284,31 @@
         offset: offset,
       };
     }
+    // A weight may be stored factorised as an MPO pair: `X.a` is (χ × in) and
+    // `X.b` is (out × χ), with W = b·a. A rebuild from the entanglement
+    // spectrum is exactly this, and reading it saves both bytes and FLOPs.
+    // The dense tensor is replaced by a shape-only placeholder so every call
+    // site keeps working unchanged; `matmul` takes the factor path.
+    var factors = {};
+    for (var fname in tensors) {
+      if (fname.length < 3 || fname.slice(-2) !== ".a") continue;
+      var base = fname.slice(0, -2);
+      var fb = tensors[base + ".b"];
+      if (fb === undefined) continue;
+      var fa = tensors[fname];
+      if (fa.rows !== fb.cols) continue; // a is (χ × in), b is (out × χ)
+      factors[base + ".weight"] = { a: fa, b: fb };
+      tensors[base + ".weight"] = {
+        name: base + ".weight",
+        type: 0,
+        dims: [fa.cols, fb.rows],
+        cols: fa.cols,
+        rows: fb.rows,
+        rowBytes: fa.cols * 4,
+        offset: 0,
+        factored: true,
+      };
+    }
     // The data section begins after the tensor-info table, not after the KV
     // block. Aligning the wrong offset reads tensor metadata as weights.
     var alignment = 32;
@@ -1294,6 +1319,7 @@
     return {
       kv: kv,
       tensors: tensors,
+      factors: factors,
       dataStart: dataStart,
       bytes: src.streaming ? null : input,
       view: src.streaming ? null : new DataView(input.buffer, input.byteOffset, input.byteLength),
@@ -2705,8 +2731,70 @@
     return values;
   }
 
+  /** A factored (MPO) weight: y = b · (a · x). a is (χ × in), b is (out × χ).
+   *  Two small products instead of one large one — χ < in·out/(in+out). */
+  function matmulFactored(model, factor, x, y) {
+    var a = factor.a;
+    var b = factor.b;
+    var chi = a.rows;
+    var cols = a.cols;
+    var scratch = model.factorScratch;
+    if (scratch === undefined || scratch.length < chi) {
+      scratch = new Float32Array(chi);
+      model.factorScratch = scratch;
+    }
+    // Fast path: float32 views over the factor rows. Fall back to the generic
+    // row dot when the buffer is misaligned or the model is streaming.
+    var av = null;
+    var bv = null;
+    if (model.view !== null) {
+      var aAbs = model.view.byteOffset + model.dataStart + a.offset;
+      var bAbs = model.view.byteOffset + model.dataStart + b.offset;
+      if (aAbs % 4 === 0 && bAbs % 4 === 0) {
+        av = new Float32Array(model.view.buffer, aAbs, a.rows * a.cols);
+        bv = new Float32Array(model.view.buffer, bAbs, b.rows * b.cols);
+      }
+    }
+    var j;
+    if (av === null || bv === null) {
+      for (j = 0; j < chi; j += 1) scratch[j] = dotRow(model, a, j, x);
+      for (j = 0; j < b.rows; j += 1) y[j] = dotRow(model, b, j, scratch);
+      return y;
+    }
+    for (j = 0; j < chi; j += 1) {
+      var base = j * cols;
+      var s = 0;
+      var i = 0;
+      for (; i + 3 < cols; i += 4) {
+        s += av[base + i] * x[i] + av[base + i + 1] * x[i + 1] +
+          av[base + i + 2] * x[i + 2] + av[base + i + 3] * x[i + 3];
+      }
+      for (; i < cols; i += 1) s += av[base + i] * x[i];
+      scratch[j] = s;
+    }
+    for (j = 0; j < b.rows; j += 1) {
+      var bbase = j * chi;
+      var t = 0;
+      var k = 0;
+      for (; k + 3 < chi; k += 4) {
+        t += bv[bbase + k] * scratch[k] + bv[bbase + k + 1] * scratch[k + 1] +
+          bv[bbase + k + 2] * scratch[k + 2] + bv[bbase + k + 3] * scratch[k + 3];
+      }
+      for (; k < chi; k += 1) t += bv[bbase + k] * scratch[k];
+      y[j] = t;
+    }
+    return y;
+  }
+
   function matmul(model, tensor, x, y) {
-    var dense = tensor === undefined ? null : denseTensor(model, tensor);
+    if (tensor !== undefined && tensor !== null && model.factors !== undefined) {
+      var factor = model.factors[tensor.name];
+      if (factor !== undefined) return matmulFactored(model, factor, x, y);
+    }
+    if (tensor === undefined || tensor === null) {
+      throw new Error("matmul: missing weight tensor");
+    }
+    var dense = denseTensor(model, tensor);
     if (dense === null) {
       for (var row = 0; row < tensor.rows; row += 1) y[row] = dotRow(model, tensor, row, x);
       return y;

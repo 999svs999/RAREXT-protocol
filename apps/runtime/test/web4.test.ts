@@ -213,6 +213,8 @@ function tinyGgufModel(
     nRot?: number;
     /** Phi-3 fused QKV/ffn_up (default) or the equivalent separate tensors. */
     phi3Layout?: "fused" | "separate";
+    /** Emit every 2-D weight as an exact MPO pair `X.a` (= W) + `X.b` (= I). */
+    factors?: boolean;
     /** Add Phi LongRoPE short/long factor tensors (all ones). */
     longRope?: boolean;
     /** Phi `rope.scaling.attn_factor` (default: absent). */
@@ -295,7 +297,7 @@ function tinyGgufModel(
   interface TensorSpec {
     name: string;
     dims: number[];
-    kind: "weight" | "norm" | "bias" | "factor" | "pad";
+    kind: "weight" | "norm" | "bias" | "factor" | "pad" | "identity";
   }
   const kvDim = nHeadKv * (nEmbd / nHead);
   const specs: TensorSpec[] = [
@@ -416,6 +418,26 @@ function tinyGgufModel(
     specs.push({ name: "blk.9.pad.weight", dims: [nEmbd, options.padRows], kind: "pad" });
   }
 
+  // Factored (MPO) layout: every 2-D weight becomes `X.a` (= W) and `X.b` (= I),
+  // so the product b·a is exactly W. The identity costs no random draws, which
+  // keeps the stream aligned with the dense twin: both fixtures then describe
+  // the same function, and the factored path must decode identically.
+  if (options.factors === true) {
+    const replaced: TensorSpec[] = [];
+    for (const spec of specs) {
+      if (spec.kind !== "weight" || spec.dims.length !== 2) {
+        replaced.push(spec);
+        continue;
+      }
+      const base = spec.name.replace(/\.weight$/, "");
+      replaced.push({ ...spec, name: `${base}.a` });
+      const out = spec.dims[1]!;
+      replaced.push({ name: `${base}.b`, dims: [out, out], kind: "identity" });
+    }
+    specs.length = 0;
+    specs.push(...replaced);
+  }
+
   const datas: Buffer[] = [];
   let offset = 0;
   const infos: Buffer[] = [];
@@ -444,6 +466,11 @@ function tinyGgufModel(
       else if (spec.kind === "bias") value = (rand() - 0.5) * 0.1;
       else if (spec.kind === "factor") {
         value = spec.name.includes("long") ? (options.ropeLongFactor ?? 1) : (options.ropeShortFactor ?? 1);
+      }
+      else if (spec.kind === "identity") {
+        // row-major identity over dims [n, n]
+        const n = spec.dims[0]!;
+        value = i % n === Math.floor(i / n) ? 1 : 0;
       }
       else value = (rand() - 0.5) * 0.2;
       values.push(value);
@@ -7479,6 +7506,34 @@ test("the GGUF engine serves an IQ2_XXS quantized model through the quant-domain
     "all-zero IQ2_XXS blocks with d=1 decode to all-ones weights",
   );
 });
+
+test("the GGUF engine serves a factored (MPO) weight as the same model", () => {
+  const engine = loadEngine(readFileSync(new URL("../engines/rarext-gguf-engine.js", import.meta.url)));
+  const dense = tinyGgufModel({ arch: "qwen2", tokenizer: "gpt2" });
+  const factored = tinyGgufModel({ arch: "qwen2", tokenizer: "gpt2", factors: true });
+
+  const parsed = engine.parseGguf(new Uint8Array(factored));
+  // The dense weight is replaced by a shape-only placeholder, backed by a pair.
+  for (const name of ["blk.0.attn_q", "blk.0.attn_k", "blk.0.attn_v",
+    "blk.0.attn_output", "blk.0.ffn_gate", "blk.0.ffn_up", "blk.0.ffn_down"]) {
+    assert.ok(parsed.factors[`${name}.weight`] !== undefined, `${name} is factored`);
+    assert.ok(parsed.tensors[`${name}.weight`]!.factored === true, `${name} has a placeholder`);
+    assert.ok(parsed.tensors[`${name}.weight`]!.rows > 0, `${name} keeps its logical shape`);
+  }
+  assert.ok(parsed.tensors["blk.0.attn_q.weight"]!.factored === true, "placeholder is flagged");
+  // This twin is deliberately full-rank (A = W, B = I) so the two decodes must
+  // be bit-identical; the actual size/FLOP win is measured on the rebuilt model
+  // in tools/entangle/factor_export.py and compare_answers.py.
+
+  const a = engine.run({ kind: "gguf" as const, bytes: new Uint8Array(dense) },
+    { prompt: "a b", steps: 12, temperature: 0 });
+  const b = engine.run({ kind: "gguf" as const, bytes: new Uint8Array(factored) },
+    { prompt: "a b", steps: 12, temperature: 0 });
+  assert.deepEqual(b.tokens, a.tokens, "the factored decode is token-identical");
+  assert.equal(b.text, a.text, "and produces the same text");
+  assert.equal(b.finishReason, a.finishReason);
+});
+
 
 /** Minimal safetensors writer for tests: header JSON + raw tensor data. */
 function writeSafetensors(

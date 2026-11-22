@@ -530,6 +530,28 @@ into the serving path. NVIDIA's free hosted Nemotron models
 demonstrations for skills the policy cannot bootstrap alone; nothing enters
 training until the computed checker accepts it.
 
+## Factored (MPO) weights
+
+A linear map can be stored as two small ones. The engine reads a GGUF that
+carries `X.a` (χ × in) and `X.b` (out × χ) in place of `X.weight`, and computes
+`y = X.b · (X.a · x)`; it verifies the bond dimension (`a.rows === b.cols`),
+registers a shape-only placeholder so every existing call site keeps working,
+and leaves the dense path untouched when no pairs are present. A file with both
+is not ambiguous: the pair wins.
+
+This is the serving form of an MPO, and it is where a rebuild from the
+entanglement spectrum becomes operational: `docs/quantum-entanglement-rebuild.md`
+reconstructs the live-host model at bond dimension χ=48 (from 128) and measures
+
+- 4,673,760 bytes vs 8,537,568 dense (54.7%),
+- 442 ms vs 644 ms per answer, 16 ms vs 24 ms per token,
+- 280/280 identical answers through this engine on held-out prompts,
+- 1,165,440 factored matrix parameters vs 2,097,152 dense (55.6%).
+
+`apps/runtime/test/web4.test.ts` holds the path to a token-identical decode with
+a fixture that emits `X.a = W`, `X.b = I` for every weight. A dense file parses
+with zero factor pairs, which is the regression guard for the original path.
+
 ## Privacy and safety
 
 - Publishing is **opt-in** (`--publish`). Without it, transcripts stay in the

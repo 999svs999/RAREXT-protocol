@@ -1,0 +1,217 @@
+{
+ "dense_params": 2132224,
+ "base": {
+  "S0 price-copy@4242": 1.0,
+  "S1 cheapest@4242": 1.0,
+  "S2 priciest@4242": 1.0,
+  "S1m cheapest-mixed@4242": 0.9583333333333334,
+  "S2m priciest-mixed@4242": 1.0,
+  "S1t cheapest-3row-mixed@4242": 0.9583333333333334,
+  "S2t priciest-3row-mixed@4242": 0.9583333333333334,
+  "S3 refusal@4242": 0.0,
+  "S0 price-copy@777": 1.0,
+  "S1 cheapest@777": 0.96875,
+  "S2 priciest@777": 1.0,
+  "S1m cheapest-mixed@777": 0.9166666666666666,
+  "S2m priciest-mixed@777": 0.9583333333333334,
+  "S1t cheapest-3row-mixed@777": 0.875,
+  "S2t priciest-3row-mixed@777": 0.9583333333333334,
+  "S3 refusal@777": 0.0
+ },
+ "seeds": [
+  4242,
+  777
+ ],
+ "sweep": [
+  {
+   "chi": 32,
+   "params": 768160,
+   "scores": {
+    "S0 price-copy@4242": 0.75,
+    "S1 cheapest@4242": 0.8125,
+    "S2 priciest@4242": 0.84375,
+    "S1m cheapest-mixed@4242": 0.7083333333333334,
+    "S2m priciest-mixed@4242": 0.7916666666666666,
+    "S1t cheapest-3row-mixed@4242": 0.7916666666666666,
+    "S2t priciest-3row-mixed@4242": 0.75,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 0.8375,
+    "S1 cheapest@777": 0.78125,
+    "S2 priciest@777": 0.8125,
+    "S1m cheapest-mixed@777": 0.6666666666666666,
+    "S2m priciest-mixed@777": 0.75,
+    "S1t cheapest-3row-mixed@777": 0.7083333333333334,
+    "S2t priciest-3row-mixed@777": 0.7916666666666666,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.25
+  },
+  {
+   "chi": 40,
+   "params": 959656,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9583333333333334,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.96875,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674
+  },
+  {
+   "chi": 48,
+   "params": 1151152,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9583333333333334,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.96875,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674
+  },
+  {
+   "chi": 56,
+   "params": 1342648,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9583333333333334,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.96875,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.875,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674
+  },
+  {
+   "chi": 64,
+   "params": 1534144,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9583333333333334,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.96875,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674
+  }
+ ],
+ "refined": [
+  {
+   "chi": 32,
+   "params": 768160,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 0.96875,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9166666666666666,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 1.0,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9583333333333334,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674,
+   "wall_s": 704
+  },
+  {
+   "chi": 48,
+   "params": 1151152,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9166666666666666,
+    "S2t priciest-3row-mixed@4242": 0.9583333333333334,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.96875,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674,
+   "wall_s": 698
+  },
+  {
+   "chi": 56,
+   "params": 1342648,
+   "scores": {
+    "S0 price-copy@4242": 1.0,
+    "S1 cheapest@4242": 1.0,
+    "S2 priciest@4242": 1.0,
+    "S1m cheapest-mixed@4242": 0.9583333333333334,
+    "S2m priciest-mixed@4242": 1.0,
+    "S1t cheapest-3row-mixed@4242": 0.9166666666666666,
+    "S2t priciest-3row-mixed@4242": 0.9166666666666666,
+    "S3 refusal@4242": 0.0,
+    "S0 price-copy@777": 1.0,
+    "S1 cheapest@777": 0.9375,
+    "S2 priciest@777": 1.0,
+    "S1m cheapest-mixed@777": 0.9166666666666666,
+    "S2m priciest-mixed@777": 0.9583333333333334,
+    "S1t cheapest-3row-mixed@777": 0.8333333333333334,
+    "S2t priciest-3row-mixed@777": 0.9583333333333334,
+    "S3 refusal@777": 0.0
+   },
+   "max_drop": 0.04166666666666674,
+   "wall_s": 733
+  }
+ ],
+ "best": null
+}

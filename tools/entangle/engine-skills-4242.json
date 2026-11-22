@@ -1,0 +1,46 @@
+{
+ "model": "/Users/r/rarext-protocol/tools/entangle/entangled-factored.gguf",
+ "seed": 4242,
+ "rows": {
+  "S0 price-copy": {
+   "ok": 80,
+   "n": 80,
+   "pct": 1.0
+  },
+  "S1 cheapest": {
+   "ok": 32,
+   "n": 32,
+   "pct": 1.0
+  },
+  "S2 priciest": {
+   "ok": 32,
+   "n": 32,
+   "pct": 1.0
+  },
+  "S1m cheapest-mixed": {
+   "ok": 23,
+   "n": 24,
+   "pct": 0.9583333333333334
+  },
+  "S2m priciest-mixed": {
+   "ok": 24,
+   "n": 24,
+   "pct": 1.0
+  },
+  "S1t cheapest-3row-mixed": {
+   "ok": 22,
+   "n": 24,
+   "pct": 0.9166666666666666
+  },
+  "S2t priciest-3row-mixed": {
+   "ok": 23,
+   "n": 24,
+   "pct": 0.9583333333333334
+  },
+  "S3 refusal": {
+   "ok": 0,
+   "n": 40,
+   "pct": 0.0
+  }
+ }
+}

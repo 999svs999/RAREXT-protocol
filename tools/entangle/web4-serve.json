@@ -1,0 +1,188 @@
+{
+ "mode": "resident",
+ "model_file": "tools/entangle/entangled-factored.gguf",
+ "model_bytes": 4673760,
+ "registry": "http://127.0.0.1:51241",
+ "bundle": {
+  "manifestHash": "d7f49a40915a85b2d56e58e5c894ef98278ade037b4ebf615cc2a132661f9934",
+  "weightsDigest": "sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+  "shards": 9,
+  "totalBytes": 4673760,
+  "engine": {
+   "name": "rarext-gguf-engine",
+   "runtime": "rarext.gguf-engine.node-cjs.v1",
+   "artifactDigest": "sha256:de7050207f78134e346ad8f5dd9f6264065338853b452265572c9fd592986a5b",
+   "shards": 1,
+   "bytes": 209561
+  },
+  "execution": {
+   "kind": "engine",
+   "engine": "rarext",
+   "engineModel": "rarext-entangled-chi48",
+   "artifact": {
+    "id": "rarext-gguf-engine@1:sha256:de7050207f7",
+    "name": "rarext-gguf-engine",
+    "engineVersion": "1",
+    "runtime": "rarext.gguf-engine.node-cjs.v1",
+    "artifactDigest": "sha256:de7050207f78134e346ad8f5dd9f6264065338853b452265572c9fd592986a5b",
+    "manifestHash": "11c04e970eeed3f177385cb29e0d17124705957d21747ab85ca8222c139cfefc"
+   }
+  }
+ },
+ "registry_blobs": {
+  "count": 12,
+  "bytes": 0
+ },
+ "source_deleted": true,
+ "repo_artifact_hidden": true,
+ "provider": "http://127.0.0.1:51247",
+ "provider_log": [
+  "[provider] fetching 9 shard(s) / 4673760 bytes for rarext-entangled-chi48 from http://127.0.0.1:51241",
+  "[provider]   shard 1/9 524288 bytes",
+  "[provider]   shard 2/9 524288 bytes",
+  "[provider]   shard 3/9 524288 bytes",
+  "[provider]   shard 4/9 524288 bytes",
+  "[provider]   shard 5/9 524288 bytes",
+  "[provider]   shard 6/9 524288 bytes",
+  "[provider]   shard 7/9 524288 bytes",
+  "[provider]   shard 8/9 524288 bytes",
+  "[provider]   shard 9/9 479456 bytes",
+  "[provider] verified 4673760 bytes against sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+  "[provider] fetched the engine this bundle commits: rarext-gguf-engine@1 (sha256:de7050207f7\u2026)",
+  "[provider] loaded engine rarext-gguf-engine@1 (sha256:de7050207f7\u2026) from 1 RAREXT shard(s)",
+  "rarext provider serving rarext-entangled-chi48 on http://127.0.0.1:51247",
+  "  bundle      1df8d45a67877baa6ee1bb8b715d13fbb91cb0d672ada1f85841f1ff05c0edcc",
+  "  weights     sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+  "  shards      9 verified from http://127.0.0.1:51241",
+  "  execution   engine",
+  "  card        3909498187517251841590fbb5f5b206fc2b381cdf787ddab08230cca79ae193",
+  "  openai      POST http://127.0.0.1:51247/v1/chat/completions",
+  "  card        GET  http://127.0.0.1:51247/v1/provider-card"
+ ],
+ "provider_rss_at_ready_bytes": 126656512,
+ "registry_rss_bytes": 109051904,
+ "health": {
+  "ok": true,
+  "bundle": "1df8d45a67877baa6ee1bb8b715d13fbb91cb0d672ada1f85841f1ff05c0edcc",
+  "weightsDigest": "sha256:da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+  "execution": "engine",
+  "engine": {
+   "name": "rarext-gguf-engine",
+   "version": "1",
+   "digest": "sha256:de7050207f78134e346ad8f5dd9f6264065338853b452265572c9fd592986a5b"
+  },
+  "engineFingerprint": "3a66e1b918035386d7b7d5ad89881579a379beff8b076f2efa5e8e72c7623815"
+ },
+ "models": {
+  "object": "list",
+  "data": [
+   {
+    "id": "rarext-entangled-chi48",
+    "object": "model",
+    "created": 1795332209,
+    "owned_by": "rarext-provider",
+    "digest": "da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
+    "capabilities": {
+     "chat": true,
+     "completions": true,
+     "streaming": true,
+     "embeddings": true,
+     "tools": true,
+     "response_format": true,
+     "logprobs": true,
+     "grammar": true,
+     "multimodal": false,
+     "multimodal_note": "image and audio parts are refused with code unsupported_content_part: no vision or audio tower is implemented in this runtime, and the committed weights carry none",
+     "weights_streaming": false
+    }
+   }
+  ]
+ },
+ "answers": {
+  "prompts": 280,
+  "correct": 276,
+  "accuracy": 0.9857142857142858,
+  "per_skill": {
+   "S0 price-copy": {
+    "ok": 80,
+    "n": 80
+   },
+   "S1 cheapest": {
+    "ok": 32,
+    "n": 32
+   },
+   "S2 priciest": {
+    "ok": 32,
+    "n": 32
+   },
+   "S1m cheapest-mixed": {
+    "ok": 23,
+    "n": 24
+   },
+   "S2m priciest-mixed": {
+    "ok": 24,
+    "n": 24
+   },
+   "S1t cheapest-3row-mixed": {
+    "ok": 22,
+    "n": 24
+   },
+   "S2t priciest-3row-mixed": {
+    "ok": 23,
+    "n": 24
+   },
+   "S3 refusal": {
+    "ok": 40,
+    "n": 40
+   }
+  },
+  "wall_s": 134.07782411575317,
+  "ms_per_answer": 478.8493718419756,
+  "tokens": 9359,
+  "ms_per_token": 14.326084423095756,
+  "engine_residentBytes": [],
+  "misses": [
+   {
+    "skill": "S1m cheapest-mixed",
+    "got": "The price is $605 delivered.",
+    "want": "The price is $645 delivered.",
+    "finish": "stop"
+   },
+   {
+    "skill": "S1t cheapest-3row-mixed",
+    "got": "The price is $99 delivered.",
+    "want": "The price is $71 delivered.",
+    "finish": "stop"
+   },
+   {
+    "skill": "S1t cheapest-3row-mixed",
+    "got": "The price is $76 delivered.",
+    "want": "The price is $69 delivered.",
+    "finish": "stop"
+   },
+   {
+    "skill": "S2t priciest-3row-mixed",
+    "got": "The price is $2419 delivered.",
+    "want": "The price is $2661 delivered.",
+    "finish": "stop"
+   }
+  ]
+ },
+ "process": {
+  "provider_peak_rss_bytes": 251789312,
+  "provider_rss_after_warmup_bytes": 117346304,
+  "provider_rss_at_ready_bytes": 126656512,
+  "registry_peak_rss_bytes": 109060096,
+  "model_bytes": 4673760
+ },
+ "provider_state_files": [
+  {
+   "name": "provider-identity.json",
+   "bytes": 513
+  }
+ ],
+ "blob_store": {
+  "files": 13,
+  "bytes": 4889776
+ }
+}
