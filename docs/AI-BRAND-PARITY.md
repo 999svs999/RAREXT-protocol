@@ -103,6 +103,20 @@ deployment's challenge with the runtime's own checker (20 checks each):
 `tools/brand-live/` holds the deployment, the challenge, both transcripts, and
 the reproduction commands.
 
+**Ops: RAREXT AI runs all the projects.** The runtime is now an operations
+layer, not just a model host: `tools/ops/run-projects.mjs` (`npm run ops:all`)
+executes every project's declared gates — rarext-protocol (runtime suite +
+claim gate), RAREXT (test + typecheck), BAPECLUB (typecheck + build),
+FUTURISTIC (site build), shipflow and stockflow (build + lint) — probes the
+five live services (provider, edge-direct, tunnel, the mirror page, the
+in-browser weights), and writes a **receipt per gate**: sha256 over the exact
+output, duration, exit code. Status publishes to the mirror
+(`/mirror/projects.html`), where the page serves the receipts themselves.
+Latest measured run: **6/6 projects PASS, 5/5 services PASS** (`all ok: true`).
+The ops layer also caught and drove two real fixes: an IPv6 renumber that took
+the direct edge down (DNS re-pointed, edge back to 200) and 75 lines of lint
+debt across shipflow/stockflow (cleared).
+
 **And the stronger answer to the underlying goal: no third party at all.**
 The rebuilt model now runs **in a web page with no server and no API provider**:
 `/mirror/entangled.html` (published from `apps/web/public/entangled.html`)
