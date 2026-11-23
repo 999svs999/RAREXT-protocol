@@ -1,0 +1,97 @@
+{
+  "weights": "apps/web/public/rarext-entangled-chi48.gguf",
+  "declaredContextLength": 192,
+  "seed": 20261124,
+  "depths": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "perDepth": 2,
+  "allOk": false,
+  "maxVerifiedBytes": 0,
+  "results": [
+    {
+      "rows": 2,
+      "promptBytes": 81,
+      "gold": "The price is $3084 delivered.",
+      "got": "The price is $8768 delivered.",
+      "ok": false,
+      "ms": 431
+    },
+    {
+      "rows": 2,
+      "promptBytes": 86,
+      "gold": "The price is $1228 delivered.",
+      "got": "The price is $8836 delivered.",
+      "ok": false,
+      "ms": 396
+    },
+    {
+      "rows": 3,
+      "promptBytes": 106,
+      "gold": "The price is $8282 delivered.",
+      "got": "The price is $8282 delivered.",
+      "ok": true,
+      "ms": 452
+    },
+    {
+      "rows": 3,
+      "promptBytes": 86,
+      "gold": "The price is $275 delivered.",
+      "got": "The price is $275 delivered.",
+      "ok": true,
+      "ms": 379
+    },
+    {
+      "rows": 4,
+      "promptBytes": 124,
+      "gold": "The price is $9439 delivered.",
+      "got": "The price is $9439 delivered.",
+      "ok": true,
+      "ms": 536
+    },
+    {
+      "rows": 4,
+      "promptBytes": 107,
+      "gold": "The price is $7646 delivered.",
+      "got": "The price is $7556 delivered.",
+      "ok": false,
+      "ms": 466
+    },
+    {
+      "rows": 5,
+      "promptBytes": 134,
+      "gold": "The price is $777 delivered.",
+      "got": "The price is $7467 delivered.",
+      "ok": false,
+      "ms": 574
+    },
+    {
+      "rows": 5,
+      "promptBytes": 131,
+      "gold": "The price is $6701 delivered.",
+      "got": "The price is $6701 delivered.",
+      "ok": true,
+      "ms": 567
+    },
+    {
+      "rows": 6,
+      "promptBytes": 161,
+      "gold": "The price is $9691 delivered.",
+      "got": "The price is $797 delivered.",
+      "ok": false,
+      "ms": 713
+    },
+    {
+      "rows": 6,
+      "promptBytes": 156,
+      "gold": "The price is $130 delivered.",
+      "got": "The price is $130 delivered.",
+      "ok": true,
+      "ms": 672
+    }
+  ]
+}

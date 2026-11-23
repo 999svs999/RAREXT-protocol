@@ -58,6 +58,29 @@ EOF
 A constant answer scores 40% on the 1-digit task and 2.2% on the 2-digit one,
 so those are the floors to read the results against — not 0%.
 
+### What the published suite actually asks
+
+```console
+$ node tools/rank/gen-tasks.mjs --n 200 --seed 20261123 --json
+diff digit-width patterns: {(4, 3): 8, (4, 4): 25}
+total digit-width patterns: {(4, 4): 12, (4, 4, 4): 14, (4, 3): 4, ...}
+pct   digit-width patterns: {(4,): 29, (3,): 4}
+```
+
+Prices are drawn uniformly from 5–9999, so **all 33 `diff` items contain a
+4-digit operand**, as do 33/33 `total` and 29/33 `pct`. A model that has
+learned only 1–3 digit subtraction therefore cannot move the published number
+much:
+
+| per-width diff accuracy | expected diff correct | model-alone on the 200-task suite |
+| --- | ---: | ---: |
+| 1d 90% · 2d 45% · 3d 15% · 4d 5% | 1.7 / 33 | 48.0% → **48.8%** |
+
+That is the arithmetic honesty this page has to carry: the interesting learning
+result (1-digit 90%, 2-digit 28%) is on a width the evaluator almost never
+samples. Moving `eval-neural.mjs` requires 4-digit subtraction, which is where
+the long run's 4d bucket is the number that matters.
+
 ## Measured results
 
 All runs start from `refined-chi48.pt`; "old" is the seven deployed skills
@@ -68,30 +91,91 @@ measured on 16–24 held-out samples each.
 | 1-digit diff, long names, projected | 400 | 1e-4 | **90%** | 90% | 40% | **0.000** |
 | 2-digit diff, long names, projected | 600 | 1e-4 | 0% | 0% | 2.2% | +0.375 (S1t 0.92→0.54) |
 | 2-digit diff, **short names**, projected | 400 | 2e-4 | 5% | 5% | 2.2% | 0.000 |
-| 2-digit diff, **no-borrow**, projected | 400 | 2e-4 | 10% | 10% | 2.2% | +0.06 (S1t 0.94→0.94, S2t 1.00→1.00) |
+| 2-digit diff, **no-borrow**, projected | 400 | 2e-4 | 10% | 10% | 2.2% | +0.06 |
 | full curriculum (all three families), projected | 600 | 2e-4 | diff 10% · total 2% · pct 5% | — | 2.2% | +0.375 (S1t 0.92→0.54) |
+| 2-digit diff, short names, **unprojected control** | 1000 | 3e-4 | **8%** | 8% | 2.2% | **0.000** |
+| 2-digit diff, short names, **projected χ=48** | 2500 | 3e-4 | **28%** | 28% | 2.2% | **0.000** |
+| real grammar (long names), 1–4 digit curriculum, 50% replay | 4500 | 2e-4 | **1d 100% · 2d 10% · 3d 2% · 4d 0%** | — | 2.2% / 1d 40% | **0.000 on all seven sets** |
 
-What this already establishes, with no interpretation:
+The 4,500-step run is the first checkpoint that *learns* and *keeps everything*:
+one-digit difference goes 0% → 100% held-out with every deployed skill at its
+baseline, and the export is a legal 56-factor-pair artifact. It was still
+refused by the promotion gate — the next section — because "kept at 24 held-out
+samples per set" is weaker than "kept on the page's own canonical prompts".
+
+What this establishes, with no interpretation:
 
 1. **The host can subtract.** One-digit difference reaches 90% exact in 400
    steps and leaves every deployed skill at its baseline. This is not a tool
    result; it is the model.
-2. **Two-digit subtraction does not come for free from that.** Shortening the
-   names (removing all lookup work) did not help — 5% — so the missing piece is
-   arithmetic width, not row matching. Removing the borrow — two independent
-   one-digit subtractions — reached only 10%.
-3. **The old skills survive training** whenever replay is present and the
-   learning rate is 2e-4 or below. The +0.375 regression row is the one run
-   that paired a 2e-4 rate with no digit curriculum; it is reported, not hidden.
-4. **Projection is a suspect, not a proven constraint** — every run above
-   projects every 10 steps. The unprojected control below separates "the task
-   is too big for 400 steps" from "χ=48 cannot hold the function".
+2. **Two-digit subtraction is learnable, but slowly.** With the χ=48
+   projection on, held-out exactness climbs 12% → 18% → 22% → 30% and finishes
+   at 28% after 2,500 steps (12.7× chance), loss falling 0.172 → 0.064.
+3. **Projection is not the binding constraint.** The unprojected control at the
+   same rate and step count did *worse* (8% at 1,000 steps vs 18% projected).
+   So neither the MPO manifold nor the 4.6 MB footprint is what limits the
+   number — it is step count and task width.
+4. **Name lookup is not the constraint either.** Shortening the names (removing
+   all multi-word matching) did not help at 400 steps (5%); removing the borrow
+   reached only 10%. The missing piece is arithmetic width.
+5. **Catastrophic forgetting is an artefact of the optimiser, not of training.**
+   Ten AdamW steps at 3e-4 move *every* parameter by roughly the learning rate
+   (Adam normalises the update), which drops the deployed skills to 0.38/0.00;
+   replay then restores them (the 2,500-step run ends at 1.00 on all seven).
+   A linear warmup removes the shock completely: after 30 warmup steps the
+   worst old-skill delta is **0.000**, versus −0.812 cold. The χ=48 projection
+   is innocent — the trained matrices stay at 0.99997 rank-48 energy.
+
+## The compute used, and where it runs
+
+The learning question above is a compute question: the probes say the function
+is learnable but slow to reach on this machine (4 cores, 8 GiB, no usable
+GPU), so the training runs wherever accelerator time exists.
+
+| resource | what runs on it | status |
+| --- | --- | --- |
+| this Mac, 4 CPU cores | `tools/entangle/train_diff.py` — the *independent replication*: batch 16, 4,500 steps, identical curriculum and gates | `tools/entangle/train-diff.json` |
+| **Kaggle** (T4/P100 GPU, 30 h/week quota) | kernel [`svs168/rarext-gpu-diff`](https://www.kaggle.com/code/svs168/rarext-gpu-diff) running `tools/entangle/gpu_train_diff.py` — batch 64, 30,000 steps, projection every 50, same replay and gates; code + starting checkpoint ship in dataset [`svs168/rarext-entangle-train`](https://www.kaggle.com/datasets/svs168/rarext-entangle-train) | `kaggle kernels status svs168/rarext-gpu-diff` |
+| **Google Colab** | `tools/entangle/colab-gpu-diff.ipynb` — the same script, one **Run all** click; the notebook clones this repo, so the starting weights are the exact served bytes | needs one user click (see below) |
+| hosted LLM APIs (Gemini, agnes) | *not used for training* — training gold is computed by code, and an LLM teacher's arithmetic is exactly the thing being measured | named refusal |
+
+The remote runs are the *same loop* as the local one, not a different method:
+fresh procedural examples, replay in every batch, SVD projection back onto the
+χ=48 manifold, per-width held-out scoring, and the old-skill regression gate.
+A returned checkpoint goes through `tools/entangle/export_from_ckpt.py` (which
+projects once more, so the artifact is exactly on the manifold) and then
+`scripts/promote-entangled.mjs`, which installs nothing unless the shipped
+engine loads the bytes as 56 factor pairs at context 192 and the in-page skill
+self-test is 14/14.
+
+**Why Colab is a click, not a command.** Colab is a browser notebook product;
+its headless path is Colab Enterprise, which needs `gcloud` credentials and a
+GCP project — this machine has neither (`gcloud: absent`,
+`GOOGLE_APPLICATION_CREDENTIALS: absent`; only `GOOGLE_API_KEY`, an LLM key,
+exists). So the notebook is committed and ready: open
+[colab-gpu-diff.ipynb](../tools/entangle/colab-gpu-diff.ipynb), set the runtime
+to T4, press Run all, and hand back `gpu-refined-diff.pt` + `gpu-train.json`.
+Kaggle is the same Google resource and *is* driven headlessly by the CLI, so it
+carries the automated run.
 
 ## Promotion gates for any checkpoint
+
+The gate exists because "no regression on 24 held-out samples per set" is not
+the same as "no regression on the page". Measured example, 2026-11-24: the
+4,500-step checkpoint above passed every set gate (worst old delta **0.000**)
+and was still refused by `scripts/promote-entangled.mjs` — the in-page skill
+self-test came back **13/14**, with `S2t priciest of 3, mixed` answering
+`$552 delivered.` where the page pins `$432 delivered.`. The installer restored
+every file byte-for-byte and shipped nothing. The fix is not a weaker gate: the
+page's 14 canonical prompts are now extracted verbatim into
+`tools/entangle/page-skills.json`, **anchored in every training batch**, and
+added to the eligibility check of all three trainers.
 
 A checkpoint is promoted to `apps/web/public/rarext-entangled-chi48.gguf` only
 if all of these hold, measured by `tools/rank/eval-neural.mjs` afterwards:
 
+* the page's 14 canonical skill prompts answer **14/14** on the candidate
+  (the gate that refused the 2026-11-24 checkpoint);
 * arithmetic families (`diff`, `total`, `pct`) held-out exact **> 0%**, and
   reported per family rather than pooled;
 * lookup/compare families **do not fall** below their current 88–97%;

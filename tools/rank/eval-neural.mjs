@@ -21,6 +21,10 @@ const arg = (name, fallback) => {
 };
 const N = Number(arg("n", 200));
 const SEED = Number(arg("seed", 20261123));
+// Score a CANDIDATE artifact without touching the shipped one, so a training
+// run can be measured against the held-out suite before anything is promoted.
+const WEIGHTS = arg("weights", "apps/web/public/rarext-entangled-chi48.gguf");
+const OUT = arg("out", "tools/rank/neural-heldout.json");
 const root = new URL("../..", import.meta.url).pathname;
 
 execFileSync("node", ["tools/rank/gen-tasks.mjs", "--n", String(N), "--seed", String(SEED), "--json"], { cwd: root });
@@ -29,7 +33,7 @@ const suite = JSON.parse(readFileSync(join(root, "tools/rank/tasks.json"), "utf8
 const entangled = await import(pathToFileURL(join(root, "apps/web/public/entangled.js")).href);
 const loaded = await entangled.loadEntangledModel({
   engineSource: readFileSync(join(root, "apps/web/public/entangled-engine.js"), "utf8"),
-  weightsBytes: new Uint8Array(readFileSync(join(root, "apps/web/public/rarext-entangled-chi48.gguf"))),
+  weightsBytes: new Uint8Array(readFileSync(join(root, WEIGHTS))),
 });
 
 const byFamily = new Map();
@@ -46,9 +50,10 @@ const ms = Date.now() - t0;
 const passed = rows.filter((r) => r.ok).length;
 
 console.log(`neural model alone — ${passed}/${rows.length} exact (${((passed / rows.length) * 100).toFixed(1)}%), ${ms} ms`);
+console.log(`weights ${WEIGHTS}`);
 for (const [family, [ok, n]] of byFamily) {
   console.log(`  ${family.padEnd(9)} ${ok}/${n}  ${((ok / n) * 100).toFixed(1)}%`);
 }
-writeFileSync(join(root, "tools/rank/neural-heldout.json"),
-  JSON.stringify({ seed: SEED, n: rows.length, passed, accuracy: passed / rows.length, ms, byFamily: Object.fromEntries(byFamily), rows }, null, 2) + "\n");
-console.log("wrote tools/rank/neural-heldout.json");
+writeFileSync(join(root, OUT),
+  JSON.stringify({ seed: SEED, weights: WEIGHTS, n: rows.length, passed, accuracy: passed / rows.length, ms, byFamily: Object.fromEntries(byFamily), rows }, null, 2) + "\n");
+console.log(`wrote ${OUT}`);

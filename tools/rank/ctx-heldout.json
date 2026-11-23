@@ -1,0 +1,21 @@
+{
+  "weights": "apps/web/public/rarext-entangled-chi48.gguf",
+  "declaredContextLength": 192,
+  "seed": 20261124,
+  "depths": [
+    8
+  ],
+  "perDepth": 1,
+  "allOk": false,
+  "maxVerifiedBytes": 0,
+  "results": [
+    {
+      "rows": 8,
+      "promptBytes": 191,
+      "gold": "The price is $62 delivered.",
+      "got": "Th",
+      "ok": false,
+      "ms": 788
+    }
+  ]
+}

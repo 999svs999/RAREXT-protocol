@@ -1,0 +1,72 @@
+[
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -red shorts college|$692\nq: how much is the red shorts college?\na: ",
+  "want": "The price is $692 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -high navy|$419\nq: what is the price of the high navy?\na: ",
+  "want": "The price is $419 delivered."
+ },
+ {
+  "skill": "S1 cheapest of 2",
+  "prompt": "rows: -classic college camo|$7039\n-shark|$951\nq: which is cheapest?\na: ",
+  "want": "The price is $951 delivered."
+ },
+ {
+  "skill": "S2 priciest of 2",
+  "prompt": "rows: -HEAD #2 CAMO JACKET|$956\n-baby city cap|$758\nq: which is most expensive?\na: ",
+  "want": "The price is $956 delivered."
+ },
+ {
+  "skill": "S1m cheapest, mixed digits",
+  "prompt": "rows: -WHITE|$989\n-TEE COLLEGE GIFT|$661\nq: which is cheapest?\na: ",
+  "want": "The price is $661 delivered."
+ },
+ {
+  "skill": "S2m priciest, mixed digits",
+  "prompt": "rows: -crew classic|$7449\n-pants jacket bape|$413\nq: which is most expensive?\na: ",
+  "want": "The price is $7449 delivered."
+ },
+ {
+  "skill": "S1t cheapest of 3, mixed",
+  "prompt": "rows: -classic city mini|$92\n-TIGER|$778\n-HIGH CAP CAMO|$508\nq: which is cheapest?\na: ",
+  "want": "The price is $92 delivered."
+ },
+ {
+  "skill": "S2t priciest of 3, mixed",
+  "prompt": "rows: -BIG HIGH|$113\n-box tee black|$55\n-COLLEGE|$432\nq: which is most expensive?\na: ",
+  "want": "The price is $432 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -mega grey|$936\nq: what is the price of the mega grey?\na: ",
+  "want": "The price is $936 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -HIGH DOWN|$645\nq: price?\na: ",
+  "want": "The price is $645 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -store pants|$823\nq: what does the store pants cost?\na: ",
+  "want": "The price is $823 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -CLASSIC BIG|$320\nq: how much?\na: ",
+  "want": "The price is $320 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -high vest white tee|$465\nq: price?\na: ",
+  "want": "The price is $465 delivered."
+ },
+ {
+  "skill": "S0 price lookup",
+  "prompt": "rows: -tiger tiger low|$493\nq: what does the tiger tiger low cost?\na: ",
+  "want": "The price is $493 delivered."
+ }
+]

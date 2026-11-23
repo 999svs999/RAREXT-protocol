@@ -1,16 +1,17 @@
 {
-  "seed": 777,
+  "seed": 20261123,
+  "weights": "apps/web/public/rarext-entangled-chi48.gguf",
   "n": 200,
-  "passed": 91,
-  "accuracy": 0.455,
-  "ms": 64165,
+  "passed": 96,
+  "accuracy": 0.48,
+  "ms": 62209,
   "byFamily": {
     "lookup": [
-      30,
+      33,
       34
     ],
     "cheapest": [
-      30,
+      32,
       34
     ],
     "priciest": [
@@ -34,1401 +35,1401 @@
     {
       "id": 0,
       "family": "lookup",
-      "gold": "The price is $3824 delivered.",
-      "got": "The price is $382 delivered.",
-      "ok": false
+      "gold": "The price is $4966 delivered.",
+      "got": "The price is $4966 delivered.",
+      "ok": true
     },
     {
       "id": 1,
       "family": "cheapest",
-      "gold": "The price is $861 delivered.",
-      "got": "The price is $861 delivered.",
+      "gold": "The price is $781 delivered.",
+      "got": "The price is $781 delivered.",
       "ok": true
     },
     {
       "id": 2,
       "family": "priciest",
-      "gold": "The price is $9426 delivered.",
-      "got": "The price is $9426 delivered.",
+      "gold": "The price is $9629 delivered.",
+      "got": "The price is $9629 delivered.",
       "ok": true
     },
     {
       "id": 3,
       "family": "diff",
-      "gold": "$5405 more",
-      "got": "The price is $3093 delivered.",
+      "gold": "$1403 more",
+      "got": "The price is $950 delivered.",
       "ok": false
     },
     {
       "id": 4,
       "family": "total",
-      "gold": "The total is $17510 delivered.",
-      "got": "The price is $7497 delivered.",
+      "gold": "The total is $21344 delivered.",
+      "got": "The price is $9412 delivered.",
       "ok": false
     },
     {
       "id": 5,
       "family": "pct",
-      "gold": "The price is $4772.4 delivered.",
-      "got": "The price is $7954 delivered.",
+      "gold": "The price is $1518.3 delivered.",
+      "got": "The price is $1687 delivered.",
       "ok": false
     },
     {
       "id": 6,
       "family": "lookup",
-      "gold": "The price is $1673 delivered.",
-      "got": "The price is $1673 delivered.",
+      "gold": "The price is $1672 delivered.",
+      "got": "The price is $1672 delivered.",
       "ok": true
     },
     {
       "id": 7,
       "family": "cheapest",
-      "gold": "The price is $4055 delivered.",
-      "got": "The price is $4055 delivered.",
+      "gold": "The price is $2351 delivered.",
+      "got": "The price is $2351 delivered.",
       "ok": true
     },
     {
       "id": 8,
       "family": "priciest",
-      "gold": "The price is $9661 delivered.",
-      "got": "The price is $9661 delivered.",
+      "gold": "The price is $9469 delivered.",
+      "got": "The price is $9469 delivered.",
       "ok": true
     },
     {
       "id": 9,
       "family": "diff",
-      "gold": "$4270 more",
-      "got": "The price is $999 delivered.",
+      "gold": "$6452 more",
+      "got": "The price is $846 delivered.",
       "ok": false
     },
     {
       "id": 10,
       "family": "total",
-      "gold": "The total is $6392 delivered.",
-      "got": "The price is $3795 delivered.",
+      "gold": "The total is $13898 delivered.",
+      "got": "The price is $8798 delivered.",
       "ok": false
     },
     {
       "id": 11,
       "family": "pct",
-      "gold": "The price is $6961.5 delivered.",
-      "got": "The price is $8190 delivered.",
+      "gold": "The price is $4594.5 delivered.",
+      "got": "The price is $5105 delivered.",
       "ok": false
     },
     {
       "id": 12,
       "family": "lookup",
-      "gold": "The price is $2762 delivered.",
-      "got": "The price is $2762 delivered.",
+      "gold": "The price is $5845 delivered.",
+      "got": "The price is $5845 delivered.",
       "ok": true
     },
     {
       "id": 13,
       "family": "cheapest",
-      "gold": "The price is $2989 delivered.",
-      "got": "The price is $2989 delivered.",
+      "gold": "The price is $4142 delivered.",
+      "got": "The price is $4142 delivered.",
       "ok": true
     },
     {
       "id": 14,
       "family": "priciest",
-      "gold": "The price is $4659 delivered.",
-      "got": "The price is $4659 delivered.",
+      "gold": "The price is $9340 delivered.",
+      "got": "The price is $9340 delivered.",
       "ok": true
     },
     {
       "id": 15,
       "family": "diff",
-      "gold": "$1821 more",
-      "got": "The price is $7565 delivered.",
+      "gold": "$20 more",
+      "got": "The price is $4355 delivered.",
       "ok": false
     },
     {
       "id": 16,
       "family": "total",
-      "gold": "The total is $11432 delivered.",
-      "got": "The price is $9250 delivered.",
+      "gold": "The total is $20564 delivered.",
+      "got": "The price is $9103 delivered.",
       "ok": false
     },
     {
       "id": 17,
       "family": "pct",
-      "gold": "The price is $3328.2 delivered.",
-      "got": "The price is $5547 delivered.",
+      "gold": "The price is $1116.75 delivered.",
+      "got": "The price is $1489 delivered.",
       "ok": false
     },
     {
       "id": 18,
       "family": "lookup",
-      "gold": "The price is $8880 delivered.",
-      "got": "The price is $8880 delivered.",
+      "gold": "The price is $8502 delivered.",
+      "got": "The price is $8502 delivered.",
       "ok": true
     },
     {
       "id": 19,
       "family": "cheapest",
-      "gold": "The price is $5132 delivered.",
-      "got": "The price is $5132 delivered.",
+      "gold": "The price is $545 delivered.",
+      "got": "The price is $545 delivered.",
       "ok": true
     },
     {
       "id": 20,
       "family": "priciest",
-      "gold": "The price is $9018 delivered.",
-      "got": "The price is $9018 delivered.",
+      "gold": "The price is $7916 delivered.",
+      "got": "The price is $7916 delivered.",
       "ok": true
     },
     {
       "id": 21,
       "family": "diff",
-      "gold": "$5157 more",
-      "got": "The price is $9878 delivered.",
+      "gold": "$4211 more",
+      "got": "The price is $9176 delivered.",
       "ok": false
     },
     {
       "id": 22,
       "family": "total",
-      "gold": "The total is $11500 delivered.",
-      "got": "The price is $6628 delivered.",
+      "gold": "The total is $4794 delivered.",
+      "got": "The price is $4151 delivered.",
       "ok": false
     },
     {
       "id": 23,
       "family": "pct",
-      "gold": "The price is $1903.5 delivered.",
-      "got": "The price is $3807 delivered.",
+      "gold": "The price is $3704 delivered.",
+      "got": "The price is $4630 delivered.",
       "ok": false
     },
     {
       "id": 24,
       "family": "lookup",
-      "gold": "The price is $8289 delivered.",
-      "got": "The price is $8289 delivered.",
+      "gold": "The price is $1650 delivered.",
+      "got": "The price is $1650 delivered.",
       "ok": true
     },
     {
       "id": 25,
       "family": "cheapest",
-      "gold": "The price is $983 delivered.",
-      "got": "The price is $983 delivered.",
-      "ok": true
+      "gold": "The price is $275 delivered.",
+      "got": "The price is $264 delivered.",
+      "ok": false
     },
     {
       "id": 26,
       "family": "priciest",
-      "gold": "The price is $9112 delivered.",
-      "got": "The price is $9112 delivered.",
+      "gold": "The price is $2985 delivered.",
+      "got": "The price is $2985 delivered.",
       "ok": true
     },
     {
       "id": 27,
       "family": "diff",
-      "gold": "$370 more",
-      "got": "The price is $3000 delivered.",
+      "gold": "$7410 more",
+      "got": "The price is $8170 delivered.",
       "ok": false
     },
     {
       "id": 28,
       "family": "total",
-      "gold": "The total is $7805 delivered.",
-      "got": "The price is $3908 delivered.",
+      "gold": "The total is $3661 delivered.",
+      "got": "The price is $3319 delivered.",
       "ok": false
     },
     {
       "id": 29,
       "family": "pct",
-      "gold": "The price is $2212.2 delivered.",
-      "got": "The price is $2458 delivered.",
+      "gold": "The price is $3268.5 delivered.",
+      "got": "The price is $6537 delivered.",
       "ok": false
     },
     {
       "id": 30,
       "family": "lookup",
-      "gold": "The price is $4920 delivered.",
-      "got": "The price is $4920 delivered.",
+      "gold": "The price is $436 delivered.",
+      "got": "The price is $436 delivered.",
       "ok": true
     },
     {
       "id": 31,
       "family": "cheapest",
-      "gold": "The price is $4316 delivered.",
-      "got": "The price is $4316 delivered.",
+      "gold": "The price is $520 delivered.",
+      "got": "The price is $520 delivered.",
       "ok": true
     },
     {
       "id": 32,
       "family": "priciest",
-      "gold": "The price is $7669 delivered.",
-      "got": "The price is $7669 delivered.",
+      "gold": "The price is $1319 delivered.",
+      "got": "The price is $1319 delivered.",
       "ok": true
     },
     {
       "id": 33,
       "family": "diff",
-      "gold": "$204 more",
-      "got": "The price is $7650 delivered.",
+      "gold": "$5623 more",
+      "got": "The price is $8005 delivered.",
       "ok": false
     },
     {
       "id": 34,
       "family": "total",
-      "gold": "The total is $15930 delivered.",
-      "got": "The price is $9589 delivered.",
+      "gold": "The total is $17823 delivered.",
+      "got": "The price is $9162 delivered.",
       "ok": false
     },
     {
       "id": 35,
       "family": "pct",
-      "gold": "The price is $4564.8 delivered.",
-      "got": "The price is $5072 delivered.",
+      "gold": "The price is $3503.4 delivered.",
+      "got": "The price is $5839 delivered.",
       "ok": false
     },
     {
       "id": 36,
       "family": "lookup",
-      "gold": "The price is $5870 delivered.",
-      "got": "The price is $587 delivered.",
-      "ok": false
+      "gold": "The price is $4076 delivered.",
+      "got": "The price is $4076 delivered.",
+      "ok": true
     },
     {
       "id": 37,
       "family": "cheapest",
-      "gold": "The price is $5356 delivered.",
-      "got": "The price is $5356 delivered.",
+      "gold": "The price is $7363 delivered.",
+      "got": "The price is $7363 delivered.",
       "ok": true
     },
     {
       "id": 38,
       "family": "priciest",
-      "gold": "The price is $9733 delivered.",
-      "got": "The price is $9733 delivered.",
+      "gold": "The price is $9238 delivered.",
+      "got": "The price is $9238 delivered.",
       "ok": true
     },
     {
       "id": 39,
       "family": "diff",
-      "gold": "$1748 more",
-      "got": "The price is $5413 delivered.",
+      "gold": "$21 more",
+      "got": "The price is $6166 delivered.",
       "ok": false
     },
     {
       "id": 40,
       "family": "total",
-      "gold": "The total is $13700 delivered.",
-      "got": "The price is $7101 delivered.",
+      "gold": "The total is $11431 delivered.",
+      "got": "The price is $8636 delivered.",
       "ok": false
     },
     {
       "id": 41,
       "family": "pct",
-      "gold": "The price is $4496.1 delivered.",
-      "got": "The price is $6423 delivered.",
+      "gold": "The price is $5988.5 delivered.",
+      "got": "The price is $855 delivered.",
       "ok": false
     },
     {
       "id": 42,
       "family": "lookup",
-      "gold": "The price is $5057 delivered.",
-      "got": "The price is $5057 delivered.",
+      "gold": "The price is $5554 delivered.",
+      "got": "The price is $5554 delivered.",
       "ok": true
     },
     {
       "id": 43,
       "family": "cheapest",
-      "gold": "The price is $800 delivered.",
-      "got": "The price is $800 delivered.",
-      "ok": true
-    },
-    {
-      "id": 44,
-      "family": "priciest",
       "gold": "The price is $8539 delivered.",
       "got": "The price is $8539 delivered.",
       "ok": true
     },
     {
+      "id": 44,
+      "family": "priciest",
+      "gold": "The price is $4478 delivered.",
+      "got": "The price is $4478 delivered.",
+      "ok": true
+    },
+    {
       "id": 45,
       "family": "diff",
-      "gold": "$569 more",
-      "got": "The price is $7726 delivered.",
+      "gold": "$1345 more",
+      "got": "The price is $4554 delivered.",
       "ok": false
     },
     {
       "id": 46,
       "family": "total",
-      "gold": "The total is $16005 delivered.",
-      "got": "The price is $9020 delivered.",
+      "gold": "The total is $11737 delivered.",
+      "got": "The price is $7353 delivered.",
       "ok": false
     },
     {
       "id": 47,
       "family": "pct",
-      "gold": "The price is $582.6 delivered.",
-      "got": "The price is $971 delivered.",
+      "gold": "The price is $3966 delivered.",
+      "got": "The price is $5288 delivered.",
       "ok": false
     },
     {
       "id": 48,
       "family": "lookup",
-      "gold": "The price is $129 delivered.",
-      "got": "The price is $129 delivered.",
+      "gold": "The price is $1706 delivered.",
+      "got": "The price is $1706 delivered.",
       "ok": true
     },
     {
       "id": 49,
       "family": "cheapest",
-      "gold": "The price is $6199 delivered.",
-      "got": "The price is $6199 delivered.",
+      "gold": "The price is $1203 delivered.",
+      "got": "The price is $1203 delivered.",
       "ok": true
     },
     {
       "id": 50,
       "family": "priciest",
-      "gold": "The price is $5863 delivered.",
-      "got": "The price is $5863 delivered.",
+      "gold": "The price is $6200 delivered.",
+      "got": "The price is $6200 delivered.",
       "ok": true
     },
     {
       "id": 51,
       "family": "diff",
-      "gold": "$3059 more",
-      "got": "The price is $4275 delivered.",
+      "gold": "$140 more",
+      "got": "The price is $9947 delivered.",
       "ok": false
     },
     {
       "id": 52,
       "family": "total",
-      "gold": "The total is $9544 delivered.",
-      "got": "The price is $4742 delivered.",
+      "gold": "The total is $14726 delivered.",
+      "got": "The price is $9602 delivered.",
       "ok": false
     },
     {
       "id": 53,
       "family": "pct",
-      "gold": "The price is $8442.2 delivered.",
-      "got": "The price is $9932 delivered.",
+      "gold": "The price is $3276.7 delivered.",
+      "got": "The price is $4681 delivered.",
       "ok": false
     },
     {
       "id": 54,
       "family": "lookup",
-      "gold": "The price is $5470 delivered.",
-      "got": "The price is $5470 delivered.",
+      "gold": "The price is $3301 delivered.",
+      "got": "The price is $3301 delivered.",
       "ok": true
     },
     {
       "id": 55,
       "family": "cheapest",
-      "gold": "The price is $540 delivered.",
-      "got": "The price is $540 delivered.",
-      "ok": true
+      "gold": "The price is $20 delivered.",
+      "got": "The price is $21 delivered.",
+      "ok": false
     },
     {
       "id": 56,
       "family": "priciest",
-      "gold": "The price is $5701 delivered.",
-      "got": "The price is $5701 delivered.",
+      "gold": "The price is $8651 delivered.",
+      "got": "The price is $8651 delivered.",
       "ok": true
     },
     {
       "id": 57,
       "family": "diff",
-      "gold": "$4576 more",
-      "got": "The price is $185 delivered.",
+      "gold": "$715 more",
+      "got": "The price is $3190 delivered.",
       "ok": false
     },
     {
       "id": 58,
       "family": "total",
-      "gold": "The total is $3658 delivered.",
-      "got": "The price is $3093 delivered.",
+      "gold": "The total is $22739 delivered.",
+      "got": "The price is $8455 delivered.",
       "ok": false
     },
     {
       "id": 59,
       "family": "pct",
-      "gold": "The price is $3740.25 delivered.",
-      "got": "The price is $4987 delivered.",
+      "gold": "The price is $5442 delivered.",
+      "got": "The price is $7256 delivered.",
       "ok": false
     },
     {
       "id": 60,
       "family": "lookup",
-      "gold": "The price is $3175 delivered.",
-      "got": "The price is $3175 delivered.",
+      "gold": "The price is $8104 delivered.",
+      "got": "The price is $8104 delivered.",
       "ok": true
     },
     {
       "id": 61,
       "family": "cheapest",
-      "gold": "The price is $1627 delivered.",
-      "got": "The price is $1627 delivered.",
+      "gold": "The price is $155 delivered.",
+      "got": "The price is $155 delivered.",
       "ok": true
     },
     {
       "id": 62,
       "family": "priciest",
-      "gold": "The price is $5544 delivered.",
-      "got": "The price is $5544 delivered.",
+      "gold": "The price is $8189 delivered.",
+      "got": "The price is $8189 delivered.",
       "ok": true
     },
     {
       "id": 63,
       "family": "diff",
-      "gold": "$1975 more",
-      "got": "The price is $8863 delivered.",
+      "gold": "$2293 more",
+      "got": "The price is $738 delivered.",
       "ok": false
     },
     {
       "id": 64,
       "family": "total",
-      "gold": "The total is $9912 delivered.",
-      "got": "The price is $6577 delivered.",
+      "gold": "The total is $24684 delivered.",
+      "got": "The price is $8683 delivered.",
       "ok": false
     },
     {
       "id": 65,
       "family": "pct",
-      "gold": "The price is $4358.25 delivered.",
-      "got": "The price is $5811 delivered.",
+      "gold": "The price is $2484 delivered.",
+      "got": "The price is $3105 delivered.",
       "ok": false
     },
     {
       "id": 66,
       "family": "lookup",
-      "gold": "The price is $971 delivered.",
-      "got": "The price is $971 delivered.",
+      "gold": "The price is $1552 delivered.",
+      "got": "The price is $1552 delivered.",
       "ok": true
     },
     {
       "id": 67,
       "family": "cheapest",
-      "gold": "The price is $628 delivered.",
-      "got": "The price is $628 delivered.",
+      "gold": "The price is $250 delivered.",
+      "got": "The price is $250 delivered.",
       "ok": true
     },
     {
       "id": 68,
       "family": "priciest",
-      "gold": "The price is $7466 delivered.",
-      "got": "The price is $7466 delivered.",
+      "gold": "The price is $7390 delivered.",
+      "got": "The price is $7390 delivered.",
       "ok": true
     },
     {
       "id": 69,
       "family": "diff",
-      "gold": "$2473 more",
-      "got": "The price is $4844 delivered.",
+      "gold": "$353 more",
+      "got": "The price is $3927 delivered.",
       "ok": false
     },
     {
       "id": 70,
       "family": "total",
-      "gold": "The total is $12419 delivered.",
-      "got": "The price is $6855 delivered.",
+      "gold": "The total is $17953 delivered.",
+      "got": "The price is $6792 delivered.",
       "ok": false
     },
     {
       "id": 71,
       "family": "pct",
-      "gold": "The price is $3824.8 delivered.",
-      "got": "The price is $5464 delivered.",
+      "gold": "The price is $230.3 delivered.",
+      "got": "The price is $329 delivered.",
       "ok": false
     },
     {
       "id": 72,
       "family": "lookup",
-      "gold": "The price is $1389 delivered.",
-      "got": "The price is $1389 delivered.",
+      "gold": "The price is $7348 delivered.",
+      "got": "The price is $7348 delivered.",
       "ok": true
     },
     {
       "id": 73,
       "family": "cheapest",
-      "gold": "The price is $1292 delivered.",
-      "got": "The price is $1292 delivered.",
+      "gold": "The price is $2746 delivered.",
+      "got": "The price is $2746 delivered.",
       "ok": true
     },
     {
       "id": 74,
       "family": "priciest",
-      "gold": "The price is $3183 delivered.",
-      "got": "The price is $3183 delivered.",
+      "gold": "The price is $7774 delivered.",
+      "got": "The price is $7774 delivered.",
       "ok": true
     },
     {
       "id": 75,
       "family": "diff",
-      "gold": "$6197 more",
-      "got": "The price is $2509 delivered.",
+      "gold": "$2396 more",
+      "got": "The price is $730 delivered.",
       "ok": false
     },
     {
       "id": 76,
       "family": "total",
-      "gold": "The total is $3710 delivered.",
-      "got": "The price is $2066 delivered.",
+      "gold": "The total is $13428 delivered.",
+      "got": "The price is $6288 delivered.",
       "ok": false
     },
     {
       "id": 77,
       "family": "pct",
-      "gold": "The price is $1328.4 delivered.",
-      "got": "The price is $1476 delivered.",
+      "gold": "The price is $5760.45 delivered.",
+      "got": "The price is $6777 delivered.",
       "ok": false
     },
     {
       "id": 78,
       "family": "lookup",
-      "gold": "The price is $4119 delivered.",
-      "got": "The price is $4119 delivered.",
+      "gold": "The price is $2684 delivered.",
+      "got": "The price is $2684 delivered.",
       "ok": true
     },
     {
       "id": 79,
       "family": "cheapest",
-      "gold": "The price is $709 delivered.",
-      "got": "The price is $709 delivered.",
+      "gold": "The price is $2306 delivered.",
+      "got": "The price is $2306 delivered.",
       "ok": true
     },
     {
       "id": 80,
       "family": "priciest",
-      "gold": "The price is $7451 delivered.",
-      "got": "The price is $7451 delivered.",
+      "gold": "The price is $4736 delivered.",
+      "got": "The price is $4736 delivered.",
       "ok": true
     },
     {
       "id": 81,
       "family": "diff",
-      "gold": "$5630 more",
-      "got": "The price is $5983 delivered.",
+      "gold": "$2821 more",
+      "got": "The price is $2356 delivered.",
       "ok": false
     },
     {
       "id": 82,
       "family": "total",
-      "gold": "The total is $10469 delivered.",
-      "got": "The price is $8297 delivered.",
+      "gold": "The total is $7394 delivered.",
+      "got": "The price is $730 delivered.",
       "ok": false
     },
     {
       "id": 83,
       "family": "pct",
-      "gold": "The price is $2683.8 delivered.",
-      "got": "The price is $4473 delivered.",
+      "gold": "The price is $3580 delivered.",
+      "got": "The price is $7160 delivered.",
       "ok": false
     },
     {
       "id": 84,
       "family": "lookup",
-      "gold": "The price is $5092 delivered.",
-      "got": "The price is $5092 delivered.",
+      "gold": "The price is $2756 delivered.",
+      "got": "The price is $2756 delivered.",
       "ok": true
     },
     {
       "id": 85,
       "family": "cheapest",
-      "gold": "The price is $1380 delivered.",
-      "got": "The price is $1380 delivered.",
+      "gold": "The price is $6636 delivered.",
+      "got": "The price is $6636 delivered.",
       "ok": true
     },
     {
       "id": 86,
       "family": "priciest",
-      "gold": "The price is $3496 delivered.",
-      "got": "The price is $3496 delivered.",
+      "gold": "The price is $9603 delivered.",
+      "got": "The price is $9603 delivered.",
       "ok": true
     },
     {
       "id": 87,
       "family": "diff",
-      "gold": "$4955 more",
-      "got": "The price is $944 delivered.",
+      "gold": "$6364 more",
+      "got": "The price is $8497 delivered.",
       "ok": false
     },
     {
       "id": 88,
       "family": "total",
-      "gold": "The total is $6084 delivered.",
-      "got": "The price is $3002 delivered.",
+      "gold": "The total is $12991 delivered.",
+      "got": "The price is $6688 delivered.",
       "ok": false
     },
     {
       "id": 89,
       "family": "pct",
-      "gold": "The price is $558 delivered.",
-      "got": "The price is $1116 delivered.",
+      "gold": "The price is $5865 delivered.",
+      "got": "The price is $7820 delivered.",
       "ok": false
     },
     {
       "id": 90,
       "family": "lookup",
-      "gold": "The price is $1087 delivered.",
-      "got": "The price is $1087 delivered.",
+      "gold": "The price is $1938 delivered.",
+      "got": "The price is $1938 delivered.",
       "ok": true
     },
     {
       "id": 91,
       "family": "cheapest",
-      "gold": "The price is $1906 delivered.",
-      "got": "The price is $1906 delivered.",
+      "gold": "The price is $147 delivered.",
+      "got": "The price is $147 delivered.",
       "ok": true
     },
     {
       "id": 92,
       "family": "priciest",
-      "gold": "The price is $6169 delivered.",
-      "got": "The price is $6161 delivered.",
-      "ok": false
+      "gold": "The price is $5197 delivered.",
+      "got": "The price is $5197 delivered.",
+      "ok": true
     },
     {
       "id": 93,
       "family": "diff",
-      "gold": "$1776 more",
-      "got": "The price is $7926 delivered.",
+      "gold": "$7846 more",
+      "got": "The price is $1511 delivered.",
       "ok": false
     },
     {
       "id": 94,
       "family": "total",
-      "gold": "The total is $15707 delivered.",
-      "got": "The price is $7964 delivered.",
+      "gold": "The total is $1648 delivered.",
+      "got": "The price is $1181 delivered.",
       "ok": false
     },
     {
       "id": 95,
       "family": "pct",
-      "gold": "The price is $5934.4 delivered.",
-      "got": "The price is $7418 delivered.",
+      "gold": "The price is $4348.8 delivered.",
+      "got": "The price is $5436 delivered.",
       "ok": false
     },
     {
       "id": 96,
       "family": "lookup",
-      "gold": "The price is $9985 delivered.",
-      "got": "The price is $9985 delivered.",
+      "gold": "The price is $4453 delivered.",
+      "got": "The price is $4453 delivered.",
       "ok": true
     },
     {
       "id": 97,
       "family": "cheapest",
-      "gold": "The price is $5170 delivered.",
-      "got": "The price is $5226 delivered.",
-      "ok": false
+      "gold": "The price is $417 delivered.",
+      "got": "The price is $417 delivered.",
+      "ok": true
     },
     {
       "id": 98,
       "family": "priciest",
-      "gold": "The price is $7361 delivered.",
-      "got": "The price is $7361 delivered.",
+      "gold": "The price is $9290 delivered.",
+      "got": "The price is $9290 delivered.",
       "ok": true
     },
     {
       "id": 99,
       "family": "diff",
-      "gold": "$8800 more",
-      "got": "The price is $219 delivered.",
+      "gold": "$2380 more",
+      "got": "The price is $4691 delivered.",
       "ok": false
     },
     {
       "id": 100,
       "family": "total",
-      "gold": "The total is $7025 delivered.",
-      "got": "The price is $5094 delivered.",
+      "gold": "The total is $12611 delivered.",
+      "got": "The price is $6732 delivered.",
       "ok": false
     },
     {
       "id": 101,
       "family": "pct",
-      "gold": "The price is $4720.1 delivered.",
-      "got": "The price is $6743 delivered.",
+      "gold": "The price is $2130.75 delivered.",
+      "got": "The price is $2841 delivered.",
       "ok": false
     },
     {
       "id": 102,
       "family": "lookup",
-      "gold": "The price is $8207 delivered.",
-      "got": "The price is $8207 delivered.",
-      "ok": true
+      "gold": "The price is $9959 delivered.",
+      "got": "The price is $995 delivered.",
+      "ok": false
     },
     {
       "id": 103,
       "family": "cheapest",
-      "gold": "The price is $7659 delivered.",
-      "got": "The price is $7659 delivered.",
+      "gold": "The price is $1717 delivered.",
+      "got": "The price is $1717 delivered.",
       "ok": true
     },
     {
       "id": 104,
       "family": "priciest",
-      "gold": "The price is $7886 delivered.",
-      "got": "The price is $7886 delivered.",
-      "ok": true
+      "gold": "The price is $8285 delivered.",
+      "got": "The price is $8275 delivered.",
+      "ok": false
     },
     {
       "id": 105,
       "family": "diff",
-      "gold": "$3 more",
-      "got": "The price is $6477 delivered.",
+      "gold": "$4710 more",
+      "got": "The price is $515 delivered.",
       "ok": false
     },
     {
       "id": 106,
       "family": "total",
-      "gold": "The total is $4476 delivered.",
-      "got": "The price is $3689 delivered.",
+      "gold": "The total is $9754 delivered.",
+      "got": "The price is $6097 delivered.",
       "ok": false
     },
     {
       "id": 107,
       "family": "pct",
-      "gold": "The price is $193.5 delivered.",
-      "got": "The price is $387 delivered.",
+      "gold": "The price is $4155.9 delivered.",
+      "got": "The price is $5937 delivered.",
       "ok": false
     },
     {
       "id": 108,
       "family": "lookup",
-      "gold": "The price is $9140 delivered.",
-      "got": "The price is $9140 delivered.",
+      "gold": "The price is $1777 delivered.",
+      "got": "The price is $1777 delivered.",
       "ok": true
     },
     {
       "id": 109,
       "family": "cheapest",
-      "gold": "The price is $939 delivered.",
-      "got": "The price is $941 delivered.",
-      "ok": false
+      "gold": "The price is $2156 delivered.",
+      "got": "The price is $2156 delivered.",
+      "ok": true
     },
     {
       "id": 110,
       "family": "priciest",
-      "gold": "The price is $4424 delivered.",
-      "got": "The price is $4424 delivered.",
+      "gold": "The price is $9570 delivered.",
+      "got": "The price is $9570 delivered.",
       "ok": true
     },
     {
       "id": 111,
       "family": "diff",
-      "gold": "$6132 more",
-      "got": "The price is $8962 delivered.",
+      "gold": "$6461 more",
+      "got": "The price is $3096 delivered.",
       "ok": false
     },
     {
       "id": 112,
       "family": "total",
-      "gold": "The total is $10470 delivered.",
-      "got": "The price is $4072 delivered.",
+      "gold": "The total is $4899 delivered.",
+      "got": "The price is $3502 delivered.",
       "ok": false
     },
     {
       "id": 113,
       "family": "pct",
-      "gold": "The price is $4804.2 delivered.",
-      "got": "The price is $5338 delivered.",
+      "gold": "The price is $2910.5 delivered.",
+      "got": "The price is $5821 delivered.",
       "ok": false
     },
     {
       "id": 114,
       "family": "lookup",
-      "gold": "The price is $9887 delivered.",
-      "got": "The price is $9887 delivered.",
+      "gold": "The price is $9068 delivered.",
+      "got": "The price is $9068 delivered.",
       "ok": true
     },
     {
       "id": 115,
       "family": "cheapest",
-      "gold": "The price is $990 delivered.",
-      "got": "The price is $938 delivered.",
-      "ok": false
+      "gold": "The price is $2062 delivered.",
+      "got": "The price is $2062 delivered.",
+      "ok": true
     },
     {
       "id": 116,
       "family": "priciest",
-      "gold": "The price is $2546 delivered.",
-      "got": "The price is $2546 delivered.",
+      "gold": "The price is $6831 delivered.",
+      "got": "The price is $6831 delivered.",
       "ok": true
     },
     {
       "id": 117,
       "family": "diff",
-      "gold": "$2546 more",
-      "got": "The price is $9938 delivered.",
+      "gold": "$3898 more",
+      "got": "The price is $2529 delivered.",
       "ok": false
     },
     {
       "id": 118,
       "family": "total",
-      "gold": "The total is $17546 delivered.",
-      "got": "The price is $7732 delivered.",
+      "gold": "The total is $7446 delivered.",
+      "got": "The price is $6191 delivered.",
       "ok": false
     },
     {
       "id": 119,
       "family": "pct",
-      "gold": "The price is $2173.8 delivered.",
-      "got": "The price is $3623 delivered.",
+      "gold": "The price is $6298.5 delivered.",
+      "got": "The price is $7410 delivered.",
       "ok": false
     },
     {
       "id": 120,
       "family": "lookup",
-      "gold": "The price is $297 delivered.",
-      "got": "The price is $297 delivered.",
+      "gold": "The price is $7420 delivered.",
+      "got": "The price is $7420 delivered.",
       "ok": true
     },
     {
       "id": 121,
       "family": "cheapest",
-      "gold": "The price is $4034 delivered.",
-      "got": "The price is $4034 delivered.",
+      "gold": "The price is $3266 delivered.",
+      "got": "The price is $3266 delivered.",
       "ok": true
     },
     {
       "id": 122,
       "family": "priciest",
-      "gold": "The price is $8830 delivered.",
-      "got": "The price is $8830 delivered.",
+      "gold": "The price is $8836 delivered.",
+      "got": "The price is $8836 delivered.",
       "ok": true
     },
     {
       "id": 123,
       "family": "diff",
-      "gold": "$4016 more",
-      "got": "The price is $942 delivered.",
+      "gold": "$3162 more",
+      "got": "The price is $5714 delivered.",
       "ok": false
     },
     {
       "id": 124,
       "family": "total",
-      "gold": "The total is $11894 delivered.",
-      "got": "The price is $7239 delivered.",
+      "gold": "The total is $2778 delivered.",
+      "got": "The price is $1497 delivered.",
       "ok": false
     },
     {
       "id": 125,
       "family": "pct",
-      "gold": "The price is $6752 delivered.",
-      "got": "The price is $844 delivered.",
+      "gold": "The price is $2942 delivered.",
+      "got": "The price is $5884 delivered.",
       "ok": false
     },
     {
       "id": 126,
       "family": "lookup",
-      "gold": "The price is $8868 delivered.",
-      "got": "The price is $8868 delivered.",
+      "gold": "The price is $368 delivered.",
+      "got": "The price is $368 delivered.",
       "ok": true
     },
     {
       "id": 127,
       "family": "cheapest",
-      "gold": "The price is $2256 delivered.",
-      "got": "The price is $2256 delivered.",
+      "gold": "The price is $2006 delivered.",
+      "got": "The price is $2006 delivered.",
       "ok": true
     },
     {
       "id": 128,
       "family": "priciest",
-      "gold": "The price is $9970 delivered.",
-      "got": "The price is $9970 delivered.",
+      "gold": "The price is $9545 delivered.",
+      "got": "The price is $9545 delivered.",
       "ok": true
     },
     {
       "id": 129,
       "family": "diff",
-      "gold": "$3736 more",
-      "got": "The price is $4546 delivered.",
+      "gold": "$2926 more",
+      "got": "The price is $2967 delivered.",
       "ok": false
     },
     {
       "id": 130,
       "family": "total",
-      "gold": "The total is $7850 delivered.",
-      "got": "The price is $3603 delivered.",
+      "gold": "The total is $19876 delivered.",
+      "got": "The price is $9010 delivered.",
       "ok": false
     },
     {
       "id": 131,
       "family": "pct",
-      "gold": "The price is $5721 delivered.",
-      "got": "The price is $953 delivered.",
+      "gold": "The price is $6121.8 delivered.",
+      "got": "The price is $6802 delivered.",
       "ok": false
     },
     {
       "id": 132,
       "family": "lookup",
-      "gold": "The price is $6770 delivered.",
-      "got": "The price is $6770 delivered.",
+      "gold": "The price is $8285 delivered.",
+      "got": "The price is $8285 delivered.",
       "ok": true
     },
     {
       "id": 133,
       "family": "cheapest",
-      "gold": "The price is $3385 delivered.",
-      "got": "The price is $3385 delivered.",
+      "gold": "The price is $252 delivered.",
+      "got": "The price is $252 delivered.",
       "ok": true
     },
     {
       "id": 134,
       "family": "priciest",
-      "gold": "The price is $9306 delivered.",
-      "got": "The price is $9305 delivered.",
-      "ok": false
+      "gold": "The price is $1664 delivered.",
+      "got": "The price is $1664 delivered.",
+      "ok": true
     },
     {
       "id": 135,
       "family": "diff",
-      "gold": "$6403 more",
-      "got": "The price is $866 delivered.",
+      "gold": "$1572 more",
+      "got": "The price is $2630 delivered.",
       "ok": false
     },
     {
       "id": 136,
       "family": "total",
-      "gold": "The total is $13964 delivered.",
-      "got": "The price is $6007 delivered.",
+      "gold": "The total is $16584 delivered.",
+      "got": "The price is $9581 delivered.",
       "ok": false
     },
     {
       "id": 137,
       "family": "pct",
-      "gold": "The price is $715.5 delivered.",
-      "got": "The price is $795 delivered.",
+      "gold": "The price is $3635.8 delivered.",
+      "got": "The price is $5194 delivered.",
       "ok": false
     },
     {
       "id": 138,
       "family": "lookup",
-      "gold": "The price is $1556 delivered.",
-      "got": "The price is $1556 delivered.",
+      "gold": "The price is $1191 delivered.",
+      "got": "The price is $1191 delivered.",
       "ok": true
     },
     {
       "id": 139,
       "family": "cheapest",
-      "gold": "The price is $1810 delivered.",
-      "got": "The price is $1810 delivered.",
+      "gold": "The price is $419 delivered.",
+      "got": "The price is $419 delivered.",
       "ok": true
     },
     {
       "id": 140,
       "family": "priciest",
-      "gold": "The price is $9084 delivered.",
-      "got": "The price is $9084 delivered.",
+      "gold": "The price is $5872 delivered.",
+      "got": "The price is $5872 delivered.",
       "ok": true
     },
     {
       "id": 141,
       "family": "diff",
-      "gold": "$2892 more",
-      "got": "The price is $6361 delivered.",
+      "gold": "$4071 more",
+      "got": "The price is $5730 delivered.",
       "ok": false
     },
     {
       "id": 142,
       "family": "total",
-      "gold": "The total is $20345 delivered.",
-      "got": "The price is $9368 delivered.",
+      "gold": "The total is $10857 delivered.",
+      "got": "The price is $7896 delivered.",
       "ok": false
     },
     {
       "id": 143,
       "family": "pct",
-      "gold": "The price is $3140.1 delivered.",
-      "got": "The price is $3489 delivered.",
+      "gold": "The price is $3358.4 delivered.",
+      "got": "The price is $4198 delivered.",
       "ok": false
     },
     {
       "id": 144,
       "family": "lookup",
-      "gold": "The price is $3709 delivered.",
-      "got": "The price is $3709 delivered.",
+      "gold": "The price is $9210 delivered.",
+      "got": "The price is $9210 delivered.",
       "ok": true
     },
     {
       "id": 145,
       "family": "cheapest",
-      "gold": "The price is $1473 delivered.",
-      "got": "The price is $1473 delivered.",
+      "gold": "The price is $2528 delivered.",
+      "got": "The price is $2528 delivered.",
       "ok": true
     },
     {
       "id": 146,
       "family": "priciest",
-      "gold": "The price is $6991 delivered.",
-      "got": "The price is $6991 delivered.",
+      "gold": "The price is $5504 delivered.",
+      "got": "The price is $5504 delivered.",
       "ok": true
     },
     {
       "id": 147,
       "family": "diff",
-      "gold": "$9089 more",
-      "got": "The price is $850 delivered.",
+      "gold": "$5157 more",
+      "got": "The price is $5776 delivered.",
       "ok": false
     },
     {
       "id": 148,
       "family": "total",
-      "gold": "The total is $7066 delivered.",
-      "got": "The price is $4980 delivered.",
+      "gold": "The total is $23145 delivered.",
+      "got": "The price is $9824 delivered.",
       "ok": false
     },
     {
       "id": 149,
       "family": "pct",
-      "gold": "The price is $2814 delivered.",
-      "got": "The price is $4690 delivered.",
+      "gold": "The price is $6937.6 delivered.",
+      "got": "The price is $8672 delivered.",
       "ok": false
     },
     {
       "id": 150,
       "family": "lookup",
-      "gold": "The price is $9239 delivered.",
-      "got": "The price is $923 delivered.",
-      "ok": false
+      "gold": "The price is $5839 delivered.",
+      "got": "The price is $5839 delivered.",
+      "ok": true
     },
     {
       "id": 151,
       "family": "cheapest",
-      "gold": "The price is $3224 delivered.",
-      "got": "The price is $3234 delivered.",
-      "ok": false
+      "gold": "The price is $813 delivered.",
+      "got": "The price is $813 delivered.",
+      "ok": true
     },
     {
       "id": 152,
       "family": "priciest",
-      "gold": "The price is $9448 delivered.",
-      "got": "The price is $9448 delivered.",
+      "gold": "The price is $5626 delivered.",
+      "got": "The price is $5626 delivered.",
       "ok": true
     },
     {
       "id": 153,
       "family": "diff",
-      "gold": "$6628 more",
-      "got": "The price is $3195 delivered.",
+      "gold": "$4398 more",
+      "got": "The price is $5430 delivered.",
       "ok": false
     },
     {
       "id": 154,
       "family": "total",
-      "gold": "The total is $21178 delivered.",
-      "got": "The price is $9145 delivered.",
+      "gold": "The total is $13002 delivered.",
+      "got": "The price is $6233 delivered.",
       "ok": false
     },
     {
       "id": 155,
       "family": "pct",
-      "gold": "The price is $7871.2 delivered.",
-      "got": "The price is $9839 delivered.",
+      "gold": "The price is $1914.2 delivered.",
+      "got": "The price is $2252 delivered.",
       "ok": false
     },
     {
       "id": 156,
       "family": "lookup",
-      "gold": "The price is $4718 delivered.",
-      "got": "The price is $4718 delivered.",
+      "gold": "The price is $2144 delivered.",
+      "got": "The price is $2144 delivered.",
       "ok": true
     },
     {
       "id": 157,
       "family": "cheapest",
-      "gold": "The price is $3233 delivered.",
-      "got": "The price is $3233 delivered.",
+      "gold": "The price is $2055 delivered.",
+      "got": "The price is $2055 delivered.",
       "ok": true
     },
     {
       "id": 158,
       "family": "priciest",
-      "gold": "The price is $8447 delivered.",
-      "got": "The price is $8447 delivered.",
+      "gold": "The price is $8951 delivered.",
+      "got": "The price is $8951 delivered.",
       "ok": true
     },
     {
       "id": 159,
       "family": "diff",
-      "gold": "$5317 more",
-      "got": "The price is $4367 delivered.",
+      "gold": "$4911 more",
+      "got": "The price is $988 delivered.",
       "ok": false
     },
     {
       "id": 160,
       "family": "total",
-      "gold": "The total is $11619 delivered.",
-      "got": "The price is $9920 delivered.",
+      "gold": "The total is $12062 delivered.",
+      "got": "The price is $7147 delivered.",
       "ok": false
     },
     {
       "id": 161,
       "family": "pct",
-      "gold": "The price is $8316.9 delivered.",
-      "got": "The price is $924 delivered.",
+      "gold": "The price is $395.5 delivered.",
+      "got": "The price is $791 delivered.",
       "ok": false
     },
     {
       "id": 162,
       "family": "lookup",
-      "gold": "The price is $430 delivered.",
-      "got": "The price is $430 delivered.",
+      "gold": "The price is $2235 delivered.",
+      "got": "The price is $2235 delivered.",
       "ok": true
     },
     {
       "id": 163,
       "family": "cheapest",
-      "gold": "The price is $1155 delivered.",
-      "got": "The price is $1155 delivered.",
+      "gold": "The price is $387 delivered.",
+      "got": "The price is $387 delivered.",
       "ok": true
     },
     {
       "id": 164,
       "family": "priciest",
-      "gold": "The price is $7464 delivered.",
-      "got": "The price is $7464 delivered.",
+      "gold": "The price is $9389 delivered.",
+      "got": "The price is $9389 delivered.",
       "ok": true
     },
     {
       "id": 165,
       "family": "diff",
-      "gold": "$895 more",
-      "got": "The price is $5952 delivered.",
+      "gold": "$1306 more",
+      "got": "The price is $359 delivered.",
       "ok": false
     },
     {
       "id": 166,
       "family": "total",
-      "gold": "The total is $11156 delivered.",
-      "got": "The price is $9936 delivered.",
+      "gold": "The total is $24560 delivered.",
+      "got": "The price is $9658 delivered.",
       "ok": false
     },
     {
       "id": 167,
       "family": "pct",
-      "gold": "The price is $3944.7 delivered.",
-      "got": "The price is $4383 delivered.",
+      "gold": "The price is $6668 delivered.",
+      "got": "The price is $8335 delivered.",
       "ok": false
     },
     {
       "id": 168,
       "family": "lookup",
-      "gold": "The price is $3454 delivered.",
-      "got": "The price is $3454 delivered.",
+      "gold": "The price is $5959 delivered.",
+      "got": "The price is $5959 delivered.",
       "ok": true
     },
     {
       "id": 169,
       "family": "cheapest",
-      "gold": "The price is $5885 delivered.",
-      "got": "The price is $5885 delivered.",
+      "gold": "The price is $932 delivered.",
+      "got": "The price is $932 delivered.",
       "ok": true
     },
     {
       "id": 170,
       "family": "priciest",
-      "gold": "The price is $6292 delivered.",
-      "got": "The price is $6292 delivered.",
+      "gold": "The price is $9623 delivered.",
+      "got": "The price is $9623 delivered.",
       "ok": true
     },
     {
       "id": 171,
       "family": "diff",
-      "gold": "$1740 more",
-      "got": "The price is $969 delivered.",
+      "gold": "$2020 more",
+      "got": "The price is $439 delivered.",
       "ok": false
     },
     {
       "id": 172,
       "family": "total",
-      "gold": "The total is $8623 delivered.",
-      "got": "The price is $8098 delivered.",
+      "gold": "The total is $11777 delivered.",
+      "got": "The price is $843 delivered.",
       "ok": false
     },
     {
       "id": 173,
       "family": "pct",
-      "gold": "The price is $1452 delivered.",
-      "got": "The price is $2420 delivered.",
+      "gold": "The price is $1618.2 delivered.",
+      "got": "The price is $1798 delivered.",
       "ok": false
     },
     {
       "id": 174,
       "family": "lookup",
-      "gold": "The price is $2026 delivered.",
-      "got": "The price is $2026 delivered.",
+      "gold": "The price is $3631 delivered.",
+      "got": "The price is $3631 delivered.",
       "ok": true
     },
     {
       "id": 175,
       "family": "cheapest",
-      "gold": "The price is $1982 delivered.",
-      "got": "The price is $1982 delivered.",
+      "gold": "The price is $2316 delivered.",
+      "got": "The price is $2316 delivered.",
       "ok": true
     },
     {
       "id": 176,
       "family": "priciest",
-      "gold": "The price is $8506 delivered.",
-      "got": "The price is $8506 delivered.",
+      "gold": "The price is $6144 delivered.",
+      "got": "The price is $6144 delivered.",
       "ok": true
     },
     {
       "id": 177,
       "family": "diff",
-      "gold": "$2212 more",
-      "got": "The price is $7753 delivered.",
+      "gold": "$5820 more",
+      "got": "The price is $8561 delivered.",
       "ok": false
     },
     {
       "id": 178,
       "family": "total",
-      "gold": "The total is $8120 delivered.",
-      "got": "The price is $4208 delivered.",
+      "gold": "The total is $6544 delivered.",
+      "got": "The price is $3699 delivered.",
       "ok": false
     },
     {
       "id": 179,
       "family": "pct",
-      "gold": "The price is $2035.6 delivered.",
-      "got": "The price is $2908 delivered.",
+      "gold": "The price is $2532 delivered.",
+      "got": "The price is $4220 delivered.",
       "ok": false
     },
     {
       "id": 180,
       "family": "lookup",
-      "gold": "The price is $1533 delivered.",
-      "got": "The price is $1533 delivered.",
+      "gold": "The price is $814 delivered.",
+      "got": "The price is $814 delivered.",
       "ok": true
     },
     {
       "id": 181,
       "family": "cheapest",
-      "gold": "The price is $1942 delivered.",
-      "got": "The price is $1942 delivered.",
+      "gold": "The price is $2434 delivered.",
+      "got": "The price is $2434 delivered.",
       "ok": true
     },
     {
       "id": 182,
       "family": "priciest",
-      "gold": "The price is $9260 delivered.",
-      "got": "The price is $9260 delivered.",
+      "gold": "The price is $6694 delivered.",
+      "got": "The price is $6694 delivered.",
       "ok": true
     },
     {
       "id": 183,
       "family": "diff",
-      "gold": "$6035 more",
-      "got": "The price is $6513 delivered.",
+      "gold": "$3590 more",
+      "got": "The price is $6148 delivered.",
       "ok": false
     },
     {
       "id": 184,
       "family": "total",
-      "gold": "The total is $9450 delivered.",
-      "got": "The price is $8396 delivered.",
+      "gold": "The total is $15730 delivered.",
+      "got": "The price is $8733 delivered.",
       "ok": false
     },
     {
       "id": 185,
       "family": "pct",
-      "gold": "The price is $1083.2 delivered.",
-      "got": "The price is $1354 delivered.",
+      "gold": "The price is $153 delivered.",
+      "got": "The price is $306 delivered.",
       "ok": false
     },
     {
       "id": 186,
       "family": "lookup",
-      "gold": "The price is $671 delivered.",
-      "got": "The price is $671 delivered.",
+      "gold": "The price is $542 delivered.",
+      "got": "The price is $542 delivered.",
       "ok": true
     },
     {
       "id": 187,
       "family": "cheapest",
-      "gold": "The price is $2297 delivered.",
-      "got": "The price is $2297 delivered.",
+      "gold": "The price is $6580 delivered.",
+      "got": "The price is $6580 delivered.",
       "ok": true
     },
     {
       "id": 188,
       "family": "priciest",
-      "gold": "The price is $7797 delivered.",
-      "got": "The price is $7797 delivered.",
-      "ok": true
+      "gold": "The price is $8323 delivered.",
+      "got": "The price is $8333 delivered.",
+      "ok": false
     },
     {
       "id": 189,
       "family": "diff",
-      "gold": "$3120 more",
-      "got": "The price is $8276 delivered.",
+      "gold": "$5352 more",
+      "got": "The price is $141 delivered.",
       "ok": false
     },
     {
       "id": 190,
       "family": "total",
-      "gold": "The total is $10917 delivered.",
-      "got": "The price is $7629 delivered.",
+      "gold": "The total is $11226 delivered.",
+      "got": "The price is $7274 delivered.",
       "ok": false
     },
     {
       "id": 191,
       "family": "pct",
-      "gold": "The price is $2434.6 delivered.",
-      "got": "The price is $3478 delivered.",
+      "gold": "The price is $1953 delivered.",
+      "got": "The price is $2604 delivered.",
       "ok": false
     },
     {
       "id": 192,
       "family": "lookup",
-      "gold": "The price is $6210 delivered.",
-      "got": "The price is $621 delivered.",
-      "ok": false
+      "gold": "The price is $9874 delivered.",
+      "got": "The price is $9874 delivered.",
+      "ok": true
     },
     {
       "id": 193,
       "family": "cheapest",
-      "gold": "The price is $8625 delivered.",
-      "got": "The price is $8625 delivered.",
+      "gold": "The price is $1122 delivered.",
+      "got": "The price is $1122 delivered.",
       "ok": true
     },
     {
       "id": 194,
       "family": "priciest",
-      "gold": "The price is $9564 delivered.",
-      "got": "The price is $9564 delivered.",
+      "gold": "The price is $8541 delivered.",
+      "got": "The price is $8541 delivered.",
       "ok": true
     },
     {
       "id": 195,
       "family": "diff",
-      "gold": "$7285 more",
-      "got": "The price is $751 delivered.",
+      "gold": "$1181 more",
+      "got": "The price is $5219 delivered.",
       "ok": false
     },
     {
       "id": 196,
       "family": "total",
-      "gold": "The total is $7969 delivered.",
-      "got": "The price is $5626 delivered.",
+      "gold": "The total is $5685 delivered.",
+      "got": "The price is $5296 delivered.",
       "ok": false
     },
     {
       "id": 197,
       "family": "pct",
-      "gold": "The price is $1780.2 delivered.",
-      "got": "The price is $2967 delivered.",
+      "gold": "The price is $107.2 delivered.",
+      "got": "The price is $134 delivered.",
       "ok": false
     },
     {
       "id": 198,
       "family": "lookup",
-      "gold": "The price is $4061 delivered.",
-      "got": "The price is $4061 delivered.",
+      "gold": "The price is $9292 delivered.",
+      "got": "The price is $9292 delivered.",
       "ok": true
     },
     {
       "id": 199,
       "family": "cheapest",
-      "gold": "The price is $2906 delivered.",
-      "got": "The price is $2906 delivered.",
+      "gold": "The price is $6328 delivered.",
+      "got": "The price is $6328 delivered.",
       "ok": true
     }
   ]
