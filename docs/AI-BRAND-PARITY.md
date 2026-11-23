@@ -141,6 +141,29 @@ holographic memory's job (shipped), and new *reasoning* skills need either a
 higher-χ refinement or a digit-decomposed curriculum. That is what an honest
 gate is for.
 
+**The combined system closed the gap the same day.** Rather than waiting for
+gradient descent to re-learn subtraction, the live page pairs the two measured
+axes: the trained model keeps language and comparison; a **holographic
+difference memory** carries the arithmetic as exact lookup — one binding per
+ordered (item, item) pair into a single 32 KiB vector, learned **instantly**
+(one binding, no gradient step, even for a pair added after encoding). In-page
+measured: **40/40 difference pairs read back exactly**, plus a brand-new pair
+learned after encoding and answered correctly (`hrrDifferenceSelfTest` in
+`entangled.js`, live on the page's "Difference questions" panel).
+
+The wider-manifold retry was also run and **refused by the same gate**: χ=96,
+no-carry digit-decomposed curriculum (every digit of the min price ≥ the
+corresponding digit — subtraction without borrowing as the learnable base
+case), two held-out seeds — 3,000 steps, loss 7.03 → 0.23, four-digit
+difference shapes in the samples (`"$2117 more"`), all seven old skills at
+1.00/1.00, worst regression 0.000, and **0/80 on the new skill across both
+seeds** (`tools/entangle/teach-difference.json`, χ=96). Twice measured, twice
+refused: within this manifold and step budget, arithmetic is not acquired by
+gradient descent even when the template is — and the gate says so instead of
+promoting a fluent-but-wrong model. Acquiring it honestly needs either a
+digit-by-digit decoding curriculum at much longer horizon, or the memory axis
+— which is shipped.
+
 | brand | flagship surface | RAREXT path today | evidence |
 | --- | --- | --- | --- |
 | OpenAI | GPT chat, tools, structured output, vision, images, voice | forwarded via `openai`-protocol card; core text surface also served natively | `cloud-model.ts` protocols; gateway forward |

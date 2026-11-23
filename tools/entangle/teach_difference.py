@@ -45,7 +45,7 @@ from model import batched_generate, answer_logprobs  # noqa: E402
 from factor_export import FACTOR_MAP  # noqa: E402
 
 CKPT = HERE / "refined-chi48.pt"
-CHI = 48
+CHI = int(__import__('os').environ.get('TEACH_CHI', '96'))
 STEPS = 3000
 SEED = 4242
 
@@ -55,13 +55,19 @@ NEW_GOLD = "{a} costs ${diff} more than {b}."
 
 
 def new_skill_example(rng, stage=1):
-    """A price-difference example with computed gold. Stage 1: differences of
-    10-99 (two digits — a predictable shape); stage 2 widens to full range."""
+    """A price-difference example with computed gold.
+    stage 1: NO-CARRY differences (every digit of p1 >= p2) — digit-wise
+    subtraction without borrowing, the learnable base case.
+    stage 2: full range with carries."""
     while True:
         pa = rng.randrange(100, 9999)
         pb = rng.randrange(100, 9999)
+        if pa <= pb:
+            continue
         if stage == 1:
-            if 10 <= pa - pb <= 99:
+            sa = str(pa)
+            sb = str(pb).rjust(len(sa), "0")
+            if all(int(x) >= int(y) for x, y in zip(sa, sb)) and pa - pb >= 10:
                 break
         else:
             if pa - pb >= 10:
@@ -229,7 +235,15 @@ def main():
             torch.save({"config": cfg, "state": model.state_dict()}, HERE / "refined-chi48-teaching.pt")
 
     # ---- gates ----
-    hits, n = score_new_skill(model, held_pairs)
+    held2 = []
+    hrng2 = random.Random(SEED + 4242)
+    while len(held2) < 40:
+        pp, aa = new_skill_example(hrng2, stage=2)
+        if len(encode(pp)) + len(encode(aa)) <= 176:
+            held2.append((pp, aa))
+    h1, n1 = score_new_skill(model, held_pairs)
+    h2, n2 = score_new_skill(model, held2)
+    hits, n = h1 + h2, n1 + n2
     new_acc = hits / n
     after_old = old_skill_score(model)
     regressions = {k: base_old[k] - after_old[k] for k in base_old}

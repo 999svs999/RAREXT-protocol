@@ -93,7 +93,13 @@ Put beside the trained model:
   key→value lookup; it does not generalize to novel phrasings, and composing
   items from words costs accuracy (69.3% measured). The trained MPO model
   generalizes and stays the reasoning engine; holographic memory is the cheap,
-  instant, training-free companion for tabular knowledge.
+  instant, training-free companion for tabular knowledge — and it closes in
+  practice what the trained axis could not: after the χ=48 and χ=96
+  arithmetic-teaching runs both failed their promotion gates
+  (`tools/entangle/teach-difference.json`), the live page ships a holographic
+  difference memory instead — 40/40 exact difference pairs in 32 KiB, and a
+  pair learned after encoding (one binding, no gradient step) answered
+  correctly. The combined system answers what either axis alone cannot.
 - **No quantum claim**: "holographic" here is Plate's algebra on phasor
   vectors. The connection to the entanglement work is structural, not
   mystical — both distribute information across a high-dimensional space with
