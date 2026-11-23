@@ -29,7 +29,12 @@ from train import TinyLM, VOCAB, VOCAB_TOKENS, EOS  # noqa: E402
 from gguf import GGUFWriter  # noqa: E402
 import task  # noqa: E402
 from model import batched_generate  # noqa: E402
-from refine_rebuild import CKPT, build, projected_refine  # noqa: E402
+# refine_rebuild is only needed by this file's own CLI; importing it at module
+# level drags the whole rebuild pipeline into every consumer of FACTOR_MAP
+# (which is what broke the Kaggle kernel's import chain).
+def _cli_deps():
+    from refine_rebuild import CKPT, build, projected_refine  # noqa: E402
+    return CKPT, build, projected_refine
 
 FACTOR_MAP = {
     "q.weight": "attn_q", "k.weight": "attn_k", "v.weight": "attn_v",
@@ -93,6 +98,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--chi", type=int, default=48)
     args = ap.parse_args()
+    CKPT, build, projected_refine = _cli_deps()
     ck = torch.load(CKPT, map_location="cpu")
     cfg, state = ck["config"], ck["state"]
 

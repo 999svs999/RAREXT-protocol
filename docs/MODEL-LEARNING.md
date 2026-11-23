@@ -178,15 +178,21 @@ if all of these hold, measured by `tools/rank/eval-neural.mjs` afterwards:
   (the gate that refused the 2026-11-24 checkpoint);
 * the **published suite itself does not regress** — `eval-neural.mjs --n 200`
   runs inside `promote-entangled.mjs` and the install reverts on any drop.
-  This gate exists because of the same day's second lesson: the 4,500-step
-  checkpoint passed every set gate *and* the 14 page prompts, and still scored
-  **92/200 (46.0%)** vs the shipped 96/200 (48.0%) — `cheapest` fell
-  94.1% → 85.3% — while `diff` stayed 0/33 because every published diff item
-  has a 4-digit operand. Training was reverted by `git checkout`, and the
-  replay was rebuilt: lookup/compare examples are now generated **fresh from
-  the deployed trainers' own generators every step** (`task.s0_example`,
-  `task.comp_example`), so the published distribution is anchored, not a fixed
-  24-sample stand-in;
+  This gate has caught two bad checkpoints that every set-based gate passed:
+
+  1. the 4,500-step run scored **92/200 (46.0%)** vs the shipped 96/200 —
+     `cheapest` fell 94.1% → 85.3% — while `diff` stayed 0/33 (all published
+     diff items have a 4-digit operand);
+  2. the "procedural replay" fix scored **82/200 (41.0%)** — published `lookup`
+     collapsed 97.1% → 58.8% — because the replay generators it drew from
+     sample prices from **49..999** (`task.make_price`), never the published
+     5..9999 range, so four hours of training slowly forgot how to read a
+     4-digit price.
+
+  The final replay fix is structural: `suite_example()` generates lookup /
+  cheapest / priciest examples **from the published grammar itself**
+  (`tools/rank/gen-tasks.mjs`: prices uniform on 5..9999, 2–3 word names with
+  the same case styling), every step. Reverted by `git checkout` both times;
 * arithmetic families (`diff`, `total`, `pct`) held-out exact **> 0%**, and
   reported per family rather than pooled;
 * lookup/compare families **do not fall** below their current 88–97%;

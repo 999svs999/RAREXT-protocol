@@ -49,6 +49,50 @@ import task  # noqa: E402
 
 WORDS = task.WORDS
 
+def suite_example(rng):
+    """One replay example drawn from the PUBLISHED suite's own grammar
+    (tools/rank/gen-tasks.mjs): prices uniform on 5..9999, 2-3 word names with
+    the same case styling, one of the three keep-families.
+
+    This exists because the deployed trainers' generators sample prices from
+    49..999 (task.make_price) — replaying only those collapsed published lookup
+    from 97.1% to 58.8% (run v4, refused by the promotion gate)."""
+    n = rng.choice([2, 2, 2, 3])
+    parts = []
+    while len(parts) < n:
+        w = rng.choice(WORDS)
+        if w not in parts:
+            parts.append(w)
+    joined = " ".join(parts)
+    r = rng.random()
+    name = joined.upper() if r < 0.34 else (joined.title() if r < 0.67 else joined)
+    rows_n = rng.choice([1, 2, 2, 3, 3, 4])
+    names, prices = [], []
+    while len(names) < rows_n:
+        m = rng.choice([2, 2, 2, 3])
+        ps = []
+        while len(ps) < m:
+            w = rng.choice(WORDS)
+            if w not in ps:
+                ps.append(w)
+        j = " ".join(ps)
+        q = rng.random()
+        nm = j.upper() if q < 0.34 else (j.title() if q < 0.67 else j)
+        if nm not in names:
+            names.append(nm)
+            prices.append(rng.randint(5, 9999))
+    body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    kind = rng.random()
+    if kind < 0.4:
+        i = rng.randrange(rows_n)
+        prompt = f"rows: {body}\nq: how much is the {names[i]}?\na: "
+        return prompt, f"The price is ${prices[i]} delivered."
+    if kind < 0.7:
+        prompt = f"rows: {body}\nq: which is cheapest?\na: "
+        return prompt, f"The price is ${min(prices)} delivered."
+    prompt = f"rows: {body}\nq: which is most expensive?\na: "
+    return prompt, f"The price is ${max(prices)} delivered."
+
 def page_skills():
     """The 14 canonical prompts the deployed page self-tests with. They are the
     deployed contract, so training anchors them in every batch — a new function
@@ -231,18 +275,14 @@ def main():
         batch = [diff_example(rng, rng.randint(1, width), noborrow=noborrow)
                  for _ in range(args.batch)]
         for _ in range(replay_n):
-            # procedural replay from the deployed trainers' own generators —
-            # fresh lookup/compare examples at the published distribution every
-            # step, plus a draw from the canonical sets. Fixed 24-sample replay
-            # passed its gate while the published suite lost 4 items.
+            # replay from the PUBLISHED grammar (suite_example), plus a draw
+            # from the canonical sets and the page's 14 prompts
             r = rng.random()
-            if r < 0.4:
-                batch.append(task.s0_example(rng))
-            elif r < 0.8:
-                batch.append(task.comp_example(rng))
+            if r < 0.7:
+                batch.append(suite_example(rng))
             else:
-                name = rng.choice(list(replay))
-                batch.append(replay[name][rng.randrange(24)])
+                nm = rng.choice(list(replay))
+                batch.append(replay[nm][rng.randrange(24)])
         batch.extend(page_skills())
         batch = [(p, a) for p, a in batch if len(encode(p)) + len(encode(a)) <= 186]
 

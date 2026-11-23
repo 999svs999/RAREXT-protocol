@@ -38,6 +38,60 @@ from train_diff import diff_example, held_sets, project  # noqa: E402
 import task  # noqa: E402
 
 
+def suite_example(rng):
+    """One replay example drawn from the PUBLISHED suite's own grammar
+    (tools/rank/gen-tasks.mjs): prices uniform on 5..9999, 2-3 word names with
+    the same case styling, one of the three keep-families.
+
+    This exists because the deployed trainers' generators sample prices from
+    49..999 (task.make_price) — replaying only those collapsed published lookup
+    from 97.1% to 58.8% (run v4, refused by the promotion gate)."""
+    n = rng.choice([2, 2, 2, 3])
+    parts = []
+    while len(parts) < n:
+        w = rng.choice(WORDS)
+        if w not in parts:
+            parts.append(w)
+    joined = " ".join(parts)
+    r = rng.random()
+    name = joined.upper() if r < 0.34 else (joined.title() if r < 0.67 else joined)
+    rows_n = rng.choice([1, 2, 2, 3, 3, 4])
+    names, prices = [], []
+    while len(names) < rows_n:
+        m = rng.choice([2, 2, 2, 3])
+        ps = []
+        while len(ps) < m:
+            w = rng.choice(WORDS)
+            if w not in ps:
+                ps.append(w)
+        j = " ".join(ps)
+        q = rng.random()
+        nm = j.upper() if q < 0.34 else (j.title() if q < 0.67 else j)
+        if nm not in names:
+            names.append(nm)
+            prices.append(rng.randint(5, 9999))
+    body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    kind = rng.random()
+    if kind < 0.4:
+        i = rng.randrange(rows_n)
+        prompt = f"rows: {body}\nq: how much is the {names[i]}?\na: "
+        return prompt, f"The price is ${prices[i]} delivered."
+    if kind < 0.7:
+        prompt = f"rows: {body}\nq: which is cheapest?\na: "
+        return prompt, f"The price is ${min(prices)} delivered."
+    prompt = f"rows: {body}\nq: which is most expensive?\na: "
+    return prompt, f"The price is ${max(prices)} delivered."
+
+def page_skills():
+    """The 14 canonical prompts the deployed page self-tests with. They are the
+    deployed contract, so training anchors them in every batch — a new function
+    must not flip even one of them."""
+    path = HERE / "page-skills.json"
+    if not path.exists():
+        return []
+    return [(x["prompt"], x["want"]) for x in json.loads(path.read_text())]
+
+
 def batch_loss_gpu(model, pairs, device):
     """Cross-entropy on answer bytes + EOS, right-padded — the GPU twin of
     teach_ledger.batch_loss (identical math, tensors on `device`)."""

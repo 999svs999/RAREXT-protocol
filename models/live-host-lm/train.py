@@ -212,7 +212,7 @@ class Block(nn.Module):
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
         att = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
-        mask = torch.triu(torch.ones(t, t, dtype=torch.bool), diagonal=1)
+        mask = torch.triu(torch.ones(t, t, dtype=torch.bool, device=x.device), diagonal=1)
         att = att.masked_fill(mask, float("-inf"))
         # Optional key-padding mask (True at PAD positions): lets batched
         # rollouts left-pad prompts of different lengths. RoPE scores depend
