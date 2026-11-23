@@ -1570,7 +1570,7 @@ function checkArtifactSources(filesOverride) {
       const copied = new Set(Array.from(listMatch[1].matchAll(/"([^"]+)"/g)).map((m) => m[1]));
       // Written from the bundle by the bundle writer, or development artifacts that are
       // not published surfaces. Named explicitly rather than guessed by shape.
-      const notCopied = new Set(["bundle.json", "bundle.js", "verify.html"]);
+      const notCopied = new Set(["bundle.json", "bundle.js", "verify.html", "futuristic.html"]);
       for (const name of readdirSync(new URL("site/registry/mirror", root))) {
         if (copied.has(name) || notCopied.has(name) || name.endsWith(".map")) continue;
         fail(

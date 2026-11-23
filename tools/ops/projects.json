@@ -1,0 +1,134 @@
+{
+ "version": 1,
+ "description": "RAREXT AI operations manifest \u2014 every project RAREXT runs, with the gates that prove each one is healthy. The runner (run-projects.mjs) executes these and writes receipts; the live mirror publishes the status.",
+ "projects": [
+  {
+   "id": "rarext-protocol",
+   "path": "rarext-protocol",
+   "role": "the protocol, runtime, engine, and this AI's own live mirror",
+   "gates": [
+    {
+     "id": "runtime",
+     "cmd": "npm run test:runtime",
+     "timeoutMs": 900000
+    },
+    {
+     "id": "claims",
+     "cmd": "node tools/ops/claim-gate.mjs",
+     "timeoutMs": 600000
+    }
+   ]
+  },
+  {
+   "id": "rarext",
+   "path": "RAREXT",
+   "role": "the RAREXT site/build surface",
+   "gates": [
+    {
+     "id": "test",
+     "cmd": "npm test",
+     "timeoutMs": 600000
+    },
+    {
+     "id": "typecheck",
+     "cmd": "npm run typecheck",
+     "timeoutMs": 600000
+    }
+   ]
+  },
+  {
+   "id": "bapeclub",
+   "path": "BAPECLUB",
+   "role": "the storefront RAREXT AI serves on the live host",
+   "gates": [
+    {
+     "id": "typecheck",
+     "cmd": "npm run typecheck",
+     "timeoutMs": 600000
+    },
+    {
+     "id": "build",
+     "cmd": "npm run build:bapeclub",
+     "timeoutMs": 900000
+    }
+   ]
+  },
+  {
+   "id": "futuristic",
+   "path": "FUTURISTIC",
+   "role": "the film showcase published through the registry",
+   "gates": [
+    {
+     "id": "site",
+     "cmd": "npm run build:site",
+     "timeoutMs": 600000
+    }
+   ]
+  },
+  {
+   "id": "shipflow",
+   "path": "shipflow",
+   "role": "shipping workflow app",
+   "gates": [
+    {
+     "id": "build",
+     "cmd": "npm run build",
+     "timeoutMs": 600000
+    },
+    {
+     "id": "lint",
+     "cmd": "npm run lint",
+     "timeoutMs": 300000
+    }
+   ]
+  },
+  {
+   "id": "stockflow",
+   "path": "stockflow",
+   "role": "stock workflow app",
+   "gates": [
+    {
+     "id": "build",
+     "cmd": "npm run build",
+     "timeoutMs": 600000
+    },
+    {
+     "id": "lint",
+     "cmd": "npm run lint",
+     "timeoutMs": 300000
+    }
+   ]
+  }
+ ],
+ "services": [
+  {
+   "id": "provider",
+   "url": "http://127.0.0.1:8790/health",
+   "expect": 200
+  },
+  {
+   "id": "edge-direct",
+   "url": "https://direct.rarext.com:8791/v1/models",
+   "expect": 200
+  },
+  {
+   "id": "tunnel",
+   "url": "https://ai.rarext.co/v1/models",
+   "expect": 200
+  },
+  {
+   "id": "mirror-entangled-page",
+   "url": "https://999svs999.github.io/RAREXT-protocol/mirror/entangled.html",
+   "expect": 200
+  },
+  {
+   "id": "mirror-weights",
+   "url": "https://999svs999.github.io/RAREXT-protocol/mirror/rarext-entangled-chi48.gguf",
+   "expect": 200
+  }
+ ],
+ "claimBaseline": {
+  "mismatches": 9,
+  "note": "the standing set of known claim drifts; the gate refuses regression, fixing one lowers this"
+ }
+}

@@ -189,6 +189,7 @@ const mirrorFiles = [
   "entangled.js",
   "entangled-engine.js",
   "rarext-entangled-chi48.gguf",
+  "projects.json",
   "app.js",
   "blobs.json",
   "favicon.svg",
@@ -216,6 +217,7 @@ const owners = {
   "entangled.js": join(root, "apps/web/public", "entangled.js"),
   "entangled-engine.js": join(root, "apps/web/public", "entangled-engine.js"),
   "rarext-entangled-chi48.gguf": join(root, "apps/web/public", "rarext-entangled-chi48.gguf"),
+  "projects.json": join(root, "apps/web/public", "projects.json"),
   "gallery.html": join(root, "apps/web/public", "gallery.html"),
   "renditions.js": join(root, "apps/web/public", "renditions.js"),
   // Hand-authored, and its home is the web tree: it was staged four cycles behind, so the
