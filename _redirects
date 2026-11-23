@@ -8,6 +8,10 @@
 # the rewrite straight at /registry/mirror/<name> serves the page in one hop
 # instead of two. Measured: /mirror/verify.html was 308 -> 200, and is 200 after
 # this change (scripts/test-showcase-ui.mjs asserts the titles either way).
-/mirror/ai.html       /registry/mirror/ai       200
-/mirror/gallery.html  /registry/mirror/gallery  200
-/mirror/verify.html   /registry/mirror/verify   200
+/mirror/ai.html           /registry/mirror/ai           200
+/mirror/gallery.html      /registry/mirror/gallery      200
+/mirror/verify.html       /registry/mirror/verify       200
+/mirror/futuristic.html   /registry/mirror/futuristic   200
+/mirror/entangled.html    /registry/mirror/entangled    200
+/mirror/leaderboard.html  /registry/mirror/leaderboard  200
+/mirror/*                 /registry/mirror/:splat       200
