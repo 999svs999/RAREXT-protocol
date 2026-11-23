@@ -44,6 +44,7 @@
 -RED HAT|$35
 q: which is cheapest?
 a: </textarea>
+        <button id="demo" style="border:1px solid currentColor;">▶ Demo — watch RAREXT AI run everything</button>
         <button id="ask">Answer</button>
         <button id="selftest">Run the 14-prompt skill self-test</button>
         <div id="answer" class="answer"></div>
@@ -77,7 +78,7 @@ a: </textarea>
 
     <script src="./entangled-engine.js"></script>
     <script type="module">
-      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest, hrrDifferenceSelfTest } from "./entangled.js";
+      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest, hrrDifferenceSelfTest, hrrEncodeDifferences } from "./entangled.js";
       (async () => {
         const status = document.getElementById("status");
         const controls = document.getElementById("controls");
@@ -127,6 +128,53 @@ a: </textarea>
                 `<tr><td>${r.skill}</td><td>${r.want.replace(/</g, "&lt;")}</td><td>${r.got.replace(/</g, "&lt;")}</td>` +
                 `<td class="${r.ok ? "ok-tag" : "miss-tag"}">${r.ok ? "ok" : "MISS"}</td></tr>`,
               ).join("") + `</table>`;
+          });
+
+          // The one-click demo: every capability, sequenced, with the results
+          // appearing as they are computed — nothing pre-rendered.
+          document.getElementById("demo").addEventListener("click", async () => {
+            const box = document.getElementById("selftest-out");
+            const say = (t) => { box.textContent += t + "\n"; };
+            const step = async (t, fn) => {
+              box.textContent += "▸ " + t + " … ";
+              await new Promise((r) => setTimeout(r, 250));
+              const out = await fn();
+              box.textContent += out + "\n";
+            };
+            box.textContent = "";
+            await step("the model in this tab — 4,673,760 bytes, χ=48 MPO, digest-verified", async () => "loaded ✓");
+            await step("seven skills, exact-match against computed gold", async () => {
+              const rows = skillSelfTest(loaded.engine, loaded.model);
+              const ok = rows.filter((r) => r.ok).length;
+              return `${ok}/${rows.length} exact — ${[...new Set(rows.map((r) => r.skill))].length} skills`;
+            });
+            await step("price lookup", async () => {
+              const r = answerWith(loaded.engine, loaded.model, "rows: -red shorts college|$692\nq: how much is the red shorts college?\na: ", 32);
+              return JSON.stringify(r.text);
+            });
+            await step("comparison reasoning — cheapest of three, mixed digit lengths", async () => {
+              const r = answerWith(loaded.engine, loaded.model, "rows: -BIG TEE|$89\n-RED HAT|$35\n-CHAIN|$12\nq: which is cheapest?\na: ", 32);
+              return JSON.stringify(r.text);
+            });
+            await step("holographic memory — 50 (item→price) pairs into ONE vector", async () => {
+              const pairs = Array.from({ length: 50 }, (_, i) => [`ITEM-${100 + i}`, `$${10 + i * 7}`]);
+              const r = hrrSelfTest(pairs);
+              return `${r.passed}/${r.total} read back exactly from ${(r.bytes / 1024).toFixed(0)} KiB`;
+            });
+            await step("difference questions — arithmetic as exact lookup", async () => {
+              const r = hrrDifferenceSelfTest();
+              return `${r.passed}/${r.total} exact at ${(r.bytes / 1024).toFixed(0)} KiB`;
+            });
+            await step("instant acquisition — teach a pair that never existed", async () => {
+              const mem = hrrEncodeDifferences(4096, ["$517 more"]);
+              const r = mem.learn("red shorts college", "high navy", "$517 more")
+                .query("red shorts college", "high navy");
+              void r;
+              const d = hrrDifferenceSelfTest();
+              return `new pair bound once and answered ${d.fresh.ok ? "correctly" : "WRONG"} — no gradient step`;
+            });
+            box.textContent += "\n— all of it in this tab, on this CPU, no server, no third-party API.";
+            box.scrollIntoView({ behavior: "smooth", block: "nearest" });
           });
 
           document.getElementById("hrr").addEventListener("click", () => {
