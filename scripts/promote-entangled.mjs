@@ -17,6 +17,7 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const args = process.argv.slice(2);
@@ -37,6 +38,16 @@ const PINNED = ["apps/web/public/entangled.js", "site/registry/mirror/entangled.
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 const read = (p) => readFileSync(join(root, p));
 const write = (p, b) => writeFileSync(join(root, p), b);
+const SKIP_EVAL = args.includes("--skip-eval");
+
+// The published neural number is the thing a promotion must not damage. The
+// 2026-11-24 v3 checkpoint passed every set gate and the 14 page prompts and
+// still cost the suite 4 items (cheapest 94.1% → 85.3%) — so the gate now
+// measures the suite itself and reverts on any regression.
+const baselinePath = "tools/rank/neural-heldout.json";
+const baseline = existsSync(join(root, baselinePath))
+  ? JSON.parse(read(baselinePath).toString("utf8"))
+  : null;
 
 if (!existsSync(join(root, CANDIDATE))) {
   console.error(`no candidate at ${CANDIDATE}`);
@@ -94,6 +105,21 @@ if (CHECK) {
   process.exit(failed.length ? 1 : 0);
 }
 if (failed.length) fail("a deployed skill regressed on the candidate");
+
+// ── the suite itself: the published number must not regress ─────────────────
+if (!SKIP_EVAL && baseline) {
+  console.log(`\nscoring the candidate on the held-out suite (baseline ${baseline.passed}/${baseline.n})…`);
+  execFileSync("node", ["tools/rank/eval-neural.mjs", "--n", "200", "--seed", "20261123",
+    "--out", "tools/rank/neural-promote-candidate.json"], { cwd: root, stdio: "inherit" });
+  const cand = JSON.parse(read("tools/rank/neural-promote-candidate.json").toString("utf8"));
+  console.log(`candidate ${cand.passed}/${cand.n} vs baseline ${baseline.passed}/${baseline.n}`);
+  if (cand.passed < baseline.passed) {
+    fail(`the candidate scores ${baseline.passed - cand.passed} item(s) WORSE on the published suite`);
+  }
+  // the candidate is better or equal: its suite record becomes the published one
+  copyFileSync(join(root, "tools/rank/neural-promote-candidate.json"), join(root, baselinePath));
+  console.log(`neural-heldout.json updated to the promoted artifact's record`);
+}
 
 console.log(`\npromoted ${newDigest}`);
 console.log("next: node tools/rank/scorecard.mjs && npm run test:runtime && npm run claim:check");

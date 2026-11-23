@@ -1,5 +1,5 @@
 {
- "steps": 60,
+ "steps": 6,
  "lr": 0.0003,
  "batch": 16,
  "replay": 0.3,
@@ -22,7 +22,7 @@
   "S2t priciest-3row-mixed": 0.9583333333333334,
   "S3 refusal": 0.0
  },
- "best_step": 30,
+ "best_step": 6,
  "eligible": true,
  "after_diff": {
   "1": 0.0,
@@ -52,24 +52,12 @@
   "S2t priciest-3row-mixed": 0.0,
   "S3 refusal": 0.0
  },
- "train_seconds": 216.6,
+ "train_seconds": 185.8,
  "history": [
   {
-   "step": 30,
+   "step": 6,
    "width": 4,
-   "loss": 1.4141,
-   "diff": {
-    "1": 0.0,
-    "2": 0.0,
-    "3": 0.0,
-    "4": 0.0
-   },
-   "mean": 0.0
-  },
-  {
-   "step": 60,
-   "width": 4,
-   "loss": 0.8194,
+   "loss": 1.9926,
    "diff": {
     "1": 0.0,
     "2": 0.0,

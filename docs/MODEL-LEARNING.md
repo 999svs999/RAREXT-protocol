@@ -135,7 +135,7 @@ GPU), so the training runs wherever accelerator time exists.
 | resource | what runs on it | status |
 | --- | --- | --- |
 | this Mac, 4 CPU cores | `tools/entangle/train_diff.py` — the *independent replication*: batch 16, 4,500 steps, identical curriculum and gates | `tools/entangle/train-diff.json` |
-| **Kaggle** (T4/P100 GPU, 30 h/week quota) | kernel [`svs168/rarext-gpu-diff`](https://www.kaggle.com/code/svs168/rarext-gpu-diff) running `tools/entangle/gpu_train_diff.py` — batch 64, 30,000 steps, projection every 50, same replay and gates; code + starting checkpoint ship in dataset [`svs168/rarext-entangle-train`](https://www.kaggle.com/datasets/svs168/rarext-entangle-train) | `kaggle kernels status svs168/rarext-gpu-diff` |
+| **Kaggle** (T4/P100 GPU, 30 h/week quota) | kernel [`svs168/rarext-gpu-diff`](https://www.kaggle.com/code/svs168/rarext-gpu-diff) running `tools/entangle/gpu_train_diff.py` — batch 64, 30,000 steps, projection every 50, same replay and gates; code + starting checkpoint ship in dataset [`svs168/rarext-entangle-train`](https://www.kaggle.com/datasets/svs168/rarext-entangle-train) | CLI-authenticated; CPU probe kernel ran to `COMPLETE` in seconds, but **GPU sessions stay `QUEUED`** — Kaggle gates accelerators behind phone verification, which only the account owner can do |
 | **Google Colab** | `tools/entangle/colab-gpu-diff.ipynb` — the same script, one **Run all** click; the notebook clones this repo, so the starting weights are the exact served bytes | needs one user click (see below) |
 | hosted LLM APIs (Gemini, agnes) | *not used for training* — training gold is computed by code, and an LLM teacher's arithmetic is exactly the thing being measured | named refusal |
 
@@ -176,6 +176,17 @@ if all of these hold, measured by `tools/rank/eval-neural.mjs` afterwards:
 
 * the page's 14 canonical skill prompts answer **14/14** on the candidate
   (the gate that refused the 2026-11-24 checkpoint);
+* the **published suite itself does not regress** — `eval-neural.mjs --n 200`
+  runs inside `promote-entangled.mjs` and the install reverts on any drop.
+  This gate exists because of the same day's second lesson: the 4,500-step
+  checkpoint passed every set gate *and* the 14 page prompts, and still scored
+  **92/200 (46.0%)** vs the shipped 96/200 (48.0%) — `cheapest` fell
+  94.1% → 85.3% — while `diff` stayed 0/33 because every published diff item
+  has a 4-digit operand. Training was reverted by `git checkout`, and the
+  replay was rebuilt: lookup/compare examples are now generated **fresh from
+  the deployed trainers' own generators every step** (`task.s0_example`,
+  `task.comp_example`), so the published distribution is anchored, not a fixed
+  24-sample stand-in;
 * arithmetic families (`diff`, `total`, `pct`) held-out exact **> 0%**, and
   reported per family rather than pooled;
 * lookup/compare families **do not fall** below their current 88–97%;

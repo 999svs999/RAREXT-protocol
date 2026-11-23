@@ -149,6 +149,9 @@ def main():
                          "parameter ~lr, so a cold 3e-4 step damages the replay skills")
     ap.add_argument("--early-replay", type=float, default=0.50)
     ap.add_argument("--early-replay-steps", type=int, default=600)
+    ap.add_argument("--only-width", type=int, default=0,
+                    help="train ONE digit width only (0 = curriculum); with a "
+                         "width, no-borrow pairs seed the first 40%% of steps")
     ap.add_argument("--export", action="store_true")
     args = ap.parse_args()
 
@@ -219,13 +222,27 @@ def main():
                 g["lr"] = (args.lr / 10) + (args.lr - args.lr / 10) * 0.5 * (1 + np.cos(np.pi * frac))
         frac_replay = args.early_replay if step <= args.early_replay_steps else args.replay
         replay_n = int(args.batch * frac_replay / (1 - frac_replay))
-        width = width_for(progress)
-        noborrow = noborrow_for(progress)
+        if args.only_width:
+            width = args.only_width
+            noborrow = progress < 0.4
+        else:
+            width = width_for(progress)
+            noborrow = noborrow_for(progress)
         batch = [diff_example(rng, rng.randint(1, width), noborrow=noborrow)
                  for _ in range(args.batch)]
         for _ in range(replay_n):
-            name = rng.choice(list(replay))
-            batch.append(replay[name][rng.randrange(24)])
+            # procedural replay from the deployed trainers' own generators —
+            # fresh lookup/compare examples at the published distribution every
+            # step, plus a draw from the canonical sets. Fixed 24-sample replay
+            # passed its gate while the published suite lost 4 items.
+            r = rng.random()
+            if r < 0.4:
+                batch.append(task.s0_example(rng))
+            elif r < 0.8:
+                batch.append(task.comp_example(rng))
+            else:
+                name = rng.choice(list(replay))
+                batch.append(replay[name][rng.randrange(24)])
         batch.extend(page_skills())
         batch = [(p, a) for p, a in batch if len(encode(p)) + len(encode(a)) <= 186]
 
