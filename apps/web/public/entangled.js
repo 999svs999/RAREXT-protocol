@@ -102,6 +102,102 @@ function skillSelfTest(engine, model) {
 }
 
 // ---------------------------------------------------------------------------
+// The exact numeric tool — deterministic, provable, and the reason the hybrid
+// system is exact where the neural model alone is not.
+//
+// A language model is a next-token predictor; arithmetic over a ledger is not a
+// language task, and measuring the χ=48 model alone on held-out numeric prompts
+// gives 48% (tools/rank/neural-heldout.json). Frontier systems close that gap
+// by calling a calculator. RAREXT does the same, except the tool ships in the
+// same 4.6 MB page: parse the ledger, compute with exact integers, format the
+// answer. It returns null for anything it does not recognise, and the neural
+// model answers those — so the hybrid is never worse, only more exact.
+// ---------------------------------------------------------------------------
+function parseLedger(prompt) {
+  const rows = [];
+  const body = String(prompt).replace(/^\s*rows:\s*/i, "");
+  for (const line of body.split("\n")) {
+    const m = /^\s*-\s*(.+?)\s*\|\s*\$(\d+(?:\.\d+)?)\s*$/.exec(line);
+    if (m) rows.push({ name: m[1].trim(), price: Number(m[2]) });
+  }
+  return rows;
+}
+
+function findRow(rows, name) {
+  const q = String(name).trim().toLowerCase().replace(/[?.!]+$/, "");
+  let hit = rows.find((r) => r.name.toLowerCase() === q);
+  if (hit) return hit;
+  // tolerate a definite article or extra whitespace the model was not trained on
+  hit = rows.find((r) => r.name.toLowerCase() === q.replace(/^(the|a|an)\s+/, ""));
+  if (hit) return hit;
+  const cands = rows.filter((r) => r.name.toLowerCase().includes(q) || q.includes(r.name.toLowerCase()));
+  return cands.length === 1 ? cands[0] : null;
+}
+
+const money = (n) => {
+  const rounded = Math.round(n * 100) / 100;
+  return `$${rounded}`;
+};
+
+/** Exact answer for a ledger question, or null when the question is not one of
+ * the deterministic families. Pure function: same prompt → same answer, always. */
+function answerExact(prompt) {
+  const rows = parseLedger(prompt);
+  if (!rows.length) return null;
+  const q = String(prompt).split(/\nq:\s*/i).pop()?.split(/\na:/i)[0]?.trim() ?? "";
+  const lower = q.toLowerCase();
+
+  // how much more is A than B?
+  let m = /how much more is (?:the )?(.+?) than (?:the )?(.+?)\?*$/i.exec(q);
+  if (m) {
+    const a = findRow(rows, m[1]);
+    const b = findRow(rows, m[2]);
+    if (a && b) return { text: `${money(Math.abs(a.price - b.price))} more`, kind: "diff" };
+    return null;
+  }
+
+  // total of all items
+  if (/total of all|sum of all|total for all/i.test(lower)) {
+    const sum = rows.reduce((s, r) => s + r.price, 0);
+    return { text: `The total is ${money(sum)} delivered.`, kind: "total" };
+  }
+
+  // price after N% off
+  m = /after\s+(\d+(?:\.\d+)?)\s*%\s*off/i.exec(q);
+  if (m) {
+    const pct = Number(m[1]);
+    const target = findRow(rows, q.replace(/^.*?(?:the|of)\s+/i, "").replace(/\s+after.*$/i, "")) ?? (rows.length === 1 ? rows[0] : null);
+    if (target) {
+      const after = Math.round(target.price * (100 - pct)) / 100;
+      return { text: `The price is ${money(after)} delivered.`, kind: "pct" };
+    }
+    return null;
+  }
+
+  // cheapest / most expensive
+  if (/cheapest|lowest price|least expensive/i.test(lower)) {
+    const min = rows.reduce((a, b) => (b.price < a.price ? b : a));
+    return { text: `The price is ${money(min.price)} delivered.`, kind: "cheapest" };
+  }
+  if (/most expensive|priciest|highest price/i.test(lower)) {
+    const max = rows.reduce((a, b) => (b.price > a.price ? b : a));
+    return { text: `The price is ${money(max.price)} delivered.`, kind: "priciest" };
+  }
+
+  // price of a named item — several phrasings
+  m = /(?:how much is|what is the price of|what does)\s+(?:the\s+)?(.+?)(?:\s+cost)?\?*$/i.exec(q);
+  if (m) {
+    const row = findRow(rows, m[1]);
+    if (row) return { text: `The price is ${money(row.price)} delivered.`, kind: "lookup" };
+    return null;
+  }
+  if (/^price\?*$/i.test(lower) && rows.length === 1) {
+    return { text: `The price is ${money(rows[0].price)} delivered.`, kind: "lookup" };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Holographic memory (FHRR) — the memory axis, in the same tab.
 // A phasor vector is a Float32Array of 2D floats: interleaved (re, im) per
 // dimension. Binding = complex multiplication (= angle addition); a table is
@@ -302,6 +398,8 @@ export {
   ENTANGLED_DIGESTS,
   loadEntangledModel,
   answerWith,
+  answerExact,
+  parseLedger,
   skillSelfTest,
   SKILL_PROMPTS,
   sha256Hex,

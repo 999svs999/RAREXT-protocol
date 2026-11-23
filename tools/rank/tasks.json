@@ -1,0 +1,606 @@
+{
+  "seed": 20261123,
+  "n": 100,
+  "tasks": [
+    {
+      "id": 0,
+      "family": "lookup",
+      "prompt": "rows: -store city camo|$4966\nq: how much is the store city camo?\na: ",
+      "gold": "The price is $4966 delivered."
+    },
+    {
+      "id": 1,
+      "family": "cheapest",
+      "prompt": "rows: -low hoodie|$3463\n-mini shark|$781\n-Classic Shorts Jacket|$2176\nq: which is cheapest?\na: ",
+      "gold": "The price is $781 delivered."
+    },
+    {
+      "id": 2,
+      "family": "priciest",
+      "prompt": "rows: -CREW SHARK|$5959\n-NAVY COLLEGE|$5536\n-SHORTS TIGER|$9629\nq: which is most expensive?\na: ",
+      "gold": "The price is $9629 delivered."
+    },
+    {
+      "id": 3,
+      "family": "diff",
+      "prompt": "rows: -GREEN CAMO|$2353\n-Camo City Big|$950\nq: how much more is the GREEN CAMO than the Camo City Big?\na: ",
+      "gold": "$1403 more"
+    },
+    {
+      "id": 4,
+      "family": "total",
+      "prompt": "rows: -bag high|$5055\n-HOODIE GREEN CHAIN|$6877\n-Belt Coat Chain|$9412\nq: what is the total of all items?\na: ",
+      "gold": "The total is $21344 delivered."
+    },
+    {
+      "id": 5,
+      "family": "pct",
+      "prompt": "rows: -DOWN GREEN|$1687\nq: what is the price after 10% off?\na: ",
+      "gold": "The price is $1518.3 delivered."
+    },
+    {
+      "id": 6,
+      "family": "lookup",
+      "prompt": "rows: -Low Baby Camo|$1672\nq: how much is the Low Baby Camo?\na: ",
+      "gold": "The price is $1672 delivered."
+    },
+    {
+      "id": 7,
+      "family": "cheapest",
+      "prompt": "rows: -MEGA BAG|$7297\n-vest cap chain|$5903\n-Crew Store|$4004\n-Grey Low|$2351\nq: which is cheapest?\na: ",
+      "gold": "The price is $2351 delivered."
+    },
+    {
+      "id": 8,
+      "family": "priciest",
+      "prompt": "rows: -SOCKS SHIRT MINI|$5776\n-Down Camo|$9469\n-vest college|$4737\nq: which is most expensive?\na: ",
+      "gold": "The price is $9469 delivered."
+    },
+    {
+      "id": 9,
+      "family": "diff",
+      "prompt": "rows: -classic store|$7467\n-COLLEGE STORE JACKET|$1015\nq: how much more is the classic store than the COLLEGE STORE JACKET?\na: ",
+      "gold": "$6452 more"
+    },
+    {
+      "id": 10,
+      "family": "total",
+      "prompt": "rows: -BABY BAG|$5100\n-tee chain|$8798\nq: what is the total of all items?\na: ",
+      "gold": "The total is $13898 delivered."
+    },
+    {
+      "id": 11,
+      "family": "pct",
+      "prompt": "rows: -mini high hoodie|$5105\nq: what is the price after 10% off?\na: ",
+      "gold": "The price is $4594.5 delivered."
+    },
+    {
+      "id": 12,
+      "family": "lookup",
+      "prompt": "rows: -NAVY HOODIE|$5845\nq: how much is the NAVY HOODIE?\na: ",
+      "gold": "The price is $5845 delivered."
+    },
+    {
+      "id": 13,
+      "family": "cheapest",
+      "prompt": "rows: -White Hoodie|$4142\n-Green Cap Store|$7400\nq: which is cheapest?\na: ",
+      "gold": "The price is $4142 delivered."
+    },
+    {
+      "id": 14,
+      "family": "priciest",
+      "prompt": "rows: -CREW CITY|$7270\n-BELT MINI|$1736\n-SOCKS DOWN RED|$9340\nq: which is most expensive?\na: ",
+      "gold": "The price is $9340 delivered."
+    },
+    {
+      "id": 15,
+      "family": "diff",
+      "prompt": "rows: -Cap Down High|$4365\n-red high tiger|$4345\nq: how much more is the Cap Down High than the red high tiger?\na: ",
+      "gold": "$20 more"
+    },
+    {
+      "id": 16,
+      "family": "total",
+      "prompt": "rows: -TEE GIFT CLASSIC|$8683\n-tiger hoodie|$9103\n-VEST STORE CHAIN|$2778\nq: what is the total of all items?\na: ",
+      "gold": "The total is $20564 delivered."
+    },
+    {
+      "id": 17,
+      "family": "pct",
+      "prompt": "rows: -shark down belt|$1489\nq: what is the price after 25% off?\na: ",
+      "gold": "The price is $1116.75 delivered."
+    },
+    {
+      "id": 18,
+      "family": "lookup",
+      "prompt": "rows: -Shark Cap|$8502\nq: how much is the Shark Cap?\na: ",
+      "gold": "The price is $8502 delivered."
+    },
+    {
+      "id": 19,
+      "family": "cheapest",
+      "prompt": "rows: -vest hoodie tiger|$545\n-Classic Coat Navy|$2965\n-Jacket Shirt|$6184\nq: which is cheapest?\na: ",
+      "gold": "The price is $545 delivered."
+    },
+    {
+      "id": 20,
+      "family": "priciest",
+      "prompt": "rows: -Grey Belt Hoodie|$4878\n-Baby Tee Down|$6400\n-down shirt|$7916\n-JACKET STORE|$2156\nq: which is most expensive?\na: ",
+      "gold": "The price is $7916 delivered."
+    },
+    {
+      "id": 21,
+      "family": "diff",
+      "prompt": "rows: -black tee|$9176\n-bag white socks|$4965\nq: how much more is the black tee than the bag white socks?\na: ",
+      "gold": "$4211 more"
+    },
+    {
+      "id": 22,
+      "family": "total",
+      "prompt": "rows: -socks shorts vest|$4151\n-green shorts|$643\nq: what is the total of all items?\na: ",
+      "gold": "The total is $4794 delivered."
+    },
+    {
+      "id": 23,
+      "family": "pct",
+      "prompt": "rows: -CITY BAG BABY|$4630\nq: what is the price after 20% off?\na: ",
+      "gold": "The price is $3704 delivered."
+    },
+    {
+      "id": 24,
+      "family": "lookup",
+      "prompt": "rows: -shorts socks navy|$1650\nq: how much is the shorts socks navy?\na: ",
+      "gold": "The price is $1650 delivered."
+    },
+    {
+      "id": 25,
+      "family": "cheapest",
+      "prompt": "rows: -BIG COAT|$275\n-Red Tee Black|$2746\n-Jacket Low Grey|$9558\n-CITY HIGH|$2642\nq: which is cheapest?\na: ",
+      "gold": "The price is $275 delivered."
+    },
+    {
+      "id": 26,
+      "family": "priciest",
+      "prompt": "rows: -Bag Mini Hoodie|$2985\n-GREEN SHORTS|$1969\nq: which is most expensive?\na: ",
+      "gold": "The price is $2985 delivered."
+    },
+    {
+      "id": 27,
+      "family": "diff",
+      "prompt": "rows: -Green Mega Hoodie|$760\n-TIGER BLACK WHITE|$8170\nq: how much more is the TIGER BLACK WHITE than the Green Mega Hoodie?\na: ",
+      "gold": "$7410 more"
+    },
+    {
+      "id": 28,
+      "family": "total",
+      "prompt": "rows: -MEGA WHITE VEST|$342\n-vest tee low|$3319\nq: what is the total of all items?\na: ",
+      "gold": "The total is $3661 delivered."
+    },
+    {
+      "id": 29,
+      "family": "pct",
+      "prompt": "rows: -TEE MEGA|$6537\nq: what is the price after 50% off?\na: ",
+      "gold": "The price is $3268.5 delivered."
+    },
+    {
+      "id": 30,
+      "family": "lookup",
+      "prompt": "rows: -shirt grey|$436\nq: how much is the shirt grey?\na: ",
+      "gold": "The price is $436 delivered."
+    },
+    {
+      "id": 31,
+      "family": "cheapest",
+      "prompt": "rows: -Mega Tee|$8896\n-store jacket|$9261\n-SHORTS WHITE|$520\n-Pants Low Vest|$6146\nq: which is cheapest?\na: ",
+      "gold": "The price is $520 delivered."
+    },
+    {
+      "id": 32,
+      "family": "priciest",
+      "prompt": "rows: -Red Tee Grey|$1319\n-Low Chain Tee|$638\n-BIG GREY TEE|$861\nq: which is most expensive?\na: ",
+      "gold": "The price is $1319 delivered."
+    },
+    {
+      "id": 33,
+      "family": "diff",
+      "prompt": "rows: -Red Store High|$2382\n-navy camo|$8005\nq: how much more is the navy camo than the Red Store High?\na: ",
+      "gold": "$5623 more"
+    },
+    {
+      "id": 34,
+      "family": "total",
+      "prompt": "rows: -store white|$5354\n-SHARK GREEN VEST|$9162\n-coat jacket camo|$3307\nq: what is the total of all items?\na: ",
+      "gold": "The total is $17823 delivered."
+    },
+    {
+      "id": 35,
+      "family": "pct",
+      "prompt": "rows: -Pants Hoodie Tee|$5839\nq: what is the price after 40% off?\na: ",
+      "gold": "The price is $3503.4 delivered."
+    },
+    {
+      "id": 36,
+      "family": "lookup",
+      "prompt": "rows: -NAVY GREY JACKET|$4076\nq: how much is the NAVY GREY JACKET?\na: ",
+      "gold": "The price is $4076 delivered."
+    },
+    {
+      "id": 37,
+      "family": "cheapest",
+      "prompt": "rows: -Classic Gift|$8842\n-big camo cap|$7363\n-SHARK STORE|$8475\nq: which is cheapest?\na: ",
+      "gold": "The price is $7363 delivered."
+    },
+    {
+      "id": 38,
+      "family": "priciest",
+      "prompt": "rows: -grey red jacket|$1799\n-city pants|$3567\n-mini shark|$9238\nq: which is most expensive?\na: ",
+      "gold": "The price is $9238 delivered."
+    },
+    {
+      "id": 39,
+      "family": "diff",
+      "prompt": "rows: -Coat Navy|$6177\n-PANTS DOWN|$6156\nq: how much more is the Coat Navy than the PANTS DOWN?\na: ",
+      "gold": "$21 more"
+    },
+    {
+      "id": 40,
+      "family": "total",
+      "prompt": "rows: -Coat Mini Vest|$1569\n-WHITE GIFT|$8636\n-vest city|$1226\nq: what is the total of all items?\na: ",
+      "gold": "The total is $11431 delivered."
+    },
+    {
+      "id": 41,
+      "family": "pct",
+      "prompt": "rows: -TEE STORE BIG|$8555\nq: what is the price after 30% off?\na: ",
+      "gold": "The price is $5988.5 delivered."
+    },
+    {
+      "id": 42,
+      "family": "lookup",
+      "prompt": "rows: -SHORTS JACKET|$5554\nq: how much is the SHORTS JACKET?\na: ",
+      "gold": "The price is $5554 delivered."
+    },
+    {
+      "id": 43,
+      "family": "cheapest",
+      "prompt": "rows: -classic grey|$9326\n-Black College|$8539\nq: which is cheapest?\na: ",
+      "gold": "The price is $8539 delivered."
+    },
+    {
+      "id": 44,
+      "family": "priciest",
+      "prompt": "rows: -tiger gift navy|$4478\n-VEST GREEN|$2851\n-Jacket Down Cap|$1005\nq: which is most expensive?\na: ",
+      "gold": "The price is $4478 delivered."
+    },
+    {
+      "id": 45,
+      "family": "diff",
+      "prompt": "rows: -TIGER COLLEGE BELT|$5899\n-LOW GIFT TEE|$4554\nq: how much more is the TIGER COLLEGE BELT than the LOW GIFT TEE?\na: ",
+      "gold": "$1345 more"
+    },
+    {
+      "id": 46,
+      "family": "total",
+      "prompt": "rows: -down white low|$4384\n-Green White Belt|$7353\nq: what is the total of all items?\na: ",
+      "gold": "The total is $11737 delivered."
+    },
+    {
+      "id": 47,
+      "family": "pct",
+      "prompt": "rows: -Black Cap|$5288\nq: what is the price after 25% off?\na: ",
+      "gold": "The price is $3966 delivered."
+    },
+    {
+      "id": 48,
+      "family": "lookup",
+      "prompt": "rows: -City Pants Coat|$1706\nq: how much is the City Pants Coat?\na: ",
+      "gold": "The price is $1706 delivered."
+    },
+    {
+      "id": 49,
+      "family": "cheapest",
+      "prompt": "rows: -red baby|$5184\n-white tee mini|$7842\n-Coat Bag|$1203\nq: which is cheapest?\na: ",
+      "gold": "The price is $1203 delivered."
+    },
+    {
+      "id": 50,
+      "family": "priciest",
+      "prompt": "rows: -Red Baby|$6200\n-VEST BELT|$2103\nq: which is most expensive?\na: ",
+      "gold": "The price is $6200 delivered."
+    },
+    {
+      "id": 51,
+      "family": "diff",
+      "prompt": "rows: -VEST LOW|$9807\n-Tiger Shark Big|$9947\nq: how much more is the Tiger Shark Big than the VEST LOW?\na: ",
+      "gold": "$140 more"
+    },
+    {
+      "id": 52,
+      "family": "total",
+      "prompt": "rows: -mega tiger belt|$9602\n-belt mega green|$5124\nq: what is the total of all items?\na: ",
+      "gold": "The total is $14726 delivered."
+    },
+    {
+      "id": 53,
+      "family": "pct",
+      "prompt": "rows: -Crew Hoodie College|$4681\nq: what is the price after 30% off?\na: ",
+      "gold": "The price is $3276.7 delivered."
+    },
+    {
+      "id": 54,
+      "family": "lookup",
+      "prompt": "rows: -CREW GREEN VEST|$3301\nq: how much is the CREW GREEN VEST?\na: ",
+      "gold": "The price is $3301 delivered."
+    },
+    {
+      "id": 55,
+      "family": "cheapest",
+      "prompt": "rows: -shirt tiger city|$20\n-Grey Belt Navy|$6379\n-SOCKS STORE|$5186\n-navy bag mega|$210\nq: which is cheapest?\na: ",
+      "gold": "The price is $20 delivered."
+    },
+    {
+      "id": 56,
+      "family": "priciest",
+      "prompt": "rows: -CAMO LOW CAP|$4987\n-low gift college|$2712\n-Hoodie Chain Low|$8651\nq: which is most expensive?\na: ",
+      "gold": "The price is $8651 delivered."
+    },
+    {
+      "id": 57,
+      "family": "diff",
+      "prompt": "rows: -Crew Hoodie|$2475\n-COAT BELT|$3190\nq: how much more is the COAT BELT than the Crew Hoodie?\na: ",
+      "gold": "$715 more"
+    },
+    {
+      "id": 58,
+      "family": "total",
+      "prompt": "rows: -SHIRT DOWN GIFT|$5829\n-Grey Socks Big|$8445\n-CITY COAT|$8465\nq: what is the total of all items?\na: ",
+      "gold": "The total is $22739 delivered."
+    },
+    {
+      "id": 59,
+      "family": "pct",
+      "prompt": "rows: -jacket chain|$7256\nq: what is the price after 25% off?\na: ",
+      "gold": "The price is $5442 delivered."
+    },
+    {
+      "id": 60,
+      "family": "lookup",
+      "prompt": "rows: -navy hoodie cap|$8104\nq: how much is the navy hoodie cap?\na: ",
+      "gold": "The price is $8104 delivered."
+    },
+    {
+      "id": 61,
+      "family": "cheapest",
+      "prompt": "rows: -Coat Hoodie|$155\n-Coat Chain Store|$9332\n-Green Baby|$2885\n-Tee Cap City|$950\nq: which is cheapest?\na: ",
+      "gold": "The price is $155 delivered."
+    },
+    {
+      "id": 62,
+      "family": "priciest",
+      "prompt": "rows: -shorts coat white|$8189\n-Crew Hoodie Socks|$4480\nq: which is most expensive?\na: ",
+      "gold": "The price is $8189 delivered."
+    },
+    {
+      "id": 63,
+      "family": "diff",
+      "prompt": "rows: -coat low red|$738\n-classic hoodie|$3031\nq: how much more is the classic hoodie than the coat low red?\na: ",
+      "gold": "$2293 more"
+    },
+    {
+      "id": 64,
+      "family": "total",
+      "prompt": "rows: -BIG RED SHIRT|$8683\n-camo city|$8122\n-Shirt Tee Mini|$7879\nq: what is the total of all items?\na: ",
+      "gold": "The total is $24684 delivered."
+    },
+    {
+      "id": 65,
+      "family": "pct",
+      "prompt": "rows: -shark mini|$3105\nq: what is the price after 20% off?\na: ",
+      "gold": "The price is $2484 delivered."
+    },
+    {
+      "id": 66,
+      "family": "lookup",
+      "prompt": "rows: -Shark City College|$1552\nq: how much is the Shark City College?\na: ",
+      "gold": "The price is $1552 delivered."
+    },
+    {
+      "id": 67,
+      "family": "cheapest",
+      "prompt": "rows: -BIG WHITE|$395\n-Shark Hoodie|$9623\n-cap red shirt|$4243\n-Mini Chain|$250\nq: which is cheapest?\na: ",
+      "gold": "The price is $250 delivered."
+    },
+    {
+      "id": 68,
+      "family": "priciest",
+      "prompt": "rows: -low white mini|$5781\n-socks gift down|$7390\n-Vest Shirt|$1100\n-college pants|$4183\nq: which is most expensive?\na: ",
+      "gold": "The price is $7390 delivered."
+    },
+    {
+      "id": 69,
+      "family": "diff",
+      "prompt": "rows: -BELT JACKET CITY|$3927\n-Black Vest Green|$4280\nq: how much more is the Black Vest Green than the BELT JACKET CITY?\na: ",
+      "gold": "$353 more"
+    },
+    {
+      "id": 70,
+      "family": "total",
+      "prompt": "rows: -cap down shirt|$6812\n-grey high coat|$6682\n-Pants City|$4459\nq: what is the total of all items?\na: ",
+      "gold": "The total is $17953 delivered."
+    },
+    {
+      "id": 71,
+      "family": "pct",
+      "prompt": "rows: -Crew Baby Down|$329\nq: what is the price after 30% off?\na: ",
+      "gold": "The price is $230.3 delivered."
+    },
+    {
+      "id": 72,
+      "family": "lookup",
+      "prompt": "rows: -Belt Crew|$7348\nq: how much is the Belt Crew?\na: ",
+      "gold": "The price is $7348 delivered."
+    },
+    {
+      "id": 73,
+      "family": "cheapest",
+      "prompt": "rows: -chain socks|$2746\n-Coat Baby White|$7128\n-mini chain high|$6121\nq: which is cheapest?\na: ",
+      "gold": "The price is $2746 delivered."
+    },
+    {
+      "id": 74,
+      "family": "priciest",
+      "prompt": "rows: -Red Gift Mega|$7774\n-mega white|$84\nq: which is most expensive?\na: ",
+      "gold": "The price is $7774 delivered."
+    },
+    {
+      "id": 75,
+      "family": "diff",
+      "prompt": "rows: -white green|$7303\n-green gift shorts|$9699\nq: how much more is the green gift shorts than the white green?\na: ",
+      "gold": "$2396 more"
+    },
+    {
+      "id": 76,
+      "family": "total",
+      "prompt": "rows: -Mini Tiger|$2703\n-hoodie shorts grey|$4437\n-Grey Big|$6288\nq: what is the total of all items?\na: ",
+      "gold": "The total is $13428 delivered."
+    },
+    {
+      "id": 77,
+      "family": "pct",
+      "prompt": "rows: -Shorts Tee|$6777\nq: what is the price after 15% off?\na: ",
+      "gold": "The price is $5760.45 delivered."
+    },
+    {
+      "id": 78,
+      "family": "lookup",
+      "prompt": "rows: -baby shorts black|$2684\nq: how much is the baby shorts black?\na: ",
+      "gold": "The price is $2684 delivered."
+    },
+    {
+      "id": 79,
+      "family": "cheapest",
+      "prompt": "rows: -Gift Store Low|$2306\n-big white|$7554\nq: which is cheapest?\na: ",
+      "gold": "The price is $2306 delivered."
+    },
+    {
+      "id": 80,
+      "family": "priciest",
+      "prompt": "rows: -COLLEGE CITY LOW|$845\n-college coat|$4736\nq: which is most expensive?\na: ",
+      "gold": "The price is $4736 delivered."
+    },
+    {
+      "id": 81,
+      "family": "diff",
+      "prompt": "rows: -WHITE SOCKS|$235\n-Gift Classic Chain|$3056\nq: how much more is the Gift Classic Chain than the WHITE SOCKS?\na: ",
+      "gold": "$2821 more"
+    },
+    {
+      "id": 82,
+      "family": "total",
+      "prompt": "rows: -LOW STORE SHORTS|$7301\n-down bag city|$93\nq: what is the total of all items?\na: ",
+      "gold": "The total is $7394 delivered."
+    },
+    {
+      "id": 83,
+      "family": "pct",
+      "prompt": "rows: -JACKET COLLEGE RED|$7160\nq: what is the price after 50% off?\na: ",
+      "gold": "The price is $3580 delivered."
+    },
+    {
+      "id": 84,
+      "family": "lookup",
+      "prompt": "rows: -HOODIE LOW|$2756\nq: how much is the HOODIE LOW?\na: ",
+      "gold": "The price is $2756 delivered."
+    },
+    {
+      "id": 85,
+      "family": "cheapest",
+      "prompt": "rows: -shark store|$7745\n-belt navy|$9910\n-hoodie red|$6636\nq: which is cheapest?\na: ",
+      "gold": "The price is $6636 delivered."
+    },
+    {
+      "id": 86,
+      "family": "priciest",
+      "prompt": "rows: -Belt Baby|$9603\n-MINI DOWN|$1206\n-mega mini low|$3483\n-Black Bag Shorts|$5970\nq: which is most expensive?\na: ",
+      "gold": "The price is $9603 delivered."
+    },
+    {
+      "id": 87,
+      "family": "diff",
+      "prompt": "rows: -bag pants store|$8497\n-coat black|$2133\nq: how much more is the bag pants store than the coat black?\na: ",
+      "gold": "$6364 more"
+    },
+    {
+      "id": 88,
+      "family": "total",
+      "prompt": "rows: -red college|$6688\n-black city|$3061\n-Store Baby College|$3242\nq: what is the total of all items?\na: ",
+      "gold": "The total is $12991 delivered."
+    },
+    {
+      "id": 89,
+      "family": "pct",
+      "prompt": "rows: -Store Cap|$7820\nq: what is the price after 25% off?\na: ",
+      "gold": "The price is $5865 delivered."
+    },
+    {
+      "id": 90,
+      "family": "lookup",
+      "prompt": "rows: -Camo Mini|$1938\nq: how much is the Camo Mini?\na: ",
+      "gold": "The price is $1938 delivered."
+    },
+    {
+      "id": 91,
+      "family": "cheapest",
+      "prompt": "rows: -vest black|$7265\n-PANTS CHAIN COAT|$7939\n-hoodie high red|$4308\n-CREW COLLEGE|$147\nq: which is cheapest?\na: ",
+      "gold": "The price is $147 delivered."
+    },
+    {
+      "id": 92,
+      "family": "priciest",
+      "prompt": "rows: -Navy Chain|$391\n-Chain Cap Store|$5197\nq: which is most expensive?\na: ",
+      "gold": "The price is $5197 delivered."
+    },
+    {
+      "id": 93,
+      "family": "diff",
+      "prompt": "rows: -baby gift down|$9357\n-Gift Shorts|$1511\nq: how much more is the baby gift down than the Gift Shorts?\na: ",
+      "gold": "$7846 more"
+    },
+    {
+      "id": 94,
+      "family": "total",
+      "prompt": "rows: -Grey College|$467\n-store hoodie|$1181\nq: what is the total of all items?\na: ",
+      "gold": "The total is $1648 delivered."
+    },
+    {
+      "id": 95,
+      "family": "pct",
+      "prompt": "rows: -BELT SHORTS|$5436\nq: what is the price after 20% off?\na: ",
+      "gold": "The price is $4348.8 delivered."
+    },
+    {
+      "id": 96,
+      "family": "lookup",
+      "prompt": "rows: -TEE BAG SOCKS|$4453\nq: how much is the TEE BAG SOCKS?\na: ",
+      "gold": "The price is $4453 delivered."
+    },
+    {
+      "id": 97,
+      "family": "cheapest",
+      "prompt": "rows: -black pants|$417\n-BAG CREW|$1230\n-Shark Down|$2995\n-High Hoodie Grey|$6114\nq: which is cheapest?\na: ",
+      "gold": "The price is $417 delivered."
+    },
+    {
+      "id": 98,
+      "family": "priciest",
+      "prompt": "rows: -BLACK SOCKS|$2197\n-Navy Chain Down|$827\n-Chain Shorts White|$1787\n-Mega Green Classic|$9290\nq: which is most expensive?\na: ",
+      "gold": "The price is $9290 delivered."
+    },
+    {
+      "id": 99,
+      "family": "diff",
+      "prompt": "rows: -RED BIG NAVY|$5691\n-Belt Chain Shark|$3311\nq: how much more is the RED BIG NAVY than the Belt Chain Shark?\na: ",
+      "gold": "$2380 more"
+    }
+  ]
+}
