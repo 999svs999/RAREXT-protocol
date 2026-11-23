@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-23T10:31:38.752Z",
+ "generatedAt": "2026-11-23T15:18:01.163Z",
  "allOk": true,
  "projects": [
   {
    "id": "rarext-protocol",
    "role": "the protocol, runtime, engine, and this AI's own live mirror",
    "git": {
-    "head": "962a60ec10ec",
+    "head": "29b851e4562f",
     "dirty": true
    },
    "ok": true,
@@ -14,14 +14,20 @@
     {
      "id": "runtime",
      "ok": true,
-     "ms": 13455,
-     "digest": "fd4ef7d49d5c3516f165457f09b8141bf4a65fba2f2fd6f8a3596dc555d8486b"
+     "ms": 13610,
+     "digest": "e3d502da8251b321d53518c1cf1e0a381205a39116283915471f326c6411575b"
     },
     {
      "id": "claims",
      "ok": true,
-     "ms": 1322,
-     "digest": "012615c45a383cadaa80fe0f3ecdab72925de5c2e67dbf635d4166d0e46ea086"
+     "ms": 1510,
+     "digest": "a88c0566a020c666b79aba7f9393448be829f105f35418d90674eb0c4f6b0904"
+    },
+    {
+     "id": "rank",
+     "ok": true,
+     "ms": 98,
+     "digest": "e129187d6ada1d552f46435b72678df6e80df2dd6b1c39898112206d114251eb"
     }
    ]
   },
@@ -37,14 +43,14 @@
     {
      "id": "test",
      "ok": true,
-     "ms": 2518,
-     "digest": "8dc451b4642f41cb90887bac08920189ca991388e94fe75199cddf413c0a7f1b"
+     "ms": 2789,
+     "digest": "44a7b345098033ca05d3e91a2bbdf0f3a6b7e50387d21a80c2623d60610c8e04"
     },
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 3915,
-     "digest": "fa7fdb08707c27278332f627153870c84ea71979722cf9a0dc465ff49cfad879"
+     "ms": 4556,
+     "digest": "85eda8b26862a21f0164afa7aea3f0e9a884f13e45c5cbc7475ada62581710ee"
     }
    ]
   },
@@ -60,14 +66,14 @@
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 9226,
-     "digest": "79d9f7644d4ee2782812510347086c857a9750e090f8a8915954549320f434c0"
+     "ms": 11867,
+     "digest": "5f99f3764bd0f497ef94523bb776435d14249c75e31859374998320bab934bc8"
     },
     {
      "id": "build",
      "ok": true,
-     "ms": 74263,
-     "digest": "2845564f23832b8c7d44773856d0038a3ac2d332673eb00abfee89594c87cde7"
+     "ms": 75987,
+     "digest": "55bf759684f385671dd4c0ca945e367aec8666951f21a1868536a757630ea567"
     }
    ]
   },
@@ -83,8 +89,8 @@
     {
      "id": "site",
      "ok": true,
-     "ms": 1065,
-     "digest": "d6772f13dded6cc536ddc0826d911b6fbb4aec797a20abe12e0d30cf57832672"
+     "ms": 931,
+     "digest": "0978f4197cf7fd51b94c3b29d747e3f6b1d2d130a1b2f55cc92b0b871a2caf35"
     }
    ]
   },
@@ -92,7 +98,7 @@
    "id": "shipflow",
    "role": "shipping workflow app",
    "git": {
-    "head": "655f15c0b7a6",
+    "head": "c98ae00c8ac7",
     "dirty": true
    },
    "ok": true,
@@ -100,14 +106,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 7558,
-     "digest": "ecf5add362149422b3fba3d7ff51e8122924acc721f0b05da8955a11f62a409a"
+     "ms": 8487,
+     "digest": "981b405c3b73baea5527628ec33ee5c0e050b7ae575c421c01b9a6d85d574a8c"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5768,
-     "digest": "ea37693bea2915f574ba436cb945e344d0f73d809e5124f310d6a926a212acbb"
+     "ms": 6261,
+     "digest": "4020fbfbcbd728062751984b12b78301844fb436f3fc187ab92030a52fb12e38"
     }
    ]
   },
@@ -115,22 +121,22 @@
    "id": "stockflow",
    "role": "stock workflow app",
    "git": {
-    "head": "390c62dfa1cf",
-    "dirty": true
+    "head": "c92c5bd0659b",
+    "dirty": false
    },
    "ok": true,
    "gates": [
     {
      "id": "build",
      "ok": true,
-     "ms": 7081,
-     "digest": "9be272fb77021036ed2c3fa868e3676693b1a94971a008e29a45925f28bdf23d"
+     "ms": 7567,
+     "digest": "5a284243bc01de39414223bf1b09b65fbd8fa6ae362a8ac955df90811e9ff836"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5433,
-     "digest": "c7d251ba4092a52b24e156755761173b601ce4c1a7b027c7e1402886830865c0"
+     "ms": 5710,
+     "digest": "ddfe7bdaa3717bbdd3a08cd0962cc6d6044a1f598affc0794b13675592affdab"
     }
    ]
   }
@@ -139,31 +145,31 @@
   {
    "id": "provider",
    "ok": true,
-   "ms": 43,
+   "ms": 42,
    "status": 200
   },
   {
    "id": "edge-direct",
    "ok": true,
-   "ms": 73,
+   "ms": 148,
    "status": 200
   },
   {
    "id": "tunnel",
    "ok": true,
-   "ms": 464,
+   "ms": 708,
    "status": 200
   },
   {
    "id": "mirror-entangled-page",
    "ok": true,
-   "ms": 219,
+   "ms": 580,
    "status": 200
   },
   {
    "id": "mirror-weights",
    "ok": true,
-   "ms": 811,
+   "ms": 2295,
    "status": 200
   }
  ]

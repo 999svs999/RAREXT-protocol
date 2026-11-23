@@ -4,7 +4,7 @@
  *
  *   npm run demo:ai
  *
- * Six phases, every number live from the running systems:
+ * Seven phases, every number live from the running systems:
  *   1. the live API      — ask RAREXT AI on the edge, read the answer
  *   2. the in-browser AI — fetch the published page + weights, verify the
  *                          pinned digests exactly as the tab does
@@ -13,7 +13,8 @@
  *                          instant acquisition of a brand-new pair
  *   5. ops               — every project's gates and every live service, from
  *                          the latest receipt
- *   6. verification      — the claim gate at its recorded baseline
+ *   6. rank              — RAREXT AI among the current top 100 AI, axis by axis
+ *   7. verification      — the claim gate at its recorded baseline
  *
  * No phase is mocked: each one either talks to the running services or runs
  * the same code the browser runs.
@@ -156,7 +157,7 @@ function phaseVerify() {
 }
 
 console.log("╔══════════════════════════════════════════════╗");
-console.log("║   RAREXT AI — live demo, six phases          ║");
+console.log("║   RAREXT AI — live demo, seven phases        ║");
 console.log("╚══════════════════════════════════════════════╝");
 
 await phaseLiveApi();
