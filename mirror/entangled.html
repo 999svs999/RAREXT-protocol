@@ -78,7 +78,7 @@ a: </textarea>
 
     <script src="./entangled-engine.js"></script>
     <script type="module">
-      import { loadEntangledModel, answerWith, skillSelfTest, hrrSelfTest, hrrDifferenceSelfTest, hrrEncodeDifferences } from "./entangled.js";
+      import { loadEntangledModel, answerWith, answerExact, skillSelfTest, hrrSelfTest, hrrDifferenceSelfTest, hrrEncodeDifferences } from "./entangled.js";
       (async () => {
         const status = document.getElementById("status");
         const controls = document.getElementById("controls");
@@ -108,6 +108,16 @@ a: </textarea>
 
           const ask = () => {
             const prompt = document.getElementById("prompt").value;
+            // Hybrid, exactly as measured: the exact numeric tool answers any
+            // ledger question it recognises (1000/1000 on held-out suites);
+            // the neural model answers everything else.
+            const exact = answerExact(prompt);
+            if (exact) {
+              answerBox.textContent =
+                JSON.stringify(exact.text) + "\n" +
+                `exact numeric tool (${exact.kind}) · deterministic · 0 tokens · 0 ms of model compute`;
+              return;
+            }
             const run = answerWith(loaded.engine, loaded.model, prompt, 64);
             answerBox.textContent =
               JSON.stringify(run.text) + "\n" +
