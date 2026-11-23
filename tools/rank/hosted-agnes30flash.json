@@ -1,0 +1,844 @@
+{
+  "model": "agnes-3.0-flash",
+  "seed": 20261123,
+  "n": 100,
+  "exact": 0,
+  "semantic": 75,
+  "ms": 442965,
+  "promptTokens": 8809,
+  "outputTokens": 3756,
+  "byFamily": {
+    "lookup": {
+      "exact": 0,
+      "semantic": 10,
+      "n": 17
+    },
+    "cheapest": {
+      "exact": 0,
+      "semantic": 12,
+      "n": 17
+    },
+    "priciest": {
+      "exact": 0,
+      "semantic": 13,
+      "n": 17
+    },
+    "pct": {
+      "exact": 0,
+      "semantic": 12,
+      "n": 16
+    },
+    "total": {
+      "exact": 0,
+      "semantic": 12,
+      "n": 16
+    },
+    "diff": {
+      "exact": 0,
+      "semantic": 16,
+      "n": 17
+    }
+  },
+  "rows": [
+    {
+      "id": 0,
+      "family": "lookup",
+      "gold": "The price is $4966 delivered.",
+      "got": "$4966",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 1,
+      "family": "cheapest",
+      "gold": "The price is $781 delivered.",
+      "got": "To determine which item is the cheapest, we compare the prices listed:\n\n1.  low hoodie: $3463\n2.  mini shark: $781\n3.  Classic Shorts Jacket: $2176\n\nComparing the values ($781 < $2176 < $3463), the **mini shark** is the cheapest.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 2,
+      "family": "priciest",
+      "gold": "The price is $9629 delivered.",
+      "got": "SHORTS TIGER",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 5,
+      "family": "pct",
+      "gold": "The price is $1518.3 delivered.",
+      "got": "1518.3",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 4,
+      "family": "total",
+      "gold": "The total is $21344 delivered.",
+      "got": "To find the total of all items, we sum the prices listed:\n\n1.  $5,055\n2.  $6,877\n3.  $9,412\n\n$5,055 + $6,877 = $11,932\n$11,932 + $9,412 = $21,344\n\nThe total of all items is **$21,344**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 3,
+      "family": "diff",
+      "gold": "$1403 more",
+      "got": "To find out how much more the GREEN CAMO costs than the Camo City Big, subtract the price of the Camo City Big from the price of the GREEN CAMO:\n\n$2353 - $950 = $1403\n\nThe GREEN CAMO is **$1403** more than the Camo City Big.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 7,
+      "family": "cheapest",
+      "gold": "The price is $2351 delivered.",
+      "got": "The cheapest item is **Grey Low** at $2,351.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 8,
+      "family": "priciest",
+      "gold": "The price is $9469 delivered.",
+      "got": "Down Camo ($9469)",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 6,
+      "family": "lookup",
+      "gold": "The price is $1672 delivered.",
+      "got": "$1672",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 9,
+      "family": "diff",
+      "gold": "$6452 more",
+      "got": "To find how much more the classic store is than the COLLEGE STORE JACKET, subtract the price of the jacket from the price of the classic store:\n\n$7467 - $1015 = $6452\n\nAnswer: $6452",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 10,
+      "family": "total",
+      "gold": "The total is $13898 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 12,
+      "family": "lookup",
+      "gold": "The price is $5845 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 11,
+      "family": "pct",
+      "gold": "The price is $4594.5 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 13,
+      "family": "cheapest",
+      "gold": "The price is $4142 delivered.",
+      "got": "The White Hoodie is the cheapest item.\n\nComparing the two prices:\n*   White Hoodie: $4,142\n*   Green Cap Store: $7,400\n\n$4,142 is less than $7,400.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 15,
+      "family": "diff",
+      "gold": "$20 more",
+      "got": "To find the difference between the prices of the Cap Down High and the red high tiger, we subtract the lower price from the higher price:\n\n$4365 - $4345 = $20\n\nThe Cap Down High is $20 more than the red high tiger.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 14,
+      "family": "priciest",
+      "gold": "The price is $9340 delivered.",
+      "got": "The most expensive item is **CREW CITY** at **$7270**.\n\nHere is the comparison:\n*   CREW CITY: $7270\n*   SOCKS DOWN RED: $9340 *(Correction: Wait, $9340 is higher than $7270)*\n\nLet me re-calculate:\n*   CREW CITY: $7270\n*   BELT MINI: $1736\n*   SOCKS DOWN RED: $9340\n\n$9340 is the highest value.\n\nTherefore, the most expensive item is **SOCKS DOWN RED**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 16,
+      "family": "total",
+      "gold": "The total is $20564 delivered.",
+      "got": "8683 + 9103 + 2778 = 20564\n\nThe total of all items is **$20,564**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 18,
+      "family": "lookup",
+      "gold": "The price is $8502 delivered.",
+      "got": "$85.02",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 17,
+      "family": "pct",
+      "gold": "The price is $1116.75 delivered.",
+      "got": "The original price of the belt is $1489.\nA 25% discount means you pay 75% of the original price (100% - 25% = 75%).\n\nCalculation:\n$1489 \\times 0.75 = $1116.75\n\nThe price after the 25% discount is **$1116.75**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 20,
+      "family": "priciest",
+      "gold": "The price is $7916 delivered.",
+      "got": "The most expensive item is the **down shirt** at $7916.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 21,
+      "family": "diff",
+      "gold": "$4211 more",
+      "got": "To find out how much more the black tee costs than the bag of white socks, subtract the price of the socks from the price of the tee:\n\n$9,176 - $4,965 = $4,211\n\nThe black tee is **$4,211** more than the bag of white socks.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 22,
+      "family": "total",
+      "gold": "The total is $4794 delivered.",
+      "got": "The total of all items is $4,794.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 19,
+      "family": "cheapest",
+      "gold": "The price is $545 delivered.",
+      "got": "-vest hoodie tiger|$545",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 23,
+      "family": "pct",
+      "gold": "The price is $3704 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 24,
+      "family": "lookup",
+      "gold": "The price is $1650 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 25,
+      "family": "cheapest",
+      "gold": "The price is $275 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 28,
+      "family": "total",
+      "gold": "The total is $3661 delivered.",
+      "got": "To find the total of all items, we add the prices together:\n\n$342 + $3,319 = $3,661\n\nAnswer: **$3,661**",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 26,
+      "family": "priciest",
+      "gold": "The price is $2985 delivered.",
+      "got": "Bag Mini Hoodie",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 27,
+      "family": "diff",
+      "gold": "$7410 more",
+      "got": "To determine how much more the TIGER BLACK WHITE costs than the Green Mega Hoodie, subtract the price of the Green Mega Hoodie from the price of the TIGER BLACK WHITE:\n\n8170 - 760 = 7410\n\nThe TIGER BLACK WHITE is $7410 more expensive.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 30,
+      "family": "lookup",
+      "gold": "The price is $436 delivered.",
+      "got": "$436",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 31,
+      "family": "cheapest",
+      "gold": "The price is $520 delivered.",
+      "got": "To determine which item is the cheapest, we compare the prices provided in the list:\n\n*   Mega Tee: $8,896\n*   store jacket: $9,261\n*   SHORTS WHITE: $520\n*   Pants Low Vest: $6,146\n\nComparing these values, $520 is the lowest amount.\n\n**Answer: SHORTS WHITE**",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 32,
+      "family": "priciest",
+      "gold": "The price is $1319 delivered.",
+      "got": "BIG GREY TEE",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 33,
+      "family": "diff",
+      "gold": "$5623 more",
+      "got": "The price of the navy camo is $8005, and the price of the Red Store High is $2382. To find out how much more the navy camo costs, subtract the price of the Red Store High from the price of the navy camo:\n\n$$8005 - 2382 = 5623$$\n\nThe navy camo is **$5,623** more than the Red Store High.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 34,
+      "family": "total",
+      "gold": "The total is $17823 delivered.",
+      "got": "$17,823",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 35,
+      "family": "pct",
+      "gold": "The price is $3503.4 delivered.",
+      "got": "To find the price after a 40% discount, we can calculate the remaining percentage of the original price:\n\n1.  A 40% discount means you pay 60% of the original price ($100\\% - 40\\% = 60\\%$).\n2.  Calculate 60% of $5839:\n    $$0.60 \\times 5839 = 3503.4$$\n\nThe price after 40% off is **$3503.40**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 29,
+      "family": "pct",
+      "gold": "The price is $3268.5 delivered.",
+      "got": "To find the price after a 50% discount, we calculate half of the original price.\n\n1.  **Original Price:** $6537\n2.  **Discount:** 50%\n3.  **Calculation:** $6537 \\times 0.50 = 3268.5$\n\nThe price after 50% off is **$3268.50**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 36,
+      "family": "lookup",
+      "gold": "The price is $4076 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 37,
+      "family": "cheapest",
+      "gold": "The price is $7363 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 38,
+      "family": "priciest",
+      "gold": "The price is $9238 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 39,
+      "family": "diff",
+      "gold": "$21 more",
+      "got": "$21",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 40,
+      "family": "total",
+      "gold": "The total is $11431 delivered.",
+      "got": "13431",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 42,
+      "family": "lookup",
+      "gold": "The price is $5554 delivered.",
+      "got": "$5554",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 41,
+      "family": "pct",
+      "gold": "The price is $5988.5 delivered.",
+      "got": "The price after a 30% discount is $5,988.50.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 43,
+      "family": "cheapest",
+      "gold": "The price is $8539 delivered.",
+      "got": "Black College is the cheapest, priced at $8,539, compared to $9,326 for classic grey.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 46,
+      "family": "total",
+      "gold": "The total is $11737 delivered.",
+      "got": "4384 + 7353 = 11737\n\na: 11737",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 47,
+      "family": "pct",
+      "gold": "The price is $3966 delivered.",
+      "got": "To calculate the price after a 25% discount, first find 25% of the original price ($5288):\n$5288 * 0.25 = $1322\n\nThen, subtract the discount from the original price:\n$5288 - $1322 = $3966\n\nAlternatively, you can multiply the original price by 75% (or 0.75):\n$5288 * 0.75 = $3966\n\nThe price after 25% off is **$3966**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 48,
+      "family": "lookup",
+      "gold": "The price is $1706 delivered.",
+      "got": "$1706",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 45,
+      "family": "diff",
+      "gold": "$1345 more",
+      "got": "$5899 - $4554 = $1345\n\nThe TIGER COLLEGE BELT is $1345 more than the LOW GIFT TEE.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 44,
+      "family": "priciest",
+      "gold": "The price is $4478 delivered.",
+      "got": "tiger gift navy",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 49,
+      "family": "cheapest",
+      "gold": "The price is $1203 delivered.",
+      "got": "The cheapest item is the **Coat Bag**, priced at $1203.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 50,
+      "family": "priciest",
+      "gold": "The price is $6200 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 51,
+      "family": "diff",
+      "gold": "$140 more",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 52,
+      "family": "total",
+      "gold": "The total is $14726 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 53,
+      "family": "pct",
+      "gold": "The price is $3276.7 delivered.",
+      "got": "To calculate the price after a 30% discount, we first determine 30% of the original price and subtract it from the total.\n\n1.  **Original Price:** $4,681\n2.  **Discount Amount:** $4,681 \\times 0.30 = 1,404.30$\n3.  **Discounted Price:** $4,681 - 1,404.30 = 3,276.70$\n\nAlternatively, you can multiply the original price by (1 - 0.30) = 0.70:\n$4,681 \\times 0.70 = 3,276.70$\n\n**Answer:** $3,276.70",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 54,
+      "family": "lookup",
+      "gold": "The price is $3301 delivered.",
+      "got": "$3301",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 56,
+      "family": "priciest",
+      "gold": "The price is $8651 delivered.",
+      "got": "Hoodie Chain Low ($8651)",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 58,
+      "family": "total",
+      "gold": "The total is $22739 delivered.",
+      "got": "To find the total of all items, we need to sum the prices provided:\n\n1.  **SHIRT DOWN GIFT**: $5829\n2.  **Grey Socks Big**: $8445\n3.  **CITY COAT**: $8465\n\n**Calculation:**\n$$5829 + 8445 + 8465 = 22739$$\n\n**Answer:**\nThe total of all items is **$22,739**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 59,
+      "family": "pct",
+      "gold": "The price is $5442 delivered.",
+      "got": "To find the price after a 25% discount, you calculate 75% of the original price:\n\n$7256 \\times 0.75 = 5442$\n\nThe price after 25% off is **$5442**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 55,
+      "family": "cheapest",
+      "gold": "The price is $20 delivered.",
+      "got": "To determine which item is the cheapest, we compare the prices provided:\n\n*   shirt tiger city: $20\n*   Grey Belt Navy: $6379\n*   SOCKS STORE: $5186\n*   navy bag mega: $210\n\nComparing the values ($20, $6379, $5186, $210), the lowest price is $20.\n\nAnswer: shirt tiger city",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 61,
+      "family": "cheapest",
+      "gold": "The price is $155 delivered.",
+      "got": "Tee Cap City ($950)",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 62,
+      "family": "priciest",
+      "gold": "The price is $8189 delivered.",
+      "got": "The shorts coat white is the most expensive item at $8189.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 63,
+      "family": "diff",
+      "gold": "$2293 more",
+      "got": "$2293",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 60,
+      "family": "lookup",
+      "gold": "The price is $8104 delivered.",
+      "got": "$8104",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 57,
+      "family": "diff",
+      "gold": "$715 more",
+      "got": "To find out how much more the COAT BELT costs than the Crew Hoodie, subtract the price of the Crew Hoodie from the price of the COAT BELT:\n\n$3190 - $2475 = $715\n\nThe COAT BELT is **$715** more than the Crew Hoodie.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 64,
+      "family": "total",
+      "gold": "The total is $24684 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 65,
+      "family": "pct",
+      "gold": "The price is $2484 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 68,
+      "family": "priciest",
+      "gold": "The price is $7390 delivered.",
+      "got": "The most expensive item is **socks gift down** at $7390.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 69,
+      "family": "diff",
+      "gold": "$353 more",
+      "got": "$353",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 70,
+      "family": "total",
+      "gold": "The total is $17953 delivered.",
+      "got": "To find the total cost of all items, we add the prices together:\n\n*   Cap down shirt: $6,812\n*   Grey high coat: $6,682\n*   Pants City: $4,459\n\nCalculation:\n$6,812 + $6,682 = $13,494\n$13,494 + $4,459 = $17,953\n\nThe total of all items is **$17,953**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 71,
+      "family": "pct",
+      "gold": "The price is $230.3 delivered.",
+      "got": "To find the price after a 30% discount, we first calculate 30% of the original price and then subtract that amount from the total.\n\n1.  **Calculate the discount amount:**\n    $329 \\times 0.30 = 98.70$\n\n2.  **Subtract the discount from the original price:**\n    $329 - 98.70 = 230.30$\n\nAlternatively, you can multiply the original price by 70% (since 100% - 30% = 70%):\n$329 \\times 0.70 = 230.30$\n\n**Answer:** $230.30",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 72,
+      "family": "lookup",
+      "gold": "The price is $7348 delivered.",
+      "got": "$7348",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 66,
+      "family": "lookup",
+      "gold": "The price is $1552 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 73,
+      "family": "cheapest",
+      "gold": "The price is $2746 delivered.",
+      "got": "To determine which item is the cheapest, compare the prices provided:\n\n1. **-chain socks**: $2746\n2. **-Coat Baby White**: $7128\n3. **-mini chain high**: $6121\n\nComparing the values:\n$2746 < $6121 < $7128\n\nThe lowest price is $2746.\n\na: -chain socks",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 74,
+      "family": "priciest",
+      "gold": "The price is $7774 delivered.",
+      "got": "Red Gift Mega",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 67,
+      "family": "cheapest",
+      "gold": "The price is $250 delivered.",
+      "got": "Mini Chain",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 75,
+      "family": "diff",
+      "gold": "$2396 more",
+      "got": "To determine how much more the green gift shorts cost compared to the white green item, we need to subtract the price of the white green item from the price of the green gift shorts.\n\n1.  **Price of green gift shorts:** $9699\n2.  **Price of white green:** $7303\n\nCalculation:\n$$9699 - 7303 = 2396$$\n\nThe green gift shorts are **$2396** more expensive than the white green.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 76,
+      "family": "total",
+      "gold": "The total is $13428 delivered.",
+      "got": "To find the total of all items, sum the prices listed:\n\n1. Mini Tiger: $2703\n2. hoodie shorts grey: $4437\n3. Grey Big: $6288\n\n$$2703 + 4437 + 6288 = 13428$$\n\nThe total of all items is **$13,428**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 79,
+      "family": "cheapest",
+      "gold": "The price is $2306 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 78,
+      "family": "lookup",
+      "gold": "The price is $2684 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 77,
+      "family": "pct",
+      "gold": "The price is $5760.45 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 80,
+      "family": "priciest",
+      "gold": "The price is $4736 delivered.",
+      "got": "-college coat ($4736)",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 81,
+      "family": "diff",
+      "gold": "$2821 more",
+      "got": "$2821",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 82,
+      "family": "total",
+      "gold": "The total is $7394 delivered.",
+      "got": "To find the total of all items, we need to add the prices provided in the rows.\n\n**Prices:**\n*   LOW STORE SHORTS: $7,301\n*   down bag city: $93\n\n**Calculation:**\n$$7301 + 93 = 7394$$\n\n**Answer:**\nThe total of all items is **$7,394**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 83,
+      "family": "pct",
+      "gold": "The price is $3580 delivered.",
+      "got": "To calculate the price after a 50% discount, you need to find half of the original price.\n\nThe original price is **$71.60** (interpreting $7160 as $71.60 is standard for retail prices, but if it is literally $7,160, the math is the same percentage-wise).\n\nCalculation:\n$71.60 × 0.50 = **$35.80**\n\n(If the price was intended to be $7,160: $7,160 × 0.50 = **$3,580**)\n\nAssuming the standard decimal currency format where \"$7160\" is a typo for \"$71.60\":\n**The price after 50% off is $35.80.**",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 86,
+      "family": "priciest",
+      "gold": "The price is $9603 delivered.",
+      "got": "The prices for each item are:\n*   Belt Baby: $9603\n*   MINI DOWN: $1206\n*   mega mini low: $3483\n*   Black Bag Shorts: $5970\n\nComparing these values, $9603 is the highest amount.\n\n**Belt Baby**",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 87,
+      "family": "diff",
+      "gold": "$6364 more",
+      "got": "8497 - 2133 = 6364\n\nThe bag pants store is $6364 more than the coat black.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 88,
+      "family": "total",
+      "gold": "The total is $12991 delivered.",
+      "got": "6688 + 3061 + 3242 = 12991\n\nThe total of all items is $12,991.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 89,
+      "family": "pct",
+      "gold": "The price is $5865 delivered.",
+      "got": "To calculate the price after a 25% discount on the Store Cap, we follow these steps:\n\n1.  **Identify the original price:** $7,820\n2.  **Calculate the discount amount:**\n    $$7,820 \\times 0.25 = 1,955$$\n3.  **Subtract the discount from the original price:**\n    $$7,820 - 1,955 = 5,865$$\n\nAlternatively, you can multiply the original price by 75% (since 100% - 25% = 75%):\n$$7,820 \\times 0.75 = 5,865$$\n\n**The price after 25% off is $5,865.**",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 85,
+      "family": "cheapest",
+      "gold": "The price is $6636 delivered.",
+      "got": "hoodie red",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 84,
+      "family": "lookup",
+      "gold": "The price is $2756 delivered.",
+      "got": "$2756",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 90,
+      "family": "lookup",
+      "gold": "The price is $1938 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 91,
+      "family": "cheapest",
+      "gold": "The price is $147 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 93,
+      "family": "diff",
+      "gold": "$7846 more",
+      "got": "To find out how much more the baby gift down costs compared to the Gift Shorts, subtract the price of the Gift Shorts from the price of the baby gift down:\n\n$9,357 - $1,511 = $7,846\n\nThe baby gift down is **$7,846** more than the Gift Shorts.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 92,
+      "family": "priciest",
+      "gold": "The price is $5197 delivered.",
+      "got": "__error__: exhausted retries",
+      "exact": false,
+      "semantic": false
+    },
+    {
+      "id": 96,
+      "family": "lookup",
+      "gold": "The price is $4453 delivered.",
+      "got": "$4453",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 94,
+      "family": "total",
+      "gold": "The total is $1648 delivered.",
+      "got": "To find the total of all items, add their prices together:\n\n1.  Grey College: $467\n2.  store hoodie: $1,181\n\nCalculation:\n$467 + $1,181 = $1,648\n\nThe total of all items is **$1,648**.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 98,
+      "family": "priciest",
+      "gold": "The price is $9290 delivered.",
+      "got": "Mega Green Classic is the most expensive, priced at $9290.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 97,
+      "family": "cheapest",
+      "gold": "The price is $417 delivered.",
+      "got": "Black pants",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 99,
+      "family": "diff",
+      "gold": "$2380 more",
+      "got": "$2380",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 95,
+      "family": "pct",
+      "gold": "The price is $4348.8 delivered.",
+      "got": "$4348.80",
+      "exact": false,
+      "semantic": true
+    }
+  ]
+}

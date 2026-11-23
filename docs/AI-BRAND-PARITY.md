@@ -23,6 +23,14 @@ answers:
    caching, fine-tuning API, realtime voice)? **No**, and this page names each
    absence instead of hiding it behind a router.
 
+**The new scorecard: [TOP-100.md](TOP-100.md).** The objective "best among the
+current top 100 AI" is answered there axis by axis against the live 100-model
+registry: **8 axes won, 1 tied, 3 lost**. RAREXT is #1 on exactness (1000/1000
+held-out vs the neural model's 48%), determinism, integrity, offline operation,
+privacy, cost, latency and footprint; it loses on context (192 tokens),
+multimodal input and open-ended reasoning, and says so on the same page. The
+published receipt is `/mirror/rank.json`, gated by `tools/rank/verify.mjs`.
+
 ## 1. The serving surface, measured live
 
 `npm run audit:ai` with a real instruct container (Qwen2.5-0.5B-Instruct,

@@ -16,6 +16,11 @@
      "id": "claims",
      "cmd": "node tools/ops/claim-gate.mjs",
      "timeoutMs": 600000
+    },
+    {
+     "id": "rank",
+     "cmd": "node tools/rank/verify.mjs",
+     "timeoutMs": 300000
     }
    ]
   },

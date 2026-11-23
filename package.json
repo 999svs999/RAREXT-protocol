@@ -99,7 +99,10 @@
   "verify:packages": "node scripts/verify-packages.mjs",
   "version:all": "node scripts/sync-version.mjs",
   "ops:all": "node tools/ops/run-projects.mjs",
-  "ops:gates": "node tools/ops/claim-gate.mjs"
+  "ops:gates": "node tools/ops/claim-gate.mjs",
+  "rank:scorecard": "node tools/rank/scorecard.mjs",
+  "rank:tasks": "node tools/rank/gen-tasks.mjs",
+  "rank:authored": "node tools/rank/eval-hybrid.mjs"
  },
  "engines": {
   "node": ">=22.18"

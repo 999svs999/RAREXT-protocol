@@ -131,9 +131,25 @@ async function phaseOps() {
   line(latest.allOk, `all ok: ${latest.allOk} (receipt generated ${latest.generatedAt})`);
 }
 
-// ── 6. verification ─────────────────────────────────────────────────────────
+// ── 6. the top-100 scorecard ────────────────────────────────────────────────
+function phaseRank() {
+  phase("6 · rank — RAREXT AI among the current top 100 AI");
+  const card = JSON.parse(readFileSync(join(root, "bench/top100-scorecard.json"), "utf8"));
+  const t = card.totals;
+  line(t.wins >= 8, `${t.wins}/${t.axes} axes won, ${t.ties} tied, ${t.losses} lost — largest population ${card.population.n} systems`);
+  for (const axis of card.axes.filter((a) => a.verdict !== "loss")) {
+    line(true, `${axis.verdict.toUpperCase()} ${axis.label} — ${axis.rank}`);
+  }
+  for (const axis of card.axes.filter((a) => a.verdict === "loss")) {
+    console.log(`  [--] LOSS ${axis.label} — ${axis.rarext}`);
+  }
+  line(card.evidence.hybridHeldout.passed === card.evidence.hybridHeldout.n,
+    `held-out ledger suite: ${card.evidence.hybridHeldout.passed}/${card.evidence.hybridHeldout.n} exact vs neural alone ${card.evidence.neuralHeldout.passed}/${card.evidence.neuralHeldout.n}`);
+}
+
+// ── 7. verification ─────────────────────────────────────────────────────────
 function phaseVerify() {
-  phase("6 · verification — the claim gate at its recorded baseline");
+  phase("7 · verification — the claim gate at its recorded baseline");
   const out = execFileSync("node", ["tools/ops/claim-gate.mjs"], { cwd: root, encoding: "utf8", timeout: 600000 });
   const verdict = out.split("\n").find((l) => l.includes("→")) ?? out.trim();
   line(/PASS/.test(verdict), verdict.trim());
@@ -147,6 +163,7 @@ await phaseLiveApi();
 await phaseBrowser();
 await phaseSkillsAndMemory();
 await phaseOps();
+phaseRank();
 phaseVerify();
 
 console.log(`\n${failures === 0 ? "ALL PHASES PASS — RAREXT AI, end to end." : `${failures} check(s) failed — shown above.`}`);

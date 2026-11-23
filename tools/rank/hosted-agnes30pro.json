@@ -1,0 +1,844 @@
+{
+  "model": "agnes-3.0-pro",
+  "seed": 20261123,
+  "n": 100,
+  "exact": 0,
+  "semantic": 100,
+  "ms": 40248,
+  "promptTokens": 14663,
+  "outputTokens": 7725,
+  "byFamily": {
+    "priciest": {
+      "exact": 0,
+      "semantic": 17,
+      "n": 17
+    },
+    "cheapest": {
+      "exact": 0,
+      "semantic": 17,
+      "n": 17
+    },
+    "total": {
+      "exact": 0,
+      "semantic": 16,
+      "n": 16
+    },
+    "lookup": {
+      "exact": 0,
+      "semantic": 17,
+      "n": 17
+    },
+    "pct": {
+      "exact": 0,
+      "semantic": 16,
+      "n": 16
+    },
+    "diff": {
+      "exact": 0,
+      "semantic": 17,
+      "n": 17
+    }
+  },
+  "rows": [
+    {
+      "id": 2,
+      "family": "priciest",
+      "gold": "The price is $9629 delivered.",
+      "got": "SHORTS TIGER",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 1,
+      "family": "cheapest",
+      "gold": "The price is $781 delivered.",
+      "got": "mini shark",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 4,
+      "family": "total",
+      "gold": "The total is $21344 delivered.",
+      "got": "$21,344",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 0,
+      "family": "lookup",
+      "gold": "The price is $4966 delivered.",
+      "got": "$4966",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 5,
+      "family": "pct",
+      "gold": "The price is $1518.3 delivered.",
+      "got": "$1518.30",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 6,
+      "family": "lookup",
+      "gold": "The price is $1672 delivered.",
+      "got": "The Low Baby Camo is $1672.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 8,
+      "family": "priciest",
+      "gold": "The price is $9469 delivered.",
+      "got": "Down Camo",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 9,
+      "family": "diff",
+      "gold": "$6452 more",
+      "got": "$6,452",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 10,
+      "family": "total",
+      "gold": "The total is $13898 delivered.",
+      "got": "$13898",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 3,
+      "family": "diff",
+      "gold": "$1403 more",
+      "got": "$1,403",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 11,
+      "family": "pct",
+      "gold": "The price is $4594.5 delivered.",
+      "got": "$4594.50",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 12,
+      "family": "lookup",
+      "gold": "The price is $5845 delivered.",
+      "got": "$5845",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 13,
+      "family": "cheapest",
+      "gold": "The price is $4142 delivered.",
+      "got": "White Hoodie",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 15,
+      "family": "diff",
+      "gold": "$20 more",
+      "got": "$20",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 14,
+      "family": "priciest",
+      "gold": "The price is $9340 delivered.",
+      "got": "SOCKS DOWN RED",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 7,
+      "family": "cheapest",
+      "gold": "The price is $2351 delivered.",
+      "got": "Grey Low",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 17,
+      "family": "pct",
+      "gold": "The price is $1116.75 delivered.",
+      "got": "$1116.75",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 18,
+      "family": "lookup",
+      "gold": "The price is $8502 delivered.",
+      "got": "The Shark Cap costs $8502.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 19,
+      "family": "cheapest",
+      "gold": "The price is $545 delivered.",
+      "got": "vest hoodie tiger",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 21,
+      "family": "diff",
+      "gold": "$4211 more",
+      "got": "$4,211",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 20,
+      "family": "priciest",
+      "gold": "The price is $7916 delivered.",
+      "got": "down shirt",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 22,
+      "family": "total",
+      "gold": "The total is $4794 delivered.",
+      "got": "$4794",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 23,
+      "family": "pct",
+      "gold": "The price is $3704 delivered.",
+      "got": "$3704",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 24,
+      "family": "lookup",
+      "gold": "The price is $1650 delivered.",
+      "got": "$1650",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 16,
+      "family": "total",
+      "gold": "The total is $20564 delivered.",
+      "got": "$20,564",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 26,
+      "family": "priciest",
+      "gold": "The price is $2985 delivered.",
+      "got": "Bag Mini Hoodie",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 28,
+      "family": "total",
+      "gold": "The total is $3661 delivered.",
+      "got": "$3661",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 29,
+      "family": "pct",
+      "gold": "The price is $3268.5 delivered.",
+      "got": "$3,268.50",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 30,
+      "family": "lookup",
+      "gold": "The price is $436 delivered.",
+      "got": "$436",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 31,
+      "family": "cheapest",
+      "gold": "The price is $520 delivered.",
+      "got": "SHORTS WHITE",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 25,
+      "family": "cheapest",
+      "gold": "The price is $275 delivered.",
+      "got": "BIG COAT",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 32,
+      "family": "priciest",
+      "gold": "The price is $1319 delivered.",
+      "got": "Red Tee Grey",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 27,
+      "family": "diff",
+      "gold": "$7410 more",
+      "got": "$7,410",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 33,
+      "family": "diff",
+      "gold": "$5623 more",
+      "got": "$5623",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 35,
+      "family": "pct",
+      "gold": "The price is $3503.4 delivered.",
+      "got": "$3,503.40",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 36,
+      "family": "lookup",
+      "gold": "The price is $4076 delivered.",
+      "got": "$4076",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 37,
+      "family": "cheapest",
+      "gold": "The price is $7363 delivered.",
+      "got": "big camo cap",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 38,
+      "family": "priciest",
+      "gold": "The price is $9238 delivered.",
+      "got": "mini shark",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 39,
+      "family": "diff",
+      "gold": "$21 more",
+      "got": "$21",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 40,
+      "family": "total",
+      "gold": "The total is $11431 delivered.",
+      "got": "$11431",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 41,
+      "family": "pct",
+      "gold": "The price is $5988.5 delivered.",
+      "got": "$5,988.50",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 43,
+      "family": "cheapest",
+      "gold": "The price is $8539 delivered.",
+      "got": "Black College",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 34,
+      "family": "total",
+      "gold": "The total is $17823 delivered.",
+      "got": "$17,823",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 44,
+      "family": "priciest",
+      "gold": "The price is $4478 delivered.",
+      "got": "tiger gift navy",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 45,
+      "family": "diff",
+      "gold": "$1345 more",
+      "got": "$1,345",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 46,
+      "family": "total",
+      "gold": "The total is $11737 delivered.",
+      "got": "$11737",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 42,
+      "family": "lookup",
+      "gold": "The price is $5554 delivered.",
+      "got": "$5554",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 47,
+      "family": "pct",
+      "gold": "The price is $3966 delivered.",
+      "got": "$3966",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 48,
+      "family": "lookup",
+      "gold": "The price is $1706 delivered.",
+      "got": "The City Pants Coat costs $1706.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 49,
+      "family": "cheapest",
+      "gold": "The price is $1203 delivered.",
+      "got": "Coat Bag",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 50,
+      "family": "priciest",
+      "gold": "The price is $6200 delivered.",
+      "got": "Red Baby",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 51,
+      "family": "diff",
+      "gold": "$140 more",
+      "got": "$140",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 52,
+      "family": "total",
+      "gold": "The total is $14726 delivered.",
+      "got": "$14,726",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 53,
+      "family": "pct",
+      "gold": "The price is $3276.7 delivered.",
+      "got": "$3276.70",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 54,
+      "family": "lookup",
+      "gold": "The price is $3301 delivered.",
+      "got": "The CREW GREEN VEST is $3301.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 55,
+      "family": "cheapest",
+      "gold": "The price is $20 delivered.",
+      "got": "shirt tiger city",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 57,
+      "family": "diff",
+      "gold": "$715 more",
+      "got": "$715",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 56,
+      "family": "priciest",
+      "gold": "The price is $8651 delivered.",
+      "got": "Hoodie Chain Low",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 58,
+      "family": "total",
+      "gold": "The total is $22739 delivered.",
+      "got": "$22,739",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 59,
+      "family": "pct",
+      "gold": "The price is $5442 delivered.",
+      "got": "$5442",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 61,
+      "family": "cheapest",
+      "gold": "The price is $155 delivered.",
+      "got": "Coat Hoodie",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 60,
+      "family": "lookup",
+      "gold": "The price is $8104 delivered.",
+      "got": "$8104",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 63,
+      "family": "diff",
+      "gold": "$2293 more",
+      "got": "$2293",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 65,
+      "family": "pct",
+      "gold": "The price is $2484 delivered.",
+      "got": "$2,484",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 64,
+      "family": "total",
+      "gold": "The total is $24684 delivered.",
+      "got": "$24,684",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 67,
+      "family": "cheapest",
+      "gold": "The price is $250 delivered.",
+      "got": "Mini Chain ($250)",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 68,
+      "family": "priciest",
+      "gold": "The price is $7390 delivered.",
+      "got": "socks gift down",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 62,
+      "family": "priciest",
+      "gold": "The price is $8189 delivered.",
+      "got": "shorts coat white",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 69,
+      "family": "diff",
+      "gold": "$353 more",
+      "got": "353",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 70,
+      "family": "total",
+      "gold": "The total is $17953 delivered.",
+      "got": "$17953",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 71,
+      "family": "pct",
+      "gold": "The price is $230.3 delivered.",
+      "got": "$230.30",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 73,
+      "family": "cheapest",
+      "gold": "The price is $2746 delivered.",
+      "got": "chain socks",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 66,
+      "family": "lookup",
+      "gold": "The price is $1552 delivered.",
+      "got": "$1552",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 74,
+      "family": "priciest",
+      "gold": "The price is $7774 delivered.",
+      "got": "Red Gift Mega",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 75,
+      "family": "diff",
+      "gold": "$2396 more",
+      "got": "$2,396",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 76,
+      "family": "total",
+      "gold": "The total is $13428 delivered.",
+      "got": "$13,428",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 78,
+      "family": "lookup",
+      "gold": "The price is $2684 delivered.",
+      "got": "$2684",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 77,
+      "family": "pct",
+      "gold": "The price is $5760.45 delivered.",
+      "got": "$5,760.45",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 80,
+      "family": "priciest",
+      "gold": "The price is $4736 delivered.",
+      "got": "college coat",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 72,
+      "family": "lookup",
+      "gold": "The price is $7348 delivered.",
+      "got": "$7348",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 81,
+      "family": "diff",
+      "gold": "$2821 more",
+      "got": "$2,821",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 82,
+      "family": "total",
+      "gold": "The total is $7394 delivered.",
+      "got": "$7394",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 83,
+      "family": "pct",
+      "gold": "The price is $3580 delivered.",
+      "got": "$3580",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 84,
+      "family": "lookup",
+      "gold": "The price is $2756 delivered.",
+      "got": "$2756",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 85,
+      "family": "cheapest",
+      "gold": "The price is $6636 delivered.",
+      "got": "hoodie red",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 87,
+      "family": "diff",
+      "gold": "$6364 more",
+      "got": "$6,364",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 86,
+      "family": "priciest",
+      "gold": "The price is $9603 delivered.",
+      "got": "Belt Baby",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 88,
+      "family": "total",
+      "gold": "The total is $12991 delivered.",
+      "got": "12991",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 89,
+      "family": "pct",
+      "gold": "The price is $5865 delivered.",
+      "got": "$5,865",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 90,
+      "family": "lookup",
+      "gold": "The price is $1938 delivered.",
+      "got": "The Camo Mini is $1938.",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 79,
+      "family": "cheapest",
+      "gold": "The price is $2306 delivered.",
+      "got": "Gift Store Low",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 91,
+      "family": "cheapest",
+      "gold": "The price is $147 delivered.",
+      "got": "CREW COLLEGE",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 93,
+      "family": "diff",
+      "gold": "$7846 more",
+      "got": "$7,846",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 92,
+      "family": "priciest",
+      "gold": "The price is $5197 delivered.",
+      "got": "Chain Cap Store",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 94,
+      "family": "total",
+      "gold": "The total is $1648 delivered.",
+      "got": "$1648",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 96,
+      "family": "lookup",
+      "gold": "The price is $4453 delivered.",
+      "got": "$4453",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 95,
+      "family": "pct",
+      "gold": "The price is $4348.8 delivered.",
+      "got": "$4,348.80",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 97,
+      "family": "cheapest",
+      "gold": "The price is $417 delivered.",
+      "got": "black pants",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 98,
+      "family": "priciest",
+      "gold": "The price is $9290 delivered.",
+      "got": "Mega Green Classic",
+      "exact": false,
+      "semantic": true
+    },
+    {
+      "id": 99,
+      "family": "diff",
+      "gold": "$2380 more",
+      "got": "$2,380",
+      "exact": false,
+      "semantic": true
+    }
+  ]
+}

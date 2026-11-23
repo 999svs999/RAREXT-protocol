@@ -166,6 +166,25 @@ a: </textarea>
               const r = answerWith(loaded.engine, loaded.model, "rows: -BIG TEE|$89\n-RED HAT|$35\n-CHAIN|$12\nq: which is cheapest?\na: ", 32);
               return JSON.stringify(r.text);
             });
+            await step("exact numeric tool — 40 fresh ledger tasks generated in this tab", async () => {
+              let seed = 12345;
+              const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+              const int = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+              let ok = 0, n = 0;
+              for (let i = 0; i < 40; i += 1) {
+                const a = int(5, 9999), b = int(5, 9999), c = int(5, 9999);
+                let prompt, gold;
+                if (i % 5 === 0) { prompt = `rows: -alpha|$${a}\nq: how much is the alpha?\na: `; gold = `The price is $${a} delivered.`; }
+                else if (i % 5 === 1) { prompt = `rows: -alpha|$${a}\n-beta|$${b}\nq: which is cheapest?\na: `; gold = `The price is $${Math.min(a, b)} delivered.`; }
+                else if (i % 5 === 2) { prompt = `rows: -alpha|$${a}\n-beta|$${b}\nq: how much more is the alpha than the beta?\na: `; gold = `$${Math.abs(a - b)} more`; }
+                else if (i % 5 === 3) { prompt = `rows: -alpha|$${a}\n-beta|$${b}\n-gamma|$${c}\nq: what is the total of all items?\na: `; gold = `The total is $${a + b + c} delivered.`; }
+                else { prompt = `rows: -alpha|$${a}\nq: what is the price after 25% off?\na: `; gold = `The price is $${Math.round(a * 75) / 100} delivered.`; }
+                const r = answerExact(prompt);
+                n += 1;
+                if (r && r.text === gold) ok += 1;
+              }
+              return `${ok}/${n} exact — computed, not sampled (0 tokens)`;
+            });
             await step("holographic memory — 50 (item→price) pairs into ONE vector", async () => {
               const pairs = Array.from({ length: 50 }, (_, i) => [`ITEM-${100 + i}`, `$${10 + i * 7}`]);
               const r = hrrSelfTest(pairs);

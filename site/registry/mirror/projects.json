@@ -1,0 +1,67 @@
+{
+ "generatedAt": "2026-11-23T15:13:43.549Z",
+ "allOk": true,
+ "projects": [
+  {
+   "id": "rarext-protocol",
+   "role": "the protocol, runtime, engine, and this AI's own live mirror",
+   "git": {
+    "head": "ea569727ab01",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "runtime",
+     "ok": true,
+     "ms": 13849,
+     "digest": "8c7b9ddeb0b5000d2735f651b41a2be234779c8944e6988e6855661e57cf87f9"
+    },
+    {
+     "id": "claims",
+     "ok": true,
+     "ms": 1901,
+     "digest": "6554ecb86509d02ac5ec5f67e8d88007e144b4d095e3464c8fcd6f539b2fc271"
+    },
+    {
+     "id": "rank",
+     "ok": true,
+     "ms": 109,
+     "digest": "ef6061c7e03166be6300aac163c23b02295a38d1549bb4fa185311eb80575b1b"
+    }
+   ]
+  }
+ ],
+ "services": [
+  {
+   "id": "provider",
+   "ok": true,
+   "ms": 37,
+   "status": 200
+  },
+  {
+   "id": "edge-direct",
+   "ok": true,
+   "ms": 256,
+   "status": 200
+  },
+  {
+   "id": "tunnel",
+   "ok": true,
+   "ms": 539,
+   "status": 200
+  },
+  {
+   "id": "mirror-entangled-page",
+   "ok": true,
+   "ms": 289,
+   "status": 200
+  },
+  {
+   "id": "mirror-weights",
+   "ok": true,
+   "ms": 1023,
+   "status": 200
+  }
+ ]
+}
