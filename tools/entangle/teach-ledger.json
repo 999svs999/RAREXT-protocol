@@ -1,0 +1,52 @@
+{
+ "steps": 600,
+ "chi": 48,
+ "lr": 0.0002,
+ "batch": 24,
+ "project_every": 10,
+ "seed": 4242,
+ "before_new": {
+  "diff": 0.0,
+  "total": 0.0,
+  "pct": 0.0
+ },
+ "before_old": {
+  "S0 price-copy": 1.0,
+  "S1 cheapest": 1.0,
+  "S2 priciest": 1.0,
+  "S1m cheapest-mixed": 0.9583333333333334,
+  "S2m priciest-mixed": 1.0,
+  "S1t cheapest-3row-mixed": 0.9166666666666666,
+  "S2t priciest-3row-mixed": 0.9583333333333334,
+  "S3 refusal": 0.0
+ },
+ "after_new": {
+  "diff": 0.1,
+  "total": 0.016666666666666666,
+  "pct": 0.05
+ },
+ "after_old": {
+  "S0 price-copy": 0.8333333333333334,
+  "S1 cheapest": 1.0,
+  "S2 priciest": 0.9166666666666666,
+  "S1m cheapest-mixed": 0.875,
+  "S2m priciest-mixed": 1.0,
+  "S1t cheapest-3row-mixed": 0.5416666666666666,
+  "S2t priciest-3row-mixed": 0.9166666666666666,
+  "S3 refusal": 0.0
+ },
+ "old_delta": {
+  "S0 price-copy": 0.16666666666666663,
+  "S1 cheapest": 0.0,
+  "S2 priciest": 0.08333333333333337,
+  "S1m cheapest-mixed": 0.08333333333333337,
+  "S2m priciest-mixed": 0.0,
+  "S1t cheapest-3row-mixed": 0.375,
+  "S2t priciest-3row-mixed": 0.04166666666666674,
+  "S3 refusal": 0.0
+ },
+ "best_step": 150,
+ "heldout_mean_before": 0.0,
+ "heldout_mean_after": 0.05555555555555556,
+ "train_seconds": 608.8
+}
