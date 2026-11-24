@@ -84,8 +84,14 @@ async function phaseBrowser() {
   const weightsDigest = sha256(weights);
   line(engineDigest === "83b666cfe3cf72f32d753c030f258eead72f139a87609b07b6708f4d07933b15",
     `engine digest ${engineDigest.slice(0, 24)}… matches the pin`);
-  line(weightsDigest === "da1a69cb75fe0bbfe61f12a4776dc0786d4d0739685e7f79ffac7f8e557cf779",
-    `weights digest ${weightsDigest.slice(0, 24)}… matches the pin (${weights.length.toLocaleString()} bytes, χ=48 MPO)`);
+  // The pin lives in the served entangled.js; the demo must read it from there,
+  // never hardcode it — a promoted model changes the digest and the demo would
+  // fail against the very consistency it is checking.
+  const entangledSrc = await (await fetch(`${live}/entangled.js`)).text();
+  const pinned = /weights:\s*"?([0-9a-f]{64})"?/.exec(entangledSrc)?.[1]
+    ?? /([0-9a-f]{64})/.exec(entangledSrc)?.[1];
+  line(!!pinned && weightsDigest === pinned,
+    `weights digest ${weightsDigest.slice(0, 24)}… matches the page pin (${weights.length.toLocaleString()} bytes, χ=48 MPO)`);
 }
 
 // ── 3+4. the engine and the holographic memory, in-process ──────────────────
