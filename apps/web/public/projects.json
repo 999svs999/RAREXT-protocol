@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-23T15:18:01.163Z",
+ "generatedAt": "2026-11-24T02:08:14.558Z",
  "allOk": true,
  "projects": [
   {
    "id": "rarext-protocol",
    "role": "the protocol, runtime, engine, and this AI's own live mirror",
    "git": {
-    "head": "29b851e4562f",
+    "head": "3610c5ddfe06",
     "dirty": true
    },
    "ok": true,
@@ -14,20 +14,20 @@
     {
      "id": "runtime",
      "ok": true,
-     "ms": 13610,
-     "digest": "e3d502da8251b321d53518c1cf1e0a381205a39116283915471f326c6411575b"
+     "ms": 13763,
+     "digest": "0097584cc76b8bd904d61f404bb1dbbd81f617c882a238584a7606d233142f97"
     },
     {
      "id": "claims",
      "ok": true,
-     "ms": 1510,
-     "digest": "a88c0566a020c666b79aba7f9393448be829f105f35418d90674eb0c4f6b0904"
+     "ms": 1618,
+     "digest": "dd2dd1a389b897ddc4586bbece28dbddf80e9de957c2fc945c3bfdd71cf22c6f"
     },
     {
      "id": "rank",
      "ok": true,
-     "ms": 98,
-     "digest": "e129187d6ada1d552f46435b72678df6e80df2dd6b1c39898112206d114251eb"
+     "ms": 119,
+     "digest": "8e15503961b6ca48b7ef8d17afdf19dcec4a581fe9313c9e89503ed08e09464f"
     }
    ]
   },
@@ -43,14 +43,14 @@
     {
      "id": "test",
      "ok": true,
-     "ms": 2789,
-     "digest": "44a7b345098033ca05d3e91a2bbdf0f3a6b7e50387d21a80c2623d60610c8e04"
+     "ms": 2799,
+     "digest": "25b9389f1515ac5c77d6c752668718f4a4eb90b99a6c0465d7d364591eedb4df"
     },
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 4556,
-     "digest": "85eda8b26862a21f0164afa7aea3f0e9a884f13e45c5cbc7475ada62581710ee"
+     "ms": 4067,
+     "digest": "454c5e270af24efeed90ba9e69e1d0f16670841905b19e0beb4ec31dc20e0f19"
     }
    ]
   },
@@ -66,14 +66,14 @@
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 11867,
-     "digest": "5f99f3764bd0f497ef94523bb776435d14249c75e31859374998320bab934bc8"
+     "ms": 16216,
+     "digest": "1d53e693934a3bdfd3302cd1916acf7f8777f0d47a50164bd91c4c01b9448067"
     },
     {
      "id": "build",
      "ok": true,
-     "ms": 75987,
-     "digest": "55bf759684f385671dd4c0ca945e367aec8666951f21a1868536a757630ea567"
+     "ms": 113305,
+     "digest": "7c6b45fe1531c517663bcb4309e1eaf4a2deb34708aef085bb8924520cf3dde5"
     }
    ]
   },
@@ -89,8 +89,8 @@
     {
      "id": "site",
      "ok": true,
-     "ms": 931,
-     "digest": "0978f4197cf7fd51b94c3b29d747e3f6b1d2d130a1b2f55cc92b0b871a2caf35"
+     "ms": 1028,
+     "digest": "470226f79ca8572748d56ac377d5173de5766f1fdd0a5bb53986f147a51fb404"
     }
    ]
   },
@@ -106,14 +106,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 8487,
-     "digest": "981b405c3b73baea5527628ec33ee5c0e050b7ae575c421c01b9a6d85d574a8c"
+     "ms": 8649,
+     "digest": "2fd67ad7631da5bb1a809270fdca4cdb4984e38e30108618856946d59f44f7b1"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 6261,
-     "digest": "4020fbfbcbd728062751984b12b78301844fb436f3fc187ab92030a52fb12e38"
+     "ms": 6454,
+     "digest": "f122dfb664714ee596b018497386d91b26d39b270560bc766b8bcbb7ebd3e35e"
     }
    ]
   },
@@ -129,14 +129,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 7567,
-     "digest": "5a284243bc01de39414223bf1b09b65fbd8fa6ae362a8ac955df90811e9ff836"
+     "ms": 7824,
+     "digest": "eb5bdb273ec670d798258700d6018e8f3cd40e3d53b4cd08725057150a6904bf"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5710,
-     "digest": "ddfe7bdaa3717bbdd3a08cd0962cc6d6044a1f598affc0794b13675592affdab"
+     "ms": 5978,
+     "digest": "a848d31d737ada3ba5d5f88df0c414eeeb9e309a6965e24deae2ab5383d0d22d"
     }
    ]
   }
@@ -145,31 +145,31 @@
   {
    "id": "provider",
    "ok": true,
-   "ms": 42,
+   "ms": 49,
    "status": 200
   },
   {
    "id": "edge-direct",
    "ok": true,
-   "ms": 148,
+   "ms": 320,
    "status": 200
   },
   {
    "id": "tunnel",
    "ok": true,
-   "ms": 708,
+   "ms": 195,
    "status": 200
   },
   {
    "id": "mirror-entangled-page",
    "ok": true,
-   "ms": 580,
+   "ms": 497,
    "status": 200
   },
   {
    "id": "mirror-weights",
    "ok": true,
-   "ms": 2295,
+   "ms": 1249,
    "status": 200
   }
  ]

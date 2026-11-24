@@ -184,6 +184,27 @@ to T4, press Run all, and hand back `gpu-refined-diff.pt` + `gpu-train.json`.
 Kaggle is the same Google resource and *is* driven headlessly by the CLI, so it
 carries the automated run.
 
+## What shipped
+
+After four refused candidates (92, 82, 95, 83 of 200 — every one caught by the
+gates and reverted), the first **model-only** promotion shipped on
+2026-11-24, commit `eefce0e`, live weights digest `c54a8a6811013b29…`:
+
+```console
+$ node tools/rank/eval-neural.mjs --n 200 --seed 20261123
+neural model alone — 97/200 exact (48.5%)
+  lookup    34/34  100.0%   (was 97.1%)
+  cheapest  34/34  100.0%   (was 94.1%)
+  priciest  29/33   87.9%   (was 90.9%)
+  diff       0/33    0.0%   (4-digit wall — the GPU run below is the lever)
+```
+
+The gain came from replay alignment, not from a bigger model: the same
+2,132,224-parameter χ=48 rebuild, trained 4,500 steps on CPU against the
+published grammar. `publish-futuristic-proof.mjs`'s curated mirror list was
+also fixed to carry `rank.html`/`rank.json` — every previous ship had been
+wiping them from `/mirror/`.
+
 ## Promotion gates for any checkpoint
 
 The gate exists because "no regression on 24 held-out samples per set" is not
