@@ -181,6 +181,8 @@ const mirrorFiles = [
   "gallery.html",
   "index.html",
   "leaderboard.html",
+  "rank.html",
+  "rank.json",
   "renditions.js",
   "styles.css",
   "verify.js",
@@ -200,6 +202,8 @@ const owners = {
   "index.html": join(root, "apps/web/public", "index.html"),
   "renditions.js": join(root, "apps/web/public", "renditions.js"),
   "leaderboard.html": join(root, "apps/web/public", "leaderboard.html"),
+  "rank.html": join(root, "apps/web/public", "rank.html"),
+  "rank.json": join(root, "apps/web/public", "rank.json"),
 };
 for (const name of mirrorFiles) {
   const owner = owners[name];

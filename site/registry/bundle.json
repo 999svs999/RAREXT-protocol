@@ -1,10 +1,10 @@
 {
   "manifest": {
     "version": 1,
-    "root": "e9922b48105faf1074b797dca31c76f64690f42768fa733838bad82598915766",
+    "root": "a1d54874c516211d3a0de68ec5da47e4d4acfc6b5515286025f1fb9e6f8d14aa",
     "leafVersion": 4,
-    "anchorId": "abce676c-3e31-480b-be64-bf629c1d252f",
-    "anchorRoot": "e9922b48105faf1074b797dca31c76f64690f42768fa733838bad82598915766",
+    "anchorId": "b55e0d03-4cc0-4aa4-9bc8-ca2e8528cdf7",
+    "anchorRoot": "a1d54874c516211d3a0de68ec5da47e4d4acfc6b5515286025f1fb9e6f8d14aa",
     "createdAt": "2026-11-24T01:47:21.580Z",
     "publications": [
       {
@@ -137,7 +137,7 @@
       },
       {
         "id": "pub-federation-commitment",
-        "leaf": "731142640e801b3f94b4a078e829c3e08e9cdd7465c2e46074a923d93e9f1804"
+        "leaf": "a6bfad5b084b3684b9e1197c5ad35417168b6e68342712892b19750f44512dbe"
       },
       {
         "id": "pub-semantics-commitment",
@@ -2697,7 +2697,7 @@
         "kind": "registry-list-commitment",
         "version": 1,
         "mediaType": "application/json",
-        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-11-24T01:49:24.073Z\"}"
+        "body": "{\"listUrl\":\"https://999svs999.github.io/RAREXT-protocol/registry/seed.json\",\"digest\":\"18f843a0b1341de4fafd6b54120303889c8ea0eca702f63af00a5fe86c60dc1a\",\"generatedAt\":\"2026-11-24T01:59:46.744Z\"}"
       },
       "taskId": "futuristic-published",
       "visibility": "public",
@@ -2791,8 +2791,8 @@
   ],
   "anchors": [
     {
-      "id": "abce676c-3e31-480b-be64-bf629c1d252f",
-      "root": "e9922b48105faf1074b797dca31c76f64690f42768fa733838bad82598915766",
+      "id": "b55e0d03-4cc0-4aa4-9bc8-ca2e8528cdf7",
+      "root": "a1d54874c516211d3a0de68ec5da47e4d4acfc6b5515286025f1fb9e6f8d14aa",
       "publicationIds": [
         "edeb9bec-5175-475a-b308-8952210a9e52",
         "17af02b5-9745-41b1-bdbe-6f7a05d360fd",
@@ -2831,14 +2831,14 @@
       ],
       "leafCount": 34,
       "leafVersion": 4,
-      "createdAt": "2026-11-24T01:49:24.094Z",
+      "createdAt": "2026-11-24T01:59:46.763Z",
       "adapter": "local",
-      "reference": "local:e9922b48105faf10",
+      "reference": "local:a1d54874c516211d",
       "receipts": [
         {
           "adapter": "local",
           "status": "ok",
-          "reference": "local:e9922b48105faf10"
+          "reference": "local:a1d54874c516211d"
         },
         {
           "adapter": "trac",
@@ -2849,7 +2849,7 @@
         {
           "adapter": "content",
           "status": "ok",
-          "reference": "cid:bafkreibui2mjgbdq3c4xkyevvjswoyjgxihil6vz7gstr7zjf5bknl3ryu"
+          "reference": "cid:bafkreifwk5muy4g5fw3vjqvxr3bc3rh4y3ianyp5n37sdmkqgnyuk2ct6e"
         }
       ]
     }
