@@ -96,6 +96,23 @@ measured on 16–24 held-out samples each.
 | 2-digit diff, short names, **unprojected control** | 1000 | 3e-4 | **8%** | 8% | 2.2% | **0.000** |
 | 2-digit diff, short names, **projected χ=48** | 2500 | 3e-4 | **28%** | 28% | 2.2% | **0.000** |
 | real grammar (long names), 1–4 digit curriculum, 50% replay | 4500 | 2e-4 | **1d 100% · 2d 10% · 3d 2% · 4d 0%** | — | 2.2% / 1d 40% | **0.000 on all seven sets** |
+| **Kaggle T4 GPU**, batch 64, 1–4 digit curriculum | **30000** | 3e-4 | **1d 100% · 2d 100% · 3d 95% · 4d 30%** | — | 2.2% / 1d 40% | **≤0.042 (one set improved)** |
+
+The GPU run is the answer to the width question. At 5 it/s for 100 minutes —
+one T4, a 2.1 M-parameter model — held-out difference arithmetic went from
+0/0/0/0 to **100/100/95/30% by digit width**, with the deployed skills intact.
+Two details matter for reading it honestly:
+
+1. The learning curve is *not* smooth: 2-digit sat at 17% for 3,000 steps and
+   then jumped to 92–100% around step 8,000; 3-digit followed the same shape
+   ~6,000 steps later; 4-digit was still climbing (12% → 38% band) when the
+   cosine schedule ended at 30,000. Longer runs should keep climbing.
+2. That first GPU checkpoint was **refused by the promotion gate** all the
+   same: it had been trained against the stale replay (the deployed
+   generators' 49..999 prices), so published `lookup` collapsed to 61.8% even
+   as `diff` scored its first-ever nonzero items (3/33). The gate measured the
+   suite, reverted the install, and the run was relaunched against the
+   suite-faithful replay — same hyperparameters, fixed data.
 
 The 4,500-step run is the first checkpoint that *learns* and *keeps everything*:
 one-digit difference goes 0% → 100% held-out with every deployed skill at its
@@ -137,6 +154,15 @@ GPU), so the training runs wherever accelerator time exists.
 | this Mac, 4 CPU cores | `tools/entangle/train_diff.py` — the *independent replication*: batch 16, 4,500 steps, identical curriculum and gates | `tools/entangle/train-diff.json` |
 | **Kaggle** (T4/P100 GPU, 30 h/week quota) | kernel [`svs168/rarext-gpu-diff`](https://www.kaggle.com/code/svs168/rarext-gpu-diff) running `tools/entangle/gpu_train_diff.py` — batch 64, 30,000 steps, projection every 50, same replay and gates; code + starting checkpoint ship in dataset [`svs168/rarext-entangle-train`](https://www.kaggle.com/datasets/svs168/rarext-entangle-train) | CLI-authenticated; CPU probe kernel ran to `COMPLETE` in seconds, but **GPU sessions stay `QUEUED`** — Kaggle gates accelerators behind phone verification, which only the account owner can do |
 | **Google Colab** | `tools/entangle/colab-gpu-diff.ipynb` — the same script, one **Run all** click; the notebook clones this repo, so the starting weights are the exact served bytes | needs one user click (see below) |
+
+**Context-axis verdict so far, measured on the GPU.** The context-extension
+kernel (`svs168/rarext-gpu-ctx`) ran **10,000 steps** at 2.3–4 it/s (≈72 min of
+T4 time) before an OOM at rows ≤ 80, and held-out long-ledger exactness was
+**0% at every depth (8, 32, 64, 96 rows) the whole way**, with the page's 14
+prompts and every deployed set intact (+0.000). Reading a row out of many
+similar rows is a *new attention skill*, not a longer table, and 10k steps ×
+batch 6 does not teach it. The context row stays a loss — 192 tokens, honestly
+measured — until someone funds a run an order of magnitude longer.
 | hosted LLM APIs (Gemini, agnes) | *not used for training* — training gold is computed by code, and an LLM teacher's arithmetic is exactly the thing being measured | named refusal |
 
 The remote runs are the *same loop* as the local one, not a different method:

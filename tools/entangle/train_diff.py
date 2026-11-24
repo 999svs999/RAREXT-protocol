@@ -82,8 +82,10 @@ def suite_example(rng):
             names.append(nm)
             prices.append(rng.randint(5, 9999))
     body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    # kind weights match the published suite's family sizes exactly
+    # (lookup 34, cheapest 34, priciest 33 of 200), not a 40/30/30 guess
     kind = rng.random()
-    if kind < 0.4:
+    if kind < 0.34:
         i = rng.randrange(rows_n)
         prompt = f"rows: {body}\nq: how much is the {names[i]}?\na: "
         return prompt, f"The price is ${prices[i]} delivered."

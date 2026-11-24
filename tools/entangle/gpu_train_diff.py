@@ -71,8 +71,10 @@ def suite_example(rng):
             names.append(nm)
             prices.append(rng.randint(5, 9999))
     body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    # kind weights match the published suite's family sizes exactly
+    # (lookup 34, cheapest 34, priciest 33 of 200), not a 40/30/30 guess
     kind = rng.random()
-    if kind < 0.4:
+    if kind < 0.34:
         i = rng.randrange(rows_n)
         prompt = f"rows: {body}\nq: how much is the {names[i]}?\na: "
         return prompt, f"The price is ${prices[i]} delivered."
@@ -128,6 +130,14 @@ def gpu_generate(model, prompt, max_new=24, temperature=0.0):
 def score_gpu(model, samples, max_new=24):
     outs = [gpu_generate(model, p, max_new) for p, _ in samples]
     return sum(1 for (_, want), g in zip(samples, outs) if g == want) / len(samples), outs[:2]
+
+
+def score_page_gpu(model, items):
+    """Exactness on the page's canonical prompts — the deployed contract."""
+    if not items:
+        return 1.0
+    got = [gpu_generate(model, p, 48) for p, _ in items]
+    return sum(1 for (_, w), g in zip(items, got) if g == w) / len(items)
 
 
 def score_old_gpu(model, sets, cap=24):
