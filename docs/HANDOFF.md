@@ -99,6 +99,23 @@ model-level win on exactness — regenerate `docs/TOP-100.md` via
 
 ## Hard-won mechanics (each cost a failed run)
 
+* **Kaggle kernel code**: the current working form is a kernel script with the
+  trainer INLINED and a header that globs for every import dir
+  (`gpu_train_diff.py`, `train.py`, `task.py`, `model.py`, `teach_ledger.py`,
+  `gguf.py`, `factor_export.py`, `refined-chi48.pt`) and aborts if any is
+  missing. Trust nothing else: v7 never scheduled; v8/v9 mounted a stale
+  dataset snapshot and silently reproduced v6 (trajectories byte-identical —
+  compare logs, not statuses); v11 inlined the trainer but lost
+  `models/live-host-lm` from `sys.path` because the inlined file derives REPO
+  from `__file__`. Also: a code fix can be present as a *definition* and still
+  never run — v6/v8/v9 defined `suite_example` while the loop still called the
+  49..999 generators. Verify the CALL SITE, and verify a new run by comparing
+  trajectory logs, never by the kernel's status field.
+* **Kaggle dataset mounts can be stale**: a version still "being created" at
+  session start mounts the previous snapshot. After bumping a dataset, wait
+  for processing to finish before pushing/starting a kernel, and confirm what
+  actually mounted (the v12 header prints each file it found).
+
 * Answers must be trained with the EOS-aware `batch_loss` — `answer_logprobs`
   excludes EOS and the model rambles forever.
 * Cold AdamW at 3e-4 wrecks the deployed skills in ~10 steps (normalised steps
