@@ -225,18 +225,16 @@ def main():
         batch = [diff_example(rng, rng.randint(1, width), noborrow=noborrow)
                  for _ in range(args.batch)]
         for _ in range(replay_n):
-            # procedural replay from the deployed trainers' own generators —
-            # fresh lookup/compare examples at the published distribution every
-            # step, plus a draw from the canonical sets. Fixed 24-sample replay
-            # passed its gate while the published suite lost 4 items.
+            # replay from the PUBLISHED grammar (suite_example: prices uniform
+            # on 5..9999), plus a draw from the canonical sets and the page's
+            # 14 prompts. The deployed generators' 49..999 prices collapsed
+            # published lookup to 61.8% — measured, gated, reverted.
             r = rng.random()
-            if r < 0.4:
-                batch.append(task.s0_example(rng))
-            elif r < 0.8:
-                batch.append(task.comp_example(rng))
+            if r < 0.7:
+                batch.append(suite_example(rng))
             else:
-                name = rng.choice(list(replay_sets))
-                batch.append(replay_sets[name][rng.randrange(24)])
+                nm = rng.choice(list(replay_sets))
+                batch.append(replay_sets[nm][rng.randrange(24)])
         batch.extend(page_skills())
         batch = [(p, a) for p, a in batch if len(encode(p)) + len(encode(a)) <= 186]
 
