@@ -1,0 +1,29 @@
+{
+ "steps": 400,
+ "lr": 5e-05,
+ "before_page": 0.9285714285714286,
+ "after_page": 1.0,
+ "before_diff": {
+  "1": 1.0,
+  "2": 1.0,
+  "3": 0.9166666666666666,
+  "4": 0.5
+ },
+ "after_diff": {
+  "1": 1.0,
+  "2": 1.0,
+  "3": 0.875,
+  "4": 0.175
+ },
+ "after_old": {
+  "S0 price-copy": 0.8333333333333334,
+  "S1 cheapest": 0.9583333333333334,
+  "S2 priciest": 0.9583333333333334,
+  "S1m cheapest-mixed": 0.875,
+  "S2m priciest-mixed": 0.9166666666666666,
+  "S1t cheapest-3row-mixed": 0.75,
+  "S2t priciest-3row-mixed": 0.8333333333333334,
+  "S3 refusal": 0.0
+ },
+ "best_step": 400
+}

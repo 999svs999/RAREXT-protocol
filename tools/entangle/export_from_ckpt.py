@@ -25,6 +25,23 @@ from teach_ledger import export_factored  # noqa: E402
 from train import TinyLM  # noqa: E402
 
 
+def export(ckpt_path, out_path, chi=48, name="rarext-entangled-chi48-ledger"):
+    """Shared by the CLI main() and the repair tool."""
+    ck = torch.load(Path(ckpt_path), map_location="cpu")
+    cfg = ck["config"]
+    model = TinyLM(VOCAB, cfg["d"], cfg["layers"], cfg["heads"], cfg["ffn"], cfg["ctx"])
+    model.load_state_dict(ck["state"])
+    state = {k: v.float() for k, v in model.state_dict().items()}
+    from train_diff import project
+    state = project(state, chi)
+    out = Path(out_path)
+    export_factored(state, cfg, out, chi, name)
+    digest = hashlib.sha256(out.read_bytes()).hexdigest()
+    print(f"exported {out} — {out.stat().st_size:,} bytes")
+    print(f"sha256 {digest}")
+    return digest
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
@@ -45,10 +62,7 @@ def main():
     state = project(state, args.chi)
 
     out = REPO / args.out
-    export_factored(state, cfg, out, args.chi, args.name)
-    digest = hashlib.sha256(out.read_bytes()).hexdigest()
-    print(f"exported {out.relative_to(REPO)} — {out.stat().st_size:,} bytes")
-    print(f"sha256 {digest}")
+    export(ck_path, out, args.chi, args.name)
 
 
 if __name__ == "__main__":

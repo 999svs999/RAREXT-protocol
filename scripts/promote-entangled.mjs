@@ -116,6 +116,13 @@ if (!SKIP_EVAL && baseline) {
   if (cand.passed < baseline.passed) {
     fail(`the candidate scores ${baseline.passed - cand.passed} item(s) WORSE on the published suite`);
   }
+  // per-family floors: a candidate may not buy one family by selling another
+  for (const fam of Object.keys(baseline.byFamily ?? {})) {
+    const b = baseline.byFamily[fam], c = cand.byFamily[fam] ?? [0, b?.[1] ?? 0];
+    if ((c?.[0] ?? 0) < (b?.[0] ?? 0)) {
+      fail(`family ${fam} regressed: ${c?.[0]}/${c?.[1]} vs baseline ${b?.[0]}/${b?.[1]}`);
+    }
+  }
   // the candidate is better or equal: its suite record becomes the published one
   copyFileSync(join(root, "tools/rank/neural-promote-candidate.json"), join(root, baselinePath));
   console.log(`neural-heldout.json updated to the promoted artifact's record`);
