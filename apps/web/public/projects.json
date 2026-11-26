@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-26T12:31:24.117Z",
+ "generatedAt": "2026-11-26T16:22:15.196Z",
  "allOk": true,
  "projects": [
   {
    "id": "rarext-protocol",
    "role": "the protocol, runtime, engine, and this AI's own live mirror",
    "git": {
-    "head": "6fb39679450a",
+    "head": "70ebd7e7fe44",
     "dirty": false
    },
    "ok": true,
@@ -14,20 +14,20 @@
     {
      "id": "runtime",
      "ok": true,
-     "ms": 13568,
-     "digest": "d072563c3bc652171c9aa4cd8ecbb1499cca23576f3e29cebd9e827029617976"
+     "ms": 13825,
+     "digest": "713edffec44a498e13b920aacd7818d9a69a4a7325531dd044b6160b57ff50d9"
     },
     {
      "id": "claims",
      "ok": true,
-     "ms": 1313,
-     "digest": "8e0798c3f60601ff1cd867e18287716d55e2d6d0c63e1662334f0d79aabd2441"
+     "ms": 1294,
+     "digest": "7193406d02d3d850ec87ebc3c52ea1add766dcf81baf9158affa29f26b28cb9a"
     },
     {
      "id": "rank",
      "ok": true,
-     "ms": 101,
-     "digest": "e2189e1a926002335ceb978554e81c4b10d8f15badda3bffba7016a4ff560285"
+     "ms": 100,
+     "digest": "ef3213dcd1f34723131e0a77f2810fea3a9ed90aa9ea515aa756196be94e036c"
     }
    ]
   },
@@ -43,14 +43,14 @@
     {
      "id": "test",
      "ok": true,
-     "ms": 2774,
-     "digest": "da2390fa4cc9c9a3640e97ac407c4a0b8740d1a28f027979198ac0b68d78ade5"
+     "ms": 2866,
+     "digest": "ff4be36a1506815dbee3429eb9c7ae2e640b9c8a4f8876c755f35f69c75f6f39"
     },
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 3899,
-     "digest": "51f05bb7a1ddfbc1200212c5f5dc9da1df22a2edb58d724db5220fdaaf7def1e"
+     "ms": 4231,
+     "digest": "c90eb64bf3df015fc1c7b02050faefaad8530af4b616c6d36da57bac2b19cb38"
     }
    ]
   },
@@ -66,14 +66,14 @@
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 11798,
-     "digest": "7b35ddb38b01f8c0aa6052f407d5fffcaf9794b63cd577f586c7642dfd4ecadc"
+     "ms": 10213,
+     "digest": "104792ebe0952dfb6eb49eacf488b28952390919f699ac885b289993cc1dd48f"
     },
     {
      "id": "build",
      "ok": true,
-     "ms": 112475,
-     "digest": "6cf9ab50877797be66ffabda84bbfff126aa85b2180dc51dcd64c9c8d24f87d2"
+     "ms": 77114,
+     "digest": "49fd2ae9c9b6b9c447ce0d6972873d3e831b7209848cf858f7a493b1d0394497"
     }
    ]
   },
@@ -89,8 +89,8 @@
     {
      "id": "site",
      "ok": true,
-     "ms": 987,
-     "digest": "5f1edce382044e625647a0fef95f7503fd4a8f303edbf16a7408e84051b152eb"
+     "ms": 916,
+     "digest": "e78203697597946ff066f572319745934fc583745466f5d179f40713add676d7"
     }
    ]
   },
@@ -106,14 +106,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 7734,
-     "digest": "a187de55cb351aff48bd947bc41c062b2a7e600b64bd987912f2f0767a601715"
+     "ms": 8110,
+     "digest": "6b4f733335ed8e812b25f1c739b414b6becbd1fe223d2071ff38b8fc0715c607"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5693,
-     "digest": "b20b1aa87699f96132f2c06ed06649e1dd8fa008bb3efd42ec76a6b3bf55b11f"
+     "ms": 6119,
+     "digest": "35576bbd0b92c4c4bb8483b94a5aa37e895126cafb42a879e13f7aae5fcb5399"
     }
    ]
   },
@@ -129,14 +129,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 7063,
-     "digest": "dd4aa0e3a521d0b4fb385f6e11a2fc5e86b63bbd324e3305c41d6fbc63b68ea3"
+     "ms": 7395,
+     "digest": "04cdac8031506ce9f47f4f5ba8697016a96bf060d36a5c9bf79d50b8d8e5ecd0"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5254,
-     "digest": "ce08dd64ae470171c929f9edfc5d9f2a8ed9a992c6be7affebb4369a1088d1c4"
+     "ms": 5690,
+     "digest": "b1948427fd976a625c74b58b971a55d699dbf045c3a7ad4747058d35c5d4fcbb"
     }
    ]
   }
@@ -145,31 +145,31 @@
   {
    "id": "provider",
    "ok": true,
-   "ms": 46,
+   "ms": 44,
    "status": 200
   },
   {
    "id": "edge-direct",
    "ok": true,
-   "ms": 121,
+   "ms": 289,
    "status": 200
   },
   {
    "id": "tunnel",
    "ok": true,
-   "ms": 4741,
+   "ms": 475,
    "status": 200
   },
   {
    "id": "mirror-entangled-page",
    "ok": true,
-   "ms": 307,
+   "ms": 348,
    "status": 200
   },
   {
    "id": "mirror-weights",
    "ok": true,
-   "ms": 6845,
+   "ms": 7914,
    "status": 200
   }
  ]
