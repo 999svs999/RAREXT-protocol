@@ -111,6 +111,11 @@ model-level win on exactness — regenerate `docs/TOP-100.md` via
   never run — v6/v8/v9 defined `suite_example` while the loop still called the
   49..999 generators. Verify the CALL SITE, and verify a new run by comparing
   trajectory logs, never by the kernel's status field.
+* **Smoke-test the exact kernel code path locally before pushing** — three
+  GPU sessions were lost to errors a 3-step CPU run would have caught
+  (`suite_example` referencing an unimported `WORDS`; a missing module; a
+  device mismatch). `gpu_train_diff.py --steps 3 --device cpu` runs the whole
+  path in under a minute.
 * **Kaggle dataset mounts can be stale**: a version still "being created" at
   session start mounts the previous snapshot. After bumping a dataset, wait
   for processing to finish before pushing/starting a kernel, and confirm what

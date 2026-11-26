@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO / "models/live-host-lm"))
 sys.path.insert(0, str(REPO / "agents/self-evolve"))
 from train import TinyLM, VOCAB, EOS, encode  # noqa: E402
 from train_diff import diff_example, held_sets, project  # noqa: E402
+from train_diff import WORDS  # suite_example reads the deployed vocabulary
 import task  # noqa: E402
 
 
