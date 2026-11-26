@@ -1,33 +1,33 @@
 {
- "generatedAt": "2026-11-26T12:25:46.821Z",
+ "generatedAt": "2026-11-26T12:31:24.117Z",
  "allOk": true,
  "projects": [
   {
    "id": "rarext-protocol",
    "role": "the protocol, runtime, engine, and this AI's own live mirror",
    "git": {
-    "head": "06eada7841f9",
-    "dirty": true
+    "head": "6fb39679450a",
+    "dirty": false
    },
    "ok": true,
    "gates": [
     {
      "id": "runtime",
      "ok": true,
-     "ms": 13582,
-     "digest": "abbca4eda4ba5fd7db4c288b95582ba5ed142fc236a36e8a502af0641490f9f3"
+     "ms": 13568,
+     "digest": "d072563c3bc652171c9aa4cd8ecbb1499cca23576f3e29cebd9e827029617976"
     },
     {
      "id": "claims",
      "ok": true,
-     "ms": 1678,
-     "digest": "643fcc6c5666efae5879d51038062a6e4ce417fecd5cfa57999ee00ef00bea5d"
+     "ms": 1313,
+     "digest": "8e0798c3f60601ff1cd867e18287716d55e2d6d0c63e1662334f0d79aabd2441"
     },
     {
      "id": "rank",
      "ok": true,
-     "ms": 105,
-     "digest": "546cfeccaa1530bc693a5f08dbb6b65c6068b8235b1040566b68db5345185b4d"
+     "ms": 101,
+     "digest": "e2189e1a926002335ceb978554e81c4b10d8f15badda3bffba7016a4ff560285"
     }
    ]
   },
@@ -43,14 +43,14 @@
     {
      "id": "test",
      "ok": true,
-     "ms": 2541,
-     "digest": "59da8fafba492d6b58b33392070ae38b070fce184a8c8425e2e5c67adf954b83"
+     "ms": 2774,
+     "digest": "da2390fa4cc9c9a3640e97ac407c4a0b8740d1a28f027979198ac0b68d78ade5"
     },
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 3907,
-     "digest": "da3a96bccd5bd4ab3c42e80f40c810220df0626a445d3e0f4a1349112903382d"
+     "ms": 3899,
+     "digest": "51f05bb7a1ddfbc1200212c5f5dc9da1df22a2edb58d724db5220fdaaf7def1e"
     }
    ]
   },
@@ -66,14 +66,14 @@
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 15056,
-     "digest": "9cc45559665f4d2554b64fe5f1368130676f7c24a929b1e183f52c83bdf04ec2"
+     "ms": 11798,
+     "digest": "7b35ddb38b01f8c0aa6052f407d5fffcaf9794b63cd577f586c7642dfd4ecadc"
     },
     {
      "id": "build",
      "ok": true,
-     "ms": 117127,
-     "digest": "49883e9de4a6a52e9088c1c9a43f885efcd33cf281a08d0fa7f03e2b54ed2af8"
+     "ms": 112475,
+     "digest": "6cf9ab50877797be66ffabda84bbfff126aa85b2180dc51dcd64c9c8d24f87d2"
     }
    ]
   },
@@ -89,8 +89,8 @@
     {
      "id": "site",
      "ok": true,
-     "ms": 1101,
-     "digest": "ec3fccbe43fdf9e7b01dbca8834908001901a8b0bbb24cce52f5cb4fadfa79c4"
+     "ms": 987,
+     "digest": "5f1edce382044e625647a0fef95f7503fd4a8f303edbf16a7408e84051b152eb"
     }
    ]
   },
@@ -106,14 +106,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 8311,
-     "digest": "2df00ceb6da5f7237844cfb38b0c916cb76fea9e538af800d7005f93e5c0eed1"
+     "ms": 7734,
+     "digest": "a187de55cb351aff48bd947bc41c062b2a7e600b64bd987912f2f0767a601715"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5668,
-     "digest": "ffe60874258b0036d6f4aa0fb105eb46f93d4dff483cdcb24111c70f4a1dddd1"
+     "ms": 5693,
+     "digest": "b20b1aa87699f96132f2c06ed06649e1dd8fa008bb3efd42ec76a6b3bf55b11f"
     }
    ]
   },
@@ -129,14 +129,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 8077,
-     "digest": "856d4ef78cd528cd46530bc2c93c528b322e254ea2109d92c35ff625867e2d8a"
+     "ms": 7063,
+     "digest": "dd4aa0e3a521d0b4fb385f6e11a2fc5e86b63bbd324e3305c41d6fbc63b68ea3"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5449,
-     "digest": "36def5bd1d4dcefe5a0ef6d3a7b0a82241dbdf23c6c9ececb6ad1aa88996c8e0"
+     "ms": 5254,
+     "digest": "ce08dd64ae470171c929f9edfc5d9f2a8ed9a992c6be7affebb4369a1088d1c4"
     }
    ]
   }
@@ -145,31 +145,31 @@
   {
    "id": "provider",
    "ok": true,
-   "ms": 45,
+   "ms": 46,
    "status": 200
   },
   {
    "id": "edge-direct",
    "ok": true,
-   "ms": 122,
+   "ms": 121,
    "status": 200
   },
   {
    "id": "tunnel",
    "ok": true,
-   "ms": 946,
+   "ms": 4741,
    "status": 200
   },
   {
    "id": "mirror-entangled-page",
    "ok": true,
-   "ms": 929,
+   "ms": 307,
    "status": 200
   },
   {
    "id": "mirror-weights",
    "ok": true,
-   "ms": 5420,
+   "ms": 6845,
    "status": 200
   }
  ]
