@@ -41,6 +41,15 @@
       <div id="verdict" class="verdict">loading rank.json…</div>
       <div id="kpis" class="kpi"></div>
       <div id="axes"></div>
+      <h2>Head-to-head on fresh tasks, live</h2>
+      <p class="sub">
+        The scorecard above is mostly structural. This is the task-level comparison: a fresh
+        sample generated at a seed no eval used, the same prompts sent to the deployed RAREXT
+        answer path and a live top-tier hosted model. <strong>exact</strong> means
+        byte-identical to the answer contract; <strong>semantic</strong> means the correct
+        number appears. The model-alone row is shown too, because it is the honest floor.
+      </p>
+      <div id="h2h">loading head-to-head.json…</div>
       <h2>What this does not say</h2>
       <p class="sub">
         It does not say RAREXT writes better prose, knows more, reads images, or holds a long
@@ -89,6 +98,31 @@
           `neural ${e.neuralHeldout.passed}/${e.neuralHeldout.n} · ` +
           `${e.hostedPro.model} ${e.hostedPro.semantic}/${e.hostedPro.n} semantic · ` +
           `digests ${data.runtime.digests.weights.slice(0, 12)}… / ${data.runtime.digests.engine.slice(0, 12)}…`;
+
+        // The fresh-task head-to-head is a separate receipt: it needs a live
+        // hosted model, so it is measured by `tools/rank/eval-head-to-head.mjs`
+        // and published alongside rank.json rather than recomputed on load.
+        try {
+          const h = await (await fetch("./head-to-head.json", { cache: "no-cache" })).json();
+          const rows = [
+            ["RAREXT deployed (exact tool → neural fallback)", h.rarext.hybrid.exact, h.rarext.hybrid.semantic, "win"],
+            ["RAREXT model alone (χ=48 weights)", h.rarext.neural.exact, h.rarext.neural.semantic, ""],
+            [`${h.hostedModel} (live, temperature 0)`, h.hosted.exact, h.hosted.semantic, "loss"],
+          ];
+          $("h2h").innerHTML =
+            `<table><tr><th>answer path</th><th>exact</th><th>semantic</th><th>task sample</th></tr>` +
+            rows.map(([label, exact, semantic, cls]) =>
+              `<tr><td>${label}</td>` +
+              `<td class="${cls}">${exact}/${h.n}</td>` +
+              `<td>${semantic}/${h.n}</td>` +
+              `<td>${h.n} fresh tasks, seed ${h.seed}</td></tr>`).join("") +
+            `</table>` +
+            `<p class="sub">Measured ${h.generatedAt} · weights ${h.weights.digest.slice(0, 12)}… · ` +
+            `same prompts to every path. This is a win on exactness and a tie on semantic ` +
+            `correctness — not a claim that RAREXT has more general knowledge.</p>`;
+        } catch {
+          $("h2h").textContent = "no head-to-head receipt published yet — run node tools/rank/eval-head-to-head.mjs";
+        }
       } catch (error) {
         $("verdict").textContent = `could not load rank.json: ${error instanceof Error ? error.message : String(error)}`;
       }
