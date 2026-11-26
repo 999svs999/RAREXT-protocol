@@ -54,7 +54,7 @@
       <header>
         <div class="mark"><h1>FUTURISTIC</h1></div>
         <p class="tagline">One-line prompts. No edits, no qualifiers. Published forever.</p>
-        <div class="address"><b>rarext:futuristic@</b>a0da8cc11917759df36b208cc18f0e8d16ed27a6b74fda3956ff20ba48998373</div>
+        <div class="address"><b>rarext:futuristic@</b>8a07896dd7a4cb103173fe2d4ad0926a5b7114e79a5572f5b6e788abf39879d9</div>
         <span id="status" class="chip" role="status" aria-live="polite">VERIFYING…</span>
       </header>
 
@@ -62,7 +62,7 @@
       <section id="site">
     <article class="card site">
       <h3><a href="https://futuristiclive.pages.dev/" rel="noopener">FUTURISTIC — we film the tomorrows we want to visit</a></h3>
-      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 39526 bytes anchored · rev 3f031001c821</p>
+      <p class="meta">https://futuristiclive.pages.dev/ · 5 pages · 39526 bytes anchored · rev f2c031bed15f</p>
       <div class="chips">
         <span>/ · 15656b</span>
         <span>/styles.css · 16342b</span>
@@ -297,7 +297,7 @@
 
       <footer>
         Anchored on RAREXT — the record survives the operator. Recompute the root yourself:
-        <a href="./verify.html?root=a0da8cc11917759df36b208cc18f0e8d16ed27a6b74fda3956ff20ba48998373">run the pinned verifier</a> ·
+        <a href="./verify.html?root=8a07896dd7a4cb103173fe2d4ad0926a5b7114e79a5572f5b6e788abf39879d9">run the pinned verifier</a> ·
         <a href="./bundle.json">bundle.json</a> ·
         <a href="https://www.youtube.com/@futuristiclive">@futuristiclive</a>
       </footer>
@@ -311,7 +311,7 @@
           if (!res.ok) throw new Error("bundle fetch " + res.status);
           const verdict = await verifyBundle(await res.json());
           if (verdict.valid) {
-            status.textContent = "ROOT VERIFIED · a0da8cc11917…";
+            status.textContent = "ROOT VERIFIED · 8a07896dd7a4…";
             status.classList.remove("bad");
           } else if (attempt < 2) {
             // A fresh deploy can serve a stale cached bundle for a moment;
