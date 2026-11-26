@@ -4,7 +4,7 @@
  *
  *   npm run demo:ai
  *
- * Seven phases, every number live from the running systems:
+ * Eight phases, every number live from the running systems:
  *   1. the live API      — ask RAREXT AI on the edge, read the answer
  *   2. the in-browser AI — fetch the published page + weights, verify the
  *                          pinned digests exactly as the tab does
@@ -13,16 +13,21 @@
  *                          instant acquisition of a brand-new pair
  *   5. ops               — every project's gates and every live service, from
  *                          the latest receipt
- *   6. rank              — RAREXT AI among the current top 100 AI, axis by axis
- *   7. verification      — the claim gate at its recorded baseline
+ *   6. rank              — re-score the shipped bytes on the published suite,
+ *                          then compare against the top-100 scorecard
+ *   7. head-to-head     — the same FRESH tasks asked of the deployed answer path
+ *                          and a live top-tier hosted model, exact vs semantic
+ *   8. verification      — the claim gate at its recorded baseline
  *
  * No phase is mocked: each one either talks to the running services or runs
- * the same code the browser runs.
+ * the same code the browser runs. The rank phase never trusts the stored
+ * number — it regenerates the 200-task suite, scores the shipped `.gguf`, and
+ * fails if the result differs from what the page claims.
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -138,12 +143,28 @@ async function phaseOps() {
   line(latest.allOk, `all ok: ${latest.allOk} (receipt generated ${latest.generatedAt})`);
 }
 
-// ── 6. the top-100 scorecard ────────────────────────────────────────────────
+// ── 6. the top-100 scorecard, with the shipped model re-scored ──────────────
 function phaseRank() {
-  phase("6 · rank — RAREXT AI among the current top 100 AI");
+  phase("6 · rank — the shipped model re-scored, then the top 100");
   const card = JSON.parse(readFileSync(join(root, "bench/top100-scorecard.json"), "utf8"));
   const t = card.totals;
   line(t.wins >= 8, `${t.wins}/${t.axes} axes won, ${t.ties} tied, ${t.losses} lost — largest population ${card.population.n} systems`);
+
+  // Do not trust the stored number: regenerate the published 200-task suite,
+  // score the shipped .gguf with the same engine the browser loads, and fail
+  // if the result has drifted from what the scorecard publishes.
+  const dir = mkdtempSync(join(tmpdir(), "rarext-demo-"));
+  const out = join(dir, "neural.json");
+  execFileSync("node", ["tools/rank/eval-neural.mjs", "--n", "200", "--seed", "20261123", "--out", out],
+    { cwd: root, encoding: "utf8", timeout: 1800000 });
+  const live = JSON.parse(readFileSync(out, "utf8"));
+  const claimed = card.evidence.neuralHeldout;
+  const fam = (k) => `${k} ${live.byFamily[k][0]}/${live.byFamily[k][1]}`;
+  line(live.passed === claimed.passed && live.n === claimed.n,
+    `shipped bytes re-scored on the published suite: ${live.passed}/${live.n} — ${Object.keys(live.byFamily).map(fam).join(" · ")}`);
+  line((live.byFamily.diff?.[0] ?? 0) > 0,
+    `the model alone now computes ledger differences: diff ${live.byFamily.diff[0]}/${live.byFamily.diff[1]} (was 0 before v13)`);
+
   for (const axis of card.axes.filter((a) => a.verdict !== "loss")) {
     line(true, `${axis.verdict.toUpperCase()} ${axis.label} — ${axis.rank}`);
   }
@@ -151,19 +172,44 @@ function phaseRank() {
     console.log(`  [--] LOSS ${axis.label} — ${axis.rarext}`);
   }
   line(card.evidence.hybridHeldout.passed === card.evidence.hybridHeldout.n,
-    `held-out ledger suite: ${card.evidence.hybridHeldout.passed}/${card.evidence.hybridHeldout.n} exact vs neural alone ${card.evidence.neuralHeldout.passed}/${card.evidence.neuralHeldout.n}`);
+    `held-out ledger suite: ${card.evidence.hybridHeldout.passed}/${card.evidence.hybridHeldout.n} exact vs neural alone ${live.passed}/${live.n}`);
+  const pro = card.evidence.hostedPro;
+  if (pro) line(true, `same exact-format bar, hosted top tier: ${pro.model} ${pro.exact}/${pro.n} exact · ${pro.semantic}/${pro.n} semantic`);
 }
 
-// ── 7. verification ─────────────────────────────────────────────────────────
+// ── 7. head-to-head on fresh tasks, live ────────────────────────────────────
+function phaseHeadToHead() {
+  phase("7 · head-to-head — fresh tasks, deployed path vs a live top-tier model");
+  const dir = mkdtempSync(join(tmpdir(), "rarext-h2h-"));
+  const out = join(dir, "head-to-head.json");
+  execFileSync("node", ["tools/rank/eval-head-to-head.mjs", "--n", "18", "--seed", "20261127", "--out", out],
+    { cwd: root, encoding: "utf8", timeout: 1800000 });
+  const h = JSON.parse(readFileSync(out, "utf8"));
+  const n = h.n;
+  line(h.rarext.hybrid.exact === n,
+    `deployed path (exact tool → neural fallback): ${h.rarext.hybrid.exact}/${n} exact · ${h.rarext.hybrid.semantic}/${n} semantic`);
+  console.log(`  [--] model alone on the same fresh tasks: ${h.rarext.neural.exact}/${n} exact · ${h.rarext.neural.semantic}/${n} semantic`);
+  if (!h.hosted) {
+    line(false, "could not verify the live comparison — no NVIDIA_BASE_URL / NVIDIA_API_KEY");
+    return;
+  }
+  line(true, `${h.hostedModel}: ${h.hosted.exact}/${n} exact · ${h.hosted.semantic}/${n} semantic (live, temperature 0)`);
+  line(h.rarext.hybrid.exact > h.hosted.exact,
+    `exact-format win on identical prompts: ${h.rarext.hybrid.exact}/${n} vs ${h.hosted.exact}/${n}`);
+  line(h.rarext.hybrid.semantic >= h.hosted.semantic,
+    `semantic parity: ${h.rarext.hybrid.semantic}/${n} vs ${h.hosted.semantic}/${n} — no correctness traded for exactness`);
+}
+
+// ── 8. verification ─────────────────────────────────────────────────────────
 function phaseVerify() {
-  phase("7 · verification — the claim gate at its recorded baseline");
+  phase("8 · verification — the claim gate at its recorded baseline");
   const out = execFileSync("node", ["tools/ops/claim-gate.mjs"], { cwd: root, encoding: "utf8", timeout: 600000 });
   const verdict = out.split("\n").find((l) => l.includes("→")) ?? out.trim();
   line(/PASS/.test(verdict), verdict.trim());
 }
 
 console.log("╔══════════════════════════════════════════════╗");
-console.log("║   RAREXT AI — live demo, seven phases        ║");
+console.log("║   RAREXT AI — live demo, eight phases        ║");
 console.log("╚══════════════════════════════════════════════╝");
 
 await phaseLiveApi();
@@ -171,6 +217,7 @@ await phaseBrowser();
 await phaseSkillsAndMemory();
 await phaseOps();
 phaseRank();
+phaseHeadToHead();
 phaseVerify();
 
 console.log(`\n${failures === 0 ? "ALL PHASES PASS — RAREXT AI, end to end." : `${failures} check(s) failed — shown above.`}`);

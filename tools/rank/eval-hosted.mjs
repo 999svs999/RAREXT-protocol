@@ -16,7 +16,7 @@
  *        --key "$NVIDIA_API_KEY" --model agnes-3.0-pro
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
@@ -132,6 +132,6 @@ console.log("\nby family (semantic / exact):");
 for (const [family, c] of byFamily) {
   console.log(`  ${family.padEnd(9)} ${c.semantic}/${c.n} / ${c.exact}/${c.n}`);
 }
-writeFileSync(join(root, OUT),
+writeFileSync((isAbsolute(OUT) ? OUT : resolve(root, OUT)),
   JSON.stringify({ model: MODEL, seed: SEED, n: N, exact, semantic, ms, promptTokens, outputTokens, byFamily: Object.fromEntries(byFamily), rows }, null, 2) + "\n");
 console.log(`\nwrote ${OUT}`);

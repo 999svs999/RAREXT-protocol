@@ -1,0 +1,653 @@
+{
+  "generatedAt": "2026-11-26T16:15:49.262Z",
+  "seed": 20261127,
+  "n": 24,
+  "hostedModel": "agnes-3.0-pro",
+  "hostedBase": "https://apihub.agnes-ai.com/v1",
+  "hostedError": null,
+  "weights": {
+    "path": "apps/web/public/rarext-entangled-chi48.gguf",
+    "digest": "8cbd6f5acb6f30dc1ca77782e01461cfddbe034a4a9f58bcd2482f091f880825"
+  },
+  "rarext": {
+    "hybrid": {
+      "exact": 24,
+      "semantic": 24
+    },
+    "neural": {
+      "exact": 12,
+      "semantic": 12
+    }
+  },
+  "hosted": {
+    "exact": 0,
+    "semantic": 24
+  },
+  "ms": 7812,
+  "rows": [
+    {
+      "id": 0,
+      "family": "lookup",
+      "prompt": "rows: -VEST WHITE GREEN|$9003\nq: how much is the VEST WHITE GREEN?\na: ",
+      "gold": "The price is $9003 delivered.",
+      "rarext": {
+        "hybrid": "The price is $9003 delivered.",
+        "neural": "The price is $9003 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nThe VEST WHITE GREEN is $9003.",
+        "ms": 4811,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 1,
+      "family": "cheapest",
+      "prompt": "rows: -jacket belt|$7366\n-shorts grey|$1471\nq: which is cheapest?\na: ",
+      "gold": "The price is $1471 delivered.",
+      "rarext": {
+        "hybrid": "The price is $1471 delivered.",
+        "neural": "The price is $1471 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nshorts grey",
+        "ms": 1034,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 2,
+      "family": "priciest",
+      "prompt": "rows: -SHIRT BLACK SOCKS|$5267\n-City Cap Shark|$200\nq: which is most expensive?\na: ",
+      "gold": "The price is $5267 delivered.",
+      "rarext": {
+        "hybrid": "The price is $5267 delivered.",
+        "neural": "The price is $5267 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nSHIRT BLACK SOCKS",
+        "ms": 1233,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 3,
+      "family": "diff",
+      "prompt": "rows: -Red Vest Tee|$7479\n-Shorts Hoodie High|$9334\nq: how much more is the Shorts Hoodie High than the Red Vest Tee?\na: ",
+      "gold": "$1855 more",
+      "rarext": {
+        "hybrid": "$1855 more",
+        "neural": "$1905 more",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$1,855",
+        "ms": 557,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 4,
+      "family": "total",
+      "prompt": "rows: -black vest baby|$58\n-GREEN CREW WHITE|$3041\nq: what is the total of all items?\na: ",
+      "gold": "The total is $3099 delivered.",
+      "rarext": {
+        "hybrid": "The total is $3099 delivered.",
+        "neural": "The price is $58 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$3099",
+        "ms": 1432,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 5,
+      "family": "pct",
+      "prompt": "rows: -SHARK TIGER|$9158\nq: what is the price after 50% off?\na: ",
+      "gold": "The price is $4579 delivered.",
+      "rarext": {
+        "hybrid": "The price is $4579 delivered.",
+        "neural": "The price is $9158 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$4579",
+        "ms": 1254,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 6,
+      "family": "lookup",
+      "prompt": "rows: -Big Red Classic|$6057\nq: how much is the Big Red Classic?\na: ",
+      "gold": "The price is $6057 delivered.",
+      "rarext": {
+        "hybrid": "The price is $6057 delivered.",
+        "neural": "The price is $6057 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$6057",
+        "ms": 1020,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 7,
+      "family": "cheapest",
+      "prompt": "rows: -MEGA WHITE STORE|$4522\n-TIGER LOW VEST|$20\n-Red Store Crew|$9116\nq: which is cheapest?\na: ",
+      "gold": "The price is $20 delivered.",
+      "rarext": {
+        "hybrid": "The price is $20 delivered.",
+        "neural": "The price is $20 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nTIGER LOW VEST",
+        "ms": 1091,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 8,
+      "family": "priciest",
+      "prompt": "rows: -RED GREEN|$2132\n-shorts classic|$6833\nq: which is most expensive?\na: ",
+      "gold": "The price is $6833 delivered.",
+      "rarext": {
+        "hybrid": "The price is $6833 delivered.",
+        "neural": "The price is $6833 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nshorts classic",
+        "ms": 1088,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 9,
+      "family": "diff",
+      "prompt": "rows: -coat gift|$7020\n-Hoodie Tee|$5076\nq: how much more is the coat gift than the Hoodie Tee?\na: ",
+      "gold": "$1944 more",
+      "rarext": {
+        "hybrid": "$1944 more",
+        "neural": "$1946 more",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$1,944",
+        "ms": 4586,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 10,
+      "family": "total",
+      "prompt": "rows: -Navy Belt|$2217\n-Baby Down|$1903\n-Mini Camo|$735\nq: what is the total of all items?\na: ",
+      "gold": "The total is $4855 delivered.",
+      "rarext": {
+        "hybrid": "The total is $4855 delivered.",
+        "neural": "The price is $1903 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$4855",
+        "ms": 663,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 11,
+      "family": "pct",
+      "prompt": "rows: -Baby Jacket|$6829\nq: what is the price after 40% off?\na: ",
+      "gold": "The price is $4097.4 delivered.",
+      "rarext": {
+        "hybrid": "The price is $4097.4 delivered.",
+        "neural": "The price is $6829 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$4097.40",
+        "ms": 803,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 12,
+      "family": "lookup",
+      "prompt": "rows: -RED LOW MEGA|$481\nq: how much is the RED LOW MEGA?\na: ",
+      "gold": "The price is $481 delivered.",
+      "rarext": {
+        "hybrid": "The price is $481 delivered.",
+        "neural": "The price is $481 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$481",
+        "ms": 621,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 13,
+      "family": "cheapest",
+      "prompt": "rows: -Shark Cap|$6076\n-navy cap tiger|$5661\nq: which is cheapest?\na: ",
+      "gold": "The price is $5661 delivered.",
+      "rarext": {
+        "hybrid": "The price is $5661 delivered.",
+        "neural": "The price is $5661 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nnavy cap tiger",
+        "ms": 4879,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 14,
+      "family": "priciest",
+      "prompt": "rows: -Mega Camo|$3371\n-mini tiger|$4030\n-college green|$9982\n-BELT CLASSIC VEST|$5365\nq: which is most expensive?\na: ",
+      "gold": "The price is $9982 delivered.",
+      "rarext": {
+        "hybrid": "The price is $9982 delivered.",
+        "neural": "The price is $9982 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\ncollege green",
+        "ms": 950,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 15,
+      "family": "diff",
+      "prompt": "rows: -low jacket mega|$9284\n-big baby|$6734\nq: how much more is the low jacket mega than the big baby?\na: ",
+      "gold": "$2550 more",
+      "rarext": {
+        "hybrid": "$2550 more",
+        "neural": "$2700 more",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$2,550",
+        "ms": 885,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 16,
+      "family": "total",
+      "prompt": "rows: -CITY SHIRT CAMO|$1746\n-Socks Cap|$6647\n-Low Store|$7740\nq: what is the total of all items?\na: ",
+      "gold": "The total is $16133 delivered.",
+      "rarext": {
+        "hybrid": "The total is $16133 delivered.",
+        "neural": "The price is $1746 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$16,133",
+        "ms": 786,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 17,
+      "family": "pct",
+      "prompt": "rows: -Grey Vest|$1154\nq: what is the price after 20% off?\na: ",
+      "gold": "The price is $923.2 delivered.",
+      "rarext": {
+        "hybrid": "The price is $923.2 delivered.",
+        "neural": "The price is $1154 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$923.20",
+        "ms": 781,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 18,
+      "family": "lookup",
+      "prompt": "rows: -Tiger Pants Gift|$4349\nq: how much is the Tiger Pants Gift?\na: ",
+      "gold": "The price is $4349 delivered.",
+      "rarext": {
+        "hybrid": "The price is $4349 delivered.",
+        "neural": "The price is $4349 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$4349",
+        "ms": 625,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 19,
+      "family": "cheapest",
+      "prompt": "rows: -DOWN WHITE|$1949\n-HIGH TIGER LOW|$2016\n-TEE NAVY|$4127\nq: which is cheapest?\na: ",
+      "gold": "The price is $1949 delivered.",
+      "rarext": {
+        "hybrid": "The price is $1949 delivered.",
+        "neural": "The price is $1949 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nDOWN WHITE",
+        "ms": 821,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 20,
+      "family": "priciest",
+      "prompt": "rows: -MINI CAP|$7686\n-Camo Belt|$3602\n-Classic Mega|$525\n-high tee|$1089\nq: which is most expensive?\na: ",
+      "gold": "The price is $7686 delivered.",
+      "rarext": {
+        "hybrid": "The price is $7686 delivered.",
+        "neural": "The price is $7686 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\nMINI CAP",
+        "ms": 914,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": true,
+        "hosted": true
+      }
+    },
+    {
+      "id": 21,
+      "family": "diff",
+      "prompt": "rows: -shirt college city|$8435\n-jacket socks hoodie|$2775\nq: how much more is the shirt college city than the jacket socks hoodie?\na: ",
+      "gold": "$5660 more",
+      "rarext": {
+        "hybrid": "$5660 more",
+        "neural": "$5800 more",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$5,660",
+        "ms": 4686,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 22,
+      "family": "total",
+      "prompt": "rows: -College Camo Shorts|$8041\n-jacket white college|$2810\nq: what is the total of all items?\na: ",
+      "gold": "The total is $10851 delivered.",
+      "rarext": {
+        "hybrid": "The total is $10851 delivered.",
+        "neural": "The price is $2810 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n10851",
+        "ms": 1152,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    },
+    {
+      "id": 23,
+      "family": "pct",
+      "prompt": "rows: -gift mini store|$7979\nq: what is the price after 50% off?\na: ",
+      "gold": "The price is $3989.5 delivered.",
+      "rarext": {
+        "hybrid": "The price is $3989.5 delivered.",
+        "neural": "The price is $7979 delivered.",
+        "hybridSource": "exact"
+      },
+      "hosted": {
+        "text": "\n\n$3,989.50",
+        "ms": 974,
+        "error": null
+      },
+      "exact": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": false
+      },
+      "semantic": {
+        "hybrid": true,
+        "neural": false,
+        "hosted": true
+      }
+    }
+  ]
+}

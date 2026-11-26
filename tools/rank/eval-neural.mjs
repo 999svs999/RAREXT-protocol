@@ -10,7 +10,7 @@
  *   node tools/rank/eval-neural.mjs --n 200 --seed 20261123
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 
@@ -54,6 +54,6 @@ console.log(`weights ${WEIGHTS}`);
 for (const [family, [ok, n]] of byFamily) {
   console.log(`  ${family.padEnd(9)} ${ok}/${n}  ${((ok / n) * 100).toFixed(1)}%`);
 }
-writeFileSync(join(root, OUT),
+writeFileSync((isAbsolute(OUT) ? OUT : resolve(root, OUT)),
   JSON.stringify({ seed: SEED, weights: WEIGHTS, n: rows.length, passed, accuracy: passed / rows.length, ms, byFamily: Object.fromEntries(byFamily), rows }, null, 2) + "\n");
 console.log(`wrote ${OUT}`);

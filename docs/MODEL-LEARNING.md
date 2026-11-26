@@ -273,3 +273,36 @@ If no checkpoint clears the first gate, the honest outcome is that this
 architecture cannot compute the ledger at χ=48 within this compute budget, and
 the numeric-accuracy axis stays a *tool* result on the scorecard — stated as
 such, not claimed as a model win.
+
+## The demo verifies the comparison every run
+
+`scripts/demo-rarext-ai.mjs` is now eight phases, and phase 6 does not trust the
+stored score: it regenerates the published 200-task suite, scores the **shipped
+`.gguf` bytes** with the same engine the browser loads, and fails if the result
+differs from `bench/top100-scorecard.json`. Measured 2026-11-26:
+
+```
+shipped bytes re-scored on the published suite: 104/200
+  lookup 34/34 · cheapest 34/34 · priciest 32/33 · diff 4/33 · total 0/33 · pct 0/33
+```
+
+Phase 7 adds the task-level comparison the scorecard cannot make offline. A
+fresh suite is generated at seed `20261127` (used by no eval), and the same
+prompts go to three answer paths — the deployed path (exact tool → neural
+fallback), the model alone, and a live hosted model at temperature 0. Measured
+2026-11-26 with `tools/rank/eval-head-to-head.mjs --n 24 --seed 20261127`:
+
+| answer path | exact | semantic |
+| --- | ---: | ---: |
+| RAREXT deployed | **24/24** | 24/24 |
+| RAREXT model alone | 12/24 | 12/24 |
+| `agnes-3.0-pro` (live) | 0/24 | 24/24 |
+
+Read honestly, that table says: on this task class the deployed system is
+**byte-exact where the hosted model is not**, and it is not more *semantically*
+correct — both answer every item. It also says the model alone is still a
+12/24 arithmetic engine, which is why the exact tool carries the deployed path.
+The receipt is published as `head-to-head.json` and rendered on `rank.html`
+next to the 8 won / 1 tied / 3 lost scorecard. The losses (context 192,
+multimodal, open-ended breadth) are on the same page — the demo prints them as
+`[--] LOSS`, it does not hide them.
