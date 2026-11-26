@@ -114,7 +114,8 @@
   {
    "id": "edge-direct",
    "url": "https://direct.rarext.com:8791/v1/models",
-   "expect": 200
+   "expect": 200,
+   "heal": "bash scripts/update-direct-aaaa.sh"
   },
   {
    "id": "tunnel",

@@ -6,12 +6,14 @@
 # direct hostname goes dark until the record follows. The tunnel
 # (ai.rarext.co) is unaffected.
 #
-# Credentials, as measured on this machine (see scripts/cutover-rarext-com.sh):
-#   CLOUDFLARE_API_TOKEN  can READ zones and dns_records but CANNOT write them
-#                         ("Authentication error" on PUT — Zone.DNS:Edit is the
-#                         one permission no local token holds)
-#   CLOUDFLARE_DNS_TOKEN  a Zone.DNS:Edit token, if the operator mints one —
-#                         this script prefers it when present
+# Credentials, as measured on this machine:
+#   CLOUDFLARE_CUTOVER_TOKEN  Zone.DNS:Edit for rarext.com — VERIFIED 2026-11-26:
+#                             a PUT updated direct.rarext.com's AAAA (the record
+#                             id must be fetched in full; a truncated id returns
+#                             1001 method_not_allowed)
+#   CLOUDFLARE_DNS_TOKEN      scoped to saikougoods.com only — useless here
+#   CLOUDFLARE_API_TOKEN      reads zones, but DNS read/write on rarext.com is
+#                             "Authentication error"
 #
 #   bash scripts/update-direct-aaaa.sh            # update to the current address
 #   bash scripts/update-direct-aaaa.sh --check    # report only
@@ -32,7 +34,8 @@ if [ -z "${ADDR:-}" ]; then
 fi
 echo "current global IPv6: $ADDR"
 
-TOKEN="${CLOUDFLARE_DNS_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}"
+# order matters: only the cutover token can write rarext.com's DNS
+TOKEN="${CLOUDFLARE_CUTOVER_TOKEN:-${CLOUDFLARE_DNS_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}}"
 if [ -z "$TOKEN" ]; then
   echo "no Cloudflare token in env (set CLOUDFLARE_DNS_TOKEN with Zone.DNS:Edit)"
   exit 2

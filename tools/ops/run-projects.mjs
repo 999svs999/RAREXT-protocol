@@ -115,9 +115,23 @@ for (const project of manifest.projects) {
 
 for (const service of manifest.services ?? []) {
   if (!asJson) process.stdout.write(`  [ .. ] service ${service.id}`);
-  const probe = await probeService(service);
-  results.services.push({ id: service.id, url: service.url, ...probe });
-  if (!asJson) process.stdout.write(`\r  [ ${probe.ok ? "PASS" : "FAIL"} ] service ${service.id} — ${probe.ms} ms\n`);
+  let probe = await probeService(service);
+  // optional self-heal: one `heal` command on first failure, then re-probe once.
+  // edge-direct uses this because the ISP renumbers the IPv6 prefix and the
+  // direct hostname's AAAA goes stale until it is updated.
+  let healed = null;
+  if (!probe.ok && service.heal) {
+    try {
+      const out = execFileSync("bash", ["-lc", service.heal], { cwd: process.cwd(), encoding: "utf8", timeout: 120000 });
+      healed = out.trim().split("\n").slice(-2).join(" | ").slice(0, 160);
+    } catch (error) {
+      healed = `heal failed: ${String(error).slice(0, 120)}`;
+    }
+    if (!asJson) process.stdout.write(`\r  [ heal ] service ${service.id} — ${healed}\n  [ .. ] service ${service.id}`);
+    probe = await probeService(service);
+  }
+  results.services.push({ id: service.id, url: service.url, healed, ...probe });
+  if (!asJson) process.stdout.write(`\r  [ ${probe.ok ? "PASS" : "FAIL"} ] service ${service.id} — ${probe.ms} ms${healed ? " (healed)" : ""}\n`);
 }
 
 results.finishedAt = new Date().toISOString();
