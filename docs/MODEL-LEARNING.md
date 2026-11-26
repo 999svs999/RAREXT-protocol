@@ -184,6 +184,26 @@ to T4, press Run all, and hand back `gpu-refined-diff.pt` + `gpu-train.json`.
 Kaggle is the same Google resource and *is* driven headlessly by the CLI, so it
 carries the automated run.
 
+## The GPU checkpoint that finally shipped, and the repair that made it legal
+
+The suite-faithful GPU run (v13, 30,000 steps, batch 64) reached held-out diff
+**100/100/92/50%** by width — but its checkpoint eroded the deployed skills
+broadly (S0 0.75, S1t 0.75 on seed-99 sets; the page's S2t answered `$422` vs
+the pinned `$432`), so the gate refused it. The fix that shipped is a
+**targeted repair**, not a retrain:
+
+* `tools/entangle/repair_page.py` — 400 steps at lr 5e-5 from the GPU
+  checkpoint, batch = ½ page prompts + ⅓ published-grammar replay + remainder
+  fresh diff, χ=48 projection every 10 steps;
+* the promotion gate was tightened to **per-family floors** — a candidate may
+  not buy one family by selling another (this is what made the trade visible:
+  the repaired candidate *improved* priciest to 32/33 while adding diff).
+
+Shipped: **104/200** (`8cbd6f5acb6f30dc…`) — lookup 34/34, cheapest 34/34,
+priciest 32/33, **diff 4/33 (12.1%, first nonzero)**, total 0/33, pct 0/33.
+Refused on the way: the raw v13 checkpoint (13/14 page) and a first repair
+pass (its own diff guard tripped — both reverted by `git checkout`).
+
 ## What shipped
 
 After four refused candidates (92, 82, 95, 83 of 200 — every one caught by the

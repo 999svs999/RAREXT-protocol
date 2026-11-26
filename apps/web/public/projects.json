@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-24T02:08:14.558Z",
- "allOk": true,
+ "generatedAt": "2026-11-26T11:26:31.592Z",
+ "allOk": false,
  "projects": [
   {
    "id": "rarext-protocol",
    "role": "the protocol, runtime, engine, and this AI's own live mirror",
    "git": {
-    "head": "3610c5ddfe06",
+    "head": "4649a4bba646",
     "dirty": true
    },
    "ok": true,
@@ -14,20 +14,20 @@
     {
      "id": "runtime",
      "ok": true,
-     "ms": 13763,
-     "digest": "0097584cc76b8bd904d61f404bb1dbbd81f617c882a238584a7606d233142f97"
+     "ms": 13506,
+     "digest": "aada1388cfe9b0de3edb6ff4f57f19d1fa33fe792393db66e9b51c54967c2244"
     },
     {
      "id": "claims",
      "ok": true,
-     "ms": 1618,
-     "digest": "dd2dd1a389b897ddc4586bbece28dbddf80e9de957c2fc945c3bfdd71cf22c6f"
+     "ms": 1621,
+     "digest": "48610f33e6d36334212f7ec19926386b316bd9de8be46a42a933b2eb2d9034d5"
     },
     {
      "id": "rank",
      "ok": true,
-     "ms": 119,
-     "digest": "8e15503961b6ca48b7ef8d17afdf19dcec4a581fe9313c9e89503ed08e09464f"
+     "ms": 107,
+     "digest": "aa4e4d0893c6c3f65f7191c3c03200f2769007423aa1ef6ef153f604c3967344"
     }
    ]
   },
@@ -43,14 +43,14 @@
     {
      "id": "test",
      "ok": true,
-     "ms": 2799,
-     "digest": "25b9389f1515ac5c77d6c752668718f4a4eb90b99a6c0465d7d364591eedb4df"
+     "ms": 2410,
+     "digest": "06c4e8936dda8343f4faf2678741865ee51a886abb202a3e49eeb66bc4974a63"
     },
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 4067,
-     "digest": "454c5e270af24efeed90ba9e69e1d0f16670841905b19e0beb4ec31dc20e0f19"
+     "ms": 4033,
+     "digest": "c3558f9eea575a78a819c31804438003a8fdb40e0be9df01f80a61f9ef2ed4fe"
     }
    ]
   },
@@ -66,14 +66,14 @@
     {
      "id": "typecheck",
      "ok": true,
-     "ms": 16216,
-     "digest": "1d53e693934a3bdfd3302cd1916acf7f8777f0d47a50164bd91c4c01b9448067"
+     "ms": 8412,
+     "digest": "21f39e16d9ad47f6383c6c6093122c853c45b85d5f6f1af33d5203ad4278a546"
     },
     {
      "id": "build",
      "ok": true,
-     "ms": 113305,
-     "digest": "7c6b45fe1531c517663bcb4309e1eaf4a2deb34708aef085bb8924520cf3dde5"
+     "ms": 73466,
+     "digest": "0c10a74c5672079918d1ad7dcc30b5f4e82ed8fbcd53058b3ad6df3557d6b8f2"
     }
    ]
   },
@@ -81,7 +81,7 @@
    "id": "futuristic",
    "role": "the film showcase published through the registry",
    "git": {
-    "head": "e02b705a2b40",
+    "head": "f2c031bed15f",
     "dirty": true
    },
    "ok": true,
@@ -89,8 +89,8 @@
     {
      "id": "site",
      "ok": true,
-     "ms": 1028,
-     "digest": "470226f79ca8572748d56ac377d5173de5766f1fdd0a5bb53986f147a51fb404"
+     "ms": 825,
+     "digest": "af4163ae2f6ea8b6346aac4dc7788dd73f96e24d4e45f48a06d1f41fcd713368"
     }
    ]
   },
@@ -106,14 +106,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 8649,
-     "digest": "2fd67ad7631da5bb1a809270fdca4cdb4984e38e30108618856946d59f44f7b1"
+     "ms": 7802,
+     "digest": "c2c84746e36f799219cfc91e60882fb5a2b12a50acf50d052d25722b6abf5c0c"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 6454,
-     "digest": "f122dfb664714ee596b018497386d91b26d39b270560bc766b8bcbb7ebd3e35e"
+     "ms": 5863,
+     "digest": "4433c8ec102fa7f474d36eec854f5886dbac0b223084429e4e7f54100c42738f"
     }
    ]
   },
@@ -129,14 +129,14 @@
     {
      "id": "build",
      "ok": true,
-     "ms": 7824,
-     "digest": "eb5bdb273ec670d798258700d6018e8f3cd40e3d53b4cd08725057150a6904bf"
+     "ms": 7338,
+     "digest": "20bf93f47ab2de12e9bad7cf980d7fb00bbc041d45f3e65083dd2503b1a19120"
     },
     {
      "id": "lint",
      "ok": true,
-     "ms": 5978,
-     "digest": "a848d31d737ada3ba5d5f88df0c414eeeb9e309a6965e24deae2ab5383d0d22d"
+     "ms": 5384,
+     "digest": "ca0261c355c8c35ee240f0b3b0aa5340cf5346f3a539938f732474100ede6192"
     }
    ]
   }
@@ -145,31 +145,31 @@
   {
    "id": "provider",
    "ok": true,
-   "ms": 49,
+   "ms": 36,
    "status": 200
   },
   {
    "id": "edge-direct",
-   "ok": true,
-   "ms": 320,
-   "status": 200
+   "ok": false,
+   "ms": 10495,
+   "status": 0
   },
   {
    "id": "tunnel",
    "ok": true,
-   "ms": 195,
+   "ms": 498,
    "status": 200
   },
   {
    "id": "mirror-entangled-page",
    "ok": true,
-   "ms": 497,
+   "ms": 616,
    "status": 200
   },
   {
    "id": "mirror-weights",
    "ok": true,
-   "ms": 1249,
+   "ms": 1375,
    "status": 200
   }
  ]
