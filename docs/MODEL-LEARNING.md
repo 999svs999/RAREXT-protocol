@@ -306,3 +306,29 @@ The receipt is published as `head-to-head.json` and rendered on `rank.html`
 next to the 8 won / 1 tied / 3 lost scorecard. The losses (context 192,
 multimodal, open-ended breadth) are on the same page — the demo prints them as
 `[--] LOSS`, it does not hide them.
+
+## v14: training `total` and `pct` (the never-trained families)
+
+`total` and `pct` were 0/33 on the published suite because no run had ever
+trained them. v14 extends the GPU trainer with examples drawn from the
+published grammar, not from the deployed generators:
+
+* `total_example` — 2-3 rows, prices uniform on 5..9999, gold
+  `The total is $<sum> delivered.`;
+* `pct_example` — 1 row, discount in {10,15,20,25,30,40,50}, gold is
+  `p*(100-off)/100` printed the way JS prints a Number (this is exactly what
+  `gen-tasks.mjs` computes, including the two-decimal cases);
+* held-out `total`/`pct` sets (40 each) and a 48-token decode cap — the diff
+  family's 24-token cap would have scored correct 31-byte answers as wrong;
+* checkpoint selection requires page 14/14, no old-skill delta > 0.07, no
+  enabled family down > 3 points, and a real gain > 2 points in at least one.
+
+Run: 36k steps, batch 64, mix `total:0.55 diff:0.30 pct:0.15`, starting from
+the **shipped repaired checkpoint** (`1309f106…`) so the deployed skills are
+the floor, not something to relearn. The kernel pins that checkpoint's sha256
+and refuses to start on a stale mount.
+
+A bug this exposed: the inlined trainer's `HERE` is `/kaggle/src`, so
+`page_skills()` returned `[]` in v13 and the page anchor was never applied —
+the likely cause of the S2t flip that needed `repair_page.py`. The lookup now
+searches `sys.path`, and the log prints `page anchor: 14 prompt(s)`.

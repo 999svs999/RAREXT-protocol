@@ -37,7 +37,17 @@ from the published grammar) plus a 400-step page-anchored repair; the promotion
 gate is now per-family, so a candidate cannot buy diff by selling lookup. Full
 record and every refused candidate: `docs/MODEL-LEARNING.md`.
 
-## The next lever
+## The next lever (v14 in flight)
+
+Kaggle kernel `svs168/rarext-gpu-diff` **v14** trains the two families the
+shipped model has never seen — `total` (2-3 row sums) and `pct` (percent-off) —
+from the **shipped repaired checkpoint**, with suite-faithful examples
+(`total_example`, `pct_example` in `gpu_train_diff.py`), batch mix
+`total:0.55 diff:0.30 pct:0.15`, 36k steps × batch 64. It verifies the mounted
+checkpoint's sha256 (`1309f106…`) before using GPU time and is fully inlined.
+The acceptance bar is unchanged: export → `scripts/promote-entangled.mjs` must
+show no published-family regression and 14/14 page skills. A 0% result is a
+measured negative, not a reason to relabel the axis.
 
 * **Diff is nonzero but weak**: 4/33 published (held-out by width after v13:
   1d 100% · 2d 100% · 3d 92% · 4d 50%, then the repair moved the deployed
@@ -94,6 +104,12 @@ byte-for-byte on failure.
   never run — v6/v8/v9 defined `suite_example` while the loop still called the
   49..999 generators. Verify the CALL SITE, and verify a new run by comparing
   trajectory logs, never by the kernel's status field.
+* **Inlined code changes `__file__`**: `HERE` becomes `/kaggle/src`, so
+  `page_skills()` silently returned `[]` in v13 — the 14 canonical prompts
+  were *not* anchored during that run, which is why its raw checkpoint flipped
+  S2t and needed a repair. The lookup now searches `sys.path` and the log
+  prints `page anchor: 14 prompt(s)`; treat any other number as a failed run.
+  The same trap applies to any future dataset-relative file read.
 * **Smoke-test the exact kernel code path locally before pushing** — three
   GPU sessions were lost to errors a 3-step CPU run would have caught
   (`suite_example` referencing an unimported `WORDS`; a missing module; a

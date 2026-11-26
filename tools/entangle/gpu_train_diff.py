@@ -85,14 +85,98 @@ def suite_example(rng):
     prompt = f"rows: {body}\nq: which is most expensive?\na: "
     return prompt, f"The price is ${max(prices)} delivered."
 
+def _styled_name(rng):
+    """A 2-3 word ledger name in the published suite's case mix (34/34/33)."""
+    m = rng.choice([2, 2, 2, 3])
+    parts = []
+    while len(parts) < m:
+        w = rng.choice(WORDS)
+        if w not in parts:
+            parts.append(w)
+    joined = " ".join(parts)
+    r = rng.random()
+    return joined.upper() if r < 0.34 else (joined.title() if r < 0.67 else joined)
+
+
+def _ledger_rows(rng, k):
+    names, prices = [], []
+    while len(names) < k:
+        nm = _styled_name(rng)
+        if nm not in names:
+            names.append(nm)
+            prices.append(rng.randint(5, 9999))
+    body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    return body, names, prices
+
+
+def total_example(rng):
+    """One `total` example from the published grammar: 2-3 rows, prices uniform
+    on 5..9999, answer `The total is $<sum> delivered.` — the family the shipped
+    model has never been trained on."""
+    body, _, prices = _ledger_rows(rng, rng.choice([2, 2, 3]))
+    return (f"rows: {body}\nq: what is the total of all items?\na: ",
+            f"The total is ${sum(prices)} delivered.")
+
+
+def pct_example(rng):
+    """One `pct` example from the published grammar. The gold is
+    `Math.round(p*(100-off))/100` in gen-tasks.mjs; p is an integer, so that is
+    exactly p*(100-off)/100, printed the way JS prints a Number (no trailing
+    zeros, up to two decimals)."""
+    body, _, prices = _ledger_rows(rng, 1)
+    p = prices[0]
+    off = rng.choice([10, 15, 20, 25, 30, 40, 50])
+    after = p * (100 - off) / 100
+    text = f"{after:.2f}".rstrip("0").rstrip(".")
+    return (f"rows: {body}\nq: what is the price after {off}% off?\na: ",
+            f"The price is ${text} delivered.")
+
+
+def held_extra(seed, n=40):
+    """Held-out total/pct prompts, full grammar, same cap as held_sets."""
+    rng = random.Random(seed)
+    out = {}
+    for name, make in (("total", total_example), ("pct", pct_example)):
+        bucket = []
+        while len(bucket) < n:
+            p, a = make(rng)
+            if len(encode(p)) + len(encode(a)) <= 186:
+                bucket.append((p, a))
+        out[name] = bucket
+    return out
+
+
+def parse_mix(spec, tasks):
+    """`diff:0.35,total:0.45,pct:0.20` → normalised weights over `tasks`."""
+    raw = {}
+    for part in spec.split(","):
+        if ":" in part:
+            k, v = part.split(":", 1)
+            raw[k.strip()] = float(v)
+    weights = {t: max(0.0, raw.get(t, 0.0)) for t in tasks}
+    total = sum(weights.values())
+    if total <= 0:
+        return {t: 1.0 / len(tasks) for t in tasks}
+    return {t: weights[t] / total for t in tasks}
+
+
 def page_skills():
     """The 14 canonical prompts the deployed page self-tests with. They are the
     deployed contract, so training anchors them in every batch — a new function
-    must not flip even one of them."""
-    path = HERE / "page-skills.json"
-    if not path.exists():
-        return []
-    return [(x["prompt"], x["want"]) for x in json.loads(path.read_text())]
+    must not flip even one of them.
+
+    The kernel inlines this file, so HERE is /kaggle/src, not tools/entangle:
+    search the import path too (the header inserts the dataset's tools/entangle
+    into sys.path). Before this fix v13 silently trained with an EMPTY page
+    anchor, which is why its raw checkpoint flipped S2t."""
+    candidates = [HERE / "page-skills.json"]
+    for entry in sys.path:
+        if entry:
+            candidates.append(Path(entry) / "page-skills.json")
+    for path in candidates:
+        if path.exists():
+            return [(x["prompt"], x["want"]) for x in json.loads(path.read_text())]
+    return []
 
 
 def batch_loss_gpu(model, pairs, device):
@@ -153,6 +237,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--steps", type=int, default=30000)
     ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--tasks", default="diff",
+                    help="comma list of families to train/evaluate: diff,total,pct")
+    ap.add_argument("--task-mix", default="diff:0.35,total:0.45,pct:0.20",
+                    help="batch weights for --tasks (normalised)")
     ap.add_argument("--replay", type=float, default=0.30)
     ap.add_argument("--early-replay", type=float, default=0.50)
     ap.add_argument("--early-replay-steps", type=int, default=1500)
@@ -180,22 +268,53 @@ def main():
     model = TinyLM(VOCAB, cfg["d"], cfg["layers"], cfg["heads"], cfg["ffn"], cfg["ctx"]).to(device)
     model.load_state_dict(ck["state"])
 
-    held = held_sets(999)          # 40 prompts per width 1..4, long names
+    tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
+    unknown = [t for t in tasks if t not in ("diff", "total", "pct")]
+    if unknown or not tasks:
+        raise SystemExit(f"--tasks must be a comma list from diff,total,pct (got {args.tasks!r})")
+    mix = parse_mix(args.task_mix, tasks)
+    held = held_sets(999) if "diff" in tasks else {}
+    extra = held_extra(999) if ({"total", "pct"} & set(tasks)) else {}
     replay_sets = task.eval_sets(args.seed)
     page = page_skills()
+    print(f"page anchor: {len(page)} prompt(s) — inlined runs must find the dataset's page-skills.json",
+          flush=True)
 
     model.eval()
-    before = {d: score_gpu(model, bucket[:args.eval_cap])[0] for d, bucket in held.items()}
+
+    def eval_all(cap):
+        """Every enabled family, measured separately — never pooled."""
+        out = {}
+        if "diff" in tasks:
+            widths = {d: score_gpu(model, bucket[:cap])[0] for d, bucket in held.items()}
+            out["diff"] = sum(widths.values()) / len(widths)
+            out["diff_by_width"] = widths
+        # total/pct answers are ~31 bytes ("The total is $19998 delivered."),
+        # so the diff family's 24-token cap would score them as wrong even when
+        # the number is right.
+        if "total" in tasks:
+            out["total"] = score_gpu(model, extra["total"][:cap], max_new=48)[0]
+        if "pct" in tasks:
+            out["pct"] = score_gpu(model, extra["pct"][:cap], max_new=48)[0]
+        return out
+
+    def combined(scores):
+        return sum(scores[t] for t in tasks) / len(tasks)
+
+    before = eval_all(args.eval_cap)
     before_old = score_old_gpu(model, replay_sets, args.old_cap)
     before_page = score_page_gpu(model, page)
-    mean_before = sum(before.values()) / len(before)
-    print("before diff:", " ".join(f"{k}d={v:.0%}" for k, v in before.items()),
-          f"mean={mean_before:.1%}", flush=True)
+    score_before = combined(before)
+    print("before:", " ".join(f"{t}={before[t]:.0%}" for t in tasks),
+          f"mean={score_before:.1%}", flush=True)
+    if "diff" in tasks:
+        print("before diff widths:", " ".join(f"{k}d={v:.0%}" for k, v in before["diff_by_width"].items()),
+              flush=True)
     print("before old:", {k.split()[0]: round(v, 3) for k, v in before_old.items()}, flush=True)
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.01)
     rng = random.Random(args.seed + 1)
-    best = {"mean": -1.0, "step": 0, "state": None, "diff": before, "old": before_old}
+    best = {"score": -1.0, "step": 0, "state": None, "scores": before, "old": before_old}
     history = []
     t0 = time.time()
 
@@ -223,8 +342,22 @@ def main():
         else:
             width, noborrow = 4, False
 
-        batch = [diff_example(rng, rng.randint(1, width), noborrow=noborrow)
-                 for _ in range(args.batch)]
+        counts = {t: int(round(args.batch * mix[t])) for t in tasks}
+        while sum(counts.values()) < args.batch:
+            counts[max(tasks, key=lambda t: mix[t])] += 1
+        batch = []
+        if "diff" in tasks:
+            batch += [diff_example(rng, rng.randint(1, width), noborrow=noborrow)
+                      for _ in range(counts["diff"])]
+        if "total" in tasks:
+            batch += [total_example(rng) for _ in range(counts["total"])]
+        if "pct" in tasks:
+            batch += [pct_example(rng) for _ in range(counts["pct"])]
+        if len(batch) < args.batch:
+            filler = diff_example if "diff" in tasks else (
+                total_example if "total" in tasks else pct_example)
+            while len(batch) < args.batch:
+                batch.append(filler(rng, rng.randint(1, width)) if filler is diff_example else filler(rng))
         for _ in range(replay_n):
             # replay from the PUBLISHED grammar (suite_example: prices uniform
             # on 5..9999), plus a draw from the canonical sets and the page's
@@ -254,49 +387,63 @@ def main():
 
         if step % args.eval_every == 0:
             model.eval()
-            diff = {d: score_gpu(model, bucket[:args.eval_cap])[0] for d, bucket in held.items()}
-            mean = sum(diff.values()) / len(diff)
+            scores = eval_all(args.eval_cap)
+            score = combined(scores)
             sps = step / (time.time() - t0)
+            widths_txt = (" " + " ".join(f"{k}d={v:.0%}" for k, v in scores["diff_by_width"].items())
+                          if "diff" in tasks else "")
             print(f"  step {step:>6} w<={width}{' nb' if noborrow else '  '} "
-                  f"loss {float(loss):.3f} " + " ".join(f"{k}d={v:.0%}" for k, v in diff.items())
-                  + f" mean={mean:.1%} {sps:.1f} it/s [{time.time()-t0:.0f}s]", flush=True)
+                  f"loss {float(loss):.3f} "
+                  + " ".join(f"{t}={scores[t]:.0%}" for t in tasks)
+                  + widths_txt
+                  + f" mean={score:.1%} {sps:.1f} it/s [{time.time()-t0:.0f}s]", flush=True)
             history.append({"step": step, "width": width, "noborrow": noborrow,
                             "loss": round(float(loss), 4), "lr": round(lr_now, 6),
-                            "diff": diff, "mean": mean})
-            if mean > best["mean"] + 0.005:
+                            "scores": {t: scores[t] for t in tasks},
+                            "diff_by_width": scores.get("diff_by_width"),
+                            "mean": score})
+            if score > best["score"] + 0.005:
                 old = score_old_gpu(model, replay_sets, args.old_cap)
                 pg = score_page_gpu(model, page)
                 worst = max(max(before_old[k] - old[k] for k in before_old),
                             before_page - pg)
-                eligible = worst <= 0.07
-                print(f"    mean {mean:.1%} · worst old delta {worst:+.3f}"
+                regressed = any(scores[t] < before[t] - 0.03 for t in tasks)
+                gained = any(scores[t] > before[t] + 0.02 for t in tasks)
+                eligible = worst <= 0.07 and pg >= 0.999 and not regressed and gained
+                print(f"    mean {score:.1%} · page {pg:.0%} · worst old delta {worst:+.3f}"
                       + ("" if eligible else " — not promotion-eligible"), flush=True)
                 if eligible:
-                    best = {"mean": mean, "step": step, "diff": diff, "old": old,
+                    best = {"score": score, "step": step, "scores": scores, "old": old,
                             "state": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}}
             torch.save({"config": cfg, "state": model.state_dict()}, Path(args.out) / "gpu-diff-last.pt")
 
     model.eval()
-    final = {d: score_gpu(model, bucket)[0] for d, bucket in held.items()}
+    final = eval_all(40)
     final_old = score_old_gpu(model, replay_sets, args.old_cap)
     chosen = best if best["state"] is not None else {
-        "mean": mean_before, "step": 0, "diff": before, "old": before_old,
+        "score": score_before, "step": 0, "scores": before, "old": before_old,
         "state": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}}
     model.load_state_dict(chosen["state"])
-    print(f"\nchosen checkpoint: step {chosen['step']} mean {chosen['mean']:.1%}", flush=True)
-    print("final diff(cap 40):", " ".join(f"{k}d={v:.0%}" for k, v in final.items()),
-          f"mean={sum(final.values()) / len(final):.1%}", flush=True)
+    print(f"\nchosen checkpoint: step {chosen['step']} mean {chosen['score']:.1%}", flush=True)
+    print("final:", " ".join(f"{t}={final[t]:.0%}" for t in tasks), flush=True)
+    if "diff" in tasks:
+        print("final diff widths:", " ".join(f"{k}d={v:.0%}" for k, v in final["diff_by_width"].items()),
+              flush=True)
     print("final old:", {k.split()[0]: round(v, 3) for k, v in final_old.items()}, flush=True)
 
     result = {
         "steps": args.steps, "batch": args.batch, "lr": args.lr, "warmup": args.warmup,
         "replay": args.replay, "early_replay": args.early_replay, "chi": args.chi,
         "project_every": args.project_every, "device": str(device), "seed": args.seed,
-        "before_diff": before, "before_old": before_old,
-        "best_step": chosen["step"], "chosen_mean": chosen["mean"],
-        "final_diff": final, "final_old": final_old,
+        "tasks": tasks, "task_mix": mix,
+        "before": {t: before[t] for t in tasks}, "before_old": before_old,
+        "before_diff": before.get("diff"), "before_diff_widths": before.get("diff_by_width"),
+        "best_step": chosen["step"], "chosen_score": chosen["score"],
+        "final": {t: final[t] for t in tasks},
+        "final_diff": final.get("diff"), "final_diff_widths": final.get("diff_by_width"),
+        "final_old": final_old,
         "old_delta": {k: before_old[k] - final_old[k] for k in before_old},
-        "final_mean": sum(final.values()) / len(final),
+        "final_mean": combined(final),
         "train_seconds": round(time.time() - t0, 1),
         "history": history,
     }
