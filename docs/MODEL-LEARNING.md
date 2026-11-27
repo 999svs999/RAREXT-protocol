@@ -407,3 +407,40 @@ showed gentle local growth cannot produce it). Shipped, deployed, and live
 verified: weights `6e449058…`, pin matched, rank gate PASS, runtime 197/197,
 claim:check 8 (baseline 9), demo ALL PHASES PASS with phase 6 re-scoring the
 shipped bytes at 107/200.
+
+## Artifact retention (pruned 2026-11-27)
+
+The six campaigns left 140 files / 583 MB in `tools/entangle` — mostly
+intermediate snapshots of candidates the engine gate refused. They are now
+pruned to the essence: **80 tracked files / 189 MB**. Deleted: 60 `.pt`/`.gguf`
+snapshots (≈394 MB) — every intermediate `cheapest-snap-{200..600}`,
+`interf-snap-{50,100,200..400}`, `ledger-snap-{200,600,800}`,
+`shortpair-snap-{100..350}`, `diff15-snap-{100..300,500,600}`,
+`total-snap-{100..800}` (campaign 5 produced no gateable candidate), and the
+matching refused exports (`cheap-{200..600}`, `d15-{100..300}`,
+`interf-{50,100,200..400}`, `ledger-{200,600,800}`, `sp-{100..350}`,
+`v14-last`, `v15-last`).
+
+Kept, because each one is load-bearing evidence or the promoted lineage:
+
+* **Promoted state**: `diff15-snap-400.pt` → `entangled-chi48-d15-400.gguf`
+  (`6e449058…`) and the shipped `entangled-factored.gguf`.
+* **One best per campaign**: `cheapest-snap-100.pt` (campaign 2, 108/200),
+  `ledger-snap-400.pt` (campaign 1, 105/200), `interf-snap-150.pt` (campaign
+  3, 107/200), `shortpair-snap-50.pt` + `entangled-chi48-sp-50.gguf`
+  (campaign 4 — the torch-flips/engine-drops proof), and the four campaign-best
+  exports.
+* **GPU lineage**: `gpu-refined-diff.pt` (v13), `gpu-refined-v14.pt`,
+  `gpu-refined-v15.pt` + their exports; `repaired-page.pt` (the 104/200
+  shipped base every repair started from).
+* **Pre-session baselines**: `refined-*.pt`, `diff-last.pt`,
+  `entangled-chi48-{diff,diff-gpu,diff-gpu13,dgpu13-last,repaired}.gguf`.
+* **All 7 `repair*.py` scripts and every `repair-*.json` receipt** — the
+  refusals, per-family scores and snapshots are the measured negative; the
+  scripts are the reproduction path (`repair_diff15.py` produced the promoted
+  candidate).
+
+Nothing was rewritten in history: the deleted blobs remain in past commits, so
+any pruned candidate can still be recovered with
+`git show <commit>:tools/entangle/<file>`. The prune is a working-tree and
+keep-set decision, not a history rewrite.
