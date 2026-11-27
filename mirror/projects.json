@@ -1,0 +1,176 @@
+{
+ "generatedAt": "2026-11-27T08:57:19.151Z",
+ "allOk": true,
+ "projects": [
+  {
+   "id": "rarext-protocol",
+   "role": "the protocol, runtime, engine, and this AI's own live mirror",
+   "git": {
+    "head": "e8d379fc295c",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "runtime",
+     "ok": true,
+     "ms": 13523,
+     "digest": "fc68722c848ee1d4cb7ac31a351242d3c198c1f28d19b474291d4943e05e5366"
+    },
+    {
+     "id": "claims",
+     "ok": true,
+     "ms": 1350,
+     "digest": "14dad87573242619b74a1ce696cacb3abbf69ae66081cfee44f3ea0bc5b950d6"
+    },
+    {
+     "id": "rank",
+     "ok": true,
+     "ms": 97,
+     "digest": "91509e623eb171efa2be41cce2d1f6301ad4d011a6f05922cefcb7e9cdf650ea"
+    }
+   ]
+  },
+  {
+   "id": "rarext",
+   "role": "the RAREXT site/build surface",
+   "git": {
+    "head": "97f0d5ca1950",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "test",
+     "ok": true,
+     "ms": 2642,
+     "digest": "f42cdb62b0c31e6a5746813d54c4701efe480605f6e92e1d8a9852f694bb0f1a"
+    },
+    {
+     "id": "typecheck",
+     "ok": true,
+     "ms": 4361,
+     "digest": "a610fc582184e7493d7e56e411725cb83af01e01afa5741e097881daa07fa5e6"
+    }
+   ]
+  },
+  {
+   "id": "bapeclub",
+   "role": "the storefront RAREXT AI serves on the live host",
+   "git": {
+    "head": "9e15ff144584",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "typecheck",
+     "ok": true,
+     "ms": 13007,
+     "digest": "61102f84738314df81b4e1f054d5bb818844d7ba5b2625eac7c5677362c04b93"
+    },
+    {
+     "id": "build",
+     "ok": true,
+     "ms": 78586,
+     "digest": "4f9c4ec3fc86eb3608f82169eccab024184be0e27e4ec6293da8650dc7ea52eb"
+    }
+   ]
+  },
+  {
+   "id": "futuristic",
+   "role": "the film showcase published through the registry",
+   "git": {
+    "head": "f2c031bed15f",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "site",
+     "ok": true,
+     "ms": 1207,
+     "digest": "1427cf00330e7b28ee19885f06b540f0da2e74e0143ff55cbed6031506f5bde9"
+    }
+   ]
+  },
+  {
+   "id": "shipflow",
+   "role": "shipping workflow app",
+   "git": {
+    "head": "c98ae00c8ac7",
+    "dirty": true
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "build",
+     "ok": true,
+     "ms": 8014,
+     "digest": "88649017c197e97de7fb5c03ecc0580717c44aa85655aa5bac3e46994aea7643"
+    },
+    {
+     "id": "lint",
+     "ok": true,
+     "ms": 5803,
+     "digest": "9ae04d643c3ae334d818d1af6c0c2c250053f6ef1f3751366190c638b961c6da"
+    }
+   ]
+  },
+  {
+   "id": "stockflow",
+   "role": "stock workflow app",
+   "git": {
+    "head": "c92c5bd0659b",
+    "dirty": false
+   },
+   "ok": true,
+   "gates": [
+    {
+     "id": "build",
+     "ok": true,
+     "ms": 7427,
+     "digest": "9740208665ea34093a1282b76c7dc1fb2138b5fbbf9a8557f1cac5aa34f8323f"
+    },
+    {
+     "id": "lint",
+     "ok": true,
+     "ms": 5340,
+     "digest": "0ecf5d82b3e4247183a4e1e2838756a6bacc5827ebef2bda27a3256fdee35724"
+    }
+   ]
+  }
+ ],
+ "services": [
+  {
+   "id": "provider",
+   "ok": true,
+   "ms": 44,
+   "status": 200
+  },
+  {
+   "id": "edge-direct",
+   "ok": true,
+   "ms": 171,
+   "status": 200
+  },
+  {
+   "id": "tunnel",
+   "ok": true,
+   "ms": 1886,
+   "status": 200
+  },
+  {
+   "id": "mirror-entangled-page",
+   "ok": true,
+   "ms": 1060,
+   "status": 200
+  },
+  {
+   "id": "mirror-weights",
+   "ok": true,
+   "ms": 64201,
+   "status": 200
+  }
+ ]
+}
