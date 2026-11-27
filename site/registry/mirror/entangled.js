@@ -15,7 +15,7 @@
 // The digests the page will serve. Pinned, not discovered: a changed artifact
 // is a refusal, not a surprise.
 const ENTANGLED_DIGESTS = {
-  weights: "8cbd6f5acb6f30dc1ca77782e01461cfddbe034a4a9f58bcd2482f091f880825",
+  weights: "6e449058edfeda0f24b5dfad6ff66d8056a765918dfdfb0ea4500bd9d3ab9eef",
   engine: "83b666cfe3cf72f32d753c030f258eead72f139a87609b07b6708f4d07933b15",
 };
 

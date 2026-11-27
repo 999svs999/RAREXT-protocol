@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T16:15:49.262Z",
+  "generatedAt": "2026-11-27T08:48:01.239Z",
   "seed": 20261127,
   "n": 24,
   "hostedModel": "agnes-3.0-pro",
@@ -7,7 +7,7 @@
   "hostedError": null,
   "weights": {
     "path": "apps/web/public/rarext-entangled-chi48.gguf",
-    "digest": "8cbd6f5acb6f30dc1ca77782e01461cfddbe034a4a9f58bcd2482f091f880825"
+    "digest": "6e449058edfeda0f24b5dfad6ff66d8056a765918dfdfb0ea4500bd9d3ab9eef"
   },
   "rarext": {
     "hybrid": {
@@ -15,15 +15,15 @@
       "semantic": 24
     },
     "neural": {
-      "exact": 12,
-      "semantic": 12
+      "exact": 13,
+      "semantic": 13
     }
   },
   "hosted": {
     "exact": 0,
     "semantic": 24
   },
-  "ms": 7812,
+  "ms": 8026,
   "rows": [
     {
       "id": 0,
@@ -37,7 +37,7 @@
       },
       "hosted": {
         "text": "\n\nThe VEST WHITE GREEN is $9003.",
-        "ms": 4811,
+        "ms": 1583,
         "error": null
       },
       "exact": {
@@ -63,7 +63,7 @@
       },
       "hosted": {
         "text": "\n\nshorts grey",
-        "ms": 1034,
+        "ms": 882,
         "error": null
       },
       "exact": {
@@ -89,7 +89,7 @@
       },
       "hosted": {
         "text": "\n\nSHIRT BLACK SOCKS",
-        "ms": 1233,
+        "ms": 1350,
         "error": null
       },
       "exact": {
@@ -110,22 +110,22 @@
       "gold": "$1855 more",
       "rarext": {
         "hybrid": "$1855 more",
-        "neural": "$1905 more",
+        "neural": "$1855 more",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$1,855",
-        "ms": 557,
+        "ms": 763,
         "error": null
       },
       "exact": {
         "hybrid": true,
-        "neural": false,
+        "neural": true,
         "hosted": false
       },
       "semantic": {
         "hybrid": true,
-        "neural": false,
+        "neural": true,
         "hosted": true
       }
     },
@@ -136,12 +136,12 @@
       "gold": "The total is $3099 delivered.",
       "rarext": {
         "hybrid": "The total is $3099 delivered.",
-        "neural": "The price is $58 delivered.",
+        "neural": "The total is $3009 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$3099",
-        "ms": 1432,
+        "ms": 1033,
         "error": null
       },
       "exact": {
@@ -162,12 +162,12 @@
       "gold": "The price is $4579 delivered.",
       "rarext": {
         "hybrid": "The price is $4579 delivered.",
-        "neural": "The price is $9158 delivered.",
+        "neural": "The price is $4580.5 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n$4579",
-        "ms": 1254,
+        "text": "\n\n$4,579",
+        "ms": 1133,
         "error": null
       },
       "exact": {
@@ -193,7 +193,7 @@
       },
       "hosted": {
         "text": "\n\n$6057",
-        "ms": 1020,
+        "ms": 4570,
         "error": null
       },
       "exact": {
@@ -219,7 +219,7 @@
       },
       "hosted": {
         "text": "\n\nTIGER LOW VEST",
-        "ms": 1091,
+        "ms": 600,
         "error": null
       },
       "exact": {
@@ -245,7 +245,7 @@
       },
       "hosted": {
         "text": "\n\nshorts classic",
-        "ms": 1088,
+        "ms": 1038,
         "error": null
       },
       "exact": {
@@ -266,12 +266,12 @@
       "gold": "$1944 more",
       "rarext": {
         "hybrid": "$1944 more",
-        "neural": "$1946 more",
+        "neural": "The price is $7020 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$1,944",
-        "ms": 4586,
+        "ms": 998,
         "error": null
       },
       "exact": {
@@ -292,12 +292,12 @@
       "gold": "The total is $4855 delivered.",
       "rarext": {
         "hybrid": "The total is $4855 delivered.",
-        "neural": "The price is $1903 delivered.",
+        "neural": "The total is $5445 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$4855",
-        "ms": 663,
+        "ms": 946,
         "error": null
       },
       "exact": {
@@ -318,12 +318,12 @@
       "gold": "The price is $4097.4 delivered.",
       "rarext": {
         "hybrid": "The price is $4097.4 delivered.",
-        "neural": "The price is $6829 delivered.",
+        "neural": "The price is $4085.4 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n$4097.40",
-        "ms": 803,
+        "text": "\n\n$4,097.40",
+        "ms": 833,
         "error": null
       },
       "exact": {
@@ -348,8 +348,8 @@
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n$481",
-        "ms": 621,
+        "text": "\n\nThe RED LOW MEGA is $481.",
+        "ms": 839,
         "error": null
       },
       "exact": {
@@ -375,7 +375,7 @@
       },
       "hosted": {
         "text": "\n\nnavy cap tiger",
-        "ms": 4879,
+        "ms": 1095,
         "error": null
       },
       "exact": {
@@ -401,7 +401,7 @@
       },
       "hosted": {
         "text": "\n\ncollege green",
-        "ms": 950,
+        "ms": 942,
         "error": null
       },
       "exact": {
@@ -422,22 +422,22 @@
       "gold": "$2550 more",
       "rarext": {
         "hybrid": "$2550 more",
-        "neural": "$2700 more",
+        "neural": "$2550 more",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$2,550",
-        "ms": 885,
+        "ms": 1026,
         "error": null
       },
       "exact": {
         "hybrid": true,
-        "neural": false,
+        "neural": true,
         "hosted": false
       },
       "semantic": {
         "hybrid": true,
-        "neural": false,
+        "neural": true,
         "hosted": true
       }
     },
@@ -448,12 +448,12 @@
       "gold": "The total is $16133 delivered.",
       "rarext": {
         "hybrid": "The total is $16133 delivered.",
-        "neural": "The price is $1746 delivered.",
+        "neural": "The total is $15443 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n$16,133",
-        "ms": 786,
+        "text": "\n\n$16133",
+        "ms": 1626,
         "error": null
       },
       "exact": {
@@ -474,12 +474,12 @@
       "gold": "The price is $923.2 delivered.",
       "rarext": {
         "hybrid": "The price is $923.2 delivered.",
-        "neural": "The price is $1154 delivered.",
+        "neural": "The price is $910.2 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$923.20",
-        "ms": 781,
+        "ms": 1293,
         "error": null
       },
       "exact": {
@@ -500,22 +500,22 @@
       "gold": "The price is $4349 delivered.",
       "rarext": {
         "hybrid": "The price is $4349 delivered.",
-        "neural": "The price is $4349 delivered.",
+        "neural": "The price is $438 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$4349",
-        "ms": 625,
+        "ms": 683,
         "error": null
       },
       "exact": {
         "hybrid": true,
-        "neural": true,
+        "neural": false,
         "hosted": false
       },
       "semantic": {
         "hybrid": true,
-        "neural": true,
+        "neural": false,
         "hosted": true
       }
     },
@@ -531,7 +531,7 @@
       },
       "hosted": {
         "text": "\n\nDOWN WHITE",
-        "ms": 821,
+        "ms": 827,
         "error": null
       },
       "exact": {
@@ -557,7 +557,7 @@
       },
       "hosted": {
         "text": "\n\nMINI CAP",
-        "ms": 914,
+        "ms": 614,
         "error": null
       },
       "exact": {
@@ -578,12 +578,12 @@
       "gold": "$5660 more",
       "rarext": {
         "hybrid": "$5660 more",
-        "neural": "$5800 more",
+        "neural": "The price is $8435 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n$5,660",
-        "ms": 4686,
+        "text": "\n\n$5660",
+        "ms": 879,
         "error": null
       },
       "exact": {
@@ -604,12 +604,12 @@
       "gold": "The total is $10851 delivered.",
       "rarext": {
         "hybrid": "The total is $10851 delivered.",
-        "neural": "The price is $2810 delivered.",
+        "neural": "The total is $10881 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
-        "text": "\n\n10851",
-        "ms": 1152,
+        "text": "\n\n$10,851",
+        "ms": 1216,
         "error": null
       },
       "exact": {
@@ -630,12 +630,12 @@
       "gold": "The price is $3989.5 delivered.",
       "rarext": {
         "hybrid": "The price is $3989.5 delivered.",
-        "neural": "The price is $7979 delivered.",
+        "neural": "The price is $3982.5 delivered.",
         "hybridSource": "exact"
       },
       "hosted": {
         "text": "\n\n$3,989.50",
-        "ms": 974,
+        "ms": 970,
         "error": null
       },
       "exact": {
