@@ -39,15 +39,17 @@ record and every refused candidate: `docs/MODEL-LEARNING.md`.
 
 ## The next lever (v14 in flight)
 
-Kaggle kernel `svs168/rarext-gpu-diff` **v14** trains the two families the
-shipped model has never seen — `total` (2-3 row sums) and `pct` (percent-off) —
-from the **shipped repaired checkpoint**, with suite-faithful examples
-(`total_example`, `pct_example` in `gpu_train_diff.py`), batch mix
-`total:0.55 diff:0.30 pct:0.15`, 36k steps × batch 64. It verifies the mounted
-checkpoint's sha256 (`1309f106…`) before using GPU time and is fully inlined.
-The acceptance bar is unchanged: export → `scripts/promote-entangled.mjs` must
-show no published-family regression and 14/14 page skills. A 0% result is a
-measured negative, not a reason to relabel the axis.
+v14 (total:0.55 diff:0.30 pct:0.15) genuinely taught total/pct — held-out
+total 0→7.5%, pct 0→2.5% — but the published suite fell 104→100 and **33
+engine-gated repair candidates across 5 campaigns all failed the per-family
+floor**: every state that gains total loses ≥1 `cheapest` item after export
+(mixed digit-length interference: `$20` vs `$210` → `$200`/`$201`; torch and
+engine fail identically). Full record: `docs/MODEL-LEARNING.md`. v15 (running
+2026-11-27) is the untested design: protective replay 0.40 DURING the run
+(`total:0.30 diff:0.25 pct:0.05`). If v15 fails the gate too, total/pct at
+χ=48 is a capacity wall — like context 192 — and the user must either fund a
+bigger model or confirm the axis-scoped definition of "best". Do not retry
+post-hoc low-LR repair or gentle local training; both are measured negatives.
 
 * **Diff is nonzero but weak**: 4/33 published (held-out by width after v13:
   1d 100% · 2d 100% · 3d 92% · 4d 50%, then the repair moved the deployed

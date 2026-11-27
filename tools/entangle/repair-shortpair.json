@@ -1,0 +1,118 @@
+{
+ "ckpt": "tools/entangle/ledger-snap-400.pt",
+ "steps": 350,
+ "lr": 1.2e-05,
+ "before": {
+  "page": 1.0,
+  "diff": {
+   "1": 1.0,
+   "2": 1.0,
+   "3": 0.9166666666666666,
+   "4": 0.16666666666666666
+  },
+  "total": 0.0,
+  "pct": 0.0,
+  "short_pair": 0.25,
+  "priciest_mixed": 0.9166666666666666
+ },
+ "snapshots": [
+  {
+   "step": 50,
+   "path": "shortpair-snap-50.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.9166666666666666,
+    "4": 0.25
+   },
+   "total": 0.0,
+   "pct": 0.0,
+   "short_pair": 0.4166666666666667,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 100,
+   "path": "shortpair-snap-100.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.9166666666666666,
+    "4": 0.25
+   },
+   "total": 0.0,
+   "pct": 0.08333333333333333,
+   "short_pair": 0.3333333333333333,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 150,
+   "path": "shortpair-snap-150.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.9166666666666666,
+    "4": 0.16666666666666666
+   },
+   "total": 0.0,
+   "pct": 0.0,
+   "short_pair": 0.4166666666666667,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 200,
+   "path": "shortpair-snap-200.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.8333333333333334,
+    "4": 0.25
+   },
+   "total": 0.0,
+   "pct": 0.0,
+   "short_pair": 0.8333333333333334,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 250,
+   "path": "shortpair-snap-250.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 0.9166666666666666,
+    "3": 1.0,
+    "4": 0.25
+   },
+   "total": 0.0,
+   "pct": 0.0,
+   "short_pair": 0.5,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 300,
+   "path": "shortpair-snap-300.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.9166666666666666,
+    "4": 0.25
+   },
+   "total": 0.08333333333333333,
+   "pct": 0.0,
+   "short_pair": 0.5,
+   "id55_torch": "The price is $20 delivered."
+  },
+  {
+   "step": 350,
+   "path": "shortpair-snap-350.pt",
+   "diff": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.9166666666666666,
+    "4": 0.3333333333333333
+   },
+   "total": 0.0,
+   "pct": 0.0,
+   "short_pair": 0.5,
+   "id55_torch": "The price is $20 delivered."
+  }
+ ]
+}

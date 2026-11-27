@@ -1,0 +1,226 @@
+"""Stage-2 targeted repair: fix the one blocking `cheapest` flip on the v14
+ledger candidate WITHOUT selling back total/diff/pct.
+
+State this starts from (`ledger-snap-400.pt`, the best engine-gate candidate):
+105/200 — lookup 34/34, cheapest 33/34, priciest 32/33, diff 4/33, total 2/33,
+pct 0/33. The gate refuses ONLY on `cheapest`, and the failing item is a digit
+alignment miss, not a reasoning miss: gold `The price is $20 delivered.`, got
+`The price is $200 delivered.` (a 2-digit minimum misread among 4-digit rows).
+
+So the batch is loaded with exactly that shape — cheapest whose ANSWER is a
+2-3 digit price among larger rows, priciest whose answer is a 4-digit max —
+plus the page anchor, published-grammar replay, and small total/pct/diff
+shares to hold the gains. LR is half the stage-1 repair's, and snapshots are
+frequent: the engine gate (`scripts/promote-entangled.mjs`) is the authority
+and gates every snapshot.
+
+    python tools/entangle/repair_cheapest.py --ckpt tools/entangle/ledger-snap-400.pt \
+        --steps 600 --lr 2.5e-5 --snapshot-every 100
+"""
+import argparse
+import json
+import random
+import sys
+import time
+from pathlib import Path
+
+import torch
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(REPO / "models/live-host-lm"))
+sys.path.insert(0, str(REPO / "agents/self-evolve"))
+from train import TinyLM, VOCAB, EOS, encode  # noqa: E402
+from train_diff import (  # noqa: E402
+    diff_example, held_sets, project, suite_example, batch_loss, WORDS,
+)
+from gpu_train_diff import total_example, pct_example, held_extra  # noqa: E402
+from model import batched_generate  # noqa: E402
+import task  # noqa: E402
+
+
+def styled_name(rng):
+    """A 2-3 word ledger name in the published suite's case mix (34/34/33)."""
+    parts = []
+    while len(parts) < rng.choice([2, 2, 2, 3]):
+        w = rng.choice(WORDS)
+        if w not in parts:
+            parts.append(w)
+    joined = " ".join(parts)
+    r = rng.random()
+    return joined.upper() if r < 0.34 else (joined.title() if r < 0.67 else joined)
+
+
+def cheapest_short_example(rng):
+    """A published-grammar cheapest prompt whose minimum is 2-3 digits while
+    every other price is larger — the exact shape of the $20-vs-$200 flip."""
+    rows_n = rng.choice([2, 3, 3, 4])
+    ad = rng.choice([2, 2, 2, 3])           # answer digits
+    ans = rng.randint(10 ** (ad - 1), 10 ** ad - 1)
+    names, prices = [], []
+    while len(names) < rows_n:
+        nm = styled_name(rng)
+        if nm in names:
+            continue
+        names.append(nm)
+        prices.append(ans if len(names) == 1 else rng.randint(min(9999, ans + 1), 9999))
+    order = list(range(rows_n))
+    rng.shuffle(order)
+    names = [names[i] for i in order]
+    prices = [prices[i] for i in order]
+    body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    return f"rows: {body}\nq: which is cheapest?\na: ", f"The price is ${min(prices)} delivered."
+
+
+def priciest_wide_example(rng):
+    """A published-grammar priciest prompt with a 4-digit maximum and at least
+    one near-miss neighbour (same leading digits, last digits differing) —
+    the shape of the measured $8285→$8275 misses."""
+    rows_n = rng.choice([2, 3, 3, 4])
+    hi = rng.randint(1000, 9999)
+    near = hi - rng.choice([1, 2, 5, 10, 100]) if hi > 1000 else hi - 1
+    pool = [hi, near]
+    while len(pool) < rows_n:
+        pool.append(rng.randint(5, hi - max(1, near // 10)))
+    names = []
+    while len(names) < rows_n:
+        nm = styled_name(rng)
+        if nm not in names:
+            names.append(nm)
+    order = list(range(rows_n))
+    rng.shuffle(order)
+    names = [names[i] for i in order]
+    prices = [pool[i] for i in order]
+    body = "\n".join(f"-{nm}|${p}" for nm, p in zip(names, prices))
+    return f"rows: {body}\nq: which is most expensive?\na: ", f"The price is ${max(prices)} delivered."
+
+
+def page_skills():
+    return [(s["prompt"], s["want"]) for s in
+            json.loads((HERE / "page-skills.json").read_text())]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ckpt", required=True)
+    ap.add_argument("--steps", type=int, default=600)
+    ap.add_argument("--batch", type=int, default=24)
+    ap.add_argument("--lr", type=float, default=2.5e-5)
+    ap.add_argument("--chi", type=int, default=48)
+    ap.add_argument("--project-every", type=int, default=10)
+    ap.add_argument("--snapshot-every", type=int, default=100)
+    ap.add_argument("--seed", type=int, default=131)
+    args = ap.parse_args()
+
+    torch.manual_seed(args.seed)
+    ck = torch.load(Path(args.ckpt), map_location="cpu")
+    cfg = ck["config"]
+    model = TinyLM(VOCAB, cfg["d"], cfg["layers"], cfg["heads"], cfg["ffn"], cfg["ctx"])
+    model.load_state_dict(ck["state"])
+
+    page = page_skills()
+    replay_sets = task.eval_sets(args.seed)
+    held = held_sets(999)
+    extra = held_extra(999)   # fixed held-out total/pct, same prompts every readout
+    rng = random.Random(args.seed + 1)
+
+    def score_page():
+        got = batched_generate(model, [p for p, _ in page], max_new=48, temperature=0.0)
+        return sum(1 for (_, w), g in zip(page, got) if g == w) / len(page)
+
+    def score_set(samples, cap=12, max_new=48):
+        sub = samples[:cap]
+        got = batched_generate(model, [p for p, _ in sub], max_new=max_new, temperature=0.0)
+        return sum(1 for (_, w), g in zip(sub, got) if g == w) / len(sub)
+
+    def score_diff(cap=12):
+        return {d: score_set(bucket, cap, max_new=24) for d, bucket in held.items()}
+
+    def score_extra(name, cap=12):
+        return score_set(extra[name], cap)
+
+    def score_short(cap=12):
+        return score_set([cheapest_short_example(rng) for _ in range(24)], cap)
+
+    def score_wide(cap=12):
+        return score_set([priciest_wide_example(rng) for _ in range(24)], cap)
+
+    def score_old(cap=24):
+        return {name: score_set(samples, cap) for name, samples in replay_sets.items()}
+
+    model.eval()
+    page0, diff0, old0 = score_page(), score_diff(), score_old()
+    total0, pct0 = score_extra("total"), score_extra("pct")
+    short0, wide0 = score_short(), score_wide()
+    print("before: page", f"{page0:.0%}",
+          "| diff", " ".join(f"{k}d={v:.0%}" for k, v in diff0.items()),
+          f"| total {total0:.0%} pct {pct0:.0%}",
+          f"| cheapest-short {short0:.0%} priciest-wide {wide0:.0%}", flush=True)
+    print("before old:", {k.split()[0]: round(v, 3) for k, v in old0.items()}, flush=True)
+
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    t0 = time.time()
+    snapshots = []
+    for step in range(1, args.steps + 1):
+        # proportional to 24: page 6, cheapest-short 4, priciest-wide 3,
+        # suite replay 4, diff 3, total 3, pct 1
+        n = args.batch
+        counts = {
+            "page": max(1, round(n * 0.25)),
+            "cheapest_short": max(1, round(n * 4 / 24)),
+            "priciest_wide": max(1, round(n * 3 / 24)),
+            "suite": max(1, round(n * 4 / 24)),
+            "diff": max(1, round(n * 3 / 24)),
+            "total": max(1, round(n * 3 / 24)),
+        }
+        counts["pct"] = max(1, n - sum(counts.values()))
+        batch = [page[rng.randrange(len(page))] for _ in range(counts["page"])]
+        batch += [cheapest_short_example(rng) for _ in range(counts["cheapest_short"])]
+        batch += [priciest_wide_example(rng) for _ in range(counts["priciest_wide"])]
+        batch += [suite_example(rng) for _ in range(counts["suite"])]
+        batch += [diff_example(rng, 4) for _ in range(counts["diff"])]
+        batch += [total_example(rng) for _ in range(counts["total"])]
+        batch += [pct_example(rng) for _ in range(counts["pct"])]
+        while len(batch) < n:
+            batch.append(suite_example(rng))
+        batch = [(p, a) for p, a in batch if len(encode(p)) + len(encode(a)) <= 186]
+
+        model.train()
+        loss = batch_loss(model, batch)
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        if step % args.project_every == 0:
+            model.eval()
+            with torch.no_grad():
+                model.load_state_dict(project(model.state_dict(), args.chi))
+
+        if step % args.snapshot_every == 0:
+            model.eval()
+            pg = score_page()
+            d = score_diff()
+            tot, pct = score_extra("total"), score_extra("pct")
+            sh, wd = score_short(), score_wide()
+            print(f"  step {step:>4} loss {float(loss):.3f} page {pg:.0%} "
+                  f"diff {sum(d.values()) / len(d):.0%} total {tot:.0%} pct {pct:.0%} "
+                  f"short {sh:.0%} wide {wd:.0%} [{time.time()-t0:.0f}s]", flush=True)
+            if pg == 1.0:
+                path = HERE / f"cheapest-snap-{step}.pt"
+                torch.save({"config": cfg, "state": {k: v.clone() for k, v in model.state_dict().items()}}, path)
+                snapshots.append({"step": step, "path": path.name, "diff": d,
+                                  "total": tot, "pct": pct, "short": sh, "wide": wd})
+                print(f"    page 14/14 — snapshot {path.name}", flush=True)
+
+    (HERE / "repair-cheapest.json").write_text(json.dumps({
+        "ckpt": args.ckpt, "steps": args.steps, "lr": args.lr,
+        "before": {"page": page0, "diff": diff0, "total": total0, "pct": pct0,
+                   "cheapest_short": short0, "priciest_wide": wide0, "old": old0},
+        "snapshots": snapshots,
+    }, indent=1) + "\n")
+    print(f"\n{len(snapshots)} snapshot(s) for the engine gate", flush=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -332,3 +332,51 @@ A bug this exposed: the inlined trainer's `HERE` is `/kaggle/src`, so
 `page_skills()` returned `[]` in v13 and the page anchor was never applied —
 the likely cause of the S2t flip that needed `repair_page.py`. The lookup now
 searches `sys.path`, and the log prints `page anchor: 14 prompt(s)`.
+
+## v14 → v14.4: the total/pct campaign, and the capacity wall it measured
+
+v14 (Kaggle 36k steps, batch 64, mix `total:0.55 diff:0.30 pct:0.15`, from the
+shipped checkpoint) genuinely taught the never-trained families — held-out
+total 0→7.5%, pct 0→2.5%, diff 70.8→78.75% — but the published suite fell
+104→100 (cheapest 34→33, priciest 32→31, diff 4→1). Four local repair
+campaigns then tried to buy the families back. Every candidate went through
+`scripts/promote-entangled.mjs`; every refusal auto-reverted. 33 gated
+candidates in total:
+
+| campaign | base | steps / lr | best candidate | refused on |
+| --- | --- | --- | --- | --- |
+| 1 `repair_ledger.py` | v14 ckpt | 800 / 5e-5 | 105/200 (snap 400) | cheapest 33/34 — id 55: gold `$20`, got `$200` |
+| 2 `repair_cheapest.py` | snap-400 | 600 / 2.5e-5 | **108/200** (total 0→6, pct 0→1) | cheapest 33/34 + priciest 30/33 |
+| 3 `repair_interference.py` | snap-100 | 400 / 1.5e-5 | 107/200 (total 5, pct 1) | cheapest 33/34 |
+| 4 `repair_shortpair.py` | snap-400 | 350 / 1.2e-5 | 104/200 — torch flips id 55 at **every** snapshot | engine cheapest drops to 30–33 anyway |
+| 5 `repair_total.py` | **shipped** | 800 / 3e-5 | total stays 0% in torch; diff 75→50% | not gated |
+
+Diagnostics that pinned the failure mode (torch, not export):
+
+* id 55 is `…|$20 / …|$6379 / …|$5186 / …|$210` — remove the `$210` row and
+  both v14-lineage models answer `$20` correctly; move the min to the last row
+  and they still fail (`$202`/`$200`). The damage is mixed digit-length
+  interference: a 2-digit minimum plus a 3-digit short sharing its leading
+  digit blends into `200`/`201`.
+* The shipped model passes every variant. The export is not the lossy step —
+  torch and the engine fail identically.
+* Campaign 4 shows the wall directly: the exact blocking prompt flips in torch
+  while the exported engine loses *different* cheapest items. At χ=48
+  (2,132,224 params, 4.67 MB MPO) the capacity that encodes 5-digit `total`
+  sums and the digit-alignment behavior `cheapest` needs do not coexist in any
+  state reached by post-hoc repair; campaign 5 shows gentle local training
+  cannot grow `total` at all (it needs the high-LR run that causes the
+  damage).
+
+**Measured negative (do not quietly retry):** post-hoc low-LR repair cannot
+restore `cheapest` 34/34 after a total-heavy run, and gentle local training
+cannot grow `total` from the shipped checkpoint. v15 (Kaggle, running
+2026-11-27) is the one untested design: protective published-grammar replay at
+0.40 *during* the main run (mix `total:0.30 diff:0.25 pct:0.05`), so the
+keep-families are anchored at high LR instead of repaired after. If v15 also
+fails the per-family gate, `total`/`pct` at χ=48 is a capacity wall like
+context 192 — closable only by a bigger model, which changes the deployable
+size axis too.
+
+The shipped state was never at risk: `8cbd6f5a…`, 104/200, cheapest 34/34,
+re-verified after every refusal.
