@@ -380,3 +380,30 @@ size axis too.
 
 The shipped state was never at risk: `8cbd6f5a…`, 104/200, cheapest 34/34,
 re-verified after every refusal.
+
+## v15 + campaign 6: PROMOTED — pct 0→3 with every family held
+
+v15 changed the one variable the wall analysis pointed at: protective replay
+**during** the high-LR run (0.40 of every batch = published-grammar suite +
+canonical sets, on top of the page's 14 prompts), mix `total:0.30 diff:0.25
+pct:0.05` (parse_mix renormalised over the task list, so total still got 50%
+of the task share — the replay share is the real change). Result: old-skill
+delta 0.0 through 36k steps, held-out total **12.5%** (v14: 7.5%), diff 80%,
+and — for the first time in the campaign — the raw export kept
+**cheapest 34/34**. Gate: 105/200, refused only on diff 1/33.
+
+Campaign 6 (`repair_diff15.py`, 600 steps lr 4e-5 from the v15 state, batch
+58% cheapest-protective: page + published replay + the `$20`-vs-`$210`
+short-pair shape) restored diff. Snapshot 400 cleared every floor:
+
+```
+lookup 34/34 · cheapest 34/34 · priciest 32/33 · diff 4/33 · total 0/33 · pct 3/33
+= 107/200 vs baseline 104 — promoted 6e449058edfeda0f…
+```
+
+`pct` is now nonzero **by training** — a real axis gain, not a redefinition.
+`total` remains 0/33: the wall stands (33 refused candidates; campaign 5
+showed gentle local growth cannot produce it). Shipped, deployed, and live
+verified: weights `6e449058…`, pin matched, rank gate PASS, runtime 197/197,
+claim:check 8 (baseline 9), demo ALL PHASES PASS with phase 6 re-scoring the
+shipped bytes at 107/200.

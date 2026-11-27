@@ -23,33 +23,31 @@ has kept, and you must keep too:
 
 | artifact | value | verify |
 | --- | --- | --- |
-| deployed weights | `8cbd6f5acb6f30dc1ca77782e01461cfddbe034a4a9f58bcd2482f091f880825` | `curl -s https://999svs999.github.io/RAREXT-protocol/mirror/rarext-entangled-chi48.gguf \| shasum -a 256` |
+| deployed weights | `6e449058edfeda0f24b5dfad6ff66d8056a765918dfdfb0ea4500bd9d3ab9eef` | `curl -s https://999svs999.github.io/RAREXT-protocol/mirror/rarext-entangled-chi48.gguf \| shasum -a 256` |
 | page pin | same digest, in served `entangled.js` | `curl -s …/mirror/entangled.js \| grep -o '"[0-9a-f]\{64\}"'` |
-| published neural score | **104/200** — lookup 34/34, cheapest 34/34, priciest 32/33, **diff 4/33**, total 0/33, pct 0/33 | `node tools/rank/eval-neural.mjs --n 200 --seed 20261123` |
-| live head-to-head | 24/24 exact vs `agnes-3.0-pro` 0/24, semantic 24/24 both; model alone 12/24 | `node tools/rank/eval-head-to-head.mjs --n 24 --seed 20261127` |
+| published neural score | **107/200** — lookup 34/34, cheapest 34/34, priciest 32/33, diff 4/33, total 0/33, **pct 3/33** | `node tools/rank/eval-neural.mjs --n 200 --seed 20261123` |
+| live head-to-head | 24/24 exact vs `agnes-3.0-pro` 0/24, semantic 24/24 both; model alone 13/24 | `node tools/rank/eval-head-to-head.mjs --n 24 --seed 20261127` |
 | scorecard | 8 won / 1 tied / 3 lost | `curl -s …/mirror/rank.json \| python3 -m json.tool \| head -40` |
 | gates | `test:runtime` 197/197 · `claim:check` 8 mismatches (baseline 9) · `tools/rank/verify.mjs` PASS | `npm run test:runtime && npm run claim:check && node tools/rank/verify.mjs` |
 | demo | eight phases, ALL PHASES PASS (re-scores the shipped bytes on every run) | `node scripts/demo-rarext-ai.mjs` |
 
-The 104/200 is a **model-only** improvement (same 2,132,224-parameter χ=48
-rebuild). It came from GPU run v13 (30k steps, batch 64, replay finally drawn
-from the published grammar) plus a 400-step page-anchored repair; the promotion
-gate is now per-family, so a candidate cannot buy diff by selling lookup. Full
-record and every refused candidate: `docs/MODEL-LEARNING.md`.
+The 107/200 is a **model-only** improvement (same 2,132,224-parameter χ=48
+rebuild). Lineage: v13 (replay from the published grammar) → v15 (protective
+replay 0.40 DURING the run — held cheapest natively where v14 could not) →
+campaign-6 diff repair (`repair_diff15.py`, snap 400). The per-family gate
+passed with **pct 0→3 gained by training** and no family regressed. Full
+record — including the 33 refused candidates and the measured capacity wall —
+is `docs/MODEL-LEARNING.md`.
 
-## The next lever (v14 in flight)
+## The next lever
 
-v14 (total:0.55 diff:0.30 pct:0.15) genuinely taught total/pct — held-out
-total 0→7.5%, pct 0→2.5% — but the published suite fell 104→100 and **33
-engine-gated repair candidates across 5 campaigns all failed the per-family
-floor**: every state that gains total loses ≥1 `cheapest` item after export
-(mixed digit-length interference: `$20` vs `$210` → `$200`/`$201`; torch and
-engine fail identically). Full record: `docs/MODEL-LEARNING.md`. v15 (running
-2026-11-27) is the untested design: protective replay 0.40 DURING the run
-(`total:0.30 diff:0.25 pct:0.05`). If v15 fails the gate too, total/pct at
-χ=48 is a capacity wall — like context 192 — and the user must either fund a
-bigger model or confirm the axis-scoped definition of "best". Do not retry
-post-hoc low-LR repair or gentle local training; both are measured negatives.
+* **PROMOTED 2026-11-27**: v15 + diff repair put pct on the board (3/33) with
+  every other family at baseline — 107/200. `total` remains 0/33: at χ=48 the
+  capacity for 5-digit sums collides with cheapest's digit alignment (33
+  refused candidates measured it; `docs/MODEL-LEARNING.md`). Do not retry
+  post-hoc low-LR repair or gentle local growth — both are measured negatives.
+  A `total` gain needs either a v16-style run with even stronger cheapest
+  anchoring or a bigger model (which costs the deployable-size win).
 
 * **Diff is nonzero but weak**: 4/33 published (held-out by width after v13:
   1d 100% · 2d 100% · 3d 92% · 4d 50%, then the repair moved the deployed
