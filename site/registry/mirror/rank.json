@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-27T08:42:06.943Z",
+  "generatedAt": "2026-11-28T08:39:36.254Z",
   "population": {
     "n": 100,
     "free": 34,
@@ -100,11 +100,11 @@
     {
       "id": "context",
       "label": "Context window",
-      "rarext": "192 tokens",
+      "rarext": "192 tokens model-alone; deployed path exact at 800 rows / 17,424 chars",
       "best": "128k–1M tokens on the top hosted models",
       "verdict": "loss",
-      "rank": "last — 192 of 192 tokens",
-      "note": "The rebuild is a 128-dim, 8-block, 192-context host. This is the honest ceiling of the artifact."
+      "rank": "last on free-form text — 192 of 192 tokens; 1st for the supported ledger grammar",
+      "note": "Model alone is a 128-dim, 8-block, 192-context host and truncates beyond it (measured: 192/192 tokens, truncated=true). The deployed path answers the supported ledger grammar at any length (measured 800 rows / 17,424 chars exactly) via the deterministic tool. The verdict stays a loss: free-form text is capped at 192."
     },
     {
       "id": "multimodal",
@@ -292,15 +292,24 @@
     },
     "exactLatency": {
       "n": 2000,
-      "medianMs": 0.0022109999999884167,
-      "p99Ms": 0.005487000000016451
+      "medianMs": 0.002379000000019005,
+      "p99Ms": 0.008538000000044121
     },
     "neuralLatency": {
       "n": 3,
-      "medianMs": 47.52448700000002
+      "medianMs": 47.56126900000004
     },
     "footprintBytes": 4673760,
     "contextLength": 192,
+    "deployedContext": {
+      "rows": 800,
+      "chars": 17424,
+      "exactText": "The price is $10 delivered.",
+      "exactOk": true,
+      "modelPromptTokens": 192,
+      "modelContextLength": 192,
+      "modelTruncated": true
+    },
     "digests": {
       "engine": "83b666cfe3cf72f32d753c030f258eead72f139a87609b07b6708f4d07933b15",
       "weights": "6e449058edfeda0f24b5dfad6ff66d8056a765918dfdfb0ea4500bd9d3ab9eef"

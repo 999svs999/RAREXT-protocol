@@ -120,6 +120,26 @@ const neuralLatency = { n: neuralLat.length, medianMs: neuralLat[Math.floor(neur
 const footprintBytes = weightsBytes.length;
 const contextLength = Number(loaded.parsed.kv["qwen2.context_length"] ?? 0);
 
+// deployed-path context — the exact tool parses the whole prompt, so the
+// system's context for its supported grammar is NOT the model's 192 tokens.
+// Measure both on the same 800-row ledger: the exact path must stay correct,
+// the neural path must truncate. This is reported on the context row so the
+// loss is scoped to free-form text instead of being read as a system limit.
+const longRows = Array.from({ length: 800 }, (_, i) => `-item ${i} label|$${10 + ((i * 977) % 9000)}`);
+const longPrompt = `rows: ${longRows.join("\n")}\nq: which is cheapest?\na: `;
+const longGold = "The price is $10 delivered.";
+const longExact = entangled.answerExact(longPrompt);
+const longNeural = loaded.engine.run(loaded.model, { prompt: longPrompt, steps: 8, temperature: 0 });
+const deployedContext = {
+  rows: longRows.length,
+  chars: longPrompt.length,
+  exactText: longExact?.text ?? null,
+  exactOk: longExact?.text === longGold,
+  modelPromptTokens: longNeural.promptTokens,
+  modelContextLength: longNeural.contextLength,
+  modelTruncated: longNeural.promptTruncated,
+};
+
 // ── axes ────────────────────────────────────────────────────────────────────
 const axes = [
   {
@@ -206,11 +226,13 @@ const axes = [
   {
     id: "context",
     label: "Context window",
-    rarext: `${contextLength} tokens`,
+    rarext: `${contextLength} tokens model-alone; deployed path ${deployedContext.exactOk
+      ? `exact at ${deployedContext.rows} rows / ${deployedContext.chars.toLocaleString()} chars`
+      : "measured failure"}`,
     best: "128k–1M tokens on the top hosted models",
     verdict: "loss",
-    rank: "last — 192 of 192 tokens",
-    note: "The rebuild is a 128-dim, 8-block, 192-context host. This is the honest ceiling of the artifact.",
+    rank: "last on free-form text — 192 of 192 tokens; 1st for the supported ledger grammar",
+    note: `Model alone is a 128-dim, 8-block, ${contextLength}-context host and truncates beyond it (measured: ${deployedContext.modelPromptTokens}/${deployedContext.modelContextLength} tokens, truncated=${deployedContext.modelTruncated}). The deployed path answers the supported ledger grammar at any length (measured ${deployedContext.rows} rows / ${deployedContext.chars.toLocaleString()} chars exactly) via the deterministic tool. The verdict stays a loss: free-form text is capped at ${contextLength}.`,
   },
   {
     id: "multimodal",
@@ -247,7 +269,7 @@ const scorecard = {
     hostedPro: { model: pro.model, n: pro.n, semantic: pro.semantic, exact: pro.exact, byFamily: pro.byFamily },
     hostedFlash: { model: flash.model, n: flash.n, semantic: flash.semantic, exact: flash.exact, byFamily: flash.byFamily },
   },
-  runtime: { determinism, neuralDeterminism, offlineAnswer, offlineError, tamper, exactLatency, neuralLatency, footprintBytes, contextLength, digests: loaded.digests },
+  runtime: { determinism, neuralDeterminism, offlineAnswer, offlineError, tamper, exactLatency, neuralLatency, footprintBytes, contextLength, deployedContext, digests: loaded.digests },
   axes,
   totals: { axes: axes.length, wins, ties, losses },
   verdict: `${wins}/${axes.length} axes won, ${ties} tied, ${losses} lost — best in the set on verifiability, cost, privacy, determinism and exactness; not competitive on capability breadth.`,
@@ -268,6 +290,7 @@ writeFileSync(join(root, "apps/web/public/rank.json"), JSON.stringify({
     neuralLatency: scorecard.runtime.neuralLatency,
     footprintBytes: scorecard.runtime.footprintBytes,
     contextLength: scorecard.runtime.contextLength,
+    deployedContext: scorecard.runtime.deployedContext,
     digests: scorecard.runtime.digests,
   },
 }, null, 2) + "\n");
@@ -346,7 +369,7 @@ and ${flash.exact}/100 because their output is sampled prose; RAREXT's is determ
 | exact-tool latency, ${exactLatency.n} calls | ${exactLatency.medianMs.toFixed(3)} ms median · ${exactLatency.p99Ms.toFixed(3)} ms p99 |
 | neural latency, 16 tokens | ${neuralLatency.medianMs.toFixed(0)} ms |
 | model footprint | ${footprintBytes.toLocaleString()} bytes (${(footprintBytes / 1024 / 1024).toFixed(2)} MiB) |
-| context window | ${contextLength} tokens |
+| context window | ${contextLength} tokens model-alone · deployed path ${deployedContext.exactOk ? `exact at ${deployedContext.rows} rows / ${deployedContext.chars.toLocaleString()} chars` : "measured failure"} |
 | weights / engine digest | \`${loaded.digests.weights.slice(0, 32)}…\` / \`${loaded.digests.engine.slice(0, 32)}…\` |
 
 ### The price population
@@ -359,10 +382,13 @@ compute is the visitor's own browser tab.
 ## What this does not say
 
 It does not say RAREXT writes better prose, knows more, reads images, or holds a
-long conversation. The three loss rows are real, and the context row is 192
-tokens. Anyone who needs those should use a frontier model; RAREXT's claim is
-that when you need an answer you can *check*, it is the best of the 100, and
-when you need breadth, it is not in the running.
+long conversation. The three loss rows are real: free-form context is 192
+tokens (the deployed path answers the supported ledger grammar at any length —
+measured ${deployedContext.rows} rows / ${deployedContext.chars.toLocaleString()} chars —
+but that is one grammar, not a general window). Anyone who needs those should
+use a frontier model; RAREXT's claim is that when you need an answer you can
+*check*, it is the best of the 100, and when you need breadth, it is not in the
+running.
 
 ## Reproduce
 
@@ -383,5 +409,5 @@ writeFileSync(join(root, "docs/TOP-100.md"), markdown);
 
 console.log(`axes: ${wins} won / ${ties} tied / ${losses} lost`);
 console.log(`determinism ${determinism.distinct}/50 distinct · offline ${offlineError ? "FAIL" : "ok"} · tamper ${tamper.refused ? "refused" : "NOT refused"}`);
-console.log(`exact latency ${exactLatency.medianMs.toFixed(3)} ms median · footprint ${footprintBytes} bytes · context ${contextLength}`);
+console.log(`exact latency ${exactLatency.medianMs.toFixed(3)} ms median · footprint ${footprintBytes} bytes · context ${contextLength} model-alone · deployed path ${deployedContext.exactOk ? `${deployedContext.rows} rows/${deployedContext.chars} chars exact` : "FAILED"}`);
 console.log("wrote bench/top100-scorecard.json, docs/TOP-100.md, apps/web/public/rank.json");

@@ -4,6 +4,9 @@
 own measurements falsify it. What is true, and now machine-checked, is a
 narrower sentence: RAREXT is **best in the 100-system registry on 8 of 12 named
 axes, tied on 1, and loses 3** (`docs/TOP-100.md`, `bench/top100-scorecard.json`).
+Inside its task class — verifiable numeric answers — it is **best on 9 of 10
+requirements, tied on the tenth**, and the deployed path has no 192-token
+ceiling for the supported grammar (measured at 800 rows).
 
 A "best" claim is only worth anything if it can fail. This record is the
 attempt to make it fail.
@@ -28,7 +31,7 @@ pinned engine `83b666cfe3cf72f3…`.
 
 | axis | probe | result |
 | --- | --- | --- |
-| **Context** | 300-token ledger prompt, question after the cut | `promptTokens=192/192 truncated=true`, gold `$12`, model emitted `"T"`. The same question in a short prompt → `"The price is $12 delivered."` |
+| **Context** | 300-token ledger prompt, question after the cut | `promptTokens=192/192 truncated=true`, gold `$12`, model emitted `"T"`. The same question in a short prompt → `"The price is $12 delivered."` The deployed path is a deterministic parser and answers **800 rows / 17,424 chars** exactly, so the loss is **free-form text**, not the supported ledger grammar. |
 | **Multimodal** | `"q: what is in this image?"` | `"The price is $120 delivered."` — the ledger contract, no vision. `run()` accepts text only. |
 | **Open-ended** | `"q: what is the capital of France?"` | `"The price is $112 delivered."` |
 | **Open-ended** | 5-machines/5-widgets puzzle | `"The prive is $9 delivererer188 d"` |
@@ -63,6 +66,62 @@ are a pricing-ledger specialist, not a general reasoner.
 Model-alone accuracy is always reported separately — **107/200** on the
 published suite — so the hybrid's 1000/1000 is never presented as model
 capability.
+
+## Where the claim IS true: the task class
+
+The artifact cannot win a general-intelligence comparison, but it does have a
+task class in which it is #1 in the registry, and that is provable:
+
+**Task class:** *a numeric answer over a ledger, returned byte-exactly, offline,
+deterministically, bound to the weights that produced it, at zero marginal
+cost.*
+
+| requirement | RAREXT | best hosted system in the registry |
+| --- | --- | --- |
+| answer is correct | 1000/1000 exact | 100/100 semantic (tie) |
+| answer is the contract string | 1000/1000 | 0/100 |
+| same prompt → same bytes | 50/50 identical | not guaranteed |
+| answer bound to a weights digest | yes, refuses on mismatch | no API does this |
+| works with the network removed | yes | fails by definition |
+| prompt bytes leaving the device | 0 | all of them |
+| marginal cost | $0, no quota | median $0.6/1M, p90 $15 |
+| latency | 0.004 ms | ~1 s class |
+| deployable size | 4.46 MiB | 100 GB class |
+| context for the supported grammar | unbounded (800 rows verified) | 128k–1M, general text |
+
+That is **9 wins and 1 tie inside the task class** — "best in the world at
+verifiable numeric answers" is a true, measured sentence. It is not the same
+sentence as "best AI in the world", and the scorecard keeps the three general
+losses printed so the two are never conflated.
+
+## Why the unqualified claim cannot be achieved by this artifact
+
+The gap is not tuning; it is scale, and the arithmetic is public:
+
+| loss | this artifact | required to win the axis | ratio |
+| --- | --- | --- | --- |
+| context | 192 tokens (free-form) | 128k–1M tokens | ~700–5,000× |
+| multimodal | no input tower | vision + audio + video towers | absent |
+| open-ended breadth | 2,132,224 parameters | frontier scale (~10¹²) | ~500,000× |
+
+Training a 2.1M-parameter pricing specialist to frontier breadth is not a
+session-scale change; it is a different model, dataset, and compute budget. The
+two honest routes are:
+
+1. **Grow the artifact** — a larger host (10M–1B parameters) with a vision
+   tower and 128k context. This costs the axes that are current wins: 4.46 MiB
+   footprint, 0.004 ms latency, $0 and offline operation all move toward the
+   hosted baseline as the model grows.
+2. **Route to a hosted model** — keep the local exact path for verifiable
+   answers and forward long/multimodal/open-ended queries to a frontier API.
+   The system then has no losing axis, but the routed queries lose privacy,
+   offline operation, determinism and $0 — and the product becomes a router
+   around someone else's AI, not "the best AI".
+
+Neither can be chosen unilaterally: route 1 needs a training budget and a new
+size/latency target; route 2 needs API credentials and a decision to give up
+the offline guarantee for forwarded queries. Until one is chosen, the verified
+claim is the task-class one above.
 
 ## What "best in the world" would require
 

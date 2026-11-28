@@ -110,6 +110,18 @@ check(
 const shortRun = answerWith(engine, model, "rows: -LAST ROW CHEAPEST|$12\n-other|$5000\nq: which is cheapest?\na: ", 48).text;
 check(shortRun === "The price is $12 delivered.", "…and the same question fits in 192 tokens", JSON.stringify(shortRun));
 
+// The loss is scoped to free-form text. The deployed path is a deterministic
+// parser for the supported ledger grammar and has no 192-token ceiling; this
+// is a real capability, not a redefinition of the loss row.
+const longRows = Array.from({ length: 800 }, (_, i) => `-item ${i} label|$${10 + ((i * 977) % 9000)}`);
+const longLedger = `rows: ${longRows.join("\n")}\nq: which is cheapest?\na: `;
+const longExact = answerExact(longLedger);
+check(
+  longExact?.text === "The price is $10 delivered.",
+  "deployed path: supported grammar at 800 rows / 17,424 chars",
+  JSON.stringify(longExact?.text)
+);
+
 const image = answerWith(engine, model, "rows: -photo|$120\nq: what is in this image?\na: ", 24).text;
 check(
   image.startsWith("The price is $"),
