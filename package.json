@@ -97,6 +97,7 @@
   "typecheck": "tsc -p tsconfig.json",
   "verify:deployment": "node contracts/scripts/verify-deployment-record.mjs",
   "verify:packages": "node scripts/verify-packages.mjs",
+  "verify:world-best": "node tools/rank/verify-world-best.mjs",
   "version:all": "node scripts/sync-version.mjs",
   "ops:all": "node tools/ops/run-projects.mjs",
   "ops:gates": "node tools/ops/claim-gate.mjs",
